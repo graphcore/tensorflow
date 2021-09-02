@@ -585,6 +585,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   bool EnableFastMath() const { return current_config_.enable_fast_math(); }
 
+  IpuOptions_IpuAlgebraicSimplifierConfig AlgebraicSimplifierConfig() const {
+    return current_config_.algebraic_simplifier_config();
+  }
+
   IpuSelectionOrder GetSelectionOrder() const {
     return current_config_.selection_order();
   }

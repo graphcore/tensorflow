@@ -1301,6 +1301,21 @@ class _IPUModelConfig(_ConfigBase):
     pb.ipu_model_config.ipu_model_version = self.version
 
 
+class _IpuAlgebraicSimplifierConfig(_ConfigBase):
+  def __init__(self):
+    """
+    Enable dot strength optimization. When set to True, the graph optimizer
+    will convert a dot product where either the LHS or the RHS contains only
+    batch and/or contracting dimensions to an elementwise matrix
+    multiplication.
+    """
+    self.enable_dot_strength = True
+
+  def _to_protobuf(self, pb):
+    pb.algebraic_simplifier_config.enable_dot_strength\
+      = self.enable_dot_strength
+
+
 class _MatmulConfig(_ConfigBase):
   def __init__(self):
     """
@@ -1439,6 +1454,11 @@ class _NormConfig(_ConfigBase):
 
 class _OptimizationConfig(_ConfigBase):
   def __init__(self):
+    """
+    Sub-category containing configuration options related to the XLA Algebraic
+    Simplifier.
+    """
+    self.algebraic_simplifier = _IpuAlgebraicSimplifierConfig()
     """
     If True (default), prefetching of data for data streams on the host will be
     overlapped with execution on the IPU.

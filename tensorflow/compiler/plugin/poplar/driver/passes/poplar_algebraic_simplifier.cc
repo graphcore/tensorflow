@@ -184,9 +184,13 @@ bool IsGlobalAllReduceWithSum(const HloInstruction* all_reduce) {
 // more general case a worklist based approach would be needed.
 class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
  public:
-  explicit AlgebraicSimplifierVisitor(PoplarAlgebraicSimplifier* simplifier,
-                                      bool enable_fast_math)
-      : simplifier_(simplifier), enable_fast_math_(enable_fast_math) {}
+  explicit AlgebraicSimplifierVisitor(
+      PoplarAlgebraicSimplifier* simplifier,
+      const poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig& config,
+      bool enable_fast_math)
+      : config_(config),
+        simplifier_(simplifier),
+        enable_fast_math_(enable_fast_math) {}
 
   Status HandleAdd(HloInstruction* add) override;
 
@@ -321,24 +325,6 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
         MakeTransposeHlo(dot_operand, transpose_dimensions), dot_operand);
   }
 
-  // Helper method to perform and add reduction on a list of dimensions.
-  HloInstruction* AddReduce(HloInstruction* hlo, absl::Span<const int64> dims) {
-    HloInstruction* zero = PreserveFrontendAttributesIfNeeded(
-        computation_->AddInstruction(
-            simplifier_->CreateConstantWithLayoutUpdated(
-                LiteralUtil::Zero(hlo->shape().element_type()).Clone())),
-        hlo);
-    HloComputation* AddReduce_computation = GetOrCreateScalarAddComputation();
-    Shape shape = ShapeUtil::FilterDimensions(
-        [&](int64 dim) { return !absl::c_linear_search(dims, dim); },
-        hlo->shape());
-    simplifier_->UpdateLayout(&shape);
-    return PreserveFrontendAttributesIfNeeded(
-        computation_->AddInstruction(HloInstruction::CreateReduce(
-            shape, hlo, zero, dims, AddReduce_computation)),
-        hlo);
-  }
-
   // Replace old instruction with new instruction if old and new instructions
   // have the same shape. Updates uses and root instruction. Returns whether a
   // replacement was made.
@@ -360,13 +346,15 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   StatusOr<HloInstruction*> OptimizeDotOfReorderContractingDims(
       HloInstruction* dot);
 
-  HloComputation* GetOrCreateScalarAddComputation() {
-    if (scalar_add_computation_) {
-      return scalar_add_computation_;
+  StatusOr<HloInstruction*> OptimizeDotStrengthReduction(HloInstruction* dot);
+
+  HloComputation* GetOrCreateScalarAddComputation(PrimitiveType type) {
+    if (scalar_add_computations_.find(type) != scalar_add_computations_.end()) {
+      return scalar_add_computations_.at(type);
     }
 
     HloComputation::Builder b("scalar_add_computation");
-    Shape shape = ShapeUtil::MakeShape(F32, {});
+    Shape shape = ShapeUtil::MakeShape(type, {});
     simplifier_->UpdateLayout(&shape);
     auto scalar_lhs = b.AddInstruction(
         HloInstruction::CreateParameter(0, shape, "scalar_lhs"));
@@ -374,9 +362,27 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
         HloInstruction::CreateParameter(1, shape, "scalar_rhs"));
     auto scalar_op = b.AddInstruction(HloInstruction::CreateBinary(
         shape, HloOpcode::kAdd, scalar_lhs, scalar_rhs));
-    scalar_add_computation_ =
+    auto scalar_add_computation =
         computation_->parent()->AddEmbeddedComputation(b.Build(scalar_op));
-    return scalar_add_computation_;
+    scalar_add_computations_.insert({type, scalar_add_computation});
+
+    return scalar_add_computation;
+  }
+
+  // Helper method to perform and add reduction on a list of dimensions.
+  HloInstruction* AddReduce(HloInstruction* hlo, absl::Span<const int64> dims,
+                            PrimitiveType type) {
+    HloInstruction* zero = computation_->AddInstruction(
+        simplifier_->CreateConstantWithLayoutUpdated(
+            LiteralUtil::Zero(hlo->shape().element_type()).Clone()));
+    HloComputation* AddReduce_computation =
+        GetOrCreateScalarAddComputation(type);
+    Shape shape = ShapeUtil::FilterDimensions(
+        [&](int64 dim) { return !absl::c_linear_search(dims, dim); },
+        hlo->shape());
+    simplifier_->UpdateLayout(&shape);
+    return computation_->AddInstruction(HloInstruction::CreateReduce(
+        shape, hlo, zero, dims, AddReduce_computation));
   }
 
   // Tries to fold a kPad in the input or filter into the convolution
@@ -400,10 +406,12 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   // Whether algebraic simplification has occurred.
   bool changed_ = false;
 
-  // Cached computation for adding two scalar F32.
-  HloComputation* scalar_add_computation_ = nullptr;
+  // Cached computation for adding two scalars of a given type.
+  absl::flat_hash_map<PrimitiveType, HloComputation*> scalar_add_computations_;
 
   PoplarAlgebraicSimplifier* simplifier_ = nullptr;
+
+  const poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig config_;
 
   const bool enable_fast_math_;
 };
@@ -1777,6 +1785,129 @@ AlgebraicSimplifierVisitor::OptimizeDotOfReorderContractingDims(
   return new_dot;
 }
 
+namespace {
+typedef google::protobuf::RepeatedField<google::protobuf::int64> RepeatedField;
+std::unique_ptr<HloInstruction> CreateBroadcastCompatibleWithOperand(
+    HloInstruction* operand_source, HloInstruction* operand_target,
+    const RepeatedField& batch_dimensions,
+    const RepeatedField& contracting_dimensions,
+    uint64_t target_outer_dimensions) {
+  // Initialize broadcast dimensions with batch dimensions starting from 0.
+  std::vector<int64> broadcast_dimensions(batch_dimensions.size());
+  absl::c_iota(broadcast_dimensions, 0);
+
+  // Add the rest of the dimensions and fill the batch dimensions starting with
+  // the number of batch dimensions + outer dimensions of the target operand.
+  broadcast_dimensions.resize(operand_source->shape().rank());
+  std::iota(broadcast_dimensions.begin() + batch_dimensions.size(),
+            broadcast_dimensions.end(),
+            batch_dimensions.size() + target_outer_dimensions);
+
+  // Create a broadcast with the shape of the target operand and the previously
+  // calculated dimensions.
+  return HloInstruction::CreateBroadcast(operand_target->shape(),
+                                         operand_source, broadcast_dimensions);
+}
+
+PrimitiveType DeterminePrimitiveTypeForDotProduct(HloInstruction* dot) {
+  if (ShapeUtil::ElementIsFloating(dot->shape())) {
+    return dot->shape().element_type() == F64 ? F64 : F32;
+  } else {
+    return dot->shape().element_type();
+  }
+}
+}  // namespace
+
+StatusOr<HloInstruction*>
+AlgebraicSimplifierVisitor::OptimizeDotStrengthReduction(HloInstruction* dot) {
+  if (!config_.enable_dot_strength()) {
+    return nullptr;
+  }
+
+  const auto& dot_dimension_numbers = dot->dot_dimension_numbers();
+  const auto& lhs_batch_dimensions =
+      dot_dimension_numbers.lhs_batch_dimensions();
+  const auto& lhs_contracting_dimensions =
+      dot_dimension_numbers.lhs_contracting_dimensions();
+  const auto& rhs_batch_dimensions =
+      dot_dimension_numbers.rhs_batch_dimensions();
+  const auto& rhs_contracting_dimensions =
+      dot_dimension_numbers.rhs_contracting_dimensions();
+
+  auto* lhs = dot->mutable_operand(0);
+  auto* rhs = dot->mutable_operand(1);
+
+  // If the lhs or rhs have only batch and contracting dimensions, a dot can be
+  // rewritten as reduce(mul(broadcast(transpose(x)),broadcast(transpose(y))))
+  if (lhs_batch_dimensions.size() + lhs_contracting_dimensions.size() !=
+          lhs->shape().rank() &&
+      rhs_batch_dimensions.size() + rhs_contracting_dimensions.size() !=
+          rhs->shape().rank()) {
+    return nullptr;
+  }
+
+  TF_ASSIGN_OR_RETURN(HloInstruction * new_lhs,
+                      NormalizeDotOperandToBatchMajorAndContractingMinor(
+                          lhs, AsInt64Slice(lhs_batch_dimensions),
+                          AsInt64Slice(lhs_contracting_dimensions)));
+
+  if (!ShapeUtil::SameElementType(dot->shape(), new_lhs->shape())) {
+    new_lhs = MakeConvertToHlo(new_lhs, dot->shape().element_type());
+  }
+
+  TF_ASSIGN_OR_RETURN(HloInstruction * new_rhs,
+                      NormalizeDotOperandToBatchMajorAndContractingMinor(
+                          rhs, AsInt64Slice(rhs_batch_dimensions),
+                          AsInt64Slice(rhs_contracting_dimensions)));
+
+  if (!ShapeUtil::SameElementType(dot->shape(), new_rhs->shape())) {
+    new_rhs = MakeConvertToHlo(new_rhs, dot->shape().element_type());
+  }
+
+  const auto lhs_outer_dimensions =
+      lhs->shape().rank() -
+      (lhs_batch_dimensions.size() + lhs_contracting_dimensions.size());
+  const auto rhs_outer_dimensions =
+      rhs->shape().rank() -
+      (rhs_batch_dimensions.size() + rhs_contracting_dimensions.size());
+  const auto outer_dimensions =
+      std::max(rhs_outer_dimensions, lhs_outer_dimensions);
+
+  // Sanity check that either lhs or rhs operand contains only batch and
+  // contracting dimensions.
+  CHECK(lhs_outer_dimensions == 0 || rhs_outer_dimensions == 0);
+
+  // Create a broadcast for the operand with only batch and contracting
+  // dimensions, making it compatible for a matmul with the other operand.
+  if (rhs_outer_dimensions > 0) {
+    auto broadcast = CreateBroadcastCompatibleWithOperand(
+        new_lhs, new_rhs, lhs_batch_dimensions, lhs_contracting_dimensions,
+        rhs_outer_dimensions);
+    new_lhs = computation_->AddInstruction(std::move(broadcast));
+  } else if (lhs_outer_dimensions > 0) {
+    auto broadcast = CreateBroadcastCompatibleWithOperand(
+        new_rhs, new_lhs, rhs_batch_dimensions, rhs_contracting_dimensions,
+        lhs_outer_dimensions);
+    new_rhs = computation_->AddInstruction(std::move(broadcast));
+  }
+
+  TF_ASSIGN_OR_RETURN(HloInstruction * new_dot,
+                      MakeBinaryHlo(HloOpcode::kMultiply, new_lhs, new_rhs));
+  new_dot->set_metadata(dot->metadata());
+
+  // We want to reduce the source operand to its original rank.
+  std::vector<int64> reduce_dimensions(lhs_contracting_dimensions.size());
+  absl::c_iota(reduce_dimensions,
+               outer_dimensions + lhs_batch_dimensions.size());
+
+  const auto dot_type = DeterminePrimitiveTypeForDotProduct(dot);
+  new_dot = AsType(new_dot, dot_type);
+  new_dot = AddReduce(new_dot, reduce_dimensions, dot_type);
+  new_dot = AsType(new_dot, dot->shape().element_type());
+
+  return new_dot;
+}
+
 Status AlgebraicSimplifierVisitor::HandleDot(HloInstruction* dot) {
   CHECK(computation_ == dot->parent());
   HloInstruction *lhs, *rhs;
@@ -1800,6 +1931,17 @@ Status AlgebraicSimplifierVisitor::HandleDot(HloInstruction* dot) {
             LiteralUtil::Zero(dot->shape().element_type())));
     return ReplaceWithNewInstruction(
         dot, HloInstruction::CreateBroadcast(dot->shape(), zero, {}));
+  }
+
+  // If the lhs or rhs have only batch and contracting dimensions, a dot can be
+  // rewritten as reduce(mul(broadcast(transpose(x)),broadcast(transpose(y))))
+  TF_ASSIGN_OR_RETURN(HloInstruction * dot_strength_reduction_optimized,
+                      OptimizeDotStrengthReduction(dot));
+  if (dot_strength_reduction_optimized) {
+    VLOG(10) << " Replaced dot " << dot->ToString()
+             << " with new dot operation: "
+             << dot_strength_reduction_optimized->ToString();
+    return ReplaceInstruction(dot, dot_strength_reduction_optimized);
   }
 
   // Simplify dot(reshape(transpose(A)), Const) to:
@@ -4257,14 +4399,16 @@ Status AlgebraicSimplifierVisitor::HandleCustomCall(
   return Status::OK();
 }
 
-PoplarAlgebraicSimplifier::PoplarAlgebraicSimplifier(bool enable_fast_math)
-    : enable_fast_math_(enable_fast_math) {}
+PoplarAlgebraicSimplifier::PoplarAlgebraicSimplifier(
+    const poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig& config,
+    bool enable_fast_math)
+    : config_(config), enable_fast_math_(enable_fast_math) {}
 
 StatusOr<bool> PoplarAlgebraicSimplifier::Run(HloModule* module) {
   XLA_VLOG_LINES(
       2, "PoplarAlgebraicSimplifier::Run(), before:\n" + module->ToString());
   bool changed = false;
-  AlgebraicSimplifierVisitor visitor(this, enable_fast_math_);
+  AlgebraicSimplifierVisitor visitor(this, config_, enable_fast_math_);
   for (HloComputation* comp : module->MakeComputationPostOrder()) {
     if (pp::IsPopOpsFusion(comp)) {
       continue;

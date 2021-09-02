@@ -18,7 +18,6 @@ limitations under the License.
 #include <memory>
 #include <utility>
 
-#include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
@@ -38,7 +37,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
-#include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/window_util.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
@@ -315,7 +313,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, MulZeroFloatRHS) {
     ASSERT_FALSE(simplifier.Run(m.get()).ValueOrDie());
   }
   {
-    PoplarAlgebraicSimplifier simplifier(true);
+    PoplarAlgebraicSimplifier simplifier({}, true);
     ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
     EXPECT_EQ(computation->root_instruction(), zero);
   }
@@ -341,7 +339,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, MulZeroFloatLHS) {
     ASSERT_FALSE(simplifier.Run(m.get()).ValueOrDie());
   }
   {
-    PoplarAlgebraicSimplifier simplifier(true);
+    PoplarAlgebraicSimplifier simplifier({}, true);
     ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
     EXPECT_EQ(computation->root_instruction(), zero);
   }
@@ -369,7 +367,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, MulZeroFloatArrayRHS) {
     ASSERT_FALSE(simplifier.Run(m.get()).ValueOrDie());
   }
   {
-    PoplarAlgebraicSimplifier simplifier(true);
+    PoplarAlgebraicSimplifier simplifier({}, true);
     ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
     EXPECT_EQ(computation->root_instruction(), bcast);
   }
@@ -397,7 +395,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, MulZeroFloatArrayLHS) {
     ASSERT_FALSE(simplifier.Run(m.get()).ValueOrDie());
   }
   {
-    PoplarAlgebraicSimplifier simplifier(true);
+    PoplarAlgebraicSimplifier simplifier({}, true);
     ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
     EXPECT_EQ(computation->root_instruction(), bcast);
   }
@@ -1099,10 +1097,10 @@ TEST_F(PoplarAlgebraicSimplifierTest, FastMathDivideByBroadcastedScalarF16) {
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
 
-  ASSERT_FALSE(PoplarAlgebraicSimplifier(/*enable_fast_math*/ false)
+  ASSERT_FALSE(PoplarAlgebraicSimplifier({}, /*enable_fast_math*/ false)
                    .Run(m.get())
                    .ValueOrDie());
-  ASSERT_TRUE(PoplarAlgebraicSimplifier(/*enable_fast_math*/ true)
+  ASSERT_TRUE(PoplarAlgebraicSimplifier({}, /*enable_fast_math*/ true)
                   .Run(m.get())
                   .ValueOrDie());
 
@@ -1643,7 +1641,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, PowNoughtPointFive) {
   EXPECT_THAT(computation->root_instruction(),
               GmockMatch(m::Power(m::Parameter(0), m::Op().Is(exponent))));
 
-  PoplarAlgebraicSimplifier simplifier(true);
+  PoplarAlgebraicSimplifier simplifier({}, true);
   ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
 
   HloInstruction* root = computation->root_instruction();
@@ -1667,7 +1665,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, PowNegativeNoughtPointFive) {
   EXPECT_THAT(computation->root_instruction(),
               GmockMatch(m::Power(m::Parameter(0), m::Op().Is(negative_half))));
 
-  PoplarAlgebraicSimplifier simplifier(true);
+  PoplarAlgebraicSimplifier simplifier({}, true);
   ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
 
   HloInstruction* root = computation->root_instruction();
@@ -3558,7 +3556,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, TestZeroLHSInDot) {
   EXPECT_THAT(computation->root_instruction(),
               GmockMatch(m::Dot(m::Broadcast(), m::Parameter(0))));
 
-  PoplarAlgebraicSimplifier simplifier(true);
+  PoplarAlgebraicSimplifier simplifier({}, true);
   ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
 
   const auto root = computation->root_instruction();
@@ -3592,7 +3590,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, TestZeroRHSInDot) {
   EXPECT_THAT(computation->root_instruction(),
               GmockMatch(m::Dot(m::Parameter(0), m::Broadcast())));
 
-  PoplarAlgebraicSimplifier simplifier(true);
+  PoplarAlgebraicSimplifier simplifier({}, true);
   ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
 
   const auto root = computation->root_instruction();
@@ -5858,6 +5856,25 @@ TEST_F(PoplarAlgebraicSimplifierTest, OptimiseBroadcastsForNonElementwiseOps) {
                   m::Broadcast(m::Convert(m::Parameter(1))))));
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, MultipleDotStrengthReductions) {
+  constexpr char kModuleStr[] = R"(
+    HloModule test
+    ENTRY test {
+      a = c64[2,2] parameter(0)
+      b = c64[2] parameter(1)
+      cd = c64[2] dot(a, b), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+      c = f64[2,2] parameter(2)
+      d = f64[2] parameter(3)
+      dd = f64[2] dot(c, d), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+      ROOT tuple = (c64[2], f64[2]) tuple(cd, dd)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  IpuOptions_IpuAlgebraicSimplifierConfig config;
+  config.set_enable_dot_strength(true);
+  ASSERT_TRUE(PoplarAlgebraicSimplifier(config).Run(m.get()).ValueOrDie());
+  EXPECT_EQ(3, m->computation_count());
+}
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

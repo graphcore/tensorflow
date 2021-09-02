@@ -255,7 +255,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 41595004)
+    self.assert_total_tile_memory(report, 41143083)
 
   def testTrainingMomentumInLoop(self):
     cfg = ipu.utils.IPUConfig()

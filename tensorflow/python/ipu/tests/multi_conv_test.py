@@ -65,6 +65,7 @@ def _compare_ipu_to_cpu(test_wrapper,
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.optimizations.algebraic_simplifier.enable_dot_strength = False
     cfg.configure_ipu_system()
 
     g = ops.Graph()
