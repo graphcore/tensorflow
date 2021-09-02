@@ -1309,6 +1309,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<HloCSE>(false);
 
       pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+          poplar_executor->GetIpuOptions().algebraic_simplifier_config(),
           resources.enable_fast_math);
       {
         auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
@@ -1323,6 +1324,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<ReshapeMover>();
       pipeline.AddPass<MapInliner>();
       pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+          poplar_executor->GetIpuOptions().algebraic_simplifier_config(),
           resources.enable_fast_math);
       pipeline.AddPass<ZeroSizedHloElimination>();
       pipeline.AddPass<FlattenCallGraph>();
@@ -1351,6 +1353,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         pass.AddPass<HloDCE>();
         pass.AddPass<WhileLoopConstantSinking>();
         pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+            poplar_executor->GetIpuOptions().algebraic_simplifier_config(),
             resources.enable_fast_math);
         pass.AddPass<ReshapeMover>();
         pass.AddPass<SortSimplifier>();
@@ -1382,6 +1385,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         pass.AddPass<MultiUpdateScaleApply>(resources.annotations);
         pass.AddPass<MultiUpdateApply>(resources.annotations);
         pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+            poplar_executor->GetIpuOptions().algebraic_simplifier_config(),
             resources.enable_fast_math);
         pass.AddPass<HloCSE>(true);
         pass.AddPass<HloDCE>();

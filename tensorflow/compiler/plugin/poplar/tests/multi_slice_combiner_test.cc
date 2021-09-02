@@ -20,11 +20,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
-#include "tensorflow/compiler/xla/service/hlo_cse.h"
-#include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_fix.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -47,7 +44,7 @@ se::Platform* GetTestPlatform() {
   auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
   EXPECT_TRUE(platform.ok());
 
-  auto* p = static_cast<xp::PoplarPlatform*>(platform.ValueOrDie());
+  auto* p = dynamic_cast<xp::PoplarPlatform*>(platform.ValueOrDie());
 
   xla::poplarplugin::IpuOptions options;
   options.set_creator_id(IpuOptionsCreator::IPU_UTILS);
@@ -195,7 +192,8 @@ ENTRY main {
   EXPECT_EQ(GetNumConcatenate(module->entry_computation()), 0);
   HloPassFix<MultiSliceCombiner> ms_combiner(annotations);
   EXPECT_TRUE(ms_combiner.Run(module).ValueOrDie());
-  HloPassFix<PoplarAlgebraicSimplifier> algebraic_simplifier;
+  PoplarAlgebraicSimplifier simplifier{{}};
+  HloPassFix<PoplarAlgebraicSimplifier> algebraic_simplifier{simplifier};
   EXPECT_TRUE(algebraic_simplifier.Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiSlice(module->entry_computation()), 1);
   EXPECT_EQ(GetNumSlice(module->entry_computation()), 3);

@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <utility>
 
+#include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
@@ -26,7 +27,9 @@ namespace xla {
 // A pass which performs algebraic simplifications.
 class PoplarAlgebraicSimplifier : public HloModulePass {
  public:
-  explicit PoplarAlgebraicSimplifier(bool enable_fast_math = false);
+  explicit PoplarAlgebraicSimplifier(
+      const poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig& config = {},
+      bool enable_fast_math = false);
   ~PoplarAlgebraicSimplifier() override = default;
   absl::string_view name() const override {
     return "poplar-algebraic-simplifier";
@@ -46,6 +49,7 @@ class PoplarAlgebraicSimplifier : public HloModulePass {
   }
 
  private:
+  const poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig config_;
   const bool enable_fast_math_;
 };
 
