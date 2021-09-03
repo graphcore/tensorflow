@@ -67,8 +67,12 @@ std::ostream& operator<<(
 
 class TestStreamCallback final : public poplar::StreamCallback {
  public:
-  TestStreamCallback(std::string name, int64 size, float start)
-      : name_(name), size_(size), current_(start) {}
+  // size: size of the tensor to be filled every time this is called.
+  // start: initial value for the streamed data.
+  // step: distance between values.
+  // Gives the same data every time it is called.
+  TestStreamCallback(std::string name, int64 size, float start, float step = 1)
+      : name_(name), size_(size), current_(start), step_(step) {}
 
  public:
   Result prefetch(void* p) override { return Result::NotAvailable; }
@@ -76,19 +80,22 @@ class TestStreamCallback final : public poplar::StreamCallback {
   void fetch(void* p) override {
     VLOG(2) << "Fetching [" << name_ << ", " << size_ << "]...";
     float* dst = static_cast<float*>(p);
+    // Fill the dst ptr for 'size_' elements a distance of 'step_' apart.
     auto n = size_;
     auto current = current_;
     while (n--) {
-      *dst++ = current++;
+      current += step_;
+      *dst++ = current;
     }
   }
 
-  void complete() override { current_ += size_; }
+  void complete() override {}
 
  private:
   std::string name_;
   int64 size_;
   float current_;
+  float step_;
 };
 
 using RemoteBuffers = std::vector<std::vector<float>>;
@@ -173,13 +180,21 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
     auto& outputs = io_map.GetEntryOutputInfos();
     auto& remote_infos = resources->annotations.remote_parameter_infos;
 
+    // Give the resources data.
     for (std::size_t index = 0; index < inputs.size(); ++index) {
       auto& input = inputs[index];
       VLOG(1) << "Input name: " << input.Name() << ", shape: " << input.Shape()
               << ", streaming: " << input.IsStreaming();
       auto size = ShapeUtil::ElementsIn(input.Shape());
+      float step_size = 1.0 / size;
+      auto per_replica_size =
+          PartitionedElementCountPerReplica(size, param.replication_factor);
+      auto aligned_size = per_replica_size * param.replication_factor;
+
       for (auto& handle : input.Handles()) {
         VLOG(1) << " handle: " << handle;
+
+        // Remote resources are initialized via copyToRemoteBuffer
         auto it = remote_infos.find(RemoteParameterInfo(index));
         if (it != remote_infos.end()) {
           auto& info = *it;
@@ -188,26 +203,35 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
                   << ", offset: " << info.buffer_offset
                   << ", replicated: " << info.is_replica_partitioned;
 
-          std::vector<float> buffer(size);
-          std::iota(buffer.begin(), buffer.end(), start);
+          // Fill a padded buffer with a linear range of values in the range
+          // 1 + [0, 1]. Do not fill the 0 padding elements.
+          std::vector<float> buffer(aligned_size);
+          float n = 1.0;
+          std::generate(buffer.begin(), buffer.begin() + size,
+                        [&n, &step_size] { return n += step_size; });
           start += size;
+
+          // Each replica gets a per_replica_size portion of the buffer.
           for (unsigned replica = 0; replica < param.replication_factor;
                ++replica) {
             engine.copyToRemoteBuffer(
-                buffer.data() + replica * size / param.replication_factor,
-                info.buffer_name, info.buffer_offset, replica);
+                buffer.data() + replica * per_replica_size, info.buffer_name,
+                info.buffer_offset, replica);
             if (!info.is_replica_partitioned) {
               break;
             }
           }
         } else {
+          // Non-remote resources are initialized via stream callback.
+          // These are similarly given values in 1 + [0, 1]
           std::unique_ptr<poplar::StreamCallback> infeed_callback =
-              absl::make_unique<TestStreamCallback>(handle, size, 10 + start++);
+              absl::make_unique<TestStreamCallback>(handle, size, 1, step_size);
           engine.connectStreamToCallback(handle, 0, std::move(infeed_callback));
         }
       }
     }
 
+    // Give the infeed inputs data.
     for (const auto& infeed_info : annotations.infeed_infos) {
       VLOG(1) << "Connecting infeed " << infeed_info.config.feed_id()
               << " of shape " << infeed_info.shape << ".";
@@ -216,11 +240,13 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
       EXPECT_EQ(shape.tuple_shapes_size(), 2);
       const Shape& input_shape = infeed_info.shape.tuple_shapes(0);
       auto size = ShapeUtil::ElementsIn(input_shape);
+      // Each replica infeed is given the same data in range 1 + [0, 1],
+      // increasing by 1 each time it's dequeued.
       for (auto replica_id = 0; replica_id < param.replication_factor;
            ++replica_id) {
         auto handle = GetInfeedCopyHandle(infeed_info.config.feed_id(), 0);
         std::unique_ptr<poplar::StreamCallback> infeed_callback =
-            absl::make_unique<TestStreamCallback>(handle, size, 1);
+            absl::make_unique<TestStreamCallback>(handle, size, 1, 1.0 / size);
         engine.connectStreamToCallback(handle, replica_id,
                                        std::move(infeed_callback));
       }
@@ -235,6 +261,9 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
               << ", shape: " << output.Shape()
               << ", streaming: " << output.IsStreaming();
       auto size = ShapeUtil::ElementsIn(output.Shape());
+      auto per_replica_size =
+          PartitionedElementCountPerReplica(size, param.replication_factor);
+      auto aligned_size = per_replica_size * param.replication_factor;
       for (auto& handle : output.Handles()) {
         VLOG(1) << " handle: " << handle;
         auto it = remote_infos.find(RemoteParameterInfo(index));
@@ -245,14 +274,14 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
                   << ", offset: " << info.buffer_offset
                   << ", replicated: " << info.is_replica_partitioned;
 
-          std::vector<float> buffer(size);
+          std::vector<float> buffer(aligned_size);
           for (auto replica_id = 0; replica_id < param.replication_factor;
                ++replica_id) {
             engine.copyFromRemoteBuffer(
-                info.buffer_name,
-                buffer.data() + replica_id * size / param.replication_factor,
+                info.buffer_name, buffer.data() + replica_id * per_replica_size,
                 info.buffer_offset, replica_id);
           }
+          buffer.resize(size);
           buffers.push_back(std::move(buffer));
         }
       }
@@ -265,12 +294,12 @@ INSTANTIATE_TEST_SUITE_P(
     ReplicatedResourceUpdateElementwiseClusteringHwTest,
     ::testing::ValuesIn(
         std::vector<ReplicatedResourceUpdateElementwiseClusteringHwTestSpec>{
-            {tu::GetSimpleHloString(1000, 10), "simple", 2},
-            {tu::GetSGDHloString(1000, 10), "sgd", 2},
-            {tu::GetAdamLikeHloString(1000, 10), "adam", 2},
-            {tu::GetMomentumLikeHloString(1000, 10), "momentum", 2},
-            {tu::GetTwoClustersShareInputHloString(1000, 10), "shared-inputs",
-             2},
+            {tu::GetSimpleHloString(99, 7), "simple", 2},
+            {tu::GetSGDHloString(99, 7), "sgd", 2},
+            {tu::GetAdamLikeHloString(99, 7), "adam", 2},
+            {tu::GetLambLikeHloString(99, 7), "lamb", 2},
+            {tu::GetMomentumLikeHloString(99, 7), "momentum", 2},
+            {tu::GetTwoClustersShareInputHloString(99, 7), "shared-inputs", 2},
         }));
 
 TEST_P(ReplicatedResourceUpdateElementwiseClusteringHwTest, DoTest) {
@@ -288,7 +317,10 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringHwTest, DoTest) {
   EXPECT_THAT(clustered_buffers.size(), 2);
   EXPECT_THAT(clustered_buffers.size(), buffers.size());
   for (std::size_t i = 0; i < buffers.size(); ++i) {
-    EXPECT_THAT(buffers[i], ::testing::Eq(clustered_buffers[i]));
+    EXPECT_TRUE(LiteralTestUtil::NearOrEqual(
+        LiteralUtil::CreateR1<float>(buffers[i]),
+        LiteralUtil::CreateR1<float>(clustered_buffers[i]),
+        ErrorSpec{1e-6, 1e-6}));
   }
 }
 

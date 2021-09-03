@@ -166,8 +166,7 @@ StatusOr<HloInstruction*> PreserveFrontendAttributesIfNeeded(
 }
 
 bool IsGlobalAllReduceWithSum(const HloInstruction* all_reduce) {
-  if (all_reduce->opcode() != HloOpcode::kAllReduce ||
-      !all_reduce->replica_groups().empty()) {
+  if (!poplarplugin::IsGlobalAllReduce(all_reduce)) {
     return false;
   }
   auto& called_computations = all_reduce->called_computations();

@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/elementwise_cluster.h"
 
 #include <functional>
+#include <queue>
 #include <string>
 #include <utility>
 #include <vector>
@@ -47,11 +48,6 @@ bool IsBroadcast(const HloInstruction* inst) {
 
 bool IsParameter(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kParameter;
-}
-
-bool IsGlobalAllReduce(const HloInstruction* inst) {
-  return inst->opcode() == HloOpcode::kAllReduce &&
-         inst->replica_groups().empty();
 }
 
 bool IsRemoteParameterLoad(const HloInstruction* inst) {
@@ -94,6 +90,31 @@ bool ValidClusterInput(const HloInstruction* inst,
   return validator.IsValidInput(inst) || IsWideConstant(inst) ||
          IsReplicatedParameterLoad(inst) ||
          IsNonReplicatedParameterLoad(inst, validator);
+}
+
+HloInstructionSet GetNonScalarInputs(HloInstruction* root) {
+  absl::flat_hash_set<HloInstruction*> visited;
+  std::queue<HloInstruction*> to_visit;
+  to_visit.push(root);
+  HloInstructionSet inputs;
+
+  while (!to_visit.empty()) {
+    HloInstruction* inst = to_visit.front();
+    to_visit.pop();
+
+    if (visited.contains(inst)) {
+      continue;
+    }
+
+    if (!IsScalar(inst)) {
+      inputs.insert(inst);
+      continue;
+    }
+    for (const auto operand : inst->operands()) {
+      to_visit.push(operand);
+    }
+  }
+  return inputs;
 }
 
 }  // namespace
@@ -155,6 +176,8 @@ bool ElementwiseCluster::AllUsersIn(HloInstruction* inst) const {
 }
 
 void ElementwiseCluster::Add(HloInstruction* inst) {
+  VLOG(2) << "Adding " << inst->ToString() << " to the cluster with top "
+          << GetTop()->ToString();
   inputs_.erase(inst);
   insts_.insert(inst);
   for (auto op : inst->operands()) {
@@ -164,7 +187,44 @@ void ElementwiseCluster::Add(HloInstruction* inst) {
   }
 }
 
-bool ElementwiseCluster::MaybeAdd(HloInstruction* inst) {
+bool ElementwiseCluster::MaybeAdd(
+    HloInstruction* inst, const ElementwiseComputationSet& elementwise_comps,
+    const HloReachabilityMap& reachability_map) {
+  if (!CanCluster(inst, elementwise_comps)) {
+    if (!IsScalar(inst)) {
+      return false;
+    }
+
+    if (!AnyUserIn(inst)) {
+      return false;
+    }
+
+    for (HloInstruction* allowed_scalar : allowed_scalars_) {
+      if (reachability_map.IsReachable(allowed_scalar, inst)) {
+        VLOG(2) << "Allowing scalar " << inst->ToString()
+                << " because it's reachable from allowed instructions.";
+        Add(inst);
+        return true;
+      }
+    }
+
+    auto inputs = GetNonScalarInputs(inst);
+    if (inputs.empty()) {
+      return false;
+    }
+    if (absl::c_all_of(inputs, [this](const HloInstruction* input) {
+          return ShapeUtil::CompatibleIgnoringElementType(input->shape(),
+                                                          GetTop()->shape());
+        })) {
+      VLOG(2) << "Found scalar instruction that depends on clusterable inputs: "
+              << inst->ToString();
+      Add(inst);
+      allowed_scalars_.insert(inputs.begin(), inputs.end());
+      return true;
+    }
+    return false;
+  }
+
   if (!AnyUserIn(inst)) {
     return false;
   }
@@ -175,6 +235,9 @@ bool ElementwiseCluster::MaybeAdd(HloInstruction* inst) {
 bool ElementwiseCluster::CanMerge(const ElementwiseCluster& other) const {
   // Allow to merge clusters if we use any of other cluster instruction
   for (auto inst : insts_) {
+    if (IsScalar(inst)) {
+      continue;
+    }
     for (auto user : inst->users()) {
       if (other.In(user)) {
         VLOG(3) << "Cluster with top in " << GetTop()->name()
@@ -201,7 +264,7 @@ HloComputation* ElementwiseCluster::GetComputation() const {
 
 bool ElementwiseCluster::IsElementwise(
     const HloInstruction* inst,
-    const absl::flat_hash_set<const HloComputation*>& elementwise_comps) {
+    const ElementwiseComputationSet& elementwise_comps) {
   switch (inst->opcode()) {
     case HloOpcode::kBroadcast:
       return IsScalar(inst->operand(0));
@@ -214,7 +277,7 @@ bool ElementwiseCluster::IsElementwise(
 
 bool ElementwiseCluster::CanCluster(
     const HloInstruction* inst,
-    const absl::flat_hash_set<const HloComputation*>& elementwise_comps) {
+    const ElementwiseComputationSet& elementwise_comps) {
   if (inst->HasSideEffect()) {
     return false;
   }
@@ -267,7 +330,7 @@ ElementwiseCluster::GetElementwiseClusterableComputations(
 
 StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
     HloInstruction* const resource_update,
-    const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
+    ElementwiseComputationSet elementwise_comps,
     ElementwiseClusterValidator& validator) {
   HloComputation* resource_update_comp = resource_update->to_apply();
   auto offload_variables =
@@ -308,22 +371,16 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
   auto comp_insts = resource_update_comp->MakeInstructionPostOrder();
   absl::c_reverse(comp_insts);
   for (auto inst : comp_insts) {
-    bool can_cluster = CanCluster(inst, elementwise_comps);
-    if (can_cluster) {
-      VLOG(2) << "Found elementwise instruction: " << inst->ToString();
-      bool added = false;
-      for (auto& cluster : clusters) {
-        if (cluster.MaybeAdd(inst)) {
-          VLOG(2) << "Added to cluster with top "
-                  << cluster.GetTop()->ToString();
-          added = true;
-          break;
-        }
+    bool added = false;
+    for (auto& cluster : clusters) {
+      if (cluster.MaybeAdd(inst, elementwise_comps, *reachability_map)) {
+        added = true;
+        break;
       }
-      if (!added) {
-        VLOG(2) << "Creating cluster with top " << inst->ToString();
-        clusters.emplace_back(inst);
-      }
+    }
+    if (!added && CanCluster(inst, elementwise_comps)) {
+      VLOG(2) << "Creating cluster with top " << inst->ToString();
+      clusters.emplace_back(inst);
     }
   }
 

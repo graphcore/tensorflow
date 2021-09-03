@@ -324,12 +324,13 @@ StatusOr<HloInstruction*> ResourceUpdateElementwiseClustering::OutlineCluster(
   // Connect up all the users of the cluster output.
   int64 output_idx = 0;
   for (auto cluster_output : cluster.GetOutputs()) {
+    VLOG(2) << "Replacing cluster output " << cluster_output->ToString();
     TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                         MakeGetTupleElementHlo(call, output_idx++));
+    VLOG(2) << "  with " << gte->ToString();
 
     for (auto user : computation_output_users.at(cluster_output)) {
       HloInstruction* to_replace_with = gte;
-      VLOG(2) << "Replacing " << user.ToString();
       for (int64 index : user.indices) {
         TF_RETURN_IF_ERROR(
             user.instruction->ReplaceOperandWith(index, to_replace_with));

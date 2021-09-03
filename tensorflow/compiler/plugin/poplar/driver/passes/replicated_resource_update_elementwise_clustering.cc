@@ -37,11 +37,6 @@ bool IsParameter(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kParameter;
 }
 
-bool IsGlobalAllReduce(const HloInstruction* inst) {
-  return inst->opcode() == HloOpcode::kAllReduce &&
-         inst->replica_groups().empty();
-}
-
 StatusOr<Shape> GetNewShape(const ElementwiseCluster& cluster,
                             HloInstruction* inst) {
   if (IsScalar(inst) ||
@@ -69,6 +64,13 @@ StatusOr<HloComputation*> CloneAndReshapeComputation(
   for (auto inst : cloned_comp->instructions()) {
     TF_ASSIGN_OR_RETURN(Shape new_shape, GetNewShape(cluster, inst));
     *inst->mutable_shape() = new_shape;
+  }
+  HloInstruction* root = cloned_comp->root_instruction();
+  if (root->opcode() == HloOpcode::kReduce) {
+    TF_RETURN_IF_ERROR(cloned_comp->ReplaceWithNewInstruction(
+        root, HloInstruction::CreateReduce(
+                  root->shape(), root->mutable_operand(0),
+                  root->mutable_operand(1), {0}, root->to_apply())));
   }
   return cloned_comp;
 }
@@ -415,7 +417,38 @@ Status ReplicatedResourceUpdateElementwiseClustering::AddClusterInstruction(
   }
 
   TF_ASSIGN_OR_RETURN(Shape new_shape, GetNewShape(cluster, inst));
-  return CloneInstruction(new_shape, inst, builder, context);
+  TF_RETURN_IF_ERROR(CloneInstruction(new_shape, inst, builder, context));
+
+  if (IsReductionFusion(inst) || inst->opcode() == HloOpcode::kReduce) {
+    CHECK(IsScalar(inst));
+
+    HloComputation* fusion_comp =
+        context->GetComputation(inst->fused_instructions_computation());
+    CHECK_NOTNULL(fusion_comp);
+
+    HloInstruction* cloned_inst = context->GetInstruction(inst);
+    CHECK_NOTNULL(cloned_inst);
+
+    // Note that this trick of replacing a local-reduce to a sharded
+    // local-reduce then an all-reduce is only valid when the values aren't
+    // getting near to the limit of the data type.
+    // For example, a whole can be greater than the sum of its parts if each
+    // part is rounded down to be representable but the whole is rounded up.
+    VLOG(2) << "Adding all-reduce after instruction " << cloned_inst->name()
+            << " in the RTS cluster to make it replica-identical";
+    HloComputation* sum_reduction = context->module()->AddEmbeddedComputation(
+        CreateSumReduction(cloned_inst->shape(), "sum-" + cloned_inst->name()));
+
+    HloInstruction* all_reduce =
+        builder->AddInstruction(HloInstruction::CreateAllReduce(
+            cloned_inst->shape(), std::vector<HloInstruction*>{cloned_inst},
+            sum_reduction, {}, {}));
+
+    // Replace all usage of the old local reduction with the new all-reduction
+    // by using the clone context map.
+    context->MapInstruction(inst, all_reduce);
+  }
+  return Status::OK();
 }
 
 StatusOr<HloInstruction*>
