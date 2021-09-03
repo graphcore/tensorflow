@@ -263,7 +263,6 @@ Status HoistOffsets(HloInstruction* call,
   TF_RETURN_IF_ERROR(new_call->CopyAllControlDepsFrom(call));
   TF_RETURN_IF_ERROR(call->DropAllControlDeps());
   TF_RETURN_IF_ERROR(call_parent->RemoveInstruction(call));
-  TF_RETURN_IF_ERROR(clone_context.module()->RemoveEmbeddedComputation(comp));
 
   return Status::OK();
 }
@@ -620,6 +619,7 @@ StatusOr<bool> RemoteBufferMerger::Run(HloModule* module) {
   TF_RETURN_IF_ERROR(AddMergedInfo(creators_to_merge, annotations_));
 
   if (changed) {
+    TF_RETURN_IF_ERROR(module->RemoveUnusedComputations());
     VLOG(3) << "After RemoteBufferMerger:";
     XLA_VLOG_LINES(3, module->ToString());
   } else {
