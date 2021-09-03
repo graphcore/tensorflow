@@ -393,6 +393,37 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
   return Status::OK();
 }
 
+DeferredAllocateFunction DeferredVisitor::MakeParameterAllocationFunction(
+    TensorLocation allocation_location, const Shape& shape,
+    absl::optional<TensorOrRemoteBuffer> tensor_like,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  return [this, shape, tensor_like, debug_name_and_id](
+             TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+    TF_ASSIGN_OR_RETURN(auto tensor,
+                        AllocateInput(allocation_location, shape, tensor_like,
+                                      debug_name_and_id));
+    return tensor;
+  };
+}
+
+DeferredPostProcessFunction DeferredVisitor::MakeParameterPostProcessFunction(
+    TensorLocation input_location, int64 param_num, const Shape& shape,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  return [this, input_location, shape, param_num, debug_name_and_id](
+             poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+    // Call the post process for this location.
+    TF_ASSIGN_OR_RETURN(tensor,
+                        PostProcessInputTensor(tensor, input_location, shape,
+                                               debug_name_and_id));
+
+    // Add the tensor to the computation inputs.
+    computation_inputs_[param_num]
+                       [input_location.flattened_output_tuple_index] = tensor;
+
+    return tensor;
+  };
+}
+
 Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
                                               const Shape shape) {
   poplar::DebugNameAndId debug_name_and_id =
@@ -408,30 +439,13 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
       callsite_inputs_[param_num][input_location.flattened_output_tuple_index];
 
   // Function which is called when allocating this tensor.
-  DeferredAllocateFunction allocate_fn =
-      [this, shape, callsite_tensor, debug_name_and_id](
-          TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-    TF_ASSIGN_OR_RETURN(
-        auto tensor, AllocateInput(allocation_location, shape, callsite_tensor,
-                                   debug_name_and_id));
-    return tensor;
-  };
+  DeferredAllocateFunction allocate_fn = MakeParameterAllocationFunction(
+      input_location, shape, callsite_tensor, debug_name_and_id);
 
   // Function which is called to post processing the allocation of this input.
   DeferredPostProcessFunction post_process_fn =
-      [this, input_location, shape, param_num,
-       debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
-    // Call the post process for this location.
-    TF_ASSIGN_OR_RETURN(tensor,
-                        PostProcessInputTensor(tensor, input_location, shape,
-                                               debug_name_and_id));
-
-    // Add the tensor to the computation inputs.
-    computation_inputs_[param_num]
-                       [input_location.flattened_output_tuple_index] = tensor;
-
-    return tensor;
-  };
+      MakeParameterPostProcessFunction(input_location, param_num, shape,
+                                       debug_name_and_id);
 
   if (callsite_tensor &&
       (callsite_tensor->IsRemoteBuffer() || callsite_tensor->IsOpaque())) {
@@ -1648,29 +1662,13 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
       callsite_inputs_[param_num][input_location.flattened_output_tuple_index];
 
   // Function which is called when tensor is allocated for this input.
-  DeferredAllocateFunction allocate_fn =
-      [this, shape, callsite_tensor, debug_name_and_id](
-          TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-    TF_ASSIGN_OR_RETURN(
-        auto tensor, AllocateInput(allocation_location, shape, callsite_tensor,
-                                   debug_name_and_id));
-    return tensor;
-  };
+  DeferredAllocateFunction allocate_fn = MakeParameterAllocationFunction(
+      input_location, shape, callsite_tensor, debug_name_and_id);
 
   // Function which is called when post processing the allocation of this input.
   DeferredPostProcessFunction post_process_fn =
-      [this, input_location, shape, param_num,
-       debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
-    // Call the post process for this location.
-    TF_ASSIGN_OR_RETURN(tensor,
-                        PostProcessInputTensor(tensor, input_location, shape,
-                                               debug_name_and_id));
-    // Add the tensor to the computation inputs.
-    computation_inputs_[param_num]
-                       [input_location.flattened_output_tuple_index] = tensor;
-
-    return tensor;
-  };
+      MakeParameterPostProcessFunction(input_location, param_num, shape,
+                                       debug_name_and_id);
 
   const bool reallocate_input =
       reallocate_inputs_info_[param_num]
