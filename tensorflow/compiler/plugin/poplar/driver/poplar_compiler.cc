@@ -1432,7 +1432,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<PipelineFeedHoisting>();
       pipeline.AddPass<PipelineFIFOInserter>(resources.remote_memory_supported);
       pipeline.AddPass<ReplicatedResourceUpdateElementwiseClustering>(
-          resources.partition_replication_factor, resources.replication_factor);
+          resources.annotations, resources.partition_replication_factor,
+          resources.replication_factor);
       {
         auto inline_fusion = [](const HloInstruction* inst) {
           return IsReplicatedParameterLoadFusion(inst) ||

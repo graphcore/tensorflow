@@ -355,6 +355,16 @@ class DeferredVisitor : public FullVisitor {
 
   virtual Status PreProcessParameter(HloInstruction* parameter);
 
+  // Default deferred allocation function.
+  virtual DeferredAllocateFunction MakeParameterAllocationFunction(
+      TensorLocation allocation_location, const Shape& shape,
+      absl::optional<TensorOrRemoteBuffer> tensor_like,
+      const poplar::DebugNameAndId& debug_name_and_id);
+  // Default deferred post-processing function.
+  virtual DeferredPostProcessFunction MakeParameterPostProcessFunction(
+      TensorLocation input_location, int64 param_num, const Shape& shape,
+      const poplar::DebugNameAndId& debug_name_and_id);
+
   // Allocates the input by trying to find an allocation target, otherwise tries
   // to use the `tensor_like` argument to create an input tensor.
   // Allocation location is the location where the tensor is actually allocated.

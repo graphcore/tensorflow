@@ -652,6 +652,8 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
       GetFunctionNumberUnmodifiedRemoteBufferInputs(inst);
   const int64 num_remote_buffer_inputs =
       num_modified_remote_buffer_inputs + num_unmodified_remote_buffer_inputs;
+  const bool partitioned_elementwise_cluster =
+      GetFunctionPartitionedElementwiseCluster(inst);
 
   // This instruction needs to be lowered inplace on the remote buffers.
   if (num_remote_buffer_inputs) {
@@ -664,7 +666,8 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
 
   TF_ASSIGN_OR_RETURN(auto subcomp_visitor,
                       res.subcomputation_cache.GetOrCompileSubcomputation(
-                          res, deferred_inputs, comp, keep_input_layouts));
+                          res, deferred_inputs, comp, keep_input_layouts,
+                          partitioned_elementwise_cluster));
 
   // Make sure any deferred inputs to the instruction are pushed up.
   TF_RETURN_IF_ERROR(subcomp_visitor->PropagateDeferredAllocations(

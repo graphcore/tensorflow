@@ -42,6 +42,7 @@ using RemoteBufferHandleVectors = std::vector<RemoteBufferHandleVector>;
 struct SubcomputationGraphCacheKey {
   const HloComputation* computation;
   bool keep_input_layouts;
+  bool partitioned_elementwise_cluster;
   RemoteBufferHandleVectors remote_buffer_handles;
 };
 
@@ -59,14 +60,17 @@ class SubcomputationGraphCache {
   // Get or compile the DeferredVisitor for a computation.
   StatusOr<std::shared_ptr<DeferredVisitor>> GetOrCompileSubcomputation(
       CompilerResources& res, TensorOrRemoteBufferVectors& inputs,
-      const HloComputation* computation, bool keep_input_layouts = false);
+      const HloComputation* computation, bool keep_input_layouts = false,
+      bool partitioned_elementwise_cluster = false);
 
   // Get or compile the DeferredVisitor for a computation.
   StatusOr<std::shared_ptr<DeferredVisitor>> GetOrCompileSubcomputation(
       CompilerResources& res, DeferredArgRBVectors& inputs,
-      const HloComputation* computation, bool keep_input_layouts = false);
+      const HloComputation* computation, bool keep_input_layouts = false,
+      bool partitioned_elementwise_cluster = false);
 
  private:
+  int64 next_rearrangement_id_ = 1;
   std::unordered_map<
       const SubcomputationGraphCacheKey, std::shared_ptr<DeferredVisitor>,
       SubcomputationGraphCacheKeyHash, SubcomputationGraphCacheKeyEquals>

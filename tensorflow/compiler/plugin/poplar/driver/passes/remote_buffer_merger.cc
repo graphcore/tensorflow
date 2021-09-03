@@ -459,6 +459,24 @@ StatusOr<bool> IsInsideFunction(const HloInstruction* inst,
   return IsFunction(call);
 }
 
+StatusOr<bool> IsInsideElementwiseCluster(const HloInstruction* inst,
+                                          const CallGraph& call_graph) {
+  auto* comp = inst->parent();
+  const auto& callsites = call_graph.GetNode(comp).caller_callsites();
+  if (callsites.empty()) {
+    return false;
+  }
+
+  if (callsites.size() > 1) {
+    return FailedPrecondition(
+        "Expected flat call graph, but found %d callers of: %s.",
+        callsites.size(), inst->parent()->name());
+  }
+
+  const auto* call = callsites[0].instruction();
+  return GetFunctionPartitionedElementwiseCluster(call);
+}
+
 void InstructionPrinter(std::string* out, HloInstruction* inst) {
   out->append(inst->ToString());
 }
@@ -466,6 +484,7 @@ void InstructionPrinter(std::string* out, HloInstruction* inst) {
 using GroupedInstructions = std::vector<std::vector<HloInstruction*>>;
 
 StatusOr<GroupedInstructions> ChooseCreatorsToMerge(
+    const CompilerAnnotations& annotations,
     const RemoteBufferCreators& buffer_creators,
     const CreatorToUsers& creator_to_users, const CallGraph& call_graph,
     bool merge_all) {
@@ -482,25 +501,47 @@ StatusOr<GroupedInstructions> ChooseCreatorsToMerge(
   };
 
   for (auto& group : buffer_creators) {
-    std::vector<HloInstruction*> to_merge;
+    std::map<int64, std::vector<HloInstruction*>> to_merge;
 
     // We attempt to merge remote buffers that have at least one user that
     // would benefit from merging.
-    absl::c_copy_if(group.second, std::back_inserter(to_merge),
-                    [&](HloInstruction* creator) {
-                      auto found_users = creator_to_users.find(creator);
-                      if (found_users != creator_to_users.end()) {
-                        return absl::c_any_of(found_users->second,
-                                              would_benefit_from_merging);
-                      }
-                      return false;
-                    });
+    for (HloInstruction* creator : group.second) {
+      auto found_users = creator_to_users.find(creator);
+      if (found_users != creator_to_users.end() &&
+          absl::c_any_of(found_users->second, would_benefit_from_merging)) {
+        int64 cluster_id = -1;
+        if (IsRemoteParameter(creator, annotations)) {
+          for (HloInstruction* user : found_users->second) {
+            auto* comp = user->parent();
+            // Checking if remote parameter user is inside of elementwise
+            // cluster rearranged with CBR. Number of the elements in the buffer
+            // will not be available until CBR instance created. If remote
+            // buffer merge candidate is rearranged, allow only buffers from the
+            // same clusters, so they will have the same number of the elements.
+            TF_ASSIGN_OR_RETURN(bool is_rearranged,
+                                IsInsideElementwiseCluster(user, call_graph));
+            if (is_rearranged) {
+              int64 new_cluster_id = comp->unique_id();
+              if (cluster_id != -1 && new_cluster_id != cluster_id) {
+                return InternalErrorStrCat(
+                    "Remote buffers shared between different clusters");
+              }
+              cluster_id = new_cluster_id;
+            }
+          }
+        }
+        to_merge[cluster_id].push_back(creator);
+      }
+    }
 
-    // Do the actual merging if we got at least two of them.
-    if (to_merge.size() > 1) {
-      VLOG(2) << "Merging remote buffers created by: "
-              << absl::StrJoin(to_merge, ", ", InstructionPrinter);
-      result.push_back(std::move(to_merge));
+    for (auto& to_merge_group : to_merge) {
+      // Do the actual merging if we got at least two of them.
+      auto& insts = to_merge_group.second;
+      if (insts.size() > 1) {
+        VLOG(2) << "Merging remote buffers created by: "
+                << absl::StrJoin(insts, ", ", InstructionPrinter);
+        result.push_back(std::move(insts));
+      }
     }
   }
 
@@ -596,9 +637,10 @@ StatusOr<bool> RemoteBufferMerger::Run(HloModule* module) {
 
   // Choose the candidates that we are actually going to merge.
   const bool merge_all = mode_ == THREESTATE_ON;
-  TF_ASSIGN_OR_RETURN(const GroupedInstructions creators_to_merge,
-                      ChooseCreatorsToMerge(grouped_creators, creator_to_users,
-                                            *call_graph, merge_all));
+  TF_ASSIGN_OR_RETURN(
+      const GroupedInstructions creators_to_merge,
+      ChooseCreatorsToMerge(annotations_, grouped_creators, creator_to_users,
+                            *call_graph, merge_all));
 
   ConstHloInstructionMap<int64> creator_to_offset;
   for (const auto& creators : creators_to_merge) {

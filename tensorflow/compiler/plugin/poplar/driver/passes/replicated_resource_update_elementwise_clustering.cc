@@ -19,7 +19,9 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/collective_reorder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_scatter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/replication_index.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/elementwise_cluster.h"
@@ -191,8 +193,7 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
   const Shape in_comp_shape =
       ShapeUtil::MakeShape(cluster_input_type, cluster.GetShardDimensions());
 
-  // If it's reshape(all-gather(reshape(remote-parameter-load))), remove
-  // all-gather.
+  // If it's replicated parameter load, allow it as is without slicing.
   if (IsReplicatedParameterLoad(cluster_input)) {
     HloInstruction* remote_load = cluster_input->mutable_operand(0);
     if (remote_load->shape().dimensions() == cluster.GetShardDimensions()) {
@@ -241,8 +242,11 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
     // Add any necessary padding before scatter.
     TF_ASSIGN_OR_RETURN(parameter, PadInput(cluster, parameter, builder));
 
+    HloInstruction* scatter_input =
+        builder->AddInstruction(CreateCollectiveReorderInstruction(parameter));
+
     HloInstruction* scatter = builder->AddInstruction(CreateReduceScatter(
-        in_comp_shape, {parameter}, CollectiveOperator::COLLECTIVE_OP_ADD,
+        in_comp_shape, {scatter_input}, CollectiveOperator::COLLECTIVE_OP_ADD,
         PoplarReplicaGroups::Consecutive(partition_replication_factor_)));
 
     if (partition_replication_factor_ == global_replication_factor_) {
@@ -316,6 +320,9 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
         HloInstruction::CreateReshape(all_shards_shape, parameter));
   }
 
+  HloInstruction* scatter_input =
+      builder->AddInstruction(CreateCollectiveReorderInstruction(parameter));
+
   // Slice off this replica's storage elements.
   const Shape slice_shape =
       ShapeUtil::MakeShape(cluster_input_type, {cluster.GetShardSize()});
@@ -324,7 +331,7 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
   // input tensor and does nothing with the values. This is more memory/cycles
   // efficient than doing dynamic-slice(replication-index() * shard_size).
   HloInstruction* slice = builder->AddInstruction(CreateReduceScatter(
-      slice_shape, {parameter}, CollectiveOperator::COLLECTIVE_OP_LOCAL,
+      slice_shape, {scatter_input}, CollectiveOperator::COLLECTIVE_OP_LOCAL,
       PoplarReplicaGroups::Consecutive(partition_replication_factor_)));
 
   if (!ShapeUtil::Compatible(in_comp_shape, slice->shape())) {
@@ -382,6 +389,9 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterOutput(
   HloInstruction* output = builder->AddInstruction(CreatePoplarAllGather(
       {in_cluster_output}, all_gather_shape,
       PoplarReplicaGroups::Consecutive(partition_replication_factor_)));
+
+  output =
+      builder->AddInstruction(CreateUndoCollectiveReorderInstruction(output));
 
   const Shape flat_cluster_shape =
       ShapeUtil::MakeShape(inst_element_type, {cluster.GetClusterSize()});

@@ -2292,19 +2292,20 @@ void PoplarExecutor::FlattenedDeviceMemoryList(
     FlattenedDeviceMemoryList(bufs, shape, const_cast<void*>(args[a].opaque()),
                               input_info, remote_parameter_info);
 
-    const gcl::CollectiveBalancedHostRearrangement* host_rearrangement =
-        nullptr;
-    if (remote_parameter_info && remote_parameter_info->host_rearrangement_id) {
-      host_rearrangement =
-          executable.GetCollectiveBalanceReorderHostRerrangement(
-              remote_parameter_info->host_rearrangement_id);
-      CHECK_NOTNULL(host_rearrangement);
-    }
     for (unsigned i = 0; i < bufs.size(); i++) {
       InputDef& input = bufs[i];
       auto input_handle = input_info.Handles().at(i);
       input.tc->element_type = shape.element_type();
-      input.tc->host_rearrangement = host_rearrangement;
+
+      if (remote_parameter_info &&
+          remote_parameter_info->host_rearrangement_id) {
+        input.tc->host_rearrangement =
+            executable.GetCollectiveBalanceReorderHostRerrangement(
+                remote_parameter_info->host_rearrangement_id);
+        CHECK_NOTNULL(input.tc->host_rearrangement);
+        VLOG(2) << "Assigned rearrangement with id "
+                << remote_parameter_info->host_rearrangement_id;
+      }
 
       if (input_info.IsResource() && !input_info.IsResourceNotModified()) {
         if (modified_resources.contains(input.tc)) {
@@ -2905,8 +2906,20 @@ Status PoplarExecutor::MoveDeviceToHost() {
                   ShapeUtil::ByteSizeOfPrimitiveType(tc->element_type);
               VLOG(3) << "Undo rearrangement for " << tc->output_handle->name
                       << ", size: " << tc->size << "/" << buffer_size;
-              tc->host_rearrangement->undoRearrangeForCollective(
-                  buffer.data(), tc->data, bytes_per_element);
+              if (tc->size < buffer.size()) {
+                // GCL host rearrangement permutes full collective tensor.
+                // If there's not enough space in tensor control buffer,
+                // create buffer enough for permutation and copy back.
+                // TODO(T43411) - remove extra copy here and in rearrangement
+                // code.
+                std::vector<char> temp(buffer.size());
+                tc->host_rearrangement->undoRearrangeForCollective(
+                    buffer.data(), temp.data(), bytes_per_element);
+                memcpy(tc->data, temp.data(), tc->size);
+              } else {
+                tc->host_rearrangement->undoRearrangeForCollective(
+                    buffer.data(), tc->data, bytes_per_element);
+              }
             }
           } else {
             const unsigned replica_id = 0;
@@ -2959,7 +2972,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
 }
 
 Status PoplarExecutor::ResetTensorControlState(TensorControl* tc) {
-  tc->in_memory_remote_parameter_info = absl::nullopt;
+  tc->in_memory_remote_parameter_info = nullptr;
   tc->on_device = false;
   tc->output_handle.reset();
   tc->input_handle.reset();
@@ -2993,8 +3006,8 @@ Status PoplarExecutor::MoveHostToDevice() {
         buf = PreProcessBuffer(arg.second);
 
         if (arg.second.remote_parameter_info) {
-          tc->in_memory_remote_parameter_info.emplace(
-              *arg.second.remote_parameter_info);
+          tc->in_memory_remote_parameter_info =
+              arg.second.remote_parameter_info;
 
           buffer_size = tc->GetRemoteBufferSize();
           const std::string buffer_name =
@@ -3027,7 +3040,6 @@ Status PoplarExecutor::MoveHostToDevice() {
               if (tc->size < buffer_size) {
                 std::vector<char> temp(buffer_size);
                 memcpy(temp.data(), tc->data, tc->size);
-                memset(temp.data() + tc->size, 0, buffer_size - tc->size);
                 tc->host_rearrangement->rearrangeForCollective(
                     temp.data(), buffer.data(), bytes_per_element);
               } else {
@@ -3075,7 +3087,7 @@ Status PoplarExecutor::MoveHostToDevice() {
             }
           }
         } else {
-          tc->in_memory_remote_parameter_info = absl::nullopt;
+          tc->in_memory_remote_parameter_info = nullptr;
           current_engine_->connectStream(arg.first.name, buf);
         }
 

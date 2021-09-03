@@ -73,6 +73,8 @@ StatusOr<HloInstruction*> GetRewrittenInput(HloInstruction* inst, bool padded) {
     TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
   }
   TF_ASSIGN_OR_RETURN(inst, LookThroughReshape(inst));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::CollectiveReorder)(inst));
+  TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ReduceScatter)(inst));
   return inst;
 }
@@ -84,6 +86,8 @@ StatusOr<HloInstruction*> GetScatterInput(HloInstruction* inst, bool padded) {
     EXPECT_THAT(inst->opcode(), HloOpcode::kPad);
     TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
   }
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::CollectiveReorder)(inst));
+  TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ReduceScatter)(inst));
   return inst;
 }
@@ -99,6 +103,8 @@ StatusOr<HloInstruction*> GetRewrittenOutput(HloInstruction* inst,
                                              bool sliced) {
   TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::AllGather)(inst));
+  TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::UndoCollectiveReorder)(inst));
   TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
   EXPECT_THAT(inst->opcode(), HloOpcode::kReshape);
   if (sliced) {
@@ -151,7 +157,8 @@ ENTRY main {
   config.set_debug_options(GetDebugOptionsForTest());
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo_string, config));
-  ReplicatedResourceUpdateElementwiseClustering pass(1);
+  CompilerAnnotations annotations(module.get());
+  ReplicatedResourceUpdateElementwiseClustering pass(annotations, 1);
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   CHECK_EQ(elementwise_comps.size(), 2);
@@ -276,8 +283,9 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   EXPECT_TRUE(offloaded);
 
   std::unique_ptr<ResourceUpdateElementwiseClustering> pass_ptr(
-      replica_partition ? new ReplicatedResourceUpdateElementwiseClustering(2)
-                        : new ResourceUpdateElementwiseClustering);
+      replica_partition
+          ? new ReplicatedResourceUpdateElementwiseClustering(annotations, 2)
+          : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
@@ -384,8 +392,9 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   EXPECT_TRUE(offloaded);
 
   std::unique_ptr<ResourceUpdateElementwiseClustering> pass_ptr(
-      replica_partition ? new ReplicatedResourceUpdateElementwiseClustering(2)
-                        : new ResourceUpdateElementwiseClustering);
+      replica_partition
+          ? new ReplicatedResourceUpdateElementwiseClustering(annotations, 2)
+          : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
@@ -580,8 +589,9 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   EXPECT_TRUE(offloaded);
 
   std::unique_ptr<ResourceUpdateElementwiseClustering> pass_ptr(
-      replica_partition ? new ReplicatedResourceUpdateElementwiseClustering(2)
-                        : new ResourceUpdateElementwiseClustering);
+      replica_partition
+          ? new ReplicatedResourceUpdateElementwiseClustering(annotations, 2)
+          : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
@@ -769,8 +779,9 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   EXPECT_TRUE(offloaded);
 
   std::unique_ptr<ResourceUpdateElementwiseClustering> pass_ptr(
-      replica_partition ? new ReplicatedResourceUpdateElementwiseClustering(2)
-                        : new ResourceUpdateElementwiseClustering);
+      replica_partition
+          ? new ReplicatedResourceUpdateElementwiseClustering(annotations, 2)
+          : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
@@ -1033,7 +1044,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringShapeTest, DoTest) {
 
   std::unique_ptr<ResourceUpdateElementwiseClustering> pass_ptr(
       param.partition_offloaded_variables
-          ? new ReplicatedResourceUpdateElementwiseClustering(2)
+          ? new ReplicatedResourceUpdateElementwiseClustering(annotations, 2)
           : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
   auto elementwise_comps =
@@ -1260,10 +1271,10 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringTest, DoTest) {
   EXPECT_TRUE(offloaded);
 
   if (param.cluster) {
-    TF_ASSERT_OK_AND_ASSIGN(
-        bool changed,
-        ReplicatedResourceUpdateElementwiseClustering(replication_factor)
-            .Run(module.get()));
+    TF_ASSERT_OK_AND_ASSIGN(bool changed,
+                            ReplicatedResourceUpdateElementwiseClustering(
+                                annotations, replication_factor)
+                                .Run(module.get()));
     EXPECT_TRUE(changed);
   }
   TF_ASSERT_OK_AND_ASSIGN(bool inlined,
@@ -1310,6 +1321,10 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringTest, DoTest) {
       return true;
     }
     auto user = inst->users()[0];
+    if (IsPoplarInstruction(PoplarOp::UndoCollectiveReorder)(user) &&
+        user->user_count() == 1) {
+      user = user->users()[0];
+    }
     if (user->opcode() == HloOpcode::kReshape && user->user_count() == 1) {
       user = user->users()[0];
     }
@@ -1407,7 +1422,7 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
   EXPECT_TRUE(offloaded);
 
   ReplicatedResourceUpdateElementwiseClustering pass(
-      partition_replication_factor, global_replication_factor);
+      annotations, partition_replication_factor, global_replication_factor);
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
@@ -1540,7 +1555,7 @@ TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
   EXPECT_TRUE(offloaded);
 
   ReplicatedResourceUpdateElementwiseClustering pass(
-      partition_replication_factor, global_replication_factor);
+      annotations, partition_replication_factor, global_replication_factor);
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
@@ -1587,10 +1602,10 @@ TEST_F(TestPartitionReplicationFactor, IgnoreImplicit2ScalarBroadcast) {
           .Run(module.get()));
   EXPECT_TRUE(offloaded);
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      bool changed,
-      ReplicatedResourceUpdateElementwiseClustering(replication_factor)
-          .Run(module.get()));
+  TF_ASSERT_OK_AND_ASSIGN(bool changed,
+                          ReplicatedResourceUpdateElementwiseClustering(
+                              annotations, replication_factor)
+                              .Run(module.get()));
   EXPECT_TRUE(changed);
 
   HloInstruction* fusion = FindInstruction(module.get(), "fusion");

@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replicated_resource_update_elementwise_clustering.h"
 
 #include <algorithm>
+#include <gcl/CollectiveBalancedReorder.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
@@ -23,6 +24,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fusion_inliner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/outline_remote_buffers.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/remote_buffer_merger.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/variables_offload_and_partition.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/elementwise_cluster.h"
@@ -134,7 +137,7 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
     if (cluster) {
       TF_ASSERT_OK_AND_ASSIGN(bool changed,
                               ReplicatedResourceUpdateElementwiseClustering(
-                                  param.replication_factor)
+                                  annotations, param.replication_factor)
                                   .Run(module.get()));
       EXPECT_TRUE(changed);
     }
@@ -147,8 +150,14 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
                                 .Run(module.get()));
     EXPECT_TRUE(inlined);
     EXPECT_TRUE(HloDCE().Run(module.get()).ok());
+    TF_ASSERT_OK_AND_ASSIGN(bool outlined,
+                            OutlineRemoteBuffers().Run(module.get()));
+    EXPECT_EQ(outlined, cluster);
 
     EXPECT_TRUE(InplaceFinder().Run(module.get()).ok());
+    EXPECT_TRUE(RemoteBufferMerger(resources->annotations, THREESTATE_ON)
+                    .Run(module.get())
+                    .ok());
     EXPECT_TRUE(AllocationFinder(resources->annotations,
                                  resources->always_rearrange_copies_on_host)
                     .Run(module.get())
@@ -156,7 +165,6 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
     EXPECT_TRUE(HloPassFix<ForwardAllocation>(resources->annotations)
                     .Run(module.get())
                     .ok());
-    XLA_VLOG_LINES(1, module->ToString());
 
     auto root = module->entry_computation()->root_instruction();
     HloComputation* repeat_computation =
@@ -172,24 +180,24 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
     TF_ASSERT_OK_AND_ASSIGN(auto engine, Compile(*resources, module.get()));
     engine.load(device);
 
-    EXPECT_EQ(resources->annotations.remote_parameter_infos.size(), 2);
+    EXPECT_EQ(annotations.remote_parameter_infos.size(), 2);
 
     float start = 1;
-    auto& io_map = resources->annotations.input_output_aliasing_map;
+    auto& io_map = annotations.input_output_aliasing_map;
     auto& inputs = io_map.GetEntryInputInfos();
     auto& outputs = io_map.GetEntryOutputInfos();
-    auto& remote_infos = resources->annotations.remote_parameter_infos;
+    auto& remote_infos = annotations.remote_parameter_infos;
+
+    absl::flat_hash_map<int64, gcl::CollectiveBalancedHostRearrangement>
+        host_rearrangements;
 
     // Give the resources data.
     for (std::size_t index = 0; index < inputs.size(); ++index) {
       auto& input = inputs[index];
       VLOG(1) << "Input name: " << input.Name() << ", shape: " << input.Shape()
               << ", streaming: " << input.IsStreaming();
-      auto size = ShapeUtil::ElementsIn(input.Shape());
-      float step_size = 1.0 / size;
-      auto per_replica_size =
-          PartitionedElementCountPerReplica(size, param.replication_factor);
-      auto aligned_size = per_replica_size * param.replication_factor;
+      const auto size = ShapeUtil::ElementsIn(input.Shape());
+      const float step_size = 1.0 / size;
 
       for (auto& handle : input.Handles()) {
         VLOG(1) << " handle: " << handle;
@@ -199,9 +207,14 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
         if (it != remote_infos.end()) {
           auto& info = *it;
 
+          auto per_replica_size =
+              PartitionedElementCountPerReplica(size, param.replication_factor);
+          auto aligned_size = per_replica_size * param.replication_factor;
+
           VLOG(1) << "Uploading data to " << info.buffer_name
                   << ", offset: " << info.buffer_offset
-                  << ", replicated: " << info.is_replica_partitioned;
+                  << ", replicated: " << info.is_replica_partitioned
+                  << ", cluster id: " << info.host_rearrangement_id;
 
           // Fill a padded buffer with a linear range of values in the range
           // 1 + [0, 1]. Do not fill the 0 padding elements.
@@ -212,6 +225,34 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
           start += size;
 
           // Each replica gets a per_replica_size portion of the buffer.
+          if (info.host_rearrangement_id) {
+            EXPECT_TRUE(cluster);
+            auto hr_it = annotations.remote_parameter_host_rearrangements.find(
+                info.host_rearrangement_id);
+            CHECK(hr_it !=
+                  annotations.remote_parameter_host_rearrangements.end());
+            auto& host_rearrangement = hr_it->second;
+            auto& gcl = host_rearrangements[index];
+            gcl.replicationFactor = host_rearrangement.replication_factor;
+            gcl.totalElementsPerReplica =
+                host_rearrangement.total_elements_per_replica;
+            for (auto& slice : host_rearrangement.gathered_to_ref_slice) {
+              gcl.gatheredToRefSlices.emplace_back(slice.first, slice.second);
+            }
+            gcl.elementMap = host_rearrangement.element_map;
+
+            CHECK_EQ(gcl.replicationFactor, param.replication_factor);
+            per_replica_size = gcl.totalElementsPerReplica;
+            aligned_size = per_replica_size * gcl.replicationFactor;
+
+            std::vector<float> tmp(aligned_size);
+            VLOG(1) << "Rearranging for collective...";
+            gcl.rearrangeForCollective(
+                reinterpret_cast<const char*>(buffer.data()),
+                reinterpret_cast<char*>(tmp.data()), 4);
+            buffer = std::move(tmp);
+          }
+
           for (unsigned replica = 0; replica < param.replication_factor;
                ++replica) {
             engine.copyToRemoteBuffer(
@@ -229,6 +270,9 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
           engine.connectStreamToCallback(handle, 0, std::move(infeed_callback));
         }
       }
+    }
+    if (cluster) {
+      EXPECT_EQ(host_rearrangements.size(), 2);
     }
 
     // Give the infeed inputs data.
@@ -261,14 +305,24 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
               << ", shape: " << output.Shape()
               << ", streaming: " << output.IsStreaming();
       auto size = ShapeUtil::ElementsIn(output.Shape());
-      auto per_replica_size =
-          PartitionedElementCountPerReplica(size, param.replication_factor);
-      auto aligned_size = per_replica_size * param.replication_factor;
+
       for (auto& handle : output.Handles()) {
         VLOG(1) << " handle: " << handle;
         auto it = remote_infos.find(RemoteParameterInfo(index));
         if (it != remote_infos.end()) {
           auto& info = *it;
+
+          auto per_replica_size =
+              PartitionedElementCountPerReplica(size, param.replication_factor);
+          auto aligned_size = per_replica_size * param.replication_factor;
+
+          auto host_rearrangement_it = host_rearrangements.find(index);
+          if (host_rearrangement_it != host_rearrangements.end()) {
+            auto& host_rearrangement = host_rearrangement_it->second;
+            per_replica_size = host_rearrangement.totalElementsPerReplica;
+            aligned_size =
+                per_replica_size * host_rearrangement.replicationFactor;
+          }
 
           VLOG(1) << "Downloading data from " << info.buffer_name
                   << ", offset: " << info.buffer_offset
@@ -280,6 +334,16 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
             engine.copyFromRemoteBuffer(
                 info.buffer_name, buffer.data() + replica_id * per_replica_size,
                 info.buffer_offset, replica_id);
+          }
+          if (host_rearrangement_it != host_rearrangements.end()) {
+            auto& host_rearrangement = host_rearrangement_it->second;
+            EXPECT_TRUE(cluster);
+            std::vector<float> tmp(buffer.size());
+            VLOG(1) << "Undo rearrangement for collective...";
+            host_rearrangement.undoRearrangeForCollective(
+                reinterpret_cast<const char*>(buffer.data()),
+                reinterpret_cast<char*>(tmp.data()), 4);
+            buffer = std::move(tmp);
           }
           buffer.resize(size);
           buffers.push_back(std::move(buffer));
@@ -312,10 +376,16 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringHwTest, DoTest) {
   }
   RemoteBuffers clustered_buffers;
   RunTest(param, true, clustered_buffers);
+  if (HasFailure()) {
+    return;
+  }
   RemoteBuffers buffers;
   RunTest(param, false, buffers);
-  EXPECT_THAT(clustered_buffers.size(), 2);
-  EXPECT_THAT(clustered_buffers.size(), buffers.size());
+  if (HasFailure()) {
+    return;
+  }
+  ASSERT_THAT(clustered_buffers.size(), 2);
+  ASSERT_THAT(clustered_buffers.size(), buffers.size());
   for (std::size_t i = 0; i < buffers.size(); ++i) {
     EXPECT_TRUE(LiteralTestUtil::NearOrEqual(
         LiteralUtil::CreateR1<float>(buffers[i]),

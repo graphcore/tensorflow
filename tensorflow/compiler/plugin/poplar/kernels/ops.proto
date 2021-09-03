@@ -116,7 +116,9 @@ enum PoplarOp {
   AssumeEqualAcrossReplicas = 112;
   ReduceMany = 113;
   GradientAccumulationCount = 114;
-  
+  CollectiveReorder = 115;
+  UndoCollectiveReorder = 116;
+
   // Supported Fusions.
   Conv_biasadd = 200;
   Matmul_biasadd = 201;

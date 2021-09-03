@@ -76,6 +76,7 @@ class RemoteBufferHolder {
    * Creates poplar RemoteBuffer or returns it if it's already created.
    */
   poplar::RemoteBuffer Get();
+  Status SetNumElements(std::size_t num_elements);
 
   const std::string& GetHandle() const { return handle_; }
   poplar::Type GetElementType() const { return element_type_; }
@@ -116,6 +117,7 @@ struct TensorOrRemoteBuffer {
    * construct the tensor, because it could only be a tensor.
    */
   TensorOrRemoteBuffer() = default;
+  TensorOrRemoteBuffer(TensorOrRemoteBuffer&&) = default;
 
   /**
    * Construct with a poplar tensor.
