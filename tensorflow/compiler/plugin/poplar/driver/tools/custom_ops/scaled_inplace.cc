@@ -20,6 +20,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
@@ -97,6 +98,19 @@ std::unique_ptr<HloInstruction> CreateScaledInplaceXbY(
   return absl::make_unique<HloScaledInplaceXbY>(x, y, scale, operation);
 }
 
+static HloPoplarInstructionFactory scaled_inplace_xby_factory(
+    PoplarOp::ScaledInplaceXbY,
+    [](HloCustomCallInstruction* call)
+        -> StatusOr<std::unique_ptr<HloInstruction>> {
+      auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+      TF_ASSIGN_OR_RETURN(std::string operation,
+                          attribute_map.GetAttributeAsString("operation"));
+      TF_ASSIGN_OR_RETURN(HloOpcode op, StringToHloOpcode(operation));
+      return CreateScaledInplaceXbY(call->mutable_operand(0),
+                                    call->mutable_operand(1),
+                                    call->mutable_operand(2), op);
+    });
+
 HloScaledInplaceaXbY::HloScaledInplaceaXbY(HloInstruction* const x,
                                            HloInstruction* const y,
                                            HloInstruction* const a,
@@ -121,6 +135,19 @@ std::unique_ptr<HloInstruction> CreateScaledInplaceaXbY(HloInstruction* const x,
                                                         HloOpcode operation) {
   return absl::make_unique<HloScaledInplaceaXbY>(x, y, a, b, operation);
 }
+
+static HloPoplarInstructionFactory scaled_inplace_axby_factory(
+    PoplarOp::ScaledInplaceaXbY,
+    [](HloCustomCallInstruction* call)
+        -> StatusOr<std::unique_ptr<HloInstruction>> {
+      auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+      TF_ASSIGN_OR_RETURN(std::string operation,
+                          attribute_map.GetAttributeAsString("operation"));
+      TF_ASSIGN_OR_RETURN(HloOpcode op, StringToHloOpcode(operation));
+      return CreateScaledInplaceaXbY(
+          call->mutable_operand(0), call->mutable_operand(1),
+          call->mutable_operand(2), call->mutable_operand(3), op);
+    });
 
 }  // namespace poplarplugin
 }  // namespace xla
