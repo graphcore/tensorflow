@@ -28,6 +28,7 @@ import pathlib
 import shutil
 import tempfile
 import numpy as np
+from pva import ProgramVisitor
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
@@ -344,6 +345,57 @@ class TestCaseExtensions(object):
   def assert_number_of_executions(self, report, n):
     """Asserts the number of executions in the report."""
     self.assertLen(report.execution.runs, n)
+
+  def assert_compute_io_overlap_percentage(self, report, p):
+    """Asserts a minimum percentage of compute and IO overlapped in the execution
+    report.
+    """
+    # Execution steps for the first run
+    steps = report.execution.runs[0].steps
+    computeIntervals = []
+    streamCopyIntervals = []
+
+    class IntervalVisitor(ProgramVisitor):
+      streamCopyStart = 0
+      streamCopyMid = False
+
+      def __init__(self, cyclesFrom, cyclesTo):
+        self.cyclesFrom = cyclesFrom
+        self.cyclesTo = cyclesTo
+        super(IntervalVisitor, self).__init__()
+
+      def visitOnTileExecute(self, _):
+        computeIntervals.append([self.cyclesFrom.max, self.cyclesTo.max])
+
+      def visitStreamCopyMid(self, _):
+        streamCopyIntervals.append([self.cyclesFrom.max, self.cyclesTo.max])
+
+    for step in steps:
+      ipu = step.ipus[0]
+      f = ipu.activeCycles.cyclesFrom
+      t = ipu.activeCycles.cyclesTo
+      v = IntervalVisitor(f, t)
+      step.program.accept(v)
+
+      def checkOverlap(low1, high1, low2, high2):
+        return low1 < high2 and low2 < high1
+
+      def getOverlap(low1, high1, low2, high2):
+        overlap = min(high1, high2) - max(low1, low2)
+        return overlap
+
+      overlap = 0
+      for compute in computeIntervals:
+        for stream in streamCopyIntervals:
+          if checkOverlap(compute[0], compute[1], stream[0], stream[1]):
+            overlap += getOverlap(compute[0], compute[1], stream[0], stream[1])
+
+    computeTotal, streamCopyTotal = (
+        sum(i[1] - i[0] for i in intervals)
+        for intervals in [computeIntervals, streamCopyIntervals])
+
+    self.assertGreater(max(overlap / streamCopyTotal, overlap / computeTotal),
+                       p)
 
 
 # Attach everything from TestCaseExtensions onto TensorFlowTestCase.
