@@ -251,6 +251,21 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "io_tiles_hw_test",
+    size = "medium",
+    srcs = ["tests/io_tiles_hw_test.py"],
+    shard_count = 10,
+    tags = ["hw_poplar_test"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
     name = "map_gradient_optimizer_test",
     size = "medium",
     srcs = ["tests/map_gradient_optimizer_test.py"],
@@ -1965,6 +1980,7 @@ test_suite(
         "image_ops_test",
         "infeed_outfeed_overlap_test",
         "infeed_outfeed_test",
+        "io_tiles_hw_test",
         "io_tiles_test",
         "ipu_compiler_test",
         "ipu_estimator_replicated_test",
