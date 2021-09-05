@@ -712,12 +712,11 @@ absl::optional<Tilesets> PartitionTiles(const poplar::Graph& main_graph,
 
   const auto num_compute_tiles = num_tiles_per_ipu - num_io_tiles;
 
-  const auto compute_tiles =
-      gcl::perIPUTiles(main_graph, num_io_tiles, num_compute_tiles,
-                       /*sorted=*/true, /*tilePairs=*/true);
-  CHECK_EQ(compute_tiles.size(), num_compute_tiles);
+  const auto io_tiles = gcl::perIPUTiles(main_graph, 0, num_io_tiles,
+                                         /*sorted=*/true, /*tilePairs=*/true);
+  CHECK_EQ(io_tiles.size(), num_io_tiles);
 
-  const auto io_tiles = DisjointTiles(compute_tiles, num_tiles_per_ipu);
+  const auto compute_tiles = DisjointTiles(io_tiles, num_tiles_per_ipu);
 
   return Tilesets{compute_tiles, io_tiles};
 }

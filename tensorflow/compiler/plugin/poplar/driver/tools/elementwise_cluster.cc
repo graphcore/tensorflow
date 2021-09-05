@@ -298,7 +298,7 @@ bool ElementwiseCluster::CanCluster(
 
   switch (inst->opcode()) {
     case HloOpcode::kFusion:
-      return !IsWideConstant(inst) &&
+      return IsPopOpsFusion(inst, "") && !IsWideConstant(inst) &&
              elementwise_comps.contains(inst->fused_instructions_computation());
     default:
       return IsPopOpsElementwise(inst);
