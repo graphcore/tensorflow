@@ -28,21 +28,50 @@ from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
+from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
 
 
 class IoTilesHWTest(test_util.TensorFlowTestCase, parameterized.TestCase):
+  def _check_overlap(self, report, use_io_tiles):
+    if use_io_tiles:
+      self.assert_compute_io_overlap_percentage(report, 0.85)
+    else:
+      with self.assertRaisesRegex(AssertionError,
+                                  r"0\.0 not greater than 0\.85"):
+        self.assert_compute_io_overlap_percentage(report, 0.85)
+
+  def _configure_system(self, num_ipus, use_io_tiles, num_io_tiles):
+    cfg = IPUConfig()
+
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+
+    if use_io_tiles:
+      cfg.io_tiles.num_io_tiles = num_io_tiles
+      cfg.io_tiles.place_ops_on_io_tiles = True
+
+    cfg.auto_select_ipus = num_ipus
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
+    return report_helper
+
+  def _data_feeds(self, num_io_tiles, count=16):
+    data = np.ones((num_io_tiles, 512), dtype=np.float32)
+    dataset = dataset_ops.Dataset.from_tensors(data)
+    dataset = dataset.repeat(count)
+    infeed = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed = ipu_outfeed_queue.IPUOutfeedQueue()
+    return infeed, outfeed
+
   @parameterized.parameters(
       itertools.product([8, 16, 32, 64, 128], [True, False]))
   @test_util.deprecated_graph_mode_only
   @tu.test_uses_ipus(num_ipus=1)
   def testSingleIPUIOOverlap(self, num_io_tiles, use_io_tiles):
-    data = np.ones((num_io_tiles, 512), dtype=np.float32)
-    dataset = dataset_ops.Dataset.from_tensors(data)
-    dataset = dataset.repeat(16)
-    infeed = ipu_infeed_queue.IPUInfeedQueue(dataset)
-    outfeed = ipu_outfeed_queue.IPUOutfeedQueue()
+    infeed, outfeed = self._data_feeds(num_io_tiles)
 
     def body(a):
       with ops.name_scope("matmul"):
@@ -56,19 +85,7 @@ class IoTilesHWTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with ops.device("/device:IPU:0"):
       compiled_net = ipu_compiler.compile(loop, inputs=[])
 
-    cfg = IPUConfig()
-
-    report_helper = tu.ReportHelper()
-    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
-
-    if use_io_tiles:
-      cfg.io_tiles.num_io_tiles = num_io_tiles
-      cfg.io_tiles.place_ops_on_io_tiles = True
-
-    cfg.auto_select_ipus = 1
-    tu.add_hw_ci_connection_options(cfg)
-    cfg.configure_ipu_system()
+    report_helper = self._configure_system(1, use_io_tiles, num_io_tiles)
 
     with session.Session() as sess:
       sess.run(infeed.initializer)
@@ -76,13 +93,44 @@ class IoTilesHWTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(compiled_net)
 
     report = pva.openReport(report_helper.find_report())
+    self._check_overlap(report, use_io_tiles)
 
-    if use_io_tiles:
-      self.assert_compute_io_overlap_percentage(report, 0.9)
-    else:
-      with self.assertRaisesRegex(AssertionError,
-                                  r"0\.0 not greater than 0\.9"):
-        self.assert_compute_io_overlap_percentage(report, 0.9)
+  @parameterized.parameters(
+      itertools.product([8, 16, 32, 64, 128], [True, False]))
+  @test_util.deprecated_graph_mode_only
+  @tu.test_uses_ipus(num_ipus=2)
+  def testPipelineIPUIOOverlap(self, num_io_tiles, use_io_tiles):
+    infeed, outfeed = self._data_feeds(num_io_tiles)
+
+    def stage0(a):
+      with ops.name_scope("matmul0"):
+        return math_ops.matmul(a, a, transpose_b=True)
+
+    def stage1(a):
+      with ops.name_scope("matmul1"):
+        return math_ops.matmul(a, a, transpose_b=True)
+
+    def pipeline():
+      return pipelining_ops.pipeline(
+          [stage0, stage1],
+          16,
+          inputs=[],
+          infeed_queue=infeed,
+          outfeed_queue=outfeed,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+
+    with ops.device("/device:IPU:0"):
+      compiled_net = ipu_compiler.compile(pipeline, inputs=[])
+
+    report_helper = self._configure_system(2, use_io_tiles, num_io_tiles)
+
+    with session.Session() as sess:
+      sess.run(infeed.initializer)
+      report_helper.clear_reports()
+      sess.run(compiled_net)
+
+    report = pva.openReport(report_helper.find_report())
+    self._check_overlap(report, use_io_tiles)
 
 
 if __name__ == "__main__":

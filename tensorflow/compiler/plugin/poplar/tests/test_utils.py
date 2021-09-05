@@ -355,9 +355,6 @@ class TestCaseExtensions(object):
     streamCopyIntervals = []
 
     class IntervalVisitor(ProgramVisitor):
-      streamCopyStart = 0
-      streamCopyMid = False
-
       def __init__(self, cyclesFrom, cyclesTo):
         self.cyclesFrom = cyclesFrom
         self.cyclesTo = cyclesTo
