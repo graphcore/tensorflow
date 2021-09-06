@@ -33,6 +33,7 @@ from tensorflow.python.ipu.keras.extensions import data_adapter as ipu_data_adap
 from tensorflow.python.ipu.keras import optimizers as ipu_optimizers
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.keras import callbacks as callbacks_module
+from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine import base_layer
 from tensorflow.python.keras.engine import training as training_module
 from tensorflow.python.keras.engine import training_utils
@@ -504,6 +505,8 @@ class ModelExtension(base_layer.KerasExtension):
                      gradient_accumulation_steps_per_replica,
                      add_loss=False,
                      add_optimizer=False):
+    training = add_loss and add_optimizer
+
     @def_function.function(experimental_compile=True)
     def pipeline_function(_steps_per_execution, iterator, outfeed):
       # Get the shapes for all the inputs.
@@ -647,7 +650,7 @@ class ModelExtension(base_layer.KerasExtension):
       # When training loss and metrics are the outputs from the last
       # computational stage, but we only want to outfeed the metrics so mask out
       # the loss.
-      outfeed_mask = [True, False] if add_loss and add_optimizer else None
+      outfeed_mask = [True, False] if training else None
 
       def optimizer_function(loss, *_):
         replication_factor = self._get_replication_factor()
@@ -661,18 +664,25 @@ class ModelExtension(base_layer.KerasExtension):
 
       accumulate_outfeed = self._pipelining_accumulate_outfeed and (
           add_loss or add_optimizer)
-      pipelining_ops.pipeline(
-          computational_stages,
-          gradient_accumulation_count=gradient_accumulation_steps_per_replica,
-          repeat_count=iterations,
-          device_mapping=self._pipelining_device_mapping,
-          accumulate_outfeed=accumulate_outfeed,
-          inputs=[],
-          infeed_queue=iterator._infeed_queue,  # pylint: disable=protected-access
-          outfeed_queue=outfeed,
-          optimizer_function=opt,
-          outfeed_mask=outfeed_mask,
-          **self._pipelining_kwargs)
+
+      # Create a dummy call context when evaluating the pipeline op.
+      call_context = base_layer_utils.call_context()
+      with call_context.enter(layer=self,
+                              inputs=[],
+                              build_graph=True,
+                              training=training):
+        pipelining_ops.pipeline(
+            computational_stages,
+            gradient_accumulation_count=gradient_accumulation_steps_per_replica,
+            repeat_count=iterations,
+            device_mapping=self._pipelining_device_mapping,
+            accumulate_outfeed=accumulate_outfeed,
+            inputs=[],
+            infeed_queue=iterator._infeed_queue,  # pylint: disable=protected-access
+            outfeed_queue=outfeed,
+            optimizer_function=opt,
+            outfeed_mask=outfeed_mask,
+            **self._pipelining_kwargs)
 
     return pipeline_function
 

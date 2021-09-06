@@ -19,7 +19,6 @@ Normalization Keras layers
 from functools import reduce
 import operator
 
-from tensorflow.python.framework import smart_cond
 from tensorflow.python.ipu.keras.layers import ipu_layer
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras import constraints
@@ -144,9 +143,6 @@ class GroupNormalization(ipu_layer.IPULayer):
     Returns:
       The tensor resulting from applying normalization.
     """
-    if training is None:
-      training = K.learning_phase()
-
     params_shape = [self.channels]
 
     # TensorFlow doesn't like constants being created in the build func.
@@ -190,8 +186,9 @@ class GroupNormalization(ipu_layer.IPULayer):
           strided_channel_grouping=self.strided_channel_grouping)
       return outputs
 
-    outputs = smart_cond.smart_cond(training, group_norm_training,
-                                    group_norm_inference)
+    outputs = K.in_train_phase(group_norm_training,
+                               group_norm_inference,
+                               training=training)
 
     return outputs
 
