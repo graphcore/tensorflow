@@ -336,6 +336,11 @@ class LayerTest(test.TestCase):
     layer2 = ipu.layers.LayerNormalization.from_config(config)
     self.assertEqual(config, layer2.get_config())
 
+  @test_util.run_v2_only
+  def testUnknownShape(self):
+    with self.assertRaisesRegex(ValueError, "Input shape"):
+      _ = ipu.layers.LayerNormalization()(keras.Input((2, 2, 1)))
+
 
 class InstanceTest(test.TestCase):
   def doTest(self,

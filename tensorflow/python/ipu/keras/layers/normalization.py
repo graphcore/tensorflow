@@ -364,7 +364,9 @@ class LayerNormalization(GroupNormalization):
       raise ValueError('Duplicate axis: {}'.format(tuple(self.axis)))
 
     if any([input_shape[dim] is None for dim in self.axis]):
-      raise ValueError('Input shape %s has unknown dimensions.' % input_shape)
+      raise ValueError(
+          "Input shape %s has unknown dimensions - all dimensions need to be "
+          "fully specified." % input_shape)
 
     # Reshape into a 2D tensor, with the 0th dimension corresponding to the
     # non-reduced dimensions and the 1st dimension corresponding to the reduced
@@ -384,6 +386,11 @@ class LayerNormalization(GroupNormalization):
   # pylint: disable=useless-super-delegation
   def call(self, inputs, training=None):
     input_shape = inputs.shape
+
+    if any([input_shape[dim] is None for dim in self.non_reduced_dims]):
+      raise ValueError(
+          "Input shape %s has unknown dimensions - all dimensions need to be "
+          "fully specified." % input_shape)
 
     # Create the 2D shape.
     num_non_reduced_elements = reduce(
