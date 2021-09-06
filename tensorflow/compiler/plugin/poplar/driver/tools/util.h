@@ -20,9 +20,13 @@ limitations under the License.
  * optimizers target within the BUILD file.
  */
 
+#include <map>
+#include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
@@ -325,6 +329,52 @@ std::vector<HloInstruction*> FindUnreachableRoots(HloComputation* computation);
 StatusOr<HloInstruction*> CloneComputationSubtree(
     HloInstruction* root, HloComputation* to, const string& suffix = "clone",
     HloCloneContext* context = nullptr);
+
+// Get tuple indices for call outputs which are used in multiple places.
+// Returns a map from the tuple index of first occurrence to a set of all other
+// occurrences.
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallOutputs(
+    const HloInstruction* call);
+
+// Get tuple indices for call operands which are used in multiple places.
+// Returns a map from the tuple index of first occurrence to a set of all other
+// occurrences.
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallInputs(
+    const HloInstruction* call);
+
+// Get output tuple indices for unused call outputs.
+StatusOr<std::set<int64>> GetUnusedCallOutputIndices(
+    const HloInstruction* call);
+
+// Get parameter numbers for parameter instructions in the call which have no
+// users.
+StatusOr<std::set<int64>> GetUnusedParametersInCall(const HloInstruction* call);
+
+// Removes outputs from the call, and GTEs which are not used by anything.
+Status RemoveOutputsFromCall(HloInstruction* call,
+                             const std::set<int64>& outputs_to_remove);
+
+// Set sharding of destination output tuple based on source output tuple.
+Status SetTupleUniqueDeviceSharding(const HloInstruction* source,
+                                    HloInstruction* dest);
+
+// Replaces a call with a new one, including a new computation.
+// Propagates all the information to the new call and removes the old call and
+// its computation.
+StatusOr<HloInstruction*> ReplaceCallWith(
+    HloInstruction* call, std::unique_ptr<HloComputation> new_computation,
+    const std::vector<HloInstruction*> new_operands,
+    bool remove_unused_operands);
+
+// Removes parameters from the call, and any operands which now have no users.
+StatusOr<HloInstruction*> RemoveParametersFromCall(
+    HloInstruction* call, const std::set<int64>& parameters_to_remove);
+
+// Adds the given operands to the call and adds a parameter to the called
+// computation corresponding to each operand.
+StatusOr<HloInstruction*> AddParametersToCall(
+    HloInstruction* call,
+    const std::vector<HloInstruction*>& parameters_to_add);
 
 }  // namespace poplarplugin
 }  // namespace xla

@@ -177,6 +177,7 @@ cc_library(
         "driver/passes/allocation_finder.cc",
         "driver/passes/add_block_recompute.cc",
         "driver/passes/apply_recompute_suggestion.cc",
+        "driver/passes/call_optimizer.cc",
         "driver/passes/casts_elimination.cc",
         "driver/passes/combine_instructions.cc",
         "driver/passes/commutative_instruction_reorder_operands.cc",
@@ -380,6 +381,7 @@ cc_library(
         "driver/passes/all_to_all_finder.h",
         "driver/passes/allocation_finder.h",
         "driver/passes/apply_recompute_suggestion.h",
+        "driver/passes/call_optimizer.h",
         "driver/passes/casts_elimination.h",
         "driver/passes/combine_instructions.h",
         "driver/passes/commutative_instruction_reorder_operands.h",
@@ -3726,6 +3728,38 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "call_optimizer_test",
+    size = "small",
+    srcs = ["tests/call_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
+    name = "util_test",
+    size = "small",
+    srcs = ["tests/util_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     testonly = 1,
@@ -5845,6 +5879,7 @@ test_suite(
         "triangular_solve_test",
         "update_op_dependencies_test",
         "user_op_internal_test",
+        "util_test",
         "variable_test",
         "variables_offload_and_partition_test",
         "weights_transpose_chans_flip_xy_test",

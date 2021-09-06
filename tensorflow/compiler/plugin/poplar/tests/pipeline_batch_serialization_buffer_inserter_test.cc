@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_batch_serialization_buffer_inserter.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/call_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -134,7 +135,8 @@ TEST_F(PipelineBatchSerializationBufferInserterTest, TestInMemory) {
   EXPECT_TRUE(changed);
 
   // Remove all the unused outputs/inputs in pipeline stages.
-  while (PipelineOptimizer().Run(module0).ValueOrDie() ||
+  while (CallOptimizer().Run(module0).ValueOrDie() ||
+         PipelineOptimizer().Run(module0).ValueOrDie() ||
          HloDCE().Run(module0).ValueOrDie() ||
          HloCSE(true).Run(module0).ValueOrDie()) {
   }
@@ -272,7 +274,8 @@ TEST_F(PipelineBatchSerializationBufferInserterTest, TestOffloaded) {
   EXPECT_TRUE(changed);
 
   // Remove all the unused outputs/inputs in pipeline stages.
-  while (PipelineOptimizer().Run(module0).ValueOrDie() ||
+  while (CallOptimizer().Run(module0).ValueOrDie() ||
+         PipelineOptimizer().Run(module0).ValueOrDie() ||
          HloDCE().Run(module0).ValueOrDie() ||
          HloCSE(true).Run(module0).ValueOrDie()) {
   }

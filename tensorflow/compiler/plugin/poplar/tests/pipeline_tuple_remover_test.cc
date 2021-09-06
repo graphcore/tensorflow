@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_tuple_remover.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/call_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
@@ -205,7 +206,8 @@ ENTRY e {
   EXPECT_TRUE(changed);
 
   // Run optimizations passes to remove all the unused operands etc.
-  while (PipelineOptimizer().Run(module.get()).ValueOrDie() ||
+  while (CallOptimizer().Run(module.get()).ValueOrDie() ||
+         PipelineOptimizer().Run(module.get()).ValueOrDie() ||
          HloDCE().Run(module.get()).ValueOrDie() ||
          HloCSE(false).Run(module.get()).ValueOrDie() ||
          TupleSimplifier(true).Run(module.get()).ValueOrDie()) {
@@ -313,7 +315,8 @@ ENTRY e {
   EXPECT_TRUE(changed);
 
   // Run optimizations passes to remove all the unused operands etc.
-  while (PipelineOptimizer().Run(module.get()).ValueOrDie() ||
+  while (CallOptimizer().Run(module.get()).ValueOrDie() ||
+         PipelineOptimizer().Run(module.get()).ValueOrDie() ||
          HloDCE().Run(module.get()).ValueOrDie() ||
          HloCSE(false).Run(module.get()).ValueOrDie()) {
   }
