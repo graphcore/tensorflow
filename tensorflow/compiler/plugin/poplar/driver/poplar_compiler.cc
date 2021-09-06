@@ -54,6 +54,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/all_to_all_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/apply_recompute_suggestion.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/call_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/casts_elimination.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/combine_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/commutative_instruction_reorder_operands.h"
@@ -984,6 +985,7 @@ void AddFrameworkFileToDirectory(const std::string& tensorflow_info,
 void AddPipelineOptimizerPass(HloPassPipeline& pipeline) {
   auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
       "pipeline-optimizer-wrapper");
+  pass.AddPass<CallOptimizer>();
   pass.AddPass<PipelineOptimizer>();
   pass.AddPass<HloDCE>();
   pass.AddPass<HloCSE>(true);
@@ -1316,6 +1318,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
             "pipeline-gradient-accumulation-optimizer-wrapper");
         pass.AddPass<PipelineGradientAccumulationOptimizer>();
+        pass.AddPass<CallOptimizer>();
         pass.AddPass<PipelineOptimizer>();
         pass.AddPass<HloDCE>();
         pass.AddPass<HloCSE>(true);
@@ -1361,6 +1364,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         pass.AddPass<FunctionOptimizer>();
         pass.AddPass<HloDCE>();
         pass.AddPass<WhileLoopConditionSimplify>();
+        pass.AddPass<CallOptimizer>();
         pass.AddPass<PipelineOptimizer>();
         pass.AddPass<HloPassFix<WhileLoopToRepeatSimplify>>();
         if (poplar_executor->EnableGatherSimplifier()) {
