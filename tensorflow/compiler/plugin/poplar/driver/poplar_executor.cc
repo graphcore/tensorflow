@@ -1233,6 +1233,7 @@ IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
         if (outfeed_context->config.mode() == PoplarFeedConfig::GetLast) {
           // For the get last we only allocate tensors once.
           allocate_tensors = outfeed_context->io_thread_output_queues.empty();
+          outfeed_context->queue_size = 0;
         }
 
         if (allocate_tensors) {
@@ -1279,6 +1280,7 @@ IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
             queue->FinishedFront();
           }
         }
+        ++(outfeed_context->queue_size);
       }
     }
 
@@ -3309,6 +3311,13 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
     return {};
   }
   outfeed_context = itr->second.get();
+
+  // Return early if there are no results to process.
+  if (outfeed_context->queue_size == 0 &&
+      ConnectionType() != IpuDeviceConnectionType::PRE_COMPILE) {
+    return {};
+  }
+
   // Lock whilst we dequeue all the tensors.
   std::lock_guard<std::recursive_mutex> guard(outfeed_context->mutex);
   outfeed_lock.unlock();
@@ -3319,6 +3328,7 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
     AllocateTensorsWithDefaults(
         outfeed_context->io_thread_output_queues, outfeed_context->shapes,
         outfeed_context->tf_data_types, outfeed_context->tf_shapes);
+    outfeed_context->queue_size = 1;
   }
 
   if (mode == xla::poplarplugin::PoplarFeedConfig::GetAll) {
@@ -3328,6 +3338,7 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
       output[i] = outfeed_context->io_thread_output_queues.back();
       outfeed_context->io_thread_output_queues.pop_back();
     }
+    outfeed_context->queue_size -= output.size();
     return output;
   } else {
     if (UseSyntheticDataFor(SyntheticDataCategory::Outfeed)) {
@@ -3338,6 +3349,7 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
              "using synthetic data.";
       return {};
     }
+    CHECK_EQ(outfeed_context->queue_size, 1);
     std::vector<std::vector<tensorflow::Tensor>> output(1);
     output[0] = outfeed_context->io_thread_output_queues.front();
     outfeed_context->io_thread_output_queues.clear();
