@@ -556,12 +556,12 @@ def pipeline(computational_stages,
       When set to `None` the variables will be placed in either in-processor or
       remote memory automatically based on the current best placement strategy.
       Note that this option has no effect for inference only pipelines.
-    replicated_optimizer_state_sharding: (EXPERIMENTAL) If True, any
-      `tf.Variable` which is offloaded (for example the accumulator variable
-      when using the `tf.MomentumOptimizer`), will be partitioned across the
-      replicas. This can exploit the additional bandwidth of the IPU-Links to
-      improve overall throughput.
-      Note that this option has no effect for inference only pipelines.
+    replicated_optimizer_state_sharding: If True, any `tf.Variable` which is
+      offloaded (for example the accumulator variable when using the
+      `tf.MomentumOptimizer`), will be partitioned across the replicas.
+      This can exploit the additional bandwidth of the IPU-Links to improve
+      overall throughput. Note that this option has no effect for
+      inference only pipelines.
     offload_activations: When enabled, all the activations for the batches which
       are not being executed by the pipeline stages at the given time are stored
       in remote memory. Requires the machine to be configured with support for

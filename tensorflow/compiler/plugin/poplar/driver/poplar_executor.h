@@ -138,7 +138,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     PrimitiveType element_type = PRIMITIVE_TYPE_INVALID;
     std::atomic<uint32> ref_count;
     bool on_device = false;
-    absl::optional<RemoteParameterInfo> in_memory_remote_parameter_info;
+    const RemoteParameterInfo* in_memory_remote_parameter_info = nullptr;
     absl::optional<ArgHandle> input_handle;
     absl::optional<ArgHandle> output_handle;
     const gcl::CollectiveBalancedHostRearrangement* host_rearrangement =

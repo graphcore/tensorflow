@@ -32,6 +32,20 @@ using ::absl::StrCat;
 namespace xla {
 namespace poplarplugin {
 
+Status RemoteBufferHolder::SetNumElements(std::size_t num_elements) {
+  if (num_elements != num_elements_) {
+    if (remote_buffer_) {
+      return InternalErrorStrCat("Remote buffer ", handle_,
+                                 " was already instantiated.");
+    }
+    VLOG(2) << "Changing number of the element in remote buffer (" << handle_
+            << ", " << num_elements_ << ", " << repeats_ << ") to "
+            << num_elements;
+    num_elements_ = num_elements;
+  }
+  return Status::OK();
+}
+
 poplar::RemoteBuffer RemoteBufferHolder::Get() {
   if (!remote_buffer_) {
     VLOG(1) << "Creating remote buffer (" << handle_ << ", " << num_elements_

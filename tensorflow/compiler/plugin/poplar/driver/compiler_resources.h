@@ -48,6 +48,7 @@ class HloInstruction;
 class CallGraph;
 
 namespace poplarplugin {
+class PartitionedElementwiseClusterVisitor;
 
 // This structure contains additional information required to lower the graph
 // from an XLA graph to a poplar graph.
@@ -178,6 +179,8 @@ struct CompilerResources {
   absl::flat_hash_map<const HloInstruction*, std::uint64_t>
       hlo_instruction_to_debug_id_mapping;
 
+  PartitionedElementwiseClusterVisitor* current_cluster_visitor;
+
   // The implementation of the progress bar.
   std::unique_ptr<ProgressBarBase> progress_bar;
 
@@ -230,7 +233,8 @@ struct CompilerResources {
         enable_fast_math(enable_fast_math),
         num_io_tiles(num_io_tiles),
         io_tile_available_memory_proportion(
-            io_tile_available_memory_proportion) {
+            io_tile_available_memory_proportion),
+        current_cluster_visitor(nullptr) {
     if (enable_progress_bar) {
       progress_bar = absl::make_unique<ProgressBar>(module);
     } else {

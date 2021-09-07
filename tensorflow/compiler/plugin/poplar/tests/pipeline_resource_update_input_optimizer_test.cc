@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_update_input_optimizer.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/call_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
@@ -133,6 +134,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(
       bool changed, PipelineResourceUpdateInputOptimizer().Run(module.get()));
   EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed, CallOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, PipelineOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, HloDCE().Run(module.get()));
   HloComputation* pipeline_computation = FindComputation(module0, "pipeline");
@@ -259,6 +261,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(
       bool changed, PipelineResourceUpdateInputOptimizer().Run(module.get()));
   EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed, CallOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, PipelineOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, HloDCE().Run(module.get()));
   HloComputation* pipeline_computation = FindComputation(module0, "pipeline");
@@ -381,6 +384,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(
       bool changed, PipelineResourceUpdateInputOptimizer().Run(module.get()));
   EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed, CallOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, PipelineOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, HloDCE().Run(module.get()));
   HloComputation* pipeline_computation = FindComputation(module0, "pipeline");
@@ -508,6 +512,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(
       bool changed, PipelineResourceUpdateInputOptimizer().Run(module.get()));
   EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed, CallOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, PipelineOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, HloDCE().Run(module.get()));
   HloComputation* pipeline_computation = FindComputation(module0, "pipeline");
@@ -633,6 +638,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(
       bool changed, PipelineResourceUpdateInputOptimizer().Run(module.get()));
   EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed, CallOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, PipelineOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, HloDCE().Run(module.get()));
 
@@ -753,6 +759,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(
       bool changed, PipelineResourceUpdateInputOptimizer().Run(module.get()));
   EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed, CallOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, PipelineOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, HloDCE().Run(module.get()));
 
@@ -976,6 +983,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(
       bool changed, PipelineResourceUpdateInputOptimizer().Run(module.get()));
   EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed, CallOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, PipelineOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, HloDCE().Run(module.get()));
 
@@ -1094,6 +1102,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(
       bool changed, PipelineResourceUpdateInputOptimizer().Run(module.get()));
   EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed, CallOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, PipelineOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, HloDCE().Run(module.get()));
 
@@ -1216,6 +1225,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(
       bool changed, PipelineResourceUpdateInputOptimizer().Run(module.get()));
   EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed, CallOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, PipelineOptimizer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(changed, HloDCE().Run(module.get()));
   HloComputation* pipeline_computation = FindComputation(module0, "pipeline");

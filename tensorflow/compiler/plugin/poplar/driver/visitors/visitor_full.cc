@@ -318,6 +318,81 @@ Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
   return AddSequenceForInstruction(inst, prog);
 }
 
+Status FullVisitor::ValidateShape(HloInstruction* inst, std::size_t tuple_index,
+                                  const Shape& shape,
+                                  const TensorOrRemoteBuffer& out) {
+  if (out.IsTensor()) {
+    TF_ASSIGN_OR_RETURN(poplar::Type expected_type, PoplarDataType(shape));
+    // Check shape
+    if (!PoplarShapeMatchesXLAShape(out.AsTensor(), shape)) {
+      return xla::InternalErrorStrCat(
+          "Instruction ", inst->name(), " has mismatched Poplar (",
+          Join(out.AsTensor().shape(), ","), ") and XLA (",
+          Join(shape.dimensions(), ","), ") shapes. ", __FUNCTION__, " ",
+          __LINE__);
+    }
+
+    // Check type
+    if (expected_type != out.AsTensor().elementType()) {
+      return xla::InternalErrorStrCat(
+          "Instruction ", inst->name(), " has mismatched Poplar (",
+          out.AsTensor().elementType().toString().cloneAsString(),
+          ") and XLA (", expected_type.toString().cloneAsString(), ") type",
+          " for output tuple index ", tuple_index, ".");
+    }
+  }
+
+  if (out.IsRemoteBuffer()) {
+    auto& rbuffer_holder = out.AsRemoteBufferHolder();
+    const auto merged_element_count =
+        rbuffer_holder.GetNumElements() * rbuffer_holder.GetRepeats();
+    CHECK_GT(out.NumMerged(), 0);
+    CHECK_EQ(merged_element_count % out.NumMerged(), 0);
+    const auto element_count = merged_element_count / out.NumMerged();
+    TF_ASSIGN_OR_RETURN(poplar::Type expected_type, PoplarDataType(shape));
+
+    // Check shape of non-replicated case
+    if (!PoplarShapeMatchesXLAShape(out, shape, resources_) &&
+        (resources_.partition_replication_factor < 2 ||
+         !out.IsReplicaPartitioned())) {
+      return xla::InternalErrorStrCat(
+          "Instruction ", inst->name(), " has mismatched Poplar (",
+          element_count, ") and XLA (", Join(shape.dimensions(), ","),
+          ") shapes. ", __FUNCTION__, " ", __LINE__);
+    }
+
+    // Check shape of replicated case
+    if (!PoplarShapeMatchesXLAShape(out, shape, resources_) &&
+        resources_.partition_replication_factor > 1 &&
+        out.IsReplicaPartitioned()) {
+      return xla::InternalErrorStrCat(
+          "Instruction ", inst->name(), " has mismatched Poplar (",
+          element_count * resources_.partition_replication_factor,
+          ") and XLA (", Join(shape.dimensions(), ","),
+          ") replica partitioned shapes. ", __FUNCTION__, " ", __LINE__);
+    }
+
+    // Check type
+    if (expected_type != rbuffer_holder.GetElementType()) {
+      return xla::InternalErrorStrCat(
+          "Instruction ", inst->name(), " has mismatched Poplar (",
+          rbuffer_holder.GetElementType().toString().cloneAsString(),
+          ") and XLA (", expected_type.toString().cloneAsString(), ") type.");
+    }
+  }
+
+  if (out.IsOpaque()) {
+    if (!shape.IsOpaque()) {
+      return xla::InternalErrorStrCat(
+          "Instruction ", inst->name(),
+          " has mismatched Poplar (opaque) and XLA (", shape.ToString(),
+          ") type.");
+    }
+  }
+
+  return Status::OK();
+}
+
 Status FullVisitor::Postprocess(HloInstruction* inst) {
   std::size_t next_tuple_index = 0;
   for (auto indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
@@ -370,76 +445,7 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
     CHECK_EQ(outs.size(), 1);
     auto& out = outs[0];
 
-    if (out.IsTensor()) {
-      TF_ASSIGN_OR_RETURN(poplar::Type expected_type, PoplarDataType(shape));
-      // Check shape
-      if (!PoplarShapeMatchesXLAShape(out.AsTensor(), shape)) {
-        return xla::InternalErrorStrCat(
-            "Instruction ", inst->name(), " has mismatched Poplar (",
-            Join(out.AsTensor().shape(), ","), ") and XLA (",
-            Join(shape.dimensions(), ","), ") shapes. ", __FUNCTION__, " ",
-            __LINE__);
-      }
-
-      // Check type
-      if (expected_type != out.AsTensor().elementType()) {
-        return xla::InternalErrorStrCat(
-            "Instruction ", inst->name(), " has mismatched Poplar (",
-            out.AsTensor().elementType().toString().cloneAsString(),
-            ") and XLA (", expected_type.toString().cloneAsString(), ") type",
-            " for output tuple index ", tuple_index, ".");
-      }
-    }
-
-    if (out.IsRemoteBuffer()) {
-      TF_ASSIGN_OR_RETURN(poplar::Type expected_type, PoplarDataType(shape));
-      const auto merged_element_count =
-          out.AsRemoteBufferHolder().GetNumElements() *
-          out.AsRemoteBufferHolder().GetRepeats();
-      CHECK_GT(out.NumMerged(), 0);
-      CHECK_EQ(merged_element_count % out.NumMerged(), 0);
-      const auto element_count = merged_element_count / out.NumMerged();
-
-      // Check shape of non-replicated case
-      if (!PoplarShapeMatchesXLAShape(out, shape, resources_) &&
-          (resources_.partition_replication_factor < 2 ||
-           !out.IsReplicaPartitioned())) {
-        return xla::InternalErrorStrCat(
-            "Instruction ", inst->name(), " has mismatched Poplar (",
-            element_count, ") and XLA (", Join(shape.dimensions(), ","),
-            ") shapes. ", __FUNCTION__, " ", __LINE__);
-      }
-
-      // Check shape of replicated case
-      if (!PoplarShapeMatchesXLAShape(out, shape, resources_) &&
-          resources_.partition_replication_factor > 1 &&
-          out.IsReplicaPartitioned()) {
-        return xla::InternalErrorStrCat(
-            "Instruction ", inst->name(), " has mismatched Poplar (",
-            element_count * resources_.partition_replication_factor,
-            ") and XLA (", Join(shape.dimensions(), ","),
-            ") replica partitioned shapes. ", __FUNCTION__, " ", __LINE__);
-      }
-
-      // Check type
-      auto remote_buffer_element_type =
-          out.AsRemoteBufferHolder().GetElementType();
-      if (expected_type != remote_buffer_element_type) {
-        return xla::InternalErrorStrCat(
-            "Instruction ", inst->name(), " has mismatched Poplar (",
-            remote_buffer_element_type.toString().cloneAsString(),
-            ") and XLA (", expected_type.toString().cloneAsString(), ") type.");
-      }
-    }
-
-    if (out.IsOpaque()) {
-      if (!shape.IsOpaque()) {
-        return xla::InternalErrorStrCat(
-            "Instruction ", inst->name(),
-            " has mismatched Poplar (opaque) and XLA (", shape.ToString(),
-            ") type.");
-      }
-    }
+    TF_RETURN_IF_ERROR(ValidateShape(inst, tuple_index, shape, out));
   }
 
   // Update the progress bar.

@@ -72,6 +72,10 @@ class FullVisitor : public BaseVisitor {
 
   Status HandleOutfeed(HloInstruction* inst) override;
 
+  virtual Status ValidateShape(HloInstruction* inst, std::size_t tuple_index,
+                               const Shape& shape,
+                               const TensorOrRemoteBuffer& out);
+
 #define HANDLE_AS_HLO_OP(Name) \
   Status Name(HloInstruction* inst) override { return HandleHloOp(inst); }
 

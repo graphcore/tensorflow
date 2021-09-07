@@ -18,7 +18,9 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/partitioned_elementwise_cluster_visitor.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
@@ -78,13 +80,18 @@ size_t SubcomputationGraphCacheKeyHash::operator()(
           hash, std::hash<std::string>()(operand_handle.value_or("no_handle")));
     }
   }
-  return tensorflow::Hash64Combine(hash, key.keep_input_layouts);
+  hash = tensorflow::Hash64Combine(hash, key.keep_input_layouts);
+  return tensorflow::Hash64Combine(hash, key.partitioned_elementwise_cluster);
 }
 
 bool SubcomputationGraphCacheKeyEquals::operator()(
     const SubcomputationGraphCacheKey& a,
     const SubcomputationGraphCacheKey& b) const {
   if (a.keep_input_layouts != b.keep_input_layouts) {
+    return false;
+  }
+
+  if (a.partitioned_elementwise_cluster != b.partitioned_elementwise_cluster) {
     return false;
   }
 
@@ -98,17 +105,21 @@ bool SubcomputationGraphCacheKeyEquals::operator()(
 StatusOr<std::shared_ptr<DeferredVisitor>>
 SubcomputationGraphCache::GetOrCompileSubcomputation(
     CompilerResources& res, TensorOrRemoteBufferVectors& inputs,
-    const HloComputation* computation, bool keep_input_layouts) {
+    const HloComputation* computation, bool keep_input_layouts,
+    bool partitioned_elementwise_cluster) {
   DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
   return GetOrCompileSubcomputation(res, deferred_inputs, computation,
-                                    keep_input_layouts);
+                                    keep_input_layouts,
+                                    partitioned_elementwise_cluster);
 }
 
 StatusOr<std::shared_ptr<DeferredVisitor>>
 SubcomputationGraphCache::GetOrCompileSubcomputation(
     CompilerResources& res, DeferredArgRBVectors& inputs,
-    const HloComputation* computation, bool keep_input_layouts) {
+    const HloComputation* computation, bool keep_input_layouts,
+    bool partitioned_elementwise_cluster) {
   SubcomputationGraphCacheKey key{computation, keep_input_layouts,
+                                  partitioned_elementwise_cluster,
                                   GetInputRemoteBufferHandles(inputs)};
 
   auto itr = table_.find(key);
@@ -118,16 +129,31 @@ SubcomputationGraphCache::GetOrCompileSubcomputation(
 
     auto order =
         computation->parent()->schedule().sequence(computation).instructions();
-    std::shared_ptr<DeferredVisitor> deferred_visitor =
-        std::make_shared<DeferredVisitor>(
-            res, inputs, computation->name(),
-            /*allocate_all_input_tensors=*/true,
-            /*dependent_computations=*/std::vector<const DeferredVisitor*>{},
-            GetReallocateInputsInfo(inputs, !keep_input_layouts));
-
-    DeferredVisitor* def_visitor =
-        const_cast<DeferredVisitor*>(deferred_visitor.get());
-    TF_RETURN_IF_ERROR(computation->AcceptOrdered(def_visitor, order));
+    std::shared_ptr<DeferredVisitor> deferred_visitor;
+    if (partitioned_elementwise_cluster) {
+      CHECK(res.current_cluster_visitor == nullptr)
+          << "Nested partitioned clusters are not allowed.";
+      auto cluster_visitor =
+          std::make_shared<PartitionedElementwiseClusterVisitor>(
+              next_rearrangement_id_, res, inputs, computation->name(),
+              /*allocate_all_input_tensors=*/true,
+              /*dependent_computations=*/std::vector<const DeferredVisitor*>{},
+              GetReallocateInputsInfo(inputs, false));
+      res.current_cluster_visitor = cluster_visitor.get();
+      TF_RETURN_IF_ERROR(
+          computation->AcceptOrdered(cluster_visitor.get(), order));
+      res.current_cluster_visitor = nullptr;
+      next_rearrangement_id_ = cluster_visitor->GetNextRearrangementId();
+      deferred_visitor = std::move(cluster_visitor);
+    } else {
+      deferred_visitor = std::make_shared<DeferredVisitor>(
+          res, inputs, computation->name(),
+          /*allocate_all_input_tensors=*/true,
+          /*dependent_computations=*/std::vector<const DeferredVisitor*>{},
+          GetReallocateInputsInfo(inputs, !keep_input_layouts));
+      TF_RETURN_IF_ERROR(
+          computation->AcceptOrdered(deferred_visitor.get(), order));
+    }
 
     if (computation->HasSideEffect()) {
       return deferred_visitor;
