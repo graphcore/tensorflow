@@ -22,6 +22,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_util
 from tensorflow.python.framework.func_graph import FuncGraph
 from tensorflow.python.ipu import functional_ops
+from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import cond_v2
 from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import control_flow_util_v2 as util
@@ -70,12 +71,21 @@ class _XlaFuncGradGraph(FuncGraph):
     # If `tensor` is a graph-building time constant, we create a constant with
     # the same value in the backward graph instead of capturing it.
     tensor_id = ops.tensor_id(tensor)
+
+    def capture_constant(t):
+      t_id = ops.tensor_id(t)
+      self._captured_constants[t_id] = constant_op.constant(
+          tensor_util.constant_value(t), dtype=t.dtype)
+      return self._captured_constants[t_id]
+
     if tensor_id in self._captured_constants:
       return self._captured_constants[tensor_id]
     elif constant_op.is_constant(tensor):
-      self._captured_constants[tensor_id] = constant_op.constant(
-          tensor_util.constant_value(tensor), dtype=tensor.dtype)
-      return self._captured_constants[tensor_id]
+      return capture_constant(tensor)
+    elif tensor.op.type == "InvertPermutation" and constant_op.is_constant(
+        tensor.op.inputs[0]):
+      permutation = capture_constant(tensor.op.inputs[0])
+      return array_ops.invert_permutation(permutation)
 
     if control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph()):
       # Capture the intermidate so that it can be added as an extra output

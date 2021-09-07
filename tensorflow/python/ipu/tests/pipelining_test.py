@@ -2124,6 +2124,53 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         gradient_accumulation_count, dataset_fn, optimizer_fn, self, 11326)
 
   @test_util.deprecated_graph_mode_only
+  def testInvertPermutation(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(10, shape=[4])
+      dataset = dataset.batch(batch_size=4, drop_remainder=True)
+
+      def dataset_parser(value):
+        label = math_ops.reduce_mean(value, axis=[1])
+        return math_ops.cast(value,
+                             np.int8), math_ops.cast(label / 10, np.int32)
+
+      return dataset.map(dataset_parser)
+
+    gradient_accumulation_count = 24
+    repeat_count = 2
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
+
+    def stage1(x, label):
+      x = math_ops.cast(x, np.float32)
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w2",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+      x = array_ops.transpose(x, array_ops.invert_permutation([1, 0]))
+      return x, label
+
+    def stage2(x, label):
+      return x, label
+
+    def stage3(x, label):
+      loss = math_ops.reduce_mean(
+          nn.sparse_softmax_cross_entropy_with_logits(logits=x, labels=label))
+      return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3], inputs_fn, [], repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer_fn, self, 11326)
+
+  @test_util.deprecated_graph_mode_only
   def testPipelineWithEmbeddingOptimization(self):
     dataset_size = 100
     embedding_size = 15
