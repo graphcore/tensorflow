@@ -17,13 +17,8 @@ Optimizer wrappers which perform local gradient accumulation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
-from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
-from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.framework import ops
-from tensorflow.python.training import optimizer
-from tensorflow.python.ops import control_flow_util_v2 as util
-from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.ipu.optimizers import IpuOptimizer
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
@@ -70,7 +65,7 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
         When set to `None` the variables will be placed in either in-processor
         or remote memory automatically based on the current best placement
         strategy.
-      replicated_optimizer_state_sharding: If True, any any `tf.Variable` which
+      replicated_optimizer_state_sharding: If True, any `tf.Variable` which
         is offloaded will be partitioned across the replicas. A collective
         all-gather will be inserted to restore the tensor on each replica.
         If `None`, this value will match the value of
@@ -98,62 +93,11 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
 
     self._num_mini_batches = num_mini_batches
 
-    def bool_to_three_state(value, default):
-      if value is None:
-        return default
-      elif value:
-        return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_ON)
-      return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_OFF)
-
-    self._offload_weight_update_variables = bool_to_three_state(
-        offload_weight_update_variables,
-        threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_UNDEFINED))
-    self._replicated_optimizer_state_sharding = bool_to_three_state(
-        replicated_optimizer_state_sharding,
-        self._offload_weight_update_variables)
+    self._offload_weight_update_variables = offload_weight_update_variables
+    self._replicated_optimizer_state_sharding = \
+        replicated_optimizer_state_sharding
 
     self._dtype = dtype
-
-  @staticmethod
-  def create_accumulated_grads(grad, var, dtype, num_mini_batches):
-    if grad is None:
-      return (grad, var)
-    with ops.colocate_with(grad):
-      # Find the data type for the accumulator.
-      dtype = op_util.get_accumulator_dtype(var, dtype)
-      # Create an accumulator - variable is used as reference for shape/layout.
-      accumulator = gen_poputil_ops.gradient_accumulator_create(
-          var, output_type=dtype)
-      # Add the gradients to the accumulator.
-      accumulator = gen_poputil_ops.gradient_accumulator_add(accumulator, grad)
-      # Sink the accumulators.
-      grad = gen_poputil_ops.gradient_accumulator_sink(accumulator)
-      return (grad, var)
-
-  @staticmethod
-  def apply_gradient_accumulation(resource_update_, name, apply_grad_ops,
-                                  offload_weight_update_variables,
-                                  replicated_optimizer_state_sharding,
-                                  num_mini_batches):
-    with ops.name_scope(name + "/WU") as scope:
-      func_graph, captured_args, constant_outputs = \
-        functional_ops._compile_function(  # pylint: disable=protected-access
-          resource_update_, [], scope, apply_grad_ops, True)
-
-    # Create the resource update and lower the function into XLA.
-    with ops.control_dependencies(list(func_graph.control_captures)):
-      outputs = gen_functional_ops.resource_update(
-          captured_args,
-          to_apply=util.create_new_tf_function(func_graph),
-          Tout=func_graph.output_types,
-          output_shapes=func_graph.output_shapes,
-          offload_weight_update_variables=offload_weight_update_variables,
-          replicated_optimizer_state_sharding=
-          replicated_optimizer_state_sharding,
-          num_batches_to_accumulate=num_mini_batches)
-      outputs = functional_ops._replace_outputs(outputs, constant_outputs)  # pylint: disable=protected-access
-
-    return outputs
 
   def apply_gradients(self, grads_and_vars, global_step=None, name=None):
     """Apply gradients to variables.
@@ -173,11 +117,8 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
     Raises:
       ValueError: If the grads_and_vars is malformed.
     """
-
-    accumulated_grads_and_vars = list(
-        map(
-            lambda x: self.create_accumulated_grads(x[0], x[
-                1], self._dtype, self._num_mini_batches), grads_and_vars))
+    accumulated_grads_and_vars = op_util.accumulate_gradients(
+        grads_and_vars, self._dtype)
 
     # Create an explicit function call for the apply gradients - note that we
     # allow external captures here.
@@ -189,7 +130,7 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
       if apply_grads is not None:
         apply_grad_ops.append(apply_grads)
 
-    return self.apply_gradient_accumulation(
+    return op_util.create_resource_update(
         resource_update_, self._opt.get_name(), apply_grad_ops,
         self._offload_weight_update_variables,
         self._replicated_optimizer_state_sharding, self._num_mini_batches)
