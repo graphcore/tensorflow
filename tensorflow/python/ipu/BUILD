@@ -682,6 +682,21 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "op_util_test",
+    size = "small",
+    srcs = ["tests/op_util_test.py"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
     name = "iteration_counter_test",
     size = "large",
     srcs = ["tests/iteration_counter_test.py"],
@@ -2021,6 +2036,7 @@ test_suite(
         "math_ops_test",
         "multi_conv_test",
         "nn_ops_test",
+        "op_util_test",
         "outfeed_ordinal_test",
         "pipelining_batch_serial_sequential_hw_test",
         "pipelining_batch_serial_sequential_recomputation_test",
