@@ -35,6 +35,7 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
 from tensorflow.python.ops import control_flow_util_v2 as util
@@ -789,14 +790,26 @@ def pipeline(computational_stages,
         "When using batch serialization, all the pipeline stages need to be "
         "mapped to a single IPU.")
 
+  def bool_to_three_state(value, default=None):
+    if value is None:
+      return default if default else threestate_pb2.ThreeState.Name(
+          threestate_pb2.THREESTATE_UNDEFINED)
+    elif value:
+      return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_ON)
+    return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_OFF)
+
   # Convert some of the binary options into three states.
-  offload_activations = op_util.bool_to_three_state(offload_activations)
-  offload_gradient_accumulation_buffers = op_util.bool_to_three_state(
+  offload_weight_update_variables = bool_to_three_state(
+      offload_weight_update_variables)
+  replicated_optimizer_state_sharding = bool_to_three_state(
+      replicated_optimizer_state_sharding,
+      default=offload_weight_update_variables)
+  offload_activations = bool_to_three_state(offload_activations)
+  offload_gradient_accumulation_buffers = bool_to_three_state(
       offload_gradient_accumulation_buffers)
-  replicated_weight_sharding = op_util.bool_to_three_state(
-      replicated_weight_sharding)
-  offload_weights = op_util.bool_to_three_state(
-      offload_weights, default=replicated_weight_sharding)
+  replicated_weight_sharding = bool_to_three_state(replicated_weight_sharding)
+  offload_weights = bool_to_three_state(offload_weights,
+                                        default=replicated_weight_sharding)
 
   # Function for setting up and validating the per stage Poplar options.
   def validate_stage_options_and_populate_proto(stages_poplar_options,
@@ -984,9 +997,23 @@ def pipeline(computational_stages,
         grads_and_vars = [(g, v) for g, v in zip(grads, trainable_vars)]
 
       # Insert gradient accumulation ops.
-      accumulated_grads_and_vars = op_util.accumulate_gradients(
-          grads_and_vars, gradient_accumulation_dtype)
-
+      accumulated_grads_and_vars = []
+      for grad, var in grads_and_vars:
+        if grad is not None:
+          with ops.colocate_with(grad):
+            # Find the data type for the accumulator.
+            dtype = op_util.get_accumulator_dtype(var,
+                                                  gradient_accumulation_dtype)
+            # Create an accumulator - variable is used as reference for shape/layout.
+            accumulator = gen_poputil_ops.gradient_accumulator_create(
+                var, output_type=dtype)
+            # Add the gradients to the accumulator.
+            accumulator = gen_poputil_ops.gradient_accumulator_add(
+                accumulator, grad)
+            # Sink the accumulators.
+            grad = gen_poputil_ops.gradient_accumulator_sink(accumulator)
+        # Use the accumulated gradients.
+        accumulated_grads_and_vars.append((grad, var))
     elif not isinstance(outputs, ops.Operation) and accumulate_outfeed:
       # In inference, we never expect tensor outputs from the final stage,
       # because they would've been enqueued already inside the stage if we were
@@ -1015,10 +1042,23 @@ def pipeline(computational_stages,
           if enqueue is not None:
             resource_update_ops.append(enqueue)
 
-      outputs = op_util.create_resource_update(
-          resource_update_, name, resource_update_ops,
-          offload_weight_update_variables, replicated_optimizer_state_sharding,
-          gradient_accumulation_count)
+      with ops.name_scope(name + "/WU") as scope:
+        func_graph, captured_args, constant_outputs = \
+          functional_ops._compile_function(  # pylint: disable=protected-access
+            resource_update_, [], scope, resource_update_ops, True)
+
+      # Create the pipeline resource update stage and lower the function into XLA.
+      with ops.control_dependencies(list(func_graph.control_captures)):
+        outputs = gen_functional_ops.resource_update(
+            captured_args,
+            to_apply=util.create_new_tf_function(func_graph),
+            Tout=func_graph.output_types,
+            output_shapes=func_graph.output_shapes,
+            offload_weight_update_variables=offload_weight_update_variables,
+            replicated_optimizer_state_sharding=
+            replicated_optimizer_state_sharding,
+            num_batches_to_accumulate=gradient_accumulation_count)
+        outputs = functional_ops._replace_outputs(outputs, constant_outputs)  # pylint: disable=protected-access
 
     if not isinstance(outputs, ops.Operation):
       if not outfeed_queue:
