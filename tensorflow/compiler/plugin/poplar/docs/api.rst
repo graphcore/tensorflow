@@ -161,6 +161,10 @@ It is also possible to access the operators via the
 .. Order alphabetically based on the headings in the source files
 .. Put the non-PopLibs ops first
 
+.. automodule:: tensorflow.python.ipu.application_compile_op
+  :members:
+  :imported-members:
+
 .. automodule:: tensorflow.python.ipu.custom_ops
   :members:
   :imported-members:
