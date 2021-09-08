@@ -20,6 +20,7 @@ import copy
 import math
 import sys
 import threading
+import time
 import six
 from collections import OrderedDict
 from functools import partial
@@ -85,6 +86,37 @@ class _PollingThread(threading.Thread):
     self._batch_end_fn = batch_end_fn
     self._unpack_step_results = unpack_step_results
 
+    # The polling mechanism works as follows:
+    # 1. Until there is data, wait for `initial_wait_time` seconds.
+    # 2. Get the time stamp when the outfeed first has data (first_timestamp).
+    # 3. Get the time stamp when the outfeed has data for the second time
+    #    (second_timestamp).
+    # 4. Update the `wait_time` to:
+    #    min((second_timestamp - first_timestamp) /
+    #        (number_of_samples_processed * fudge_factor),
+    #        initial_wait_time)
+    self._initial_wait_time = 0.001
+    self._first_timestamp = None
+    self._second_timestamp = None
+    self._fudge_factor = 1.9
+    self._wait_time = self._initial_wait_time
+
+  def postprocess(self, num_samples_processed):
+    """Functions which should be called after an iteration of a polling loop is
+    complete. If no results were processed, a sleep is inserted."""
+
+    if num_samples_processed:
+      if not self._first_timestamp:
+        self._first_timestamp = time.time()
+      elif not self._second_timestamp:
+        self._second_timestamp = time.time()
+        self._wait_time = min(
+            (self._second_timestamp - self._first_timestamp) /
+            (num_samples_processed * self._fudge_factor),
+            self._initial_wait_time)
+    else:
+      time.sleep(self._wait_time)
+
   def cancel(self):
     """A thread should only be cancelled when an exception occurs."""
     self._cancelled.set()
@@ -117,6 +149,8 @@ class _PollingThread(threading.Thread):
       if self.cancelled():
         return
 
+      begin_step = step
+
       # Get the data (including replication).
       for all_data in self._output_iterator:
         # Get each step outputs.
@@ -132,6 +166,8 @@ class _PollingThread(threading.Thread):
           # Call the callbacks for the next step.
           if step != end_step:
             self._batch_begin_fn(step)
+
+      self.postprocess(step - begin_step)
 
 
 class _PredictPollingThread(_PollingThread):
@@ -151,11 +187,15 @@ class _PredictPollingThread(_PollingThread):
       flat_results = nest.flatten(results)
       # Skip if no results are ready.
       if not flat_results:
+        self.postprocess(0)
         continue
 
       num_iterations = array_ops.shape(flat_results[0]).numpy()[0]
       if not num_iterations:
+        self.postprocess(0)
         continue
+
+      begin_step = step
 
       # Call the callback for each step.
       for iteration in range(num_iterations):
@@ -178,6 +218,8 @@ class _PredictPollingThread(_PollingThread):
         self._result = [merged_results]
       else:
         self._result.append(merged_results)
+
+      self.postprocess(step - begin_step)
 
 
 class ModelExtension(base_layer.KerasExtension):
