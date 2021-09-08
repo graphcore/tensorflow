@@ -991,9 +991,10 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
 
     // Use multi-tensor allReduce to reduce them all at the same time even if
     // they have different types.
-    gcl::allReduceInPlace(
-        GetMasterGraph(res), flat_tensors, popops::CollectiveOperator::ADD, seq,
-        gcl_comm_group, {debug_name_and_id}, GetReplicateAllReduceOptions(res));
+    gcl::allReduceInPlaceCrossReplica(GetMasterGraph(res), flat_tensors,
+                                      popops::CollectiveOperator::ADD, seq,
+                                      gcl_comm_group, {debug_name_and_id},
+                                      GetReplicatedCollectiveOptions(res));
   }
 
   for (int64 i = 0; i != flat_tensors.size(); ++i) {
@@ -1036,7 +1037,8 @@ StatusOr<poplar::program::Program> CreateReplicatedAllToAll(
         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
   } else {
     // Perfom the actual Replica->Replica exchange version.
-    output_tensor = gcl::allToAll(graph, target_input, seq, {debug_name_and_id},
+    output_tensor =
+        gcl::allToAllCrossReplica(graph, target_input, seq, {debug_name_and_id},
                                   GetReplicatedCollectiveOptions(res));
   }
 

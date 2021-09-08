@@ -126,7 +126,7 @@ class ReduceScatterOp : public PoplarOpDef {
                         ToGclCommGroup(replica_groups, res));
 
     // Do the actual reduce scatter on the interleaved input.
-    poplar::Tensor interleaved_output = gcl::reduceScatter(
+    poplar::Tensor interleaved_output = gcl::reduceScatterCrossReplica(
         graph, interleaved_input, op, seq, gcl_comm_group,
         {debug_info, "ReduceScatter"}, GetReplicatedCollectiveOptions(res));
 
