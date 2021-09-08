@@ -282,12 +282,6 @@ poplar::OptionFlags GetReplicatedCollectiveOptions(
   return options;
 }
 
-poplar::OptionFlags GetReplicateAllReduceOptions(const CompilerResources& res) {
-  poplar::OptionFlags options = GetReplicatedCollectiveOptions(res);
-  options.set("useReplicatedImplementation", "true");
-  return options;
-}
-
 StatusOr<gcl::CommGroup> ToGclCommGroup(PoplarReplicaGroups replica_groups,
                                         const CompilerResources& res) {
   // We use ALL both if the group size is not set, and also if it is

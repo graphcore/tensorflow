@@ -204,9 +204,9 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
                   {debug_name_and_id, "output"}));
 
     // All-Gather the indices from all replicas.
-    indices =
-        gcl::allGather(graph, indices, seq, {debug_name_and_id, "indices"},
-                       GetReplicatedCollectiveOptions(res));
+    indices = gcl::allGatherCrossReplica(graph, indices, seq,
+                                         {debug_name_and_id, "indices"},
+                                         GetReplicatedCollectiveOptions(res));
 
     // Create a replication factor constant tensor.
     poplar::Tensor rep =
@@ -269,7 +269,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     // Given that invalid elements will be zero and valid elements will contain
     // the correct value, we can replicatedReduceScatter sum to distribute the
     // results to the correct replica.
-    host_sliceable.tensor = gcl::reduceScatter(
+    host_sliceable.tensor = gcl::reduceScatterCrossReplica(
         graph, host_sliceable.tensor.flatten(), popops::CollectiveOperator::ADD,
         seq, {debug_name_and_id, "reduce_scatter"},
         GetReplicatedCollectiveOptions(res));
@@ -297,9 +297,9 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
                   {debug_name_and_id, "output"}));
 
     // All-Gather the indices from all replicas.
-    indices =
-        gcl::allGather(graph, indices, seq, {debug_name_and_id, "indices"},
-                       GetReplicatedCollectiveOptions(res));
+    indices = gcl::allGatherCrossReplica(graph, indices, seq,
+                                         {debug_name_and_id, "indices"},
+                                         GetReplicatedCollectiveOptions(res));
 
     // Create the host sliceable temporary tensor.
     auto host_sliceable = popops::createHostSliceableTensor(
@@ -322,9 +322,9 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     // Exchange the columns from this replica back to their respective replicas.
     // We also recieve the columns we requested from the other replicas.
     host_sliceable.tensor =
-        gcl::allToAll(graph, host_sliceable.tensor, seq,
-                      {debug_name_and_id, "exchange_columns"},
-                      GetReplicatedCollectiveOptions(res));
+        gcl::allToAllCrossReplica(graph, host_sliceable.tensor, seq,
+                                  {debug_name_and_id, "exchange_columns"},
+                                  GetReplicatedCollectiveOptions(res));
 
     // Dimshuffle and reshape back to the output shape.
     host_sliceable.tensor = host_sliceable.tensor.dimShuffle({1, 0, 2});
@@ -473,14 +473,15 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugNameAndId& debug_name_and_id) {
     // All-Gather the indices from all replicas.
-    indices =
-        gcl::allGather(graph, indices, seq, {debug_name_and_id, "indices"},
-                       GetReplicatedCollectiveOptions(res));
+    indices = gcl::allGatherCrossReplica(graph, indices, seq,
+                                         {debug_name_and_id, "indices"},
+                                         GetReplicatedCollectiveOptions(res));
     indices = indices.flatten(0, 2);
 
     // All-Gather the grads from all replicas.
-    grads = gcl::allGather(graph, grads, seq, {debug_name_and_id, "grads"},
-                           GetReplicatedCollectiveOptions(res));
+    grads = gcl::allGatherCrossReplica(graph, grads, seq,
+                                       {debug_name_and_id, "grads"},
+                                       GetReplicatedCollectiveOptions(res));
     grads = grads.flatten(0, 2);
 
     // Create the host sliceable temporary tensor.
@@ -566,9 +567,9 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugNameAndId& debug_name_and_id) {
     // All-Gather the indices from all replicas.
-    indices =
-        gcl::allGather(graph, indices, seq, {debug_name_and_id, "indices"},
-                       GetReplicatedCollectiveOptions(res));
+    indices = gcl::allGatherCrossReplica(graph, indices, seq,
+                                         {debug_name_and_id, "indices"},
+                                         GetReplicatedCollectiveOptions(res));
 
     // Check whether we need to pad the gradients because the replication factor
     // isn't a factor of the encoding width.
@@ -584,9 +585,9 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
     grads = grads.dimShuffle({1, 0, 2});
 
     // All-To-All exchange the grad columns with their respective replicas.
-    grads = gcl::allToAll(graph, grads, seq,
-                          {debug_name_and_id, "exchange_columns"},
-                          GetReplicatedCollectiveOptions(res));
+    grads = gcl::allToAllCrossReplica(graph, grads, seq,
+                                      {debug_name_and_id, "exchange_columns"},
+                                      GetReplicatedCollectiveOptions(res));
     grads = grads.flatten(0, 2);
 
     // Create the host sliceable temporary tensor.

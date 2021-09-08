@@ -248,7 +248,7 @@ poplin::DistributedNormReduceCallback GetDistributedNormReduceCallback(
 
         // Use multi-tensor allReduce to reduce them all at the same time even
         // if they have different types.
-        return gcl::allReduce(
+        return gcl::allReduceCrossReplica(
             graph, inputs, popops::CollectiveOperator::ADD, prog,
             {gcl::CommGroupType::CONSECUTIVE, replica_group_size}, {debug_info},
             options);
