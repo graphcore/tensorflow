@@ -70,8 +70,7 @@ class _NormalizedKerasOptimizerWrapper(  # pylint: disable=abstract-method
 class _PollingThread(threading.Thread):
   def __init__(self,
                output_iterator,
-               start_step,
-               last_step,
+               num_steps,
                replication_factor,
                batch_begin_fn,
                batch_end_fn,
@@ -80,8 +79,7 @@ class _PollingThread(threading.Thread):
     self._cancelled = threading.Event()
     self._result = None
     self._output_iterator = output_iterator
-    self._start_step = start_step
-    self._last_step = last_step
+    self._num_steps = num_steps
     self._replication_factor = replication_factor
     self._batch_begin_fn = batch_begin_fn
     self._batch_end_fn = batch_end_fn
@@ -109,8 +107,11 @@ class _PollingThread(threading.Thread):
       yield nest.map_structure(lambda t: t[replica], data)  # pylint: disable=cell-var-from-loop
 
   def run(self):
-    step = self._start_step
-    end_step = self._last_step + 1
+    step = 0
+    end_step = self._num_steps
+
+    self._batch_begin_fn(step)
+
     while step != end_step:
       # Check whether the thread was cancelled (could be an exception).
       if self.cancelled():
@@ -136,8 +137,11 @@ class _PollingThread(threading.Thread):
 class _PredictPollingThread(_PollingThread):
   """Optimized version of the PollingThread for predict function."""
   def run(self):
-    step = self._start_step
-    end_step = self._last_step + 1
+    step = 0
+    end_step = self._num_steps
+
+    self._batch_begin_fn(step)
+
     while step != end_step:
       # Check whether the thread was cancelled (could be an exception).
       if self.cancelled():
@@ -1178,6 +1182,17 @@ class ModelExtension(base_layer.KerasExtension):
           training_module.write_scalar_summaries(data, step=step)
           callbacks.on_train_batch_end(step, data)
 
+        outfeed_thread = None
+        if asynchronous_callbacks:
+          outfeed_thread = _PollingThread(
+              outfeed,
+              inferred_steps,
+              replication_factor,
+              batch_begin_fn,
+              batch_end_fn,
+              unpack_step_results=unpack_step_results)
+          outfeed_thread.start()
+
         for step in data_handler.steps():
           end_step = step + data_handler.step_increment
           with trace.Trace('train',
@@ -1185,19 +1200,8 @@ class ModelExtension(base_layer.KerasExtension):
                            step_num=step,
                            batch_size=batch_size,
                            _r=1):
-
-            batch_begin_fn(step)
-            outfeed_thread = None
-            if asynchronous_callbacks:
-              outfeed_thread = _PollingThread(
-                  outfeed,
-                  step,
-                  end_step,
-                  replication_factor,
-                  batch_begin_fn,
-                  batch_end_fn,
-                  unpack_step_results=unpack_step_results)
-              outfeed_thread.start()
+            if not asynchronous_callbacks:
+              batch_begin_fn(step)
 
             try:
               self.distribute_strategy.run(
@@ -1211,16 +1215,19 @@ class ModelExtension(base_layer.KerasExtension):
 
             self._train_counter.assign_add(steps_per_execution_value)
 
-            if asynchronous_callbacks:
-              outfeed_thread.join()
-              logs = outfeed_thread.get_result()
-            else:
+            if not asynchronous_callbacks:
               data = self._get_last_batch_results(outfeed, replication_factor)
               logs = data[0] if unpack_step_results else data
               batch_end_fn(end_step, logs)
 
           if self.stop_training:
+            if asynchronous_callbacks:
+              outfeed_thread.cancel()
             break
+
+        if asynchronous_callbacks:
+          outfeed_thread.join()
+          logs = outfeed_thread.get_result()
 
         if logs is None:
           raise ValueError('Expect x to be a non-empty array or dataset.')
@@ -1371,21 +1378,22 @@ class ModelExtension(base_layer.KerasExtension):
         def batch_end_fn(step, data):
           callbacks.on_test_batch_end(step, data)
 
+        outfeed_thread = None
+        if asynchronous_callbacks:
+          outfeed_thread = _PollingThread(
+              outfeed,
+              inferred_steps,
+              replication_factor,
+              batch_begin_fn,
+              batch_end_fn,
+              unpack_step_results=unpack_step_results)
+          outfeed_thread.start()
+
         for step in data_handler.steps():
           end_step = step + data_handler.step_increment
           with trace.Trace('test', step_num=step, _r=1):
-            batch_begin_fn(step)
-            outfeed_thread = None
-            if asynchronous_callbacks:
-              outfeed_thread = _PollingThread(
-                  outfeed,
-                  step,
-                  end_step,
-                  replication_factor,
-                  batch_begin_fn,
-                  batch_end_fn,
-                  unpack_step_results=unpack_step_results)
-              outfeed_thread.start()
+            if not asynchronous_callbacks:
+              batch_begin_fn(step)
 
             try:
               self.distribute_strategy.run(
@@ -1399,13 +1407,14 @@ class ModelExtension(base_layer.KerasExtension):
 
             self._test_counter.assign_add(steps_per_execution_value)
 
-            if asynchronous_callbacks:
-              outfeed_thread.join()
-              logs = outfeed_thread.get_result()
-            else:
+            if not asynchronous_callbacks:
               data = self._get_last_batch_results(outfeed, replication_factor)
               logs = data[0] if unpack_step_results else data
               batch_end_fn(end_step, logs)
+
+      if asynchronous_callbacks:
+        outfeed_thread.join()
+        logs = outfeed_thread.get_result()
 
       logs = tf_utils.to_numpy_or_python_type(logs)
       callbacks.on_test_end(logs=logs)
@@ -1498,17 +1507,29 @@ class ModelExtension(base_layer.KerasExtension):
         def batch_end_fn(step, data):
           callbacks.on_predict_batch_end(step, {'outputs': data})
 
+        def process_batch(outs, batch):
+          if outs is None:
+            outs = nest.map_structure(lambda batch_output: [batch_output],
+                                      batch)
+          else:
+            nest.map_structure_up_to(
+                batch,
+                lambda output, batch_output: output.append(batch_output), outs,
+                batch)
+          return outs
+
+        outfeed_thread = None
+        if self._asynchronous_callbacks:
+          outfeed_thread = _PredictPollingThread(outfeed, inferred_steps,
+                                                 replication_factor,
+                                                 batch_begin_fn, batch_end_fn)
+          outfeed_thread.start()
+
         for step in data_handler.steps():
           end_step = step + data_handler.step_increment
 
-          batch_begin_fn(step)
-          outfeed_thread = None
-          if self._asynchronous_callbacks:
-            outfeed_thread = _PredictPollingThread(outfeed, step, end_step,
-                                                   replication_factor,
-                                                   batch_begin_fn,
-                                                   batch_end_fn)
-            outfeed_thread.start()
+          if not self._asynchronous_callbacks:
+            batch_begin_fn(step)
 
           try:
             self.distribute_strategy.run(predict_function,
@@ -1522,28 +1543,18 @@ class ModelExtension(base_layer.KerasExtension):
 
           self._predict_counter.assign_add(steps_per_execution_value)
 
-          def process_batch(outs, batch):
-            if outs is None:
-              outs = nest.map_structure(lambda batch_output: [batch_output],
-                                        batch)
-            else:
-              nest.map_structure_up_to(
-                  batch,
-                  lambda output, batch_output: output.append(batch_output),
-                  outs, batch)
-            return outs
-
-          if self._asynchronous_callbacks:
-            outfeed_thread.join()
-            batches = outfeed_thread.get_result()
-            for batch in batches:
-              batch_outputs = batch
-              outputs = process_batch(outputs, batch_outputs)
-          else:
+          if not self._asynchronous_callbacks:
             batch_outputs = self._get_all_batch_results(
                 outfeed, replication_factor, steps_per_execution_value)
             batch_end_fn(end_step, batch_outputs)
             outputs = process_batch(outputs, batch_outputs)
+
+      if self._asynchronous_callbacks:
+        outfeed_thread.join()
+        batches = outfeed_thread.get_result()
+        for batch in batches:
+          batch_outputs = batch
+          outputs = process_batch(outputs, batch_outputs)
 
       if batch_outputs is None:
         raise ValueError('Expect x to be a non-empty array or dataset.')
