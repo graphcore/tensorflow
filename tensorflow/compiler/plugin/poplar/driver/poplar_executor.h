@@ -1075,6 +1075,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
         std::unique_ptr<OutfeedQueueType, void (*)(OutfeedQueueType*)>;
     std::vector<std::vector<OutfeedQueueStorage>> callback_to_io_thread_queues;
     std::deque<std::vector<tensorflow::Tensor>> io_thread_output_queues;
+    // An atomic used to indicate whether there are any elements in the outfeed
+    // queue - means that the mutex doesn't need to be acquired which can block
+    // processing of results.
+    std::atomic<std::size_t> queue_size{0};
     // Mutex to prevent TF CPU op reading from the outfeed whilst we are
     // moving a tensor from the device.
     std::recursive_mutex mutex;
