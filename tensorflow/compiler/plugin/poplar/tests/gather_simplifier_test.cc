@@ -19,10 +19,12 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
+#include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 
 namespace xla {
+namespace m = match;
 namespace poplarplugin {
 namespace {
 
@@ -101,19 +103,18 @@ TEST_F(GatherSimplifierTest, TestMultiSlice1) {
 }
 
 TEST_F(GatherSimplifierTest, TestMultiSlice2) {
-  // Will fail as operand_shape.rank() is 3.
   std::string hlo_string = R"(
     HloModule top
 
     ENTRY main {
     operand = s32[3,3,2] parameter(0)
-    indices = s32[2,2] parameter(1)
-    gather = s32[2,2] gather(operand, indices),
-        offset_dims={1},
-        collapsed_slice_dims={0,1},
-        start_index_map={0,1},
-        index_vector_dim=0,
-        slice_sizes={1,1,2}
+    indices = s32[100] parameter(1)
+    gather = s32[100,3,2] gather(operand, indices),
+        offset_dims={1,2},
+        collapsed_slice_dims={0},
+        start_index_map={0},
+        index_vector_dim=1,
+        slice_sizes={1,3,2}
     }
     )";
 
@@ -125,10 +126,12 @@ TEST_F(GatherSimplifierTest, TestMultiSlice2) {
 
   CompilerAnnotations annotations(module);
   GatherSimplifier gs;
-  EXPECT_FALSE(gs.Run(module).ValueOrDie());
+  EXPECT_TRUE(gs.Run(module).ValueOrDie());
   auto root = module->entry_computation()->root_instruction();
-  EXPECT_EQ(GetNumMultiSlice(module->entry_computation()), 0);
-  EXPECT_EQ(GetNumGather(module->entry_computation()), 1);
+  EXPECT_EQ(GetNumMultiSlice(module->entry_computation()), 1);
+  EXPECT_EQ(GetNumGather(module->entry_computation()), 0);
+  EXPECT_TRUE(Match(root, m::Reshape(m::CustomCall(m::Reshape(m::Parameter(0)),
+                                                   m::Parameter(1)))));
 }
 
 TEST_F(GatherSimplifierTest, TestMultiSlice3) {
@@ -220,6 +223,38 @@ TEST_F(GatherSimplifierTest, TestMultiSlice5) {
   auto root = module->entry_computation()->root_instruction();
   EXPECT_EQ(GetNumMultiSlice(module->entry_computation()), 0);
   EXPECT_EQ(GetNumGather(module->entry_computation()), 1);
+}
+
+TEST_F(GatherSimplifierTest, TestMultiSlice6) {
+  std::string hlo_string = R"(
+    HloModule top
+
+    ENTRY main {
+    operand = s32[6] parameter(0)
+    indices = s32[] parameter(1)
+    gather = s32[] gather(operand, indices),
+        offset_dims={},
+        collapsed_slice_dims={0},
+        start_index_map={0},
+        index_vector_dim=0,
+        slice_sizes={1}
+    }
+    )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module0 = ParseAndReturnVerifiedModule(hlo_string, config).ValueOrDie();
+  auto* module = module0.get();
+
+  CompilerAnnotations annotations(module);
+  GatherSimplifier gs;
+  EXPECT_TRUE(gs.Run(module).ValueOrDie());
+  auto root = module->entry_computation()->root_instruction();
+  EXPECT_EQ(GetNumMultiSlice(module->entry_computation()), 1);
+  EXPECT_EQ(GetNumGather(module->entry_computation()), 0);
+  EXPECT_TRUE(Match(root, m::Reshape(m::CustomCall(m::Reshape(m::Parameter(0)),
+                                                   m::Parameter(1)))));
 }
 
 }  // namespace

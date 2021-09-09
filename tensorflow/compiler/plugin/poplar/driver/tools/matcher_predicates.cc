@@ -56,76 +56,6 @@ bool CheckValidMultiUpdateAttributes(const HloScatterInstruction* inst) {
          update_window_dims.size() == 1 &&
          update_window_dims[0] == (updates_shape.rank() - 1);
 }
-
-bool CheckValidMultiSliceAttributes(const HloGatherInstruction* inst) {
-  const Shape output_shape = inst->shape();
-  const Shape operand_shape = inst->operand(0)->shape();
-  const Shape start_indices = inst->operand(1)->shape();
-  const auto dim_numbers = inst->gather_dimension_numbers();
-  const auto offset_dims = dim_numbers.offset_dims();
-  const auto start_index_map = dim_numbers.start_index_map();
-  const auto collapsed_slice_dims = dim_numbers.collapsed_slice_dims();
-  const auto index_vector_dim = dim_numbers.index_vector_dim();
-  const auto slice_sizes = inst->gather_slice_sizes();
-
-  const uint64 index_dim_size =
-      start_indices.rank() == index_vector_dim
-          ? 1
-          : start_indices.dimensions(index_vector_dim);
-
-  if (index_dim_size != 1) {
-    return false;
-  }
-
-  if (operand_shape.rank() != 2) {
-    return false;
-  }
-
-  if (slice_sizes.size() != 2) {
-    return false;
-  }
-
-  if (collapsed_slice_dims.size() != 1) {
-    return false;
-  }
-  const int64 collapsed_slice_dim = collapsed_slice_dims[0];
-  const int64 non_collapsed_dim = 1 - collapsed_slice_dims[0];
-
-  // Non collapsed axis of operand shape should be same as
-  // non collapsed axis of slice sizes.
-  if (operand_shape.dimensions(non_collapsed_dim) !=
-      slice_sizes[non_collapsed_dim]) {
-    return false;
-  }
-
-  // Collapsed axis of slice sizes must have dimension 1.
-  if (slice_sizes[collapsed_slice_dim] != 1) {
-    return false;
-  }
-
-  // Size of offset dims must be 1.
-  if (offset_dims.size() != 1) {
-    return false;
-  }
-
-  if (output_shape.dimensions(offset_dims[0]) !=
-      slice_sizes[non_collapsed_dim]) {
-    return false;
-  }
-
-  std::vector<int64> incremental_start_index_map(start_index_map.size());
-  absl::c_iota(incremental_start_index_map, 0);
-  if (!absl::c_equal(incremental_start_index_map, start_index_map)) {
-    return false;
-  }
-
-  // TODO(T14037): only slicing on the last dimension is currently supported.
-  if (non_collapsed_dim != 1) {
-    return false;
-  }
-
-  return true;
-}
 }  // namespace
 
 bool HasSingleUser(const HloInstruction* inst) {
@@ -481,14 +411,6 @@ bool IsMultiUpdateAddScatter(const HloInstruction* inst) {
     const HloInstruction* root = inst->to_apply()->root_instruction();
     return Match(root, m::Add(m::Parameter(0), m::Parameter(1))) &&
            CheckValidMultiUpdateAttributes(scatter);
-  }
-  return false;
-}
-
-bool IsMultiSliceGather(const HloInstruction* inst) {
-  if (inst->opcode() == HloOpcode::kGather) {
-    const HloGatherInstruction* gather = Cast<HloGatherInstruction>(inst);
-    return CheckValidMultiSliceAttributes(gather);
   }
   return false;
 }
