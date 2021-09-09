@@ -872,6 +872,13 @@ def pipeline(computational_stages,
       raise ValueError(
           "To accumulate the outfeed, it must be in IPUOutfeedMode ALL.")
 
+  if optimizer_function is None and replicated_optimizer_state_sharding:
+    logging.warn("replicated_optimizer_state_sharding will have no effect"
+                 " since this pipeline is in inference.")
+  if optimizer_function is None and offload_weight_update_variables != False:
+    logging.warn("offload_weight_update_variables will have no effect"
+                 " since this pipeline is in inference.")
+
   control_outputs = []
 
   def _pipeline(*args):

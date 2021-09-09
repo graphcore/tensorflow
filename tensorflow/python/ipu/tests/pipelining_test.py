@@ -267,6 +267,62 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         sess.run(r, {c: 10.01})
 
   @test_util.deprecated_graph_mode_only
+  def testRTSButNoOffloading(self):
+    """
+    Sharding the offloaded optimizer state doesn't make sense when the
+    optimizer state is not offloaded. This combination is invalid, so make sure
+    it throws an error which tells the user it needs to be offloaded.
+    """
+    dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
+    dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+    def dataset_parser(value):
+      a = value
+      b = (value + 10.) / 2.0
+      return {"a": a, "b": b}
+
+    dataset = dataset.map(dataset_parser)
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed3")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed3")
+
+    def stage1(**kwargs):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          kernel_initializer=init_ops.ones_initializer(),
+                          name='conv1')(kwargs["a"])
+        return y + kwargs["b"]
+
+    def stage2(x):
+      return math_ops.reduce_sum(x)
+
+    def stage3(x):
+      return x
+
+    def optimizer_function(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01)
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+    def my_net():
+      return pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          3,
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          device_mapping=[2, 0, 1],
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          # Invalid combination. RTS only operates on offloaded state.
+          replicated_optimizer_state_sharding=True,
+          offload_weight_update_variables=False,
+          optimizer_function=optimizer_function)
+
+    with self.assertRaisesRegex(ValueError,
+                                'optimizer state must be offloaded'):
+      with ops.device("/device:IPU:0"):
+        ipu_compiler.compile(my_net)
+
+  @test_util.deprecated_graph_mode_only
   def testPipelineInvalidDeviceMapping(self):
     dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)

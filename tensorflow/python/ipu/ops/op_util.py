@@ -354,11 +354,10 @@ def create_resource_update(fn, name, control_outputs,
       of the weight update. When set to `None` the variables will be placed in
       either in-processor or remote memory automatically based on the current
       best placement.
-    - replicated_optimizer_state_sharding: (EXPERIMENTAL) If True, any
-      `tf.Variable` which is offloaded via `offload_weight_update_variables`
-      will be partitioned across the replicas. This can exploit the additional
-      bandwidth of the IPU-Links and the parallelism of the replicas to improve
-      improve overall throughput.
+    - replicated_optimizer_state_sharding: If True, any `tf.Variable` which is
+      offloaded via `offload_weight_update_variables` will be partitioned across
+      the replicas. This can exploit the additional bandwidth of the IPU-Links
+      and the parallelism of the replicas to improve overall throughput.
 
   """
   offload_weight_update_variables = bool_to_three_state(

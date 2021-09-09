@@ -629,7 +629,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
     if (offload_info.replica_partition &&
         offload_info.offload == THREESTATE_OFF) {
       return UnimplementedStrCat("Requested replicated weight sharding for ",
-                                 call_op->ToString(),
+                                 call_op->to_apply()->name(),
                                  " without offloading. This is currently not "
                                  "supported.");
     }
