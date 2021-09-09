@@ -133,7 +133,7 @@ class ResourceUpdateOp : public XlaOpKernel {
         builder->SetInstructionFrontendAttribute(
             outputs, FrontendAttributeId_Name(OFFLOAD_WEIGHT_UPDATE_VARIABLES),
             offload_weight_update_variables_));
-    // Set the offload_weight_update_variables flag.
+    // Set the partition_offloaded_weight_update_variables flag.
     OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
                             outputs,
                             FrontendAttributeId_Name(

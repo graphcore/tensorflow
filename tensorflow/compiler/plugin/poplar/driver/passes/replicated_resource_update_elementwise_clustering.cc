@@ -495,6 +495,37 @@ ReplicatedResourceUpdateElementwiseClustering::PadInput(
   return input;
 }
 
+Status ReplicatedResourceUpdateElementwiseClustering::
+    ValidateResourceUpdateAndClusters(
+        const HloInstruction* ru,
+        std::vector<ElementwiseCluster> clusters) const {
+  auto partition_variables = GetResourceUpdatePartitionOffloadedVariables(ru);
+  auto offload_variables = GetResourceUpdateOffloadVariables(ru);
+  if (clusters.empty()) {
+    if (partition_variables != THREESTATE_OFF) {
+      std::string cause = "";
+      if (offload_variables == THREESTATE_OFF) {
+        cause =
+            "This is because optimizer state is not being offloaded."
+            " Offload optimizer state via offload_weight_update_variables";
+      } else {
+        cause =
+            "This can occur when the optimizer contains operations that"
+            " don't do the same thing on each replica, such as most non"
+            " elementwise operations, dependencies or operations with side"
+            " effects.";
+      }
+      LOG(WARNING)
+          << "Failed to shard optimizer state across the replicas:"
+          << " replicated_optimizer_state_sharding is on, but optimizer state"
+          << " could not be sharded across replicas, as no suitable RTS"
+          << " clusters could be found in the computation "
+          << ru->to_apply()->name() << ". " << cause;
+    }
+  }
+  return Status::OK();
+}
+
 ClusterOutlinePolicy
 ReplicatedResourceUpdateElementwiseClustering::GetClusterOutlinePolicy(
     const ElementwiseCluster& cluster) const {

@@ -383,8 +383,10 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
       clusters.emplace_back(inst);
     }
   }
+  VLOG(1) << clusters.size() << " initial clusters found during traversal.";
 
   bool clusters_merged;
+  uint32 num_merged = 0;
   do {
     VLOG(2) << "Merging clusters...";
     clusters_merged = false;
@@ -400,6 +402,7 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
           a.Merge(b);
           clusters.erase(j);
           clusters_merged = true;
+          num_merged++;
           break;
         } else if (b.CanMerge(a)) {
           VLOG(2) << "Cluster " << a.GetTop()->name()
@@ -407,13 +410,17 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
           b.Merge(a);
           clusters.erase(i);
           clusters_merged = true;
+          num_merged++;
           break;
         }
       }
     }
   } while (clusters_merged);
+  VLOG(1) << clusters.size() << " clusters after merging (" << num_merged
+          << " merged).";
 
   absl::flat_hash_set<HloInstruction*> seen_insts;
+  uint32 num_invalid = 0;
   for (auto it = clusters.begin(); it != clusters.end();) {
     auto& cluster = *it;
     bool valid =
@@ -439,8 +446,11 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
       VLOG(2) << "Invalid cluster:";
       XLA_VLOG_LINES(2, cluster.Dump());
       it = clusters.erase(it);
+      num_invalid++;
     }
   }
+  VLOG(1) << clusters.size() << " valid clusters found (" << num_invalid
+          << " merged clusters were rejected).";
   return clusters;
 }
 

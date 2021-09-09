@@ -93,15 +93,14 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
   // Make sure that the root of the call op is a tuple instruction.
   TF_RETURN_IF_ERROR(FixRootInstruction(call_comp).status());
 
-  std::vector<ElementwiseCluster> clusters;
   // Find the resource update.
   std::vector<HloInstruction*> resource_updates;
   absl::c_copy_if(call_comp->MakeInstructionPostOrder(),
                   std::back_inserter(resource_updates), IsResourceUpdate);
   if (resource_updates.empty()) {
-    return clusters;
+    return std::vector<ElementwiseCluster>{};
   } else if (resource_updates.size() > 1) {
-    return FailedPrecondition("Detected multiple resource update.");
+    return FailedPrecondition("Detected multiple resource updates.");
   }
 
   HloInstruction* resource_update = resource_updates[0];
@@ -117,17 +116,27 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
 
   // Do not optimize if this is not a op inside an entry computation.
   if (call->parent() != call->GetModule()->entry_computation()) {
-    return clusters;
+    return std::vector<ElementwiseCluster>{};
   }
 
   HloInstruction* call_root = call_comp->root_instruction();
   if (call_root->user_count() > 0) {
-    return clusters;
+    return std::vector<ElementwiseCluster>{};
   }
 
   auto validator = CreateValidator(call, resource_update);
-  return ElementwiseCluster::GetClustersIn(resource_update, elementwise_comps,
-                                           *validator);
+  TF_ASSIGN_OR_RETURN(std::vector<ElementwiseCluster> clusters,
+                      ElementwiseCluster::GetClustersIn(
+                          resource_update, elementwise_comps, *validator));
+  // Try to print some helpful warnings if things don't look right.
+  TF_RETURN_IF_ERROR(
+      ValidateResourceUpdateAndClusters(resource_update, clusters));
+  return clusters;
+}
+
+Status ResourceUpdateElementwiseClustering::ValidateResourceUpdateAndClusters(
+    const HloInstruction* ru, std::vector<ElementwiseCluster> clusters) const {
+  return Status::OK();
 }
 
 // Returns the instruction which should be the input to the outlined
@@ -371,7 +380,7 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::RewriteCall(
                       GetClustersIn(call, elementwise_comps));
 
   if (clusters.empty()) {
-    VLOG(2) << "No clusters found.";
+    VLOG(1) << "No clusters found.";
     return false;
   }
 
