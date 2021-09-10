@@ -585,7 +585,7 @@ StatusOr<bool> PipelineFixer::LowerOpsIntoPipelineStages() {
 Status PipelineFixer::RemovePipelineWrapper(HloComputation* pipeline_comp) {
   // We expect the pipeline computation to have a call to a wrapped computation
   // of all the pipeline stages. Find that call.
-  std::vector<HloInstruction*> inner_calls;
+  absl::InlinedVector<HloInstruction*, 1> inner_calls;
   absl::c_copy_if(
       pipeline_comp->instructions(), std::back_inserter(inner_calls),
       [&](HloInstruction* inst) { return inst->opcode() == HloOpcode::kCall; });
@@ -849,8 +849,7 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
 }
 
 StatusOr<bool> PipelineFixer::Run(HloModule* module) {
-  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
-                      GetPipelines(module));
+  TF_ASSIGN_OR_RETURN(auto pipeline_ops, GetPipelines(module));
   if (pipeline_ops.empty()) {
     // No pipeline ops found - nothing to fix.
     return false;
