@@ -364,7 +364,7 @@ bool HasPipeliningWithDefaultSharding(const HloModule* module) {
   if (!pipeline_ops_or.ok()) {
     LOG(FATAL) << pipeline_ops_or.status();
   }
-  std::vector<HloInstruction*> pipelines = pipeline_ops_or.ValueOrDie();
+  auto pipelines = pipeline_ops_or.ValueOrDie();
   if (pipelines.empty()) {
     return false;
   }

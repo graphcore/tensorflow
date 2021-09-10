@@ -105,8 +105,9 @@ bool IsPipelineStageReadOnlyInput(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kParameter || IsExecutionCounter(inst);
 }
 
-StatusOr<std::vector<HloInstruction*>> GetPipelines(const HloModule* module) {
-  std::vector<HloInstruction*> pipeline_ops;
+StatusOr<absl::InlinedVector<HloInstruction*, 1>> GetPipelines(
+    const HloModule* module) {
+  absl::InlinedVector<HloInstruction*, 1> pipeline_ops;
   for (auto comp : module->MakeComputationPostOrder()) {
     if (IsPopOpsFusion(comp)) {
       continue;

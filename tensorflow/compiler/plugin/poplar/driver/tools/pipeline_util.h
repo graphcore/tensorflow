@@ -20,6 +20,7 @@ limitations under the License.
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/inlined_vector.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
@@ -82,7 +83,8 @@ class OrderedPipelineStages {
 };
 
 // Get all the pipelines in the module.
-StatusOr<std::vector<HloInstruction*>> GetPipelines(const HloModule* module);
+StatusOr<absl::InlinedVector<HloInstruction*, 1>> GetPipelines(
+    const HloModule* module);
 
 // Get the forward and backward pipeline stages from the pipeline_computation.
 StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
