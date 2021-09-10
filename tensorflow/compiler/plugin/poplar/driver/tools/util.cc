@@ -517,9 +517,44 @@ int64 GetPipelineStageID(const HloInstruction* inst) {
   return cfg.call_config().pipeline_stage_config().stage_id();
 }
 
-int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction* inst) {
-  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
-  return cfg.call_config().resource_update_config().num_batches_to_accumulate();
+const HloInstruction* GetResourceUpdateNumMiniBatchesInstruction(
+    const HloInstruction* inst) {
+  CHECK(IsResourceUpdate(inst));
+  const HloComputation* comp = inst->to_apply();
+  const auto instructions = comp->instructions();
+  auto it = absl::c_find_if(instructions, [](const HloInstruction* candidate) {
+    return IsPoplarInstruction(PoplarOp::GradientAccumulationCount)(candidate);
+  });
+  // There must be a gradient accumulation count instruction
+  // inside the computation.
+  CHECK(it != instructions.end());
+  CHECK_EQ(it->operands().size(), 1);
+  return it->operand(0);
+}
+
+HloInstruction* GetResourceUpdateNumMiniBatchesInstruction(
+    HloInstruction* inst) {
+  CHECK(IsResourceUpdate(inst));
+  HloComputation* comp = inst->to_apply();
+  auto instructions = comp->instructions();
+  auto it = absl::c_find_if(instructions, [](const HloInstruction* candidate) {
+    return IsPoplarInstruction(PoplarOp::GradientAccumulationCount)(candidate);
+  });
+  // There must be a gradient accumulation count instruction
+  // inside the computation.
+  CHECK(it != instructions.end());
+  CHECK_EQ(it->operands().size(), 1);
+  return it->mutable_operand(0);
+}
+
+absl::optional<int64> GetResourceUpdateBatchesToAccumulate(
+    const HloInstruction* inst) {
+  auto result = GetAccumulationConstantsValue(
+      GetResourceUpdateNumMiniBatchesInstruction(inst));
+  if (!result) {
+    LOG(FATAL) << "Resource update must have constant accumulation count";
+  }
+  return result;
 }
 
 ThreeState GetResourceUpdateOffloadVariables(const HloInstruction* inst) {

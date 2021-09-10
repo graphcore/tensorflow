@@ -87,8 +87,6 @@ class ResourceUpdateOp : public XlaOpKernel {
                                      &offload_weight_update_variables_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("replicated_optimizer_state_sharding",
                                      &replicated_optimizer_state_sharding_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("num_batches_to_accumulate",
-                                     &num_batches_to_accumulate_));
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -121,29 +119,16 @@ class ResourceUpdateOp : public XlaOpKernel {
     std::vector<xla::XlaOp> inputs = inputs_or.ValueOrDie();
 
     auto outputs = xla::Call(builder, *result.computation, inputs);
-    // Set the config type of the call.
-    OP_REQUIRES_OK(ctx,
-                   builder->SetInstructionFrontendAttribute(
-                       outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
-                       PoplarBackendConfig_CallConfig_Type_Name(
-                           PoplarBackendConfig::CallConfig::ResourceUpdate)));
-    // Set the offload_weight_update_variables flag.
-    OP_REQUIRES_OK(
-        ctx,
-        builder->SetInstructionFrontendAttribute(
-            outputs, FrontendAttributeId_Name(OFFLOAD_WEIGHT_UPDATE_VARIABLES),
-            offload_weight_update_variables_));
-    // Set the partition_offloaded_weight_update_variables flag.
-    OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
-                            outputs,
-                            FrontendAttributeId_Name(
-                                PARTITION_OFFLOADED_WEIGHT_UPDATE_VARIABLES),
-                            replicated_optimizer_state_sharding_));
-    // Set the num_batches_to_accumulate flag.
-    OP_REQUIRES_OK(
-        ctx, builder->SetInstructionFrontendAttribute(
-                 outputs, FrontendAttributeId_Name(NUM_BATCHES_TO_ACCUMULATE),
-                 std::to_string(num_batches_to_accumulate_)));
+
+    util::SetInstructionFrontEndAttributes(
+        ctx, builder, outputs,
+        {util::AttrMember(CALL_CONFIG_TYPE,
+                          PoplarBackendConfig_CallConfig_Type_Name(
+                              PoplarBackendConfig::CallConfig::ResourceUpdate)),
+         util::AttrMember(OFFLOAD_WEIGHT_UPDATE_VARIABLES,
+                          offload_weight_update_variables_),
+         util::AttrMember(PARTITION_OFFLOADED_WEIGHT_UPDATE_VARIABLES,
+                          replicated_optimizer_state_sharding_)});
 
     // We expect the resource update stage to only have resource outputs. This
     // code assumes that the outputs are all of the resource variables in the
@@ -171,7 +156,6 @@ class ResourceUpdateOp : public XlaOpKernel {
   DataTypeVector input_types_;
   std::string offload_weight_update_variables_;
   std::string replicated_optimizer_state_sharding_;
-  int64 num_batches_to_accumulate_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(ResourceUpdateOp);
 };

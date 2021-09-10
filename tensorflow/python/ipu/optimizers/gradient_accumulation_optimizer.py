@@ -123,7 +123,8 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
     # allow external captures here.
     apply_grad_ops = []
 
-    def resource_update_():
+    def resource_update_(accumulation_count):
+      gen_poputil_ops.gradient_accumulation_count(accumulation_count)
       apply_grads = self._opt.apply_gradients(accumulated_grads_and_vars,
                                               global_step, name)
       apply_grad_ops.append(apply_grads)

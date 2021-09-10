@@ -207,6 +207,9 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
     arg3_new = f16[128] add(arg3, arg5_mul)
 
     ROOT t = (f16[128],f16[128],f16[128],f16[128]) tuple(arg2_new, arg3_new, arg4_new, arg5_new)
+
+    counter_0 = s32[] constant(4)
+    gac = () custom-call(s32[] counter_0), custom_call_target="GradientAccumulationCount"
   }
 
   loop {
@@ -333,6 +336,8 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
     arg3_arg2_mul = f16[128] multiply(bcast, arg2_new)
     arg1_new = f16[128] add(arg1, arg3_arg2_mul)
     ROOT t = (f16[128],f16[128]) tuple(arg1_new, arg2_new)
+    counter_0 = s32[] constant(4)
+    gac = () custom-call(s32[] counter_0), custom_call_target="GradientAccumulationCount"
   }
 
   loop {
@@ -526,6 +531,8 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
     arg3_arg2_mul = f16[128] multiply(bcast, arg2_new)
     arg1_new = f16[128] add(arg1, arg3_arg2_mul)
     ROOT t = (f16[128],f16[128],f16[]) tuple(arg1_new, arg2_new, arg3_new)
+    counter_0 = s32[] constant(4)
+    gac = () custom-call(s32[] counter_0), custom_call_target="GradientAccumulationCount"
   }
 
   loop {
@@ -723,6 +730,8 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
     arg3_arg2_mul = f16[128] multiply(fusion, arg2_new)
     arg1_new = f16[128] add(arg1, arg3_arg2_mul)
     ROOT t = (f16[128],f16[128]) tuple(arg1_new, arg2_new)
+    counter_0 = s32[] constant(4)
+    gac = () custom-call(s32[] counter_0), custom_call_target="GradientAccumulationCount"
   }
 
   loop {
@@ -911,6 +920,9 @@ std::string GetHlo(bool partition_offloaded_variables,
     arg2_new_c = $remote_buffer_element_type$shape convert(arg2_new)
     ROOT t = ($element_type$shape,$remote_buffer_element_type$shape)
     tuple(arg1_new, arg2_new_c)
+
+    counter_0 = s32[] constant(4)
+    gac = () custom-call(s32[] counter_0), custom_call_target="GradientAccumulationCount"
   }
 
   loop {
@@ -1361,6 +1373,8 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
     arg1_new = f16[128] add(arg1, arg2_new)
 
     ROOT t = (f16[128],f16[128]) tuple(arg1_new, arg2_new)
+    counter_0 = s32[] constant(4)
+    gac = () custom-call(s32[] counter_0), custom_call_target="GradientAccumulationCount"
   }
 
   loop {
@@ -1591,6 +1605,8 @@ TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
     arg1_new = f16[128] add(arg1, arg2_new)
 
     ROOT t = (f16[128],f16[128]) tuple(arg1_new, arg2_new)
+    counter_0 = s32[] constant(4)
+    gac = () custom-call(s32[] counter_0), custom_call_target="GradientAccumulationCount"
   }
 
   loop {

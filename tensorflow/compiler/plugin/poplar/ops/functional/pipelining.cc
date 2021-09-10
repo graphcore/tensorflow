@@ -90,7 +90,6 @@ REGISTER_OP("ResourceUpdate")
     .Attr("output_shapes: list(shape) >= 0")
     .Attr("offload_weight_update_variables: string")
     .Attr("replicated_optimizer_state_sharding: string")
-    .Attr("num_batches_to_accumulate: int >= 1")
     .SetIsStateful()
     .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(

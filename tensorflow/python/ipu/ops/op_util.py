@@ -377,7 +377,7 @@ def create_resource_update(fn, name, control_outputs,
   # Create the resource update and lower the function into XLA.
   with ops.name_scope(name + "/WU") as scope:
     func_graph, captured_args = functional_ops._compile_function(  # pylint: disable=protected-access
-        fn, [], scope, control_outputs, True)
+        fn, [gradient_accumulation_count], scope, control_outputs, True)
 
   # Add a call op to the graph that calls the resource update.
   with ops.control_dependencies(list(func_graph.control_captures)):
@@ -387,7 +387,7 @@ def create_resource_update(fn, name, control_outputs,
         Tout=func_graph.output_types,
         output_shapes=func_graph.output_shapes,
         offload_weight_update_variables=offload_weight_update_variables,
-        replicated_optimizer_state_sharding=replicated_optimizer_state_sharding,
-        num_batches_to_accumulate=gradient_accumulation_count)
+        replicated_optimizer_state_sharding=replicated_optimizer_state_sharding
+    )
 
   return outputs

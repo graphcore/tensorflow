@@ -31,6 +31,10 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
+from tensorflow.python.ops import control_flow_util_v2 as control_util
+from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
+from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
+from tensorflow.python.ipu import functional_ops
 
 
 class FunctionalOpsTest(test_util.TensorFlowTestCase):
@@ -634,6 +638,47 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
 
     report = pva.openReport(report_helper.find_report())
     self.assert_max_tile_memory(report, 439, tolerance=0.1)
+
+  @test_util.deprecated_graph_mode_only
+  def testResourceUpdateErrors(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.configure_ipu_system()
+
+    def body():
+      def resource_update_(accumulation_count):
+        ipu.internal_ops.print_tensor(accumulation_count)
+
+      with ops.name_scope("WU") as scope:
+        to_print = math_ops.sigmoid(4.0)
+        func_graph, captured_args = \
+          functional_ops._compile_function(  # pylint: disable=protected-access
+              resource_update_, [to_print], scope, [], True)
+
+      # Create the resource update and lower the function into XLA.
+      with ops.control_dependencies(list(func_graph.control_captures)):
+        outputs = gen_functional_ops.resource_update(
+            captured_args,
+            to_apply=control_util.create_new_tf_function(func_graph),
+            Tout=func_graph.output_types,
+            output_shapes=func_graph.output_shapes,
+            offload_weight_update_variables=threestate_pb2.ThreeState.Name(
+                threestate_pb2.THREESTATE_UNDEFINED),
+            replicated_optimizer_state_sharding=threestate_pb2.ThreeState.Name(
+                threestate_pb2.THREESTATE_UNDEFINED))
+        return outputs
+
+    def my_net():
+      return ipu.loops.repeat(5, body, [])
+
+    with ops.device("/device:IPU:0"):
+      outputs = ipu.ipu_compiler.compile(my_net, inputs=[])
+
+    with tu.ipu_session() as sess:
+      with self.assertRaisesRegex(
+          Exception, r"No gradient accumulation count instruction found for "
+          r"resource update instruction *"):
+        sess.run(variables.global_variables_initializer())
+        sess.run(outputs)
 
 
 if __name__ == "__main__":
