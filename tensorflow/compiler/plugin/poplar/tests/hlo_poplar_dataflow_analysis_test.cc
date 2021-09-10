@@ -165,6 +165,53 @@ TEST_F(HloPoplarDataflowAnalysisTest, TestSimpleLogicalBinaryElementwise) {
   EXPECT_EQ(arg0_buffer, analysis->GetUniqueBufferAt(and0));
 }
 
+TEST_F(HloPoplarDataflowAnalysisTest, TestAllReduce) {
+  std::string hlo = R"(
+ HloModule top
+
+add {
+  x = s32[] parameter(0)
+  y = s32[] parameter(1)
+  ROOT add = s32[] add(x, y)
+}
+
+ ENTRY cluster_1 {
+  arg0 = s32[2] parameter(0)
+  arg1 = s32[2,1] parameter(1)
+  arg2 = s32[8] parameter(2)
+  ROOT all_reduce = (s32[2], s32[2,1], s32[8]) all-reduce(arg0, arg1, arg2), to_apply=add
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  EXPECT_THAT(analysis->buffer_count(), 3);
+
+  HloInstruction* arg0 = FindInstruction(m.get(), "arg0");
+  HloInstruction* arg1 = FindInstruction(m.get(), "arg1");
+  HloInstruction* arg2 = FindInstruction(m.get(), "arg2");
+  HloInstruction* all_reduce = FindInstruction(m.get(), "all_reduce");
+
+  auto arg0_buffer = analysis->GetUniqueBufferAt(arg0);
+  auto arg1_buffer = analysis->GetUniqueBufferAt(arg1);
+  auto arg2_buffer = analysis->GetUniqueBufferAt(arg2);
+  EXPECT_NE(arg0_buffer, arg1_buffer);
+  EXPECT_NE(arg0_buffer, arg2_buffer);
+  EXPECT_NE(arg1_buffer, arg2_buffer);
+
+  auto all_reduce_set = analysis->GetInstructionBufferSet(all_reduce);
+  EXPECT_EQ(all_reduce_set.GetOutputBufferSet(ShapeIndex{0}).GetUniqueBuffer(),
+            arg0_buffer);
+  EXPECT_EQ(all_reduce_set.GetOutputBufferSet(ShapeIndex{1}).GetUniqueBuffer(),
+            arg1_buffer);
+  EXPECT_EQ(all_reduce_set.GetOutputBufferSet(ShapeIndex{2}).GetUniqueBuffer(),
+            arg2_buffer);
+}
+
 TEST_F(HloPoplarDataflowAnalysisTest, TestConstant) {
   std::string hlo = R"(
  HloModule top
@@ -192,6 +239,170 @@ TEST_F(HloPoplarDataflowAnalysisTest, TestConstant) {
   auto c0_buffer = analysis->GetUniqueBufferAt(c0);
   EXPECT_NE(arg0_buffer, c0_buffer);
   EXPECT_EQ(arg0_buffer, analysis->GetUniqueBufferAt(add));
+}
+
+TEST_F(HloPoplarDataflowAnalysisTest, TestTupleAndGte) {
+  std::string hlo = R"(
+ HloModule top
+
+ ENTRY cluster_1 {
+  arg0 = f32[2] parameter(0)
+  arg1 = f32[2] parameter(1)
+  tuple0 = (f32[2], f32[2]) tuple(arg0, arg1)
+  gte = f32[2] get-tuple-element(tuple0), index=1
+  ROOT tuple1 = (f32[2], (f32[2], f32[2])) tuple(gte, tuple0)
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  EXPECT_THAT(analysis->buffer_count(), 2);
+
+  HloInstruction* arg0 = FindInstruction(m.get(), "arg0");
+  HloInstruction* arg1 = FindInstruction(m.get(), "arg1");
+  HloInstruction* tuple0 = FindInstruction(m.get(), "tuple0");
+  HloInstruction* gte = FindInstruction(m.get(), "gte");
+  HloInstruction* tuple1 = FindInstruction(m.get(), "tuple1");
+
+  auto arg0_buffer = analysis->GetUniqueBufferAt(arg0);
+  auto arg1_buffer = analysis->GetUniqueBufferAt(arg1);
+  EXPECT_NE(arg0_buffer, arg1_buffer);
+
+  EXPECT_EQ(arg0_buffer, analysis->GetUniqueBufferAt(tuple0, ShapeIndex{0}));
+  EXPECT_EQ(arg1_buffer, analysis->GetUniqueBufferAt(tuple0, ShapeIndex{1}));
+  EXPECT_EQ(arg1_buffer, analysis->GetUniqueBufferAt(gte));
+  EXPECT_EQ(arg1_buffer, analysis->GetUniqueBufferAt(tuple1, ShapeIndex{0}));
+  EXPECT_EQ(arg0_buffer, analysis->GetUniqueBufferAt(tuple1, ShapeIndex{1, 0}));
+  EXPECT_EQ(arg1_buffer, analysis->GetUniqueBufferAt(tuple1, ShapeIndex{1, 1}));
+}
+
+TEST_F(HloPoplarDataflowAnalysisTest, TestPad) {
+  std::string hlo = R"(
+ HloModule top
+
+ ENTRY cluster_1 {
+  arg0 = f32[3,4] parameter(0)
+  c0 = f32[] constant(0.0)
+  ROOT pad = f32[8,10] pad(f32[3,4] arg0, f32[] c0), padding=3_2x1_5
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  EXPECT_THAT(analysis->buffer_count(), 2);
+
+  HloInstruction* arg0 = FindInstruction(m.get(), "arg0");
+  HloInstruction* c0 = FindInstruction(m.get(), "c0");
+  HloInstruction* pad = FindInstruction(m.get(), "pad");
+
+  auto arg0_buffer = analysis->GetUniqueBufferAt(arg0);
+  auto c0_buffer = analysis->GetUniqueBufferAt(c0);
+  EXPECT_NE(arg0_buffer, c0_buffer);
+  HloPoplarBufferSet union_set({&arg0_buffer, &c0_buffer});
+  EXPECT_THAT(analysis->GetBufferSet(pad), union_set);
+}
+
+TEST_F(HloPoplarDataflowAnalysisTest, TestMap) {
+  std::string hlo = R"(
+ HloModule top
+
+mapped {
+  map_a = f32[] parameter(0)
+  map_b = f32[] parameter(1)
+  ROOT map_add = f32[] add(map_b, map_a)
+}
+
+ENTRY comp {
+  arg0 = f32[1000] parameter(0)
+  arg1 = f32[1000] parameter(1)
+  ROOT mapped = f32[1000] map(arg0, arg1), dimensions={0}, to_apply=mapped
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  EXPECT_THAT(analysis->buffer_count(), 2);
+
+  HloInstruction* arg0 = FindInstruction(m.get(), "arg0");
+  HloInstruction* arg1 = FindInstruction(m.get(), "arg1");
+  HloInstruction* mapped = FindInstruction(m.get(), "mapped");
+  HloInstruction* map_a = FindInstruction(m.get(), "map_a");
+  HloInstruction* map_b = FindInstruction(m.get(), "map_b");
+  HloInstruction* map_add = FindInstruction(m.get(), "map_add");
+
+  auto arg0_buffer = analysis->GetUniqueBufferAt(arg0);
+  auto arg1_buffer = analysis->GetUniqueBufferAt(arg1);
+  EXPECT_NE(arg0_buffer, arg1_buffer);
+
+  EXPECT_EQ(arg0_buffer, analysis->GetUniqueBufferAt(map_a));
+  EXPECT_EQ(arg1_buffer, analysis->GetUniqueBufferAt(map_b));
+  EXPECT_EQ(arg1_buffer, analysis->GetUniqueBufferAt(map_add));
+  EXPECT_EQ(arg1_buffer, analysis->GetUniqueBufferAt(mapped));
+}
+
+TEST_F(HloPoplarDataflowAnalysisTest, TestConditional) {
+  std::string hlo = R"(
+ HloModule top
+on_false {
+  false_t = (f32[2], f32[2]) parameter(0)
+  false_lhs = f32[2] get-tuple-element(false_t), index=0
+  false_rhs = f32[2] get-tuple-element(false_t), index=1
+  false_add = f32[2] add(false_lhs, false_rhs)
+  ROOT false_root = (f32[2]) tuple(false_add)
+}
+
+on_true {
+  true_t = (f32[2], f32[2]) parameter(0)
+  true_lhs = f32[2] get-tuple-element(true_t), index=0
+  true_rhs = f32[2] get-tuple-element(true_t), index=1
+  true_subtract = f32[2] subtract(true_lhs, true_rhs)
+  ROOT true_root = (f32[2]) tuple(true_subtract)
+}
+
+ENTRY main {
+  arg0 = f32[2] parameter(0)
+  arg1 = f32[2] parameter(1)
+  arg2 = pred[] parameter(2)
+  input_tuple = (f32[2], f32[2]) tuple(arg0, arg1)
+  ROOT result = (f32[2]) conditional(arg2, input_tuple, input_tuple), false_computation=on_false, true_computation=on_true
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  EXPECT_THAT(analysis->buffer_count(), 8);
+
+  HloInstruction* input_tuple = FindInstruction(m.get(), "input_tuple");
+  HloInstruction* false_t = FindInstruction(m.get(), "false_t");
+  HloInstruction* true_t = FindInstruction(m.get(), "true_t");
+  HloInstruction* result = FindInstruction(m.get(), "result");
+
+  // Make sure there is no aliasing between conditional branches and the input.
+  EXPECT_NE(analysis->GetInstructionBufferSet(input_tuple),
+            analysis->GetInstructionBufferSet(false_t));
+  EXPECT_NE(analysis->GetInstructionBufferSet(input_tuple),
+            analysis->GetInstructionBufferSet(true_t));
+  EXPECT_NE(analysis->GetInstructionBufferSet(false_t),
+            analysis->GetInstructionBufferSet(true_t));
+
+  // Check that the conditional defined a value.
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(result, ShapeIndex{0}));
 }
 
 TEST_F(HloPoplarDataflowAnalysisTest, TestPopopsFusionNoAlias) {
