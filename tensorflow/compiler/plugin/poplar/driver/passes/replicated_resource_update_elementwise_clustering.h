@@ -78,6 +78,10 @@ class ReplicatedResourceUpdateElementwiseClustering final
       const ElementwiseCluster& cluster,
       PoplarBackendConfig& backend_config) const override;
 
+  Status ValidateResourceUpdateAndClusters(
+      const HloInstruction* ru,
+      std::vector<ElementwiseCluster> clusters) const override;
+
  private:
   CompilerAnnotations& annotations_;
   uint32 partition_replication_factor_;

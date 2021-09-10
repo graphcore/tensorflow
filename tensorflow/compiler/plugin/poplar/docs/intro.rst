@@ -7,7 +7,7 @@ some knowledge of machine learning and TensorFlow.
 
 .. note:: This document is for TensorFlow 1. For information on TensorFlow 2
           please refer to `Targeting the IPU from TensorFlow 2
-          <https://docs.graphcore.ai/projects/tensorflow2-user-guide/>`_.
+          <https://docs.graphcore.ai/projects/tensorflow-user-guide/>`_.
 
 See the "Getting Started" guide for your IPU system in the
 `Graphcore documentation <https://docs.graphcore.ai>`_

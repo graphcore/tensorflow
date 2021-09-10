@@ -113,8 +113,6 @@ void SetFlagIfNotPresent(poplar::OptionFlags& opts, const std::string& key,
 poplar::OptionFlags GetReplicatedCollectiveOptions(
     const CompilerResources& res);
 
-poplar::OptionFlags GetReplicateAllReduceOptions(const CompilerResources& res);
-
 StatusOr<gcl::CommGroup> ToGclCommGroup(PoplarReplicaGroups replica_groups,
                                         const CompilerResources& res);
 

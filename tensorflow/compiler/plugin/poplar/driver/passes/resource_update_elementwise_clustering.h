@@ -99,6 +99,11 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
       const ElementwiseCluster& cluster,
       PoplarBackendConfig& backend_config) const;
 
+  // Assess a resource update and the clusters generated from it, printing
+  // helpful warnings if something doesn't look right.
+  virtual Status ValidateResourceUpdateAndClusters(
+      const HloInstruction* ru, std::vector<ElementwiseCluster> clusters) const;
+
  private:
   StatusOr<bool> RewriteCall(HloModule* module, HloInstruction* call,
                              const absl::flat_hash_set<const HloComputation*>&
