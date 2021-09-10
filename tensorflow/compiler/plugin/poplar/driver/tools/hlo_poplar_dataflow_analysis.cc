@@ -113,6 +113,34 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
     return Status::OK();
   }
 
+  Status HandleGetTupleElement(HloInstruction* inst) override {
+    const int64 tuple_index = inst->tuple_index();
+    HloInstruction* input = inst->mutable_operand(0);
+    // Forward the buffers from the right shape tree index.
+    for (auto& indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
+      ShapeIndex input_index = indexed_shape.index;
+      input_index.push_front(tuple_index);
+
+      const HloPoplarPosition input_position{input, input_index};
+      const HloPoplarPosition output_position{inst, indexed_shape.index};
+
+      const auto& buffer_set = analysis_->GetBufferSet(input_position);
+
+      analysis_->SetInstructionBufferSetOutput(inst, indexed_shape.index,
+                                               buffer_set);
+
+      VLOG(2) << "Forwarding buffer set " << buffer_set << " from "
+              << input_position << " to " << output_position;
+    }
+    return Status::OK();
+  }
+
+  Status HandleMap(HloInstruction* inst) override {
+    // Maps are inplace on all the inputs, and the output buffers are derrived
+    // from that.
+    return HandleInplaceVisitor(inst, inst->to_apply());
+  }
+
   Status HandleFusion(HloInstruction* inst) override {
     if (!IsPopOpsFusion(inst)) {
       // A non poplibs fusion is inplace on all operands and the output buffers
@@ -158,6 +186,16 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
     return Status::OK();
   }
 
+  Status HandleConditional(HloInstruction* inst) override {
+    // Visit each branch.
+    for (HloComputation* branch_comp : inst->called_computations()) {
+      DataflowAnalysisBufferVisitor visitor(analysis_, annotations_);
+      TF_RETURN_IF_ERROR(branch_comp->Accept(&visitor));
+    }
+
+    return HandleNotInplace(inst);
+  }
+
   Status HandleCustomCall(HloInstruction* inst) override {
     if (!IsPoplibsHloCustomOp(inst)) {
       return DefaultAction(inst);
@@ -192,6 +230,29 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
     analysis_->SetInstructionBufferSet(inst, instruction_set);
 
     return Status::OK();
+  }
+
+  Status HandlePad(HloInstruction* inst) override {
+    return HandleForwardsUnionOfAllOperands(inst);
+  }
+
+  Status HandleConcatenate(HloInstruction* inst) override {
+    return HandleForwardsUnionOfAllOperands(inst);
+  }
+
+  Status HandleAllReduce(HloInstruction* inst) override {
+    return HandleInplaceForwardAllBuffers(
+        inst, /*kind=*/BufferUseKind::USE_ALIAS_READ_WRITE);
+  }
+
+  Status HandleSort(HloInstruction* inst) override {
+    return HandleInplaceForwardAllBuffers(
+        inst, /*kind=*/BufferUseKind::USE_ALIAS_READ_WRITE);
+  }
+
+  Status HandleTuple(HloInstruction* inst) override {
+    return HandleInplaceForwardAllBuffers(
+        inst, /*kind=*/BufferUseKind::USE_ALIAS_READ_ONLY);
   }
 
 #define HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(Name)                             \
