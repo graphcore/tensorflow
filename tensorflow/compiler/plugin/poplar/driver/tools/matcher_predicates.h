@@ -80,7 +80,6 @@ bool IsSupportedAllReduce(const HloInstruction*);
 bool IsMultiSliceOrUpdate(const HloInstruction*);
 bool IsMultiUpdateScatter(const HloInstruction*);
 bool IsMultiUpdateAddScatter(const HloInstruction*);
-bool IsMultiSliceGather(const HloInstruction*);
 bool IsAnySliceApply(const HloInstruction*);
 bool IsUniformSingleDimSlice(const HloInstruction*);
 bool IsSingleElement(const HloInstruction*);
