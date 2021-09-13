@@ -21,7 +21,6 @@ from tensorflow.python.ipu.ops import rand_ops
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils
-from tensorflow.python.framework import smart_cond
 from tensorflow.python.ops import array_ops
 
 
@@ -45,7 +44,6 @@ class Dropout(Layer):
       mask.
   """
   def __init__(self, rate, noise_shape=None, seed=None, **kwargs):
-    self.built = False
     self.seed = seed
     self.rate = rate
     self.noise_shape = noise_shape
@@ -71,10 +69,6 @@ class Dropout(Layer):
       selected based on other parameters. In inference mode, a tensor that is
       identical to the input tensor.
     """
-
-    if training is None:
-      training = K.learning_phase()
-
     def dropped_inputs():
       return rand_ops.dropout(inputs,
                               seed=self.seed,
@@ -83,8 +77,9 @@ class Dropout(Layer):
                               ref=self.ref,
                               name=self.name)
 
-    output = smart_cond.smart_cond(training, dropped_inputs,
-                                   lambda: array_ops.identity(inputs))
+    output = K.in_train_phase(dropped_inputs,
+                              lambda: array_ops.identity(inputs),
+                              training=training)
 
     return output
 
@@ -93,10 +88,9 @@ class Dropout(Layer):
     return input_shape
 
   def get_config(self):
-    config = {
+    return {
         'rate': self.rate,
         'noise_shape': self.noise_shape,
-        'seed': self.seed
+        'seed': self.seed,
+        'ref': self.ref
     }
-    base_config = super(Dropout, self).get_config()
-    return dict(list(base_config.items()) + list(config.items()))

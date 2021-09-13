@@ -54,6 +54,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/all_to_all_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/apply_recompute_suggestion.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/call_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/casts_elimination.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/combine_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/commutative_instruction_reorder_operands.h"
@@ -213,6 +214,8 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
+using Tracepoint = TensorflowPoplarPluginTracepoint;
+
 std::once_flag help_flag_printed;
 
 int64 SizeFunction(const BufferValue& buffer) {
@@ -228,11 +231,11 @@ int64 SizeFunction(const BufferValue& buffer) {
 class PVTICompilerStats : public xla::CompilationStats {
  public:
   void StartPass(absl::string_view pass_name) override {
-    TensorflowPoplarPluginTracepoint::BeginTrace(pass_name);
+    Tracepoint::BeginTrace(pass_name);
   }
 
   void EndPass(absl::string_view pass_name) override {
-    TensorflowPoplarPluginTracepoint::EndTrace(pass_name);
+    Tracepoint::EndTrace(pass_name);
   }
 
   // Pure virtual but not needed for our tracepoints.
@@ -383,6 +386,38 @@ bool HasPipeliningWithDefaultSharding(const HloModule* module) {
   }
 
   return true;
+}
+
+StatusOr<bool> ModuleExecutionCanStall(const HloModule* module,
+                                       int32 num_io_tiles) {
+  if (num_io_tiles) {
+    return true;
+  }
+
+  TF_ASSIGN_OR_RETURN(auto pipeline_ops, GetPipelines(module));
+  switch (pipeline_ops.size()) {
+    case 0: {
+      return false;
+    }
+    case 1: {
+      TF_ASSIGN_OR_RETURN(const auto schedule,
+                          GetPipelineSchedule(pipeline_ops[0]));
+      switch (schedule) {
+        case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
+        case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved: {
+          return true;
+        }
+        case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential: {
+          return false;
+        }
+        default: { return FailedPrecondition("Unknown pipeline schedule."); }
+      }
+    }
+    default: {
+      return Unimplemented(
+          "Multiple pipelines in the same HloModule are not supported");
+    }
+  }
 }
 
 int64 MaximalShard(const HloModule* module) {
@@ -602,9 +637,11 @@ void setFpBehaviour(poplar::Graph& graph,
                     const IpuOptions::FloatingPointBehaviour& fp_control,
                     poplar::program::Sequence& seq) {
   if (graph.getTarget().getTargetType() == poplar::TargetType::IPU) {
+    const auto esr =
+        fp_control.esr() == StochasticRoundingBehaviour::StochasticRounding_On;
     poplar::FloatingPointBehaviour fp_behaviour(
-        fp_control.inv(), fp_control.div0(), fp_control.oflo(),
-        fp_control.esr(), fp_control.nanoo());
+        fp_control.inv(), fp_control.div0(), fp_control.oflo(), esr,
+        fp_control.nanoo());
     poplar::setFloatingPointBehaviour(graph, seq, fp_behaviour,
                                       "setFpBehaviour");
   } else {
@@ -628,6 +665,13 @@ StatusOr<int> GetNumIoTiles(const PoplarExecutor* poplar_executor) {
         "%d is an invalid number of IO tiles. The number of IO tiles must be "
         "in the range [0, %d].",
         value, kNumIoTilesMaxValue);
+  }
+
+  // Round up the number of IO tiles to the next even number.
+  if (value % 2) {
+    LOG(INFO) << "Rounding the number of IO tiles up from " << value
+              << " to the next even number " << value + 1 << ".";
+    return value + 1;
   }
 
   return value;
@@ -667,13 +711,14 @@ absl::optional<Tilesets> PartitionTiles(const poplar::Graph& main_graph,
   }
 
   CHECK_LT(num_io_tiles, num_tiles_per_ipu);
+
   const auto num_compute_tiles = num_tiles_per_ipu - num_io_tiles;
 
-  const auto compute_tiles =
-      gcl::perIPUTiles(main_graph, num_io_tiles, num_compute_tiles);
-  CHECK_EQ(compute_tiles.size(), num_compute_tiles);
+  const auto io_tiles = gcl::perIPUTiles(main_graph, 0, num_io_tiles,
+                                         /*sorted=*/true, /*tilePairs=*/true);
+  CHECK_EQ(io_tiles.size(), num_io_tiles);
 
-  const auto io_tiles = DisjointTiles(compute_tiles, num_tiles_per_ipu);
+  const auto compute_tiles = DisjointTiles(io_tiles, num_tiles_per_ipu);
 
   return Tilesets{compute_tiles, io_tiles};
 }
@@ -687,7 +732,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
         poplar_target,
         poplar::replication_factor(resources.replication_factor));
   } catch (const std::exception& e) {
-    return PoplarExceptionToTensorflowStatus("[Create Graph] ", e);
+    return PoplarExceptionToTensorflowStatus("[Create Graph]", e);
   }
 
   if (resources.replication_factor > 1) {
@@ -941,6 +986,7 @@ void AddFrameworkFileToDirectory(const std::string& tensorflow_info,
 void AddPipelineOptimizerPass(HloPassPipeline& pipeline) {
   auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
       "pipeline-optimizer-wrapper");
+  pass.AddPass<CallOptimizer>();
   pass.AddPass<PipelineOptimizer>();
   pass.AddPass<HloDCE>();
   pass.AddPass<HloCSE>(true);
@@ -1103,7 +1149,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         } catch (const std::exception& e) {
           const std::string origin =
               "[Deserialize][File: " + filenames.CachedExecutableFilename() +
-              "] ";
+              "]";
           return PoplarExceptionToTensorflowStatus(origin, e);
         }
       }
@@ -1177,6 +1223,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
               poplar_executor->GetMaxReduceScatterBufferSize())
           .set_max_inter_ipu_copies_buffer_size(
               poplar_executor->GetMaxInterIpuCopyBufferSize())
+          .set_max_reduce_many_buffer_size(
+              poplar_executor->GetMaxReduceManyBufferSize())
           .set_max_send_recv_cluster_size(
               poplar_executor->GetMaxSendRecvClusterSize())
           .set_max_scheduler_lookahead_depth(
@@ -1189,7 +1237,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   CompilerResources resources(
       module, information, poplar_executor->GetConvolutionOptions(),
       poplar_executor->GetMatMulOptions(), poplar_executor->GetPoolingOptions(),
-      poplar_executor->UseVerifiedTransfers(),
+      poplar_executor->GetSliceOptions(),
       poplar_executor->ClearMatmulPassType(),
       poplar_executor->DisableGraphOutlining(),
       poplar_executor->MergeInfeedCopies(), replication_factor,
@@ -1204,7 +1252,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       poplar_executor->GetTriangularSolveExpanderBlockSize(),
       poplar_executor->GetCholeskyBlockSize(),
       poplar_executor->EnableExperimentalRemoteBufferEmbedding(),
-      poplar_executor->EnableFastMath(), poplar_executor->GetNumIoTiles(),
+      poplar_executor->EnableFastMath(), num_io_tiles,
       poplar_executor->GetIoTileAvailableMemoryProportion(),
       EnableProgressBar(module));
 
@@ -1212,9 +1260,19 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
   }
 
+  const int64 num_IPUs = target.getNumIPUs();
+  const std::string target_type = poplar::toString(target.getTargetType());
+  const std::string target_arch =
+      target.getTargetType() == poplar::TargetType::IPU
+          ? target.getTargetArchString()
+          : "";
+  const bool gateway_mode = target.getGatewayMode();
+  const bool supports_remote_buffers = poplar_executor->SupportsRemoteBuffers();
+
   resources.progress_bar->Start();
 
   {
+    Tracepoint tracepoint("HloOptimizerPipeline");
     std::unique_ptr<PVTICompilerStats> optimizer_compiler_stats =
         absl::make_unique<PVTICompilerStats>();
     HloPassPipeline optimizer_pipeline("OptimizerPipeline",
@@ -1253,11 +1311,13 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<HloCSE>(false);
 
       pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+          poplar_executor->GetIpuOptions().algebraic_simplifier_config(),
           resources.enable_fast_math);
       {
         auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
             "pipeline-gradient-accumulation-optimizer-wrapper");
         pass.AddPass<PipelineGradientAccumulationOptimizer>();
+        pass.AddPass<CallOptimizer>();
         pass.AddPass<PipelineOptimizer>();
         pass.AddPass<HloDCE>();
         pass.AddPass<HloCSE>(true);
@@ -1267,6 +1327,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<ReshapeMover>();
       pipeline.AddPass<MapInliner>();
       pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+          poplar_executor->GetIpuOptions().algebraic_simplifier_config(),
           resources.enable_fast_math);
       pipeline.AddPass<ZeroSizedHloElimination>();
       pipeline.AddPass<FlattenCallGraph>();
@@ -1295,12 +1356,14 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         pass.AddPass<HloDCE>();
         pass.AddPass<WhileLoopConstantSinking>();
         pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+            poplar_executor->GetIpuOptions().algebraic_simplifier_config(),
             resources.enable_fast_math);
         pass.AddPass<ReshapeMover>();
         pass.AddPass<SortSimplifier>();
         pass.AddPass<FunctionOptimizer>();
         pass.AddPass<HloDCE>();
         pass.AddPass<WhileLoopConditionSimplify>();
+        pass.AddPass<CallOptimizer>();
         pass.AddPass<PipelineOptimizer>();
         pass.AddPass<HloPassFix<WhileLoopToRepeatSimplify>>();
         if (poplar_executor->EnableGatherSimplifier()) {
@@ -1326,6 +1389,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         pass.AddPass<MultiUpdateScaleApply>(resources.annotations);
         pass.AddPass<MultiUpdateApply>(resources.annotations);
         pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+            poplar_executor->GetIpuOptions().algebraic_simplifier_config(),
             resources.enable_fast_math);
         pass.AddPass<HloCSE>(true);
         pass.AddPass<HloDCE>();
@@ -1368,7 +1432,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<PipelineFeedHoisting>();
       pipeline.AddPass<PipelineFIFOInserter>(resources.remote_memory_supported);
       pipeline.AddPass<ReplicatedResourceUpdateElementwiseClustering>(
-          resources.partition_replication_factor, resources.replication_factor);
+          resources.annotations, resources.partition_replication_factor,
+          resources.replication_factor);
       {
         auto inline_fusion = [](const HloInstruction* inst) {
           return IsReplicatedParameterLoadFusion(inst) ||
@@ -1469,7 +1534,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           resources.replication_factor);
       if (resources.information.max_all_reduce_buffer_size > 0 ||
           resources.information.max_inter_ipu_copies_buffer_size > 0 ||
-          resources.information.max_send_recv_cluster_size > 0) {
+          resources.information.max_send_recv_cluster_size > 0 ||
+          resources.information.max_reduce_many_buffer_size > 0) {
         pipeline.AddPass<IpuScheduler>(
             SizeFunction,
             CreateClusteringMemoryScheduler(resources.information));
@@ -1496,6 +1562,11 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
     TF_RETURN_IF_ERROR(optimizer_pipeline.Run(module).status());
   }
+
+  // Indicates whether the binary generated for this module can stall without
+  // more data arriving.
+  TF_ASSIGN_OR_RETURN(const bool is_module_which_can_stall,
+                      ModuleExecutionCanStall(module, num_io_tiles));
 
   VLOG(1) << "End XLA compilation: " << module->name() << " (Hash: 0x"
           << std::hex << HloHash(module).GetHash() << ")";
@@ -1530,9 +1601,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   const bool all_scalar_elementwise_graph =
       AreAllScalarElementwiseGraph(module);
 
-  const bool is_scalar_elementwise_graph = all_scalar_elementwise_graph &&
-                                           !any_computation_has_side_effects &&
-                                           !resources.use_verified_transfers;
+  const bool is_scalar_elementwise_graph =
+      all_scalar_elementwise_graph && !any_computation_has_side_effects;
 
   bool compile = true;
   if (is_constant_graph) {
@@ -1574,6 +1644,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   bool logging_cycle_count;
 
   if (compile) {
+    Tracepoint tracepoint("ExecutableConstruction");
     if (in_precompile_mode) {
       TF_RETURN_IF_ERROR(CheckUnsupportedPrecompileInstructions(module));
     }
@@ -1602,6 +1673,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
     EntryVisitor visitor(resources, entry);
     try {
+      Tracepoint tracepoint("PoplarGraphConstruction");
       resources.progress_bar->MoveToNextStage();
       // Run a compile only Poplar specific pipeline - these passes do not
       // modify the module in a functional way.
@@ -1623,9 +1695,6 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       resources.progress_bar->MoveToNextStage();
 
       auto order = module->schedule().sequence(entry).instructions();
-      TF_RETURN_IF_ERROR(resources.streams_indices.InitializeIndexTensors(
-          resources, poplar_executor->VerifiedTransfers(),
-          {"InitializeIndexTensors"}));
 
       // The following line starts the lowering in poplar.
       VLOG(1) << "Begin Poplar graph construction.";
@@ -1633,7 +1702,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       VLOG(1) << "End Poplar graph construction.";
       resources.progress_bar->MoveToNextStage();
     } catch (const std::exception& e) {
-      return PoplarExceptionToTensorflowStatus("[Build graph] ", e);
+      return PoplarExceptionToTensorflowStatus("[Build graph]", e);
     }
 
     poplar::program::Sequence main_program({}, {"MainProgram"});
@@ -1671,16 +1740,6 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     progs.push_back(main_program);
     progs.push_back(visitor.GetDeviceToHost());
 
-    // For verified transfers fuse all 3 programs in a single one.
-    if (poplar_executor->UseVerifiedTransfers()) {
-      poplar::program::Sequence fused_program({}, "FusedProgram");
-      for (auto& prog : progs) {
-        fused_program.add(prog);
-      }
-      progs.clear();
-      progs.push_back(fused_program);
-    }
-
     if (!PoplarXlaFlags::Get().save_vertex_graph.empty()) {
       auto filename =
           tensorflow::io::JoinPath(PoplarXlaFlags::Get().save_vertex_graph,
@@ -1691,6 +1750,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     }
 
     try {
+      Tracepoint tracepoint("PoplarEngineConstruction");
       VLOG(1) << "Begin compiling Poplar engine " << module->name();
 
       auto progress_logging = [&resources](int progress, int total) {
@@ -1726,16 +1786,41 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       if (is_cacheable) {
         // If we have the lock, serialize the result to the executable cache.
         if (executable_cache_lock) {
+          Tracepoint tracepoint("PoplarEngineSerialisation");
           // Serialize some additional options that Poplar does not serialize
           // on its own.
           poplar::OptionFlags options_to_serialize =
               poplar_executor->GetReportExecutionFlags();
 
+          auto& annotations = resources.annotations;
+
           TF_RETURN_IF_ERROR(PoplarExecutableCore::Serialize(
-              filenames, exec, resources.annotations, replication_factor,
-              options_to_serialize, logging_cycle_count,
-              resources.streams_indices.GetAssignedIds(),
-              resources.streams_indices.CheckpointFeedsOrder()));
+              filenames, exec, options_to_serialize,
+              PoplarExecutableInfo{
+                  num_IPUs,
+                  target_type,
+                  target_arch,
+                  gateway_mode,
+                  supports_remote_buffers,
+                  is_module_which_can_stall,
+                  TF_MAJOR_VERSION,
+                  TF_MINOR_VERSION,
+                  tf_git_version(),
+                  replication_factor,
+                  annotations.infeed_infos,
+                  annotations.outfeed_infos,
+                  annotations.send_infos,
+                  annotations.recv_infos,
+                  annotations.host_embedding_lookup_infos,
+                  annotations.host_embedding_update_infos,
+                  annotations.host_embedding_notify_infos,
+                  annotations.remote_parameter_infos,
+                  annotations.remote_parameter_host_rearrangements,
+                  annotations.entry_input_infos,
+                  annotations.feed_input_infos,
+                  annotations.entry_output_infos,
+                  annotations.feed_output_infos,
+                  logging_cycle_count}));
 
           if (in_precompile_mode) {
             LOG(INFO) << "A pre-compiled Poplar program has been saved to "
@@ -1769,7 +1854,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       VLOG(1) << "End compiling Poplar engine.";
 
     } catch (const std::exception& e) {
-      return PoplarExceptionToTensorflowStatus("[Compile engine] ", e);
+      return PoplarExceptionToTensorflowStatus("[Compile engine]", e);
     }
 
     if (enable_trace_events && compile) {
@@ -1798,7 +1883,17 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           std::move(resources.annotations.stream_infos),
           std::move(resources.annotations.stream_meta_infos),
           PoplarExecutableInfo{
-              replication_factor, std::move(resources.annotations.infeed_infos),
+              num_IPUs,
+              target_type,
+              target_arch,
+              gateway_mode,
+              supports_remote_buffers,
+              is_module_which_can_stall,
+              TF_MAJOR_VERSION,
+              TF_MINOR_VERSION,
+              tf_git_version(),
+              replication_factor,
+              std::move(resources.annotations.infeed_infos),
               std::move(resources.annotations.outfeed_infos),
               std::move(resources.annotations.send_infos),
               std::move(resources.annotations.recv_infos),
@@ -1806,12 +1901,13 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
               std::move(resources.annotations.host_embedding_update_infos),
               std::move(resources.annotations.host_embedding_notify_infos),
               std::move(resources.annotations.remote_parameter_infos),
+              std::move(
+                  resources.annotations.remote_parameter_host_rearrangements),
               std::move(resources.annotations.entry_input_infos),
               std::move(resources.annotations.feed_input_infos),
               std::move(resources.annotations.entry_output_infos),
               std::move(resources.annotations.feed_output_infos),
-              logging_cycle_count, resources.streams_indices.GetAssignedIds(),
-              resources.streams_indices.CheckpointFeedsOrder()});
+              logging_cycle_count});
 
   return executable_core;
 }

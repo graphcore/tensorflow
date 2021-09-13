@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 
@@ -27,7 +28,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/shape_inference.h"
 
 #include "tensorflow/compiler/xla/test.h"
-#include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 
 #include <poplin/codelets.hpp>
@@ -39,7 +39,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-using ElementwiseBroadcastConvert = HloTestBase;
+using ElementwiseBroadcastConvert = HloPoplarTestBase;
 
 std::vector<HloPoplarUseDescription> GetInplaceDescriptions(
     const HloInstruction* inst) {
@@ -50,19 +50,6 @@ std::vector<HloPoplarUseDescription> GetInplaceDescriptions(
     output.push_back(HloPoplarUseDescription::FromProto(inplace_description));
   }
   return output;
-}
-
-std::unique_ptr<CompilerResources> GetMockResources(HloModule* module) {
-  auto resources = CompilerResources::CreateTestDefault(module);
-  resources->streams_indices.InitializeIndexTensors(*resources, {}, {});
-  resources->module_call_graph = CallGraph::Build(module);
-  resources->main_graph = absl::make_unique<poplar::Graph>(
-      poplar::Device::createCPUDevice(), poplar::replication_factor(1));
-  poplin::addCodelets(*resources->main_graph);
-  popnn::addCodelets(*resources->main_graph);
-  popops::addCodelets(*resources->main_graph);
-  poprand::addCodelets(*resources->main_graph);
-  return std::move(resources);
 }
 
 TEST_F(ElementwiseBroadcastConvert, BinaryRHS) {
@@ -457,7 +444,7 @@ ENTRY c1 {
 }
 
 class ElementwiseBroadcastConvertImplicit
-    : public HloTestBase,
+    : public HloPoplarTestBase,
       public ::testing::WithParamInterface<std::string> {};
 
 const char* binary_all_inputs_broadcasts = R"(

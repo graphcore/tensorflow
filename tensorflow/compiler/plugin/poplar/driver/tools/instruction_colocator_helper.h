@@ -30,7 +30,8 @@ namespace poplarplugin {
 
 class InstructionColocatorHelper {
  protected:
-  InstructionColocatorHelper();
+  explicit InstructionColocatorHelper(
+      bool requires_matching_element_types = true);
   // Function which can be specialized for each collocator.
   virtual bool CanColocateExtra(const HloInstruction* a,
                                 const HloInstruction* b) const;
@@ -58,6 +59,7 @@ class InstructionColocatorHelper {
   // ID used for determinism in scheduling.
   static int64 GetNextID();
   int64 id_;
+  bool requires_matching_element_types_;
 };
 
 struct InstructionColocatorHelperPtrComparator {

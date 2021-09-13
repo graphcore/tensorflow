@@ -22,6 +22,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_util
 from tensorflow.python.framework.func_graph import FuncGraph
 from tensorflow.python.ipu import functional_ops
+from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import cond_v2
 from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import control_flow_util_v2 as util
@@ -70,12 +71,21 @@ class _XlaFuncGradGraph(FuncGraph):
     # If `tensor` is a graph-building time constant, we create a constant with
     # the same value in the backward graph instead of capturing it.
     tensor_id = ops.tensor_id(tensor)
+
+    def capture_constant(t):
+      t_id = ops.tensor_id(t)
+      self._captured_constants[t_id] = constant_op.constant(
+          tensor_util.constant_value(t), dtype=t.dtype)
+      return self._captured_constants[t_id]
+
     if tensor_id in self._captured_constants:
       return self._captured_constants[tensor_id]
     elif constant_op.is_constant(tensor):
-      self._captured_constants[tensor_id] = constant_op.constant(
-          tensor_util.constant_value(tensor), dtype=tensor.dtype)
-      return self._captured_constants[tensor_id]
+      return capture_constant(tensor)
+    elif tensor.op.type == "InvertPermutation" and constant_op.is_constant(
+        tensor.op.inputs[0]):
+      permutation = capture_constant(tensor.op.inputs[0])
+      return array_ops.invert_permutation(permutation)
 
     if control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph()):
       # Capture the intermidate so that it can be added as an extra output
@@ -170,16 +180,19 @@ def _get_gradients_for_function(op, *grads):
     fwd_op._set_shape_list_attr("output_shapes", func_graph.output_shapes)
     fwd_op._add_outputs([t.dtype for t in extra_func_outputs],
                         [t.shape for t in extra_func_outputs])
+    # pylint: enable=protected-access
 
   func_grad_inputs = _resolve_grad_inputs(func_graph, func_grad_graph, op)
-  # pylint: enable=protected-access
-  return func_grad_graph, func_grad_inputs
+  constant_outputs = functional_ops._get_constant_outputs(  # pylint: disable=protected-access
+      func_grad_graph, func_grad_inputs)
+  return func_grad_graph, func_grad_inputs, constant_outputs
 
 
 @ops.RegisterGradient("Function")
 def _function_grad(op, *grads):
   """The gradient of a Function op."""
-  func_grad_graph, func_grad_inputs = _get_gradients_for_function(op, *grads)
+  func_grad_graph, func_grad_inputs, constant_outputs = \
+    _get_gradients_for_function(op, *grads)
   outputs = gen_functional_ops.function(
       func_grad_inputs,
       to_apply=util.create_new_tf_function(func_grad_graph),
@@ -188,6 +201,7 @@ def _function_grad(op, *grads):
       unique_sharding=op.get_attr("unique_sharding"),
       keep_input_layouts=True)
 
+  outputs = functional_ops._replace_outputs(outputs, constant_outputs)  # pylint: disable=protected-access
   return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
       func_grad_graph.structured_outputs, outputs)
 

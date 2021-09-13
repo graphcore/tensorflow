@@ -29,6 +29,7 @@ namespace xla {
 
 class HloModule;
 class HloComputation;
+class HloReachabilityMap;
 
 namespace poplarplugin {
 
@@ -50,6 +51,8 @@ struct ElementwiseClusterValidator {
       const HloComputation* comp);
 };
 
+using ElementwiseComputationSet = absl::flat_hash_set<const HloComputation*>;
+
 enum struct ElementwiseClusterClass { Invalid, Partitioned, NonPartitioned };
 
 class ElementwiseCluster {
@@ -59,10 +62,12 @@ class ElementwiseCluster {
   bool AnyUserIn(HloInstruction* inst) const;
   bool AllUsersIn(HloInstruction* inst) const;
   void Add(HloInstruction* inst);
-  bool MaybeAdd(HloInstruction* inst);
+  bool MaybeAdd(HloInstruction* inst,
+                const ElementwiseComputationSet& elementwise_comps,
+                const HloReachabilityMap& reachability_map);
   ElementwiseClusterClass Classify(
       const ElementwiseClusterValidator& validator) const;
-  bool CanMerge(const ElementwiseCluster& other);
+  bool CanMerge(const ElementwiseCluster& other) const;
   void Merge(const ElementwiseCluster& other);
   const HloInstruction* GetTop() const;
   HloComputation* GetComputation() const;
@@ -70,7 +75,8 @@ class ElementwiseCluster {
 
   // Finalize the cluster - no more instructions will be added. Returns whether
   // this is a cluster which should be processed further.
-  bool Finalize(const ElementwiseClusterValidator& validator,
+  bool Finalize(const HloReachabilityMap& reachability_map,
+                const ElementwiseClusterValidator& validator,
                 ThreeState partition_offload_variables);
 
   // Following functions can be called once finalized.
@@ -96,17 +102,25 @@ class ElementwiseCluster {
   // Returns original shape of the top-level instruction.
   Shape GetClusterShape(PrimitiveType type) const;
 
-  static bool CanCluster(
-      const HloInstruction* inst, bool allow_inputs,
-      const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
-      const ElementwiseClusterValidator& validator);
+  static bool IsElementwise(const HloInstruction* inst,
+                            const ElementwiseComputationSet& elementwise_comps);
+  static bool CanCluster(const HloInstruction* inst,
+                         const ElementwiseComputationSet& elementwise_comps);
 
   static StatusOr<std::vector<ElementwiseCluster>> GetClustersIn(
       HloInstruction* const resource_update,
-      const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
+      ElementwiseComputationSet elementwise_comps,
       ElementwiseClusterValidator& validator);
 
+  // Returns all computations in the module which are elementwise and can be
+  // clustered.
+  static absl::flat_hash_set<const HloComputation*>
+  GetElementwiseClusterableComputations(const HloModule* module);
+
  private:
+  // Finds if there's any cycles between input/outputs.
+  bool HasCycles(const HloReachabilityMap& reachability_map);
+
   HloInstruction* top_;
   Shape cluster_shape_;
   HloInstructionSet insts_;
@@ -121,6 +135,7 @@ class ElementwiseCluster {
   HloInstructionMap<std::vector<UserPositions>> outputs_to_users_;
   std::vector<int64> cluster_dimensions_;
   std::vector<int64> shard_dimensions_;
+  absl::flat_hash_set<HloInstruction*> allowed_scalars_;
   int64 cluster_size_;
   int64 shard_size_;
   int64 aligned_cluster_size_;

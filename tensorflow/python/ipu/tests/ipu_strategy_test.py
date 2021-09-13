@@ -34,6 +34,8 @@ from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.keras.mixed_precision import loss_scale_optimizer
+from tensorflow.python.keras.optimizer_v2 import gradient_descent
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
@@ -617,6 +619,29 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
         return x
 
       self.assertAllClose(strategy.run(step_fn, args=(iterator,)), 6.)
+
+  @test_util.run_v2_only
+  def test_loss_scale_optimizer_supported(self):
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      # No exception raised.
+      loss_scale_optimizer.LossScaleOptimizer(gradient_descent.SGD())
+
+  @test_util.run_v2_only
+  def test_distribute_datasets_from_function(self):
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+
+      def create_dataset(input_context):
+        # There should be a single input pipeline.
+        self.assertEqual(input_context.input_pipeline_id, 0)
+        self.assertEqual(input_context.num_input_pipelines, 1)
+        return dataset_ops.Dataset.from_tensor_slices([1, 2, 3, 4])
+
+      dataset = strategy.distribute_datasets_from_function(create_dataset)
+
+      # The dataset cardinality should be unchanged.
+      self.assertEqual(len(dataset), 4)
 
 
 if __name__ == "__main__":

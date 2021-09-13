@@ -23,8 +23,14 @@ For example, this will not work:
   :members:
   :imported-members:
 
+.. note::
+
+  `tensorflow.python.ipu.ipu_strategy.IPUStrategy` is an alias of
+  :py:class:`tensorflow.python.ipu.ipu_strategy.IPUStrategyV1`.
+
 .. automodule:: tensorflow.python.ipu.ipu_strategy
   :members: IPUStrategyV1
+  :special-members: __init__
 
 .. Note: the headings of the following modules will be included
          as subsection headings. They need to be added before
@@ -137,20 +143,9 @@ Estimators
 Keras
 ^^^^^
 
-.. note::
-
-  `tensorflow.python.ipu.keras.SequentialPipelineModel` has been renamed to
-  :py:class:`tensorflow.python.ipu.keras.PipelineSequential` and will be removed
-  in a future version.
-
-.. automodule:: tensorflow.python.ipu.keras
-  :members: Model, Sequential, PipelineStage, PipelineModel, PipelineSequential
-  :imported-members: Model, Sequential, PipelineModel, PipelineStage, PipelineSequential
-  :special-members: __init__
-
-.. automodule:: tensorflow.python.ipu.keras.model
-  :members: IPUModel, IPUSequential
-  :special-members: __init__
+.. automodule:: tensorflow.python.ipu.keras.extensions
+  :members: FunctionalExtension, PipelineStage, FunctionalLayerPipelineStageAssignment, SequentialExtension, SequentialLayerPipelineStageAssignment
+  :imported-members: FunctionalExtension, PipelineStage, FunctionalLayerPipelineStageAssignment, SequentialExtension, SequentialLayerPipelineStageAssignment
 
 .. _keras-layers-api:
 
@@ -167,7 +162,7 @@ Keras layers
 
 
 .. automodule:: tensorflow.python.ipu.keras.layers
-  :members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, PopnnGRU, PopnnLSTM, SerialDense, CTCInferenceLayer, CTCPredictionsLayer, RecomputationCheckpoint
+  :members: Dropout, EffectiveTransformer, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, PopnnGRU, PopnnLSTM, SerialDense, CTCInferenceLayer, CTCPredictionsLayer, RecomputationCheckpoint
   :imported-members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, PopnnGRU, PopnnLSTM, SerialDense, CTCInferenceLayer, CTCPredictionsLayer, RecomputationCheckpoint
 
 Keras losses
@@ -183,8 +178,8 @@ Keras optimizers
 ^^^^^^^^^^^^^^^^
 
 .. automodule:: tensorflow.python.ipu.keras.optimizers
-  :members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer, GradientAccumulationOptimizer
-  :imported-members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer, GradientAccumulationOptimizer
+  :members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer, MapGradientOptimizerInvertedChaining, GradientAccumulationOptimizer,
+  :imported-members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer, MapGradientOptimizerInvertedChaining, GradientAccumulationOptimizer
 
 .. _operators-api:
 
@@ -197,6 +192,10 @@ It is also possible to access the operators via the
 
 .. Order alphabetically based on the headings in the source files
 .. Put the non-PopLibs ops first
+
+.. automodule:: tensorflow.python.ipu.application_compile_op
+  :members:
+  :imported-members:
 
 .. automodule:: tensorflow.python.ipu.custom_ops
   :members:
@@ -284,6 +283,10 @@ It is also possible to access the operators via the
   :imported-members:
 
 .. automodule:: tensorflow.python.ipu.summary_ops
+  :members:
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.embedded_runtime
   :members:
   :imported-members:
 

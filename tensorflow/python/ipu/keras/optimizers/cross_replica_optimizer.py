@@ -23,7 +23,7 @@ from tensorflow.python.ipu.keras.optimizers import IpuOptimizer
 
 class CrossReplicaOptimizer(IpuOptimizer):
   """An optimizer that averages gradients across IPU replicas."""
-  def __init__(self, opt, **kwargs):
+  def __init__(self, opt, name="CrossReplicaOptimizer"):
     """Construct a new cross-replica optimizer.
 
     Args:
@@ -31,7 +31,7 @@ class CrossReplicaOptimizer(IpuOptimizer):
       kwargs: Keyword arguments to pass onto the wrapper optimizer
     """
 
-    IpuOptimizer.__init__(self, opt, **kwargs)
+    super().__init__(opt, name=name)
 
   def _resource_apply_dense(self, grad, handle, apply_state):
     """Apply gradient to variable referenced by `handle`.
@@ -48,7 +48,32 @@ class CrossReplicaOptimizer(IpuOptimizer):
       The updated variable.
     """
     (new_grad, new_var) = apply_cross_replica_op_single(grad, handle)
-    return self._opt._resource_apply_dense(  # pylint: disable=protected-access
+    return super()._resource_apply_dense(  # pylint: disable=protected-access
         new_grad,
         new_var,
         apply_state=apply_state)
+
+  @classmethod
+  def from_config(cls, config, custom_objects=None):
+    """Creates a `CrossReplicaOptimizer` from its config.
+
+    This method is the reverse of `get_config`,
+    capable of instantiating the same optimizer from the config
+    dictionary.
+
+    Arguments:
+        config: A Python dictionary, typically the output of get_config.
+        custom_objects: A Python dictionary mapping names to additional Python
+          objects used to create this optimizer, such as a function used for a
+          hyperparameter.
+
+    Returns:
+        A `CrossReplicaOptimizer` instance.
+    """
+    config = config.copy()
+    IpuOptimizer._verify_config(config)
+    inner_config = config.pop('inner_optimizer_config')
+    inner_type = config.pop('inner_optimizer_type')
+    inner_opt = inner_type(**inner_config)
+
+    return CrossReplicaOptimizer(inner_opt, **config)

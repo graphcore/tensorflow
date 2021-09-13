@@ -436,11 +436,11 @@ main {
 
   Shape shape = ShapeUtil::MakeShape(F32, {2});
 
-  ShapedBuffer arg0(shape, shape, platform, 0);
+  ShapedBuffer arg0(shape, shape, 0);
   arg0.set_buffer(buf0, {});
-  ShapedBuffer arg1(shape, shape, platform, 0);
+  ShapedBuffer arg1(shape, shape, 0);
   arg1.set_buffer(buf1, {});
-  ShapedBuffer arg2(shape, shape, platform, 0);
+  ShapedBuffer arg2(shape, shape, 0);
   arg2.set_buffer(buf2, {});
 
   std::vector<const ShapedBuffer*> args = {&arg0, &arg1, &arg2};
@@ -549,9 +549,9 @@ main {
 
   Shape shape = ShapeUtil::MakeShape(F32, {2});
 
-  ShapedBuffer arg0(shape, shape, platform, 0);
+  ShapedBuffer arg0(shape, shape, 0);
   arg0.set_buffer(buf, {});
-  ShapedBuffer arg1(shape, shape, platform, 0);
+  ShapedBuffer arg1(shape, shape, 0);
   arg1.set_buffer(buf, {});
 
   std::vector<const ShapedBuffer*> args = {&arg0, &arg1};

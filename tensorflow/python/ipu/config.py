@@ -229,11 +229,19 @@ def _get_docstring_above_AST_node(filename, node):
   then this function will retrieve the "A statement that adds 3 to 4" docstring.
   If there is no such docstring, "No description provided" is returned.
   """
-  # Find the docstring by looking for the AST node for the line above the
-  # assigning statement. We have to use the AST node since the docstring
-  # could be over a number of source lines.
+  # Find the docstring by looking for the first line above the assigning
+  # statement with AST nodes associated to it. We have to use the AST node since
+  # the docstring could be over a number of source lines and depending on
+  # Python version it could be defined at the first or last line of the doc
+  # string.
   source_index = _get_source_index(filename)
-  nodes = source_index.get(node.lineno - 1, [])
+
+  nodes = []
+  for line_number in reversed(range(0, node.lineno)):
+    if line_number in source_index:
+      nodes = source_index[line_number]
+      break
+
   # (Docstrings are Exprs with a Str in them in AST)
   if len(nodes) == 2 and isinstance(nodes[0], ast.Expr) and isinstance(
       nodes[0].value, ast.Str):
@@ -1067,38 +1075,6 @@ class SchedulingAlgorithm(Enum):
   SHORTEST_PATH = config_pb2.IpuSchedulingAlgorithm.Value("SHORTEST_PATH")
 
 
-class KeyId:
-  def __init__(self, key=0, start_id=-1):
-    self.key = key
-    self.start_id = start_id
-
-
-class VerificationOptions:
-  """Store pairs of key / id to use for each type of data used in the graph.
-  Does nothing unless verified transfers have been enabled by calling
-  `set_transfer_options(opts, use_verified_transfers=True)`
-  and an instance of this class has been set by calling
-  `set_verification_options`:
-
-  .. code-block:: python
-
-    o = VerificationOptions()
-    o.inputs.key = 1
-    o.infeeds["infeed"].key = 3
-    set_verification_options(opts, o)
-
-  """
-  def __init__(self):
-    self.inputs = KeyId()
-    self.input_parameters = KeyId()
-    self.outputs = KeyId()
-    self.output_parameters = KeyId()
-    self.infeeds = collections.defaultdict(KeyId)
-    self.outfeeds = collections.defaultdict(KeyId)
-    self.checkpoint_in = KeyId(0, 0)
-    self.checkpoint_out = KeyId(0, 0)
-
-
 # pylint: disable=pointless-string-statement
 class _MultiReplicaDistributionConfig(_ConfigBase):
   def __init__(self):
@@ -1325,6 +1301,21 @@ class _IPUModelConfig(_ConfigBase):
     pb.ipu_model_config.ipu_model_version = self.version
 
 
+class _IpuAlgebraicSimplifierConfig(_ConfigBase):
+  def __init__(self):
+    """
+    Enable dot strength optimization. When set to True, the graph optimizer
+    will convert a dot product where either the LHS or the RHS contains only
+    batch and/or contracting dimensions to an elementwise matrix
+    multiplication.
+    """
+    self.enable_dot_strength = True
+
+  def _to_protobuf(self, pb):
+    pb.algebraic_simplifier_config.enable_dot_strength\
+      = self.enable_dot_strength
+
+
 class _MatmulConfig(_ConfigBase):
   def __init__(self):
     """
@@ -1376,6 +1367,30 @@ class _ConvolutionConfig(_ConfigBase):
 
   def _to_protobuf(self, pb):
     _poplar_options_to_protobuf(self.poplar_options, pb.convolution_options)
+
+
+class _SliceConfig(_ConfigBase):
+  def __init__(self):
+    """
+    Set the PopLibs slice options for the session. Must be a dictionary of valid
+    PopLibs slice options. See `embedding::plan` in the PopLibs API reference
+    for the full list of options. The options will be passed to multiSlice,
+    multiUpdate, and multiUpdateAdd poplibs calls. These are most commonly
+    generated when using embeddings.
+
+    Of note is the "availableMemoryProportion" flag, which indicates the
+    proportion of tile memory to be made available as temporary memory for
+    slice operations (float between 0 and 1.0). Less temporary memory will
+    generally result in a slice operation that takes more cycles to complete.
+    However, because always live memory (such as control code and vertex state)
+    is not tracked when planning it, a slice operation using less temporary
+    memory may use more memory overall, due to an increase of always live
+    memory.
+    """
+    self.poplar_options = {}
+
+  def _to_protobuf(self, pb):
+    _poplar_options_to_protobuf(self.poplar_options, pb.slice_options)
 
 
 class _PoolingConfig(_ConfigBase):
@@ -1440,6 +1455,11 @@ class _NormConfig(_ConfigBase):
 class _OptimizationConfig(_ConfigBase):
   def __init__(self):
     """
+    Sub-category containing configuration options related to the XLA Algebraic
+    Simplifier.
+    """
+    self.algebraic_simplifier = _IpuAlgebraicSimplifierConfig()
+    """
     If True (default), prefetching of data for data streams on the host will be
     overlapped with execution on the IPU.
     """
@@ -1496,6 +1516,12 @@ class _OptimizationConfig(_ConfigBase):
     stream copies that can be merged by Poplar.
     """
     self.maximum_send_recv_cluster_size = 0
+    """
+    The maximum size (in bytes) a cluster of reduce operations can reach
+    before it is scheduled. These clusters are lowered to popops ReduceMany
+    operations.
+    """
+    self.maximum_reduce_many_buffer_size = 0
     """
     The minimum size (in bytes) a tensor must be in order to be considered for
     being stored in remote memory.
@@ -1556,6 +1582,7 @@ class _OptimizationConfig(_ConfigBase):
     pb.max_cross_replica_sum_buffer_size = \
         self.maximum_cross_replica_sum_buffer_size
     pb.max_reduce_scatter_buffer_size = self.maximum_reduce_scatter_buffer_size
+    pb.max_reduce_many_buffer_size = self.maximum_reduce_many_buffer_size
     pb.max_inter_ipu_copies_buffer_size = \
         self.maximum_inter_ipu_copies_buffer_size
     pb.max_send_recv_cluster_size = self.maximum_send_recv_cluster_size
@@ -1697,41 +1724,6 @@ class _SchedulingConfig(_ConfigBase):
     pb.max_scheduler_lookahead_depth = self.maximum_scheduler_lookahead_depth
     pb.max_scheduler_search_space_size = \
         self.maximum_scheduler_search_space_size
-
-
-class _VerifiedTransfersConfig(_ConfigBase):
-  def __init__(self):
-    """
-    If True, use Poplar's verified transfers feature.
-    """
-    self.enabled = False
-    """
-    A :py:class:`~tensorflow.python.ipu.config.VerificationOptions` object that
-    contains the keys and ids to use for verified transfers. Has no effect
-    unless :ref:`verified transfers are enabled
-    <verified_transfers.enabled>`.
-    """
-    self.key_id_pairs = VerificationOptions()
-
-  def _to_protobuf(self, pb):
-    pb.verified_transfers.enabled = self.enabled
-
-    def _cp_key_and_id(src, dst):
-      dst.key = src.key
-      dst.start_id = src.start_id
-
-    for attr in [
-        "inputs", "input_parameters", "outputs", "output_parameters",
-        "checkpoint_in", "checkpoint_out"
-    ]:
-      _cp_key_and_id(getattr(self.key_id_pairs, attr),
-                     getattr(pb.verified_transfers, attr))
-
-    for name, options in self.key_id_pairs.infeeds.items():
-      _cp_key_and_id(options, pb.verified_transfers.infeeds[name])
-
-    for name, options in self.key_id_pairs.outfeeds.items():
-      _cp_key_and_id(options, pb.verified_transfers.outfeeds[name])
 
 
 class IPUConfig(_ConfigBase):
@@ -1956,6 +1948,10 @@ class IPUConfig(_ConfigBase):
     """
     self.device_connection = _IPUDeviceConnectionConfig()
     """
+    Sub-category containing configuration options that affect slice operations.
+    """
+    self.slices = _SliceConfig()
+    """
     Sub-category containing experimental configuration options that may be
     changed or removed with short or no notice.
     """
@@ -2008,12 +2004,6 @@ class IPUConfig(_ConfigBase):
     operations in the graph during compilation.
     """
     self.scheduling = _SchedulingConfig()
-    """
-    DEPRECATED: Verified transfers through the IPUConfig API is deprecated.
-    Set the pairs or key / id to use for each type of data used in the graph
-    when verified transfers are enabled.
-    """
-    self._verified_transfers = _VerifiedTransfersConfig()
     # This only needs to be called in this base config, not nested configs. It
     # generates the docstring of this class and propagates deprecation.
     self._finalize_base_config()  # pylint: disable=protected-access

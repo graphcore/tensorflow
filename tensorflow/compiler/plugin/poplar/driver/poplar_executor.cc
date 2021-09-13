@@ -433,6 +433,15 @@ PoplarExecutor::TensorControl::TensorControl(size_t size_) {
   data = static_cast<char*>(tensorflow::port::AlignedMalloc(size_, 64));
 }
 
+std::size_t PoplarExecutor::TensorControl::GetRemoteBufferSize() const {
+  if (host_rearrangement) {
+    return ShapeUtil::ByteSizeOf(ShapeUtil::MakeShape(
+        element_type, {host_rearrangement->replicationFactor,
+                       host_rearrangement->totalElementsPerReplica}));
+  }
+  return size;
+}
+
 PoplarExecutor::TensorControl::~TensorControl() {
   tensorflow::port::AlignedFree(data);
 }
@@ -1085,13 +1094,13 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
       // replica for an infeed are dequeued every iteration - we therefore
       // only need to check if the first queue is full to know whether all the
       // queues are full.
-      if (VLOG_IS_ON(2)) {
+      if (VLOG_IS_ON(3)) {
         if (infeed_queues[0][0]->IsFull()) {
-          VLOG(2) << "Infeed queue is full.";
+          VLOG(3) << "Infeed queue is full.";
         }
 
         if (infeed_queues[0][0]->IsEmpty()) {
-          VLOG(2) << "Infeed queue is empty.";
+          VLOG(3) << "Infeed queue is empty.";
         }
       }
 
@@ -1224,6 +1233,7 @@ IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
         if (outfeed_context->config.mode() == PoplarFeedConfig::GetLast) {
           // For the get last we only allocate tensors once.
           allocate_tensors = outfeed_context->io_thread_output_queues.empty();
+          outfeed_context->queue_size = 0;
         }
 
         if (allocate_tensors) {
@@ -1270,6 +1280,7 @@ IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
             queue->FinishedFront();
           }
         }
+        ++(outfeed_context->queue_size);
       }
     }
 
@@ -1927,11 +1938,6 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
       break;
   }
 
-  if (UseVerifiedTransfers()) {
-    option_flags_.set("opt.useAutoloader", "false");
-    option_flags_.set("target.useBufferedCompletions", "false");
-  }
-
   // By setting stream options before user options we make sure the user can
   // override this default behaviour.
   if (current_config_.prefetch_data_streams()) {
@@ -1958,6 +1964,10 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
 
   for (const auto& opt : current_config_.pooling_options()) {
     pooling_options_.set(opt.option(), opt.value());
+  }
+
+  for (const auto& opt : current_config_.slice_options()) {
+    slice_options_.set(opt.option(), opt.value());
   }
 
   for (const auto& opt : current_config_.profiling().graph_options()) {
@@ -2005,9 +2015,6 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     VLOG(1) << "Pooling option: " << opt.first << " = " << opt.second;
   }
 
-  VLOG(1) << "Use verified transfers: "
-          << (UseVerifiedTransfers() ? "Yes" : "No");
-
   for (auto opt : graph_options_) {
     VLOG(1) << "Graph report option: " << opt.first << " = " << opt.second;
   }
@@ -2033,6 +2040,9 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
       static_cast<int64>(ipu_.Target().getIpuLinkConfiguration()));
   target_hash.push_back(ipu_.Target().getIpuLinkDomainSize());
   target_hash.push_back(static_cast<int64>(ipu_.Target().getIpuLinkTopology()));
+  target_hash.push_back(ipu_.Target().getGatewayMode());
+  target_hash.push_back(ipu_.Target().getGatewayMultiReadServiceTable());
+
   if (ipu_.Target().getTargetType() == poplar::TargetType::IPU) {
     target_hash.push_back(
         std::hash<string>()(ipu_.Target().getTargetArchString()));
@@ -2280,12 +2290,25 @@ void PoplarExecutor::FlattenedDeviceMemoryList(
     InputPairList bufs;
     auto remote_parameter_info =
         FindRemoteParameterInfo(a, executable.GetRemoteParameterInfos());
-    FlattenedDeviceMemoryList(bufs, shapes[a],
-                              const_cast<void*>(args[a].opaque()), input_info,
-                              remote_parameter_info);
+    const Shape& shape = shapes[a];
+    FlattenedDeviceMemoryList(bufs, shape, const_cast<void*>(args[a].opaque()),
+                              input_info, remote_parameter_info);
+
     for (unsigned i = 0; i < bufs.size(); i++) {
       InputDef& input = bufs[i];
       auto input_handle = input_info.Handles().at(i);
+      input.tc->element_type = shape.element_type();
+
+      if (remote_parameter_info &&
+          remote_parameter_info->host_rearrangement_id) {
+        input.tc->host_rearrangement =
+            executable.GetCollectiveBalanceReorderHostRerrangement(
+                remote_parameter_info->host_rearrangement_id);
+        CHECK_NOTNULL(input.tc->host_rearrangement);
+        VLOG(2) << "Assigned rearrangement with id "
+                << remote_parameter_info->host_rearrangement_id;
+      }
+
       if (input_info.IsResource() && !input_info.IsResourceNotModified()) {
         if (modified_resources.contains(input.tc)) {
           // We found an alias - we add a copy.
@@ -2303,7 +2326,7 @@ void PoplarExecutor::FlattenedDeviceMemoryList(
         modified_resources.insert(input.tc);
       }
 
-      input.tc->element_type = shapes[a].element_type();
+      input.tc->element_type = shape.element_type();
       args_map.emplace(ArgHandle{a, i, input_handle}, input);
     }
   }
@@ -2825,6 +2848,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
     for (const auto& tc : allocations_) {
       // Set up streams
       if (tc->on_device == true && tc->output_handle) {
+        auto buffer_size = tc->size;
         if (tc->in_memory_remote_parameter_info) {
           // We currently only get one copy of the buffer.
           // Note that only resource variables are on device, hence they must
@@ -2835,33 +2859,69 @@ Status PoplarExecutor::MoveDeviceToHost() {
               tc->in_memory_remote_parameter_info->buffer_name;
           const int64 buffer_offset =
               tc->in_memory_remote_parameter_info->buffer_offset;
+          buffer_size = tc->GetRemoteBufferSize();
 
           if (tc->in_memory_remote_parameter_info->is_replica_partitioned) {
-            if (HostSizeToDeviceSize(tc->size, tc->element_type) != tc->size) {
+            if (HostSizeToDeviceSize(buffer_size, tc->element_type) !=
+                buffer_size) {
               return InvalidArgumentStrCat(
                   "Unsupported replica partitioned type ",
                   PrimitiveType_Name(tc->element_type), " for ", buffer_name);
             }
 
             const std::size_t bytes_per_replica =
-                PartitionedByteCountPerReplica(tc->size, tc->element_type,
+                PartitionedByteCountPerReplica(buffer_size, tc->element_type,
                                                current_replication_factor_);
 
-            auto buffer = absl::make_unique<char[]>(bytes_per_replica);
+            std::vector<char> buffer;
+            const bool rearrange = tc->host_rearrangement != nullptr;
+            if (rearrange) {
+              buffer.resize(buffer_size);
+            } else {
+              buffer.resize(bytes_per_replica);
+            }
 
             // This is a remote parameter - copy it to the remote buffer for
             // each replica.
             for (int replica_id = 0; replica_id < current_replication_factor_;
                  ++replica_id) {
               const std::size_t offset = replica_id * bytes_per_replica;
-              CHECK_LE(offset, tc->size);
+              CHECK_LE(offset, buffer_size);
               const std::size_t replica_length =
-                  std::min(bytes_per_replica, tc->size - offset);
+                  std::min(bytes_per_replica, buffer_size - offset);
 
-              current_engine_->copyFromRemoteBuffer(buffer_name, buffer.get(),
-                                                    buffer_offset, replica_id);
+              if (rearrange) {
+                // Collect all shards into full buffer to rearrange collective
+                // balanced reorder later.
+                current_engine_->copyFromRemoteBuffer(
+                    buffer_name, buffer.data() + offset, buffer_offset,
+                    replica_id);
+              } else {
+                current_engine_->copyFromRemoteBuffer(
+                    buffer_name, buffer.data(), buffer_offset, replica_id);
 
-              std::memcpy(tc->data + offset, buffer.get(), replica_length);
+                std::memcpy(tc->data + offset, buffer.data(), replica_length);
+              }
+            }
+            if (rearrange) {
+              auto bytes_per_element =
+                  ShapeUtil::ByteSizeOfPrimitiveType(tc->element_type);
+              VLOG(3) << "Undo rearrangement for " << tc->output_handle->name
+                      << ", size: " << tc->size << "/" << buffer_size;
+              if (tc->size < buffer.size()) {
+                // GCL host rearrangement permutes full collective tensor.
+                // If there's not enough space in tensor control buffer,
+                // create buffer enough for permutation and copy back.
+                // TODO(T43411) - remove extra copy here and in rearrangement
+                // code.
+                std::vector<char> temp(buffer.size());
+                tc->host_rearrangement->undoRearrangeForCollective(
+                    buffer.data(), temp.data(), bytes_per_element);
+                memcpy(tc->data, temp.data(), tc->size);
+              } else {
+                tc->host_rearrangement->undoRearrangeForCollective(
+                    buffer.data(), tc->data, bytes_per_element);
+              }
             }
           } else {
             const unsigned replica_id = 0;
@@ -2878,9 +2938,9 @@ Status PoplarExecutor::MoveDeviceToHost() {
             Json::Value::Int64(tc->output_handle->parameter_index);
         tensor["flat_tensor_index"] =
             Json::Value::Int64(tc->output_handle->flat_tensor_index);
-        tensor["size"] = Json::Value::UInt64(tc->size);
+        tensor["size"] = Json::Value::UInt64(buffer_size);
         root["tensors"].append(tensor);
-        total_size += tc->size;
+        total_size += buffer_size;
         total_count++;
       }
     }
@@ -2908,13 +2968,13 @@ Status PoplarExecutor::MoveDeviceToHost() {
       TF_RETURN_IF_ERROR(ResetTensorControlState(tc));
     }
   } catch (const std::exception& e) {
-    return PoplarExceptionToTensorflowStatus("[Device to host] ", e);
+    return PoplarExceptionToTensorflowStatus("[Device to host]", e);
   }
   return Status::OK();
 }
 
 Status PoplarExecutor::ResetTensorControlState(TensorControl* tc) {
-  tc->in_memory_remote_parameter_info = absl::nullopt;
+  tc->in_memory_remote_parameter_info = nullptr;
   tc->on_device = false;
   tc->output_handle.reset();
   tc->input_handle.reset();
@@ -2943,54 +3003,85 @@ Status PoplarExecutor::MoveHostToDevice() {
       TensorControl* tc = arg.second.tc;
       std::vector<std::pair<std::string, int64>> stream_list;
       void* buf(static_cast<void*>(tc->data));
+      auto buffer_size = tc->size;
       if (!arg.second.streamed) {
         buf = PreProcessBuffer(arg.second);
 
         if (arg.second.remote_parameter_info) {
-          tc->in_memory_remote_parameter_info.emplace(
-              *arg.second.remote_parameter_info);
+          tc->in_memory_remote_parameter_info =
+              arg.second.remote_parameter_info;
 
+          buffer_size = tc->GetRemoteBufferSize();
           const std::string buffer_name =
               tc->in_memory_remote_parameter_info->buffer_name;
           const int64 buffer_offset =
               tc->in_memory_remote_parameter_info->buffer_offset;
 
           if (tc->in_memory_remote_parameter_info->is_replica_partitioned) {
-            if (HostSizeToDeviceSize(tc->size, tc->element_type) != tc->size) {
+            if (HostSizeToDeviceSize(buffer_size, tc->element_type) !=
+                buffer_size) {
               return InvalidArgumentStrCat(
                   "Unsupported replica partitioned type ",
                   PrimitiveType_Name(tc->element_type), " for ", buffer_name);
             }
 
             const std::size_t bytes_per_replica =
-                PartitionedByteCountPerReplica(tc->size, tc->element_type,
+                PartitionedByteCountPerReplica(buffer_size, tc->element_type,
                                                current_replication_factor_);
 
-            auto buffer = absl::make_unique<char[]>(bytes_per_replica);
+            std::vector<char> buffer;
+            const bool rearrange = tc->host_rearrangement != nullptr;
+            if (rearrange) {
+              CHECK_LE(tc->size, buffer_size);
+              buffer.resize(buffer_size);
+
+              VLOG(3) << "Rearranging data for collective " << buffer_name
+                      << ", size: " << tc->size << "/" << buffer_size;
+              auto bytes_per_element =
+                  ShapeUtil::ByteSizeOfPrimitiveType(tc->element_type);
+              if (tc->size < buffer_size) {
+                std::vector<char> temp(buffer_size);
+                memcpy(temp.data(), tc->data, tc->size);
+                tc->host_rearrangement->rearrangeForCollective(
+                    temp.data(), buffer.data(), bytes_per_element);
+              } else {
+                tc->host_rearrangement->rearrangeForCollective(
+                    tc->data, buffer.data(), bytes_per_element);
+              }
+            } else {
+              buffer.resize(bytes_per_replica);
+            }
 
             // This is a remote parameter - copy it to the remote buffer for
             // each replica.
             for (int replica_id = 0; replica_id < current_replication_factor_;
                  ++replica_id) {
               const std::size_t offset = replica_id * bytes_per_replica;
-              CHECK_LE(offset, tc->size);
-              const std::size_t replica_length =
-                  std::min(bytes_per_replica, tc->size - offset);
+              CHECK_LE(offset, buffer_size);
 
-              // Copy the replica-local region into the tmp buffer (with
-              // padding).
-              std::memcpy(buffer.get(), static_cast<char*>(buf) + offset,
-                          replica_length);
+              if (rearrange) {
+                current_engine_->copyToRemoteBuffer(buffer.data() + offset,
+                                                    buffer_name, buffer_offset,
+                                                    replica_id);
+              } else {
+                const std::size_t replica_length =
+                    std::min(bytes_per_replica, buffer_size - offset);
+                // Copy the replica-local region into the tmp buffer (with
+                // padding).
+                std::memcpy(buffer.data(), static_cast<char*>(buf) + offset,
+                            replica_length);
 
-              // Zero the padding
-              std::memset(buffer.get() + replica_length, 0,
-                          bytes_per_replica - replica_length);
+                // Zero the padding
+                std::memset(buffer.data() + replica_length, 0,
+                            bytes_per_replica - replica_length);
 
-              // Copy the padded buffer to the remote buffer.
-              current_engine_->copyToRemoteBuffer(buffer.get(), buffer_name,
-                                                  buffer_offset, replica_id);
+                // Copy the padded buffer to the remote buffer.
+                current_engine_->copyToRemoteBuffer(buffer.data(), buffer_name,
+                                                    buffer_offset, replica_id);
+              }
             }
           } else {
+            CHECK(!tc->host_rearrangement);
             for (int replica_id = 0; replica_id < current_replication_factor_;
                  ++replica_id) {
               current_engine_->copyToRemoteBuffer(buf, buffer_name,
@@ -2998,7 +3089,7 @@ Status PoplarExecutor::MoveHostToDevice() {
             }
           }
         } else {
-          tc->in_memory_remote_parameter_info = absl::nullopt;
+          tc->in_memory_remote_parameter_info = nullptr;
           current_engine_->connectStream(arg.first.name, buf);
         }
 
@@ -3012,9 +3103,9 @@ Status PoplarExecutor::MoveHostToDevice() {
         tensor["flat_tensor_index"] =
             Json::Value::Int64(arg.first.flat_tensor_index);
         tensor["name"] = Json::Value(arg.first.name);
-        tensor["size"] = Json::Value::UInt64(tc->size);
+        tensor["size"] = Json::Value::UInt64(buffer_size);
         root["tensors"].append(tensor);
-        total_size += tc->size;
+        total_size += buffer_size;
 
         stream_list.push_back(std::make_pair(arg.first.name, 0));
       }
@@ -3036,7 +3127,7 @@ Status PoplarExecutor::MoveHostToDevice() {
       tc->converted_data.clear();
     }
   } catch (const std::exception& e) {
-    return PoplarExceptionToTensorflowStatus("[Host to device] ", e);
+    return PoplarExceptionToTensorflowStatus("[Host to device]", e);
   }
 
   return Status::OK();
@@ -3222,6 +3313,13 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
     return {};
   }
   outfeed_context = itr->second.get();
+
+  // Return early if there are no results to process.
+  if (outfeed_context->queue_size == 0 &&
+      ConnectionType() != IpuDeviceConnectionType::PRE_COMPILE) {
+    return {};
+  }
+
   // Lock whilst we dequeue all the tensors.
   std::lock_guard<std::recursive_mutex> guard(outfeed_context->mutex);
   outfeed_lock.unlock();
@@ -3232,6 +3330,7 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
     AllocateTensorsWithDefaults(
         outfeed_context->io_thread_output_queues, outfeed_context->shapes,
         outfeed_context->tf_data_types, outfeed_context->tf_shapes);
+    outfeed_context->queue_size = 1;
   }
 
   if (mode == xla::poplarplugin::PoplarFeedConfig::GetAll) {
@@ -3241,6 +3340,7 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
       output[i] = outfeed_context->io_thread_output_queues.back();
       outfeed_context->io_thread_output_queues.pop_back();
     }
+    outfeed_context->queue_size -= output.size();
     return output;
   } else {
     if (UseSyntheticDataFor(SyntheticDataCategory::Outfeed)) {
@@ -3251,6 +3351,7 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
              "using synthetic data.";
       return {};
     }
+    CHECK_EQ(outfeed_context->queue_size, 1);
     std::vector<std::vector<tensorflow::Tensor>> output(1);
     output[0] = outfeed_context->io_thread_output_queues.front();
     outfeed_context->io_thread_output_queues.clear();
@@ -3511,6 +3612,11 @@ void PoplarExecutor::ExecuteEngine(se::DeviceMemoryBase* result_buffer,
   }
   current_status_ = ExecuteEngineImpl(result_buffer, executor, executable,
                                       args_map, allocator, args);
+  if (!current_status_.ok()) {
+    StopIOThreads();
+    TF_CHECK_OK(ResetOnDeviceBuffers());
+    current_engine_ = nullptr;
+  }
 }
 
 Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
@@ -3621,7 +3727,7 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
 
         executable.OnEngineLoaded();
       } catch (const std::exception& e) {
-        return PoplarExceptionToTensorflowStatus("[Load engine] ", e);
+        return PoplarExceptionToTensorflowStatus("[Load engine]", e);
       }
     }
 
@@ -3758,10 +3864,7 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
       // right format on the host
       PostProcessStreamedVariablesDeviceToHost();
     } catch (const std::exception& e) {
-      StopIOThreads();
-      TF_CHECK_OK(ResetOnDeviceBuffers());
-      current_engine_ = nullptr;
-      return PoplarExceptionToTensorflowStatus("[Execute engine] ", e);
+      return PoplarExceptionToTensorflowStatus("[Execute engine]", e);
     }
 
     try {
@@ -3779,7 +3882,7 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
         AddExecuteEventRecord(executable.module().name());
       }
     } catch (const std::exception& e) {
-      return PoplarExceptionToTensorflowStatus("[Execute engine] ", e);
+      return PoplarExceptionToTensorflowStatus("[Execute engine]", e);
     }
   }
 

@@ -5,24 +5,28 @@ The Poplar XLA devices are named ``/device:IPU:X``, where X is an integer which
 identifies that logical device. This can consist of one or more physical IPU
 devices, as described below.
 
-A Python context handler is available for setting up all appropriate scoping
-when you create the graph. This will place all operations built inside it on the
-chosen Poplar XLA device:
+An IPU-specific TensorFlow distribution strategy, the ``IPUStrategy``, is
+available for setting up all appropriate scoping when creating a model. The
+``IPUStrategy`` should always be used to target the Poplar XLA device.
 
-.. code-block:: python
+If you are using Keras, you must instantiate your Keras model inside of the
+strategy scope:
+
+.. literalinclude:: keras_tf2_example1.py
+  :language: python
   :linenos:
+  :start-at: strategy = ipu.ipu_strategy.IPUStrategy()
 
-  with ipu_scope("/device:IPU:0"):
-    xla_result = ipu.ipu_compiler.compile(my_net, [x_data, y_data, p_angle])
+If you are not using Keras, you must use the ``@tf.function`` annotation along
+with ``strategy.run``. This will cause all operations created by the Python
+function passed into ``strategy.run`` to be placed on the IPU system and
+compiled together into a single Poplar executable:
 
-For very simple graphs, it is sufficient to use the IPU scope to define the
-parts of the graph which will be compiled.  For most graphs, the function
-``ipu_compiler.compile()`` must be used.  This must be placed inside an IPU
-device scope.
-
-The function ``ipu_compiler.compile()`` will cause all operations created by
-the Python function passed into its first argument to be placed on the IPU
-system, and be compiled together into a single Poplar executable.
+.. literalinclude:: targeting_tf2_example1.py
+  :language: python
+  :linenos:
+  :start-at: a = tf.constant([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+  :end-at: c = strategy.run(matmul_fn, args=(a, b))
 
 Supported types
 ~~~~~~~~~~~~~~~
@@ -377,12 +381,47 @@ supported. For instance, ``JpegDecode``.
 
 Unsupported operations will cause the compilation to fail.
 
-By including
-``config=tf.ConfigProto(log_device_placement=True)`` as an argument to the
-creation of the session, you can check whether the operations in your graph
-have been targeted at the Poplar device. For example:
+By including ``tf.debugging.set_log_device_placement(true)`` in your script, you
+can check if the operations in your graph are targeting the Poplar XLA
+device.
 
-.. code-block:: python
+Error Handling
+~~~~~~~~~~~~~~
 
-  # Creates a session with log_device_placement set to True.
-  sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
+The error and exception handling by TensorFlow is divided into two categories:
+
+* Poplar graph construction and compilation errors which occur during
+  construction and compilation of TensorFlow programs.
+* Poplar runtime errors which occur during the execution of the compiled
+  program.
+
+The following sections describe the actions you need to take when these errors
+occur.
+
+Construction and compilation errors
+...................................
+
+These errors are reported to the user using the TensorFlow Status error classes.
+The error messages contain information about why the error occurred and what
+action the user is required to take in order to stop the error from occurring.
+
+Runtime errors
+..............
+
+These errors and exceptions occur when running a Poplar program. The full list
+of all the exceptions and their meanings can be found in the Poplar
+documentation in the `Exceptions <https://docs.graphcore.ai/projects/poplar-api/en/latest/poplar_api.html#exceptions>`__
+section of the Poplar API reference manual.
+
+These runtime errors are handled in the following manner:
+
+* ``application_runtime_error`` - a ``tensorflow.errors.InternalError`` error
+  is raised. The error message contains the reason why the error occurred. An
+  IPU reset will be performed before the next execution of a Poplar program.
+* ``recoverable_runtime_error`` with a recovery action ``poplar::RecoveryAction::IPU_RESET`` - a ``tensorflow.errors.InternalError`` error
+  is raised. The error message contains the reason why the error occurred. An
+  IPU reset will be performed before the next execution of a Poplar program.
+* All other runtime errors - the process executing the Poplar program is
+  terminated and the full error message is logged to the console. When these
+  errors occur manual intervention might be required before the system is
+  operational again. The error message might contain a required recovery action.

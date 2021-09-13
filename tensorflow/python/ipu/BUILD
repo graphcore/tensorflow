@@ -13,7 +13,9 @@ load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "if_horovod", "poprun
 py_library(
     name = "ipu_ops_lib",
     srcs = [
+        "ops/application_compile_op.py",
         "ops/cross_replica_ops.py",
+        "ops/embedded_runtime.py",
         "ops/embedding_ops.py",
         "ops/functional_ops.py",
         "ops/image_ops.py",
@@ -125,6 +127,7 @@ py_library(
         "keras/layers/assume_equal_across_replicas.py",
         "keras/layers/ctc.py",
         "keras/layers/dropout.py",
+        "keras/layers/effective_transformer.py",
         "keras/layers/embedding_lookup.py",
         "keras/layers/ipu_layer.py",
         "keras/layers/math.py",
@@ -136,7 +139,7 @@ py_library(
         "keras/model.py",
         "keras/optimizers/__init__.py",
         "keras/optimizers/cross_replica_optimizer.py",
-        "keras/optimizers/gradient_accumulate_optimizer.py",
+        "keras/optimizers/gradient_accumulation_optimizer.py",
         "keras/optimizers/ipu_wrappers.py",
         "keras/optimizers/map_gradient_optimizer.py",
         "keras/pipeline.py",
@@ -248,6 +251,21 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "io_tiles_hw_test",
+    size = "medium",
+    srcs = ["tests/io_tiles_hw_test.py"],
+    shard_count = 10,
+    tags = ["hw_poplar_test"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
     name = "map_gradient_optimizer_test",
     size = "medium",
     srcs = ["tests/map_gradient_optimizer_test.py"],
@@ -278,6 +296,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/dropout_test.py"],
     shard_count = 4,
+    tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -292,10 +311,22 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "application_compile_test",
+    size = "large",
+    srcs = ["tests/application_compile_test.py"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
     name = "application_runtime_test",
     size = "large",
     srcs = ["tests/application_runtime_test.py"],
     shard_count = 4,
+    tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -526,6 +557,18 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "keras_effective_transformer_test",
+    size = "large",
+    srcs = ["tests/keras/keras_effective_transformer_test.py"],
+    shard_count = 12,
+    deps = [
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//third_party/py/numpy",
+    ],
+)
+
+tf_py_test(
     name = "keras_mnist_test",
     size = "large",
     srcs = ["tests/keras/examples/keras_mnist_test.py"],
@@ -555,10 +598,10 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "keras_v2_optimizers",
+    name = "keras_v2_optimizers_test",
     size = "large",
-    srcs = ["tests/keras/keras_v2_optimizers.py"],
-    shard_count = 5,
+    srcs = ["tests/keras/keras_v2_optimizers_test.py"],
+    shard_count = 8,
     tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -629,6 +672,21 @@ tf_py_test(
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
+    name = "op_util_test",
+    size = "small",
+    srcs = ["tests/op_util_test.py"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:control_flow_ops",
         "//tensorflow/python:framework",
@@ -1891,9 +1949,30 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "keras_asynchronous_callbacks_test",
+    size = "large",
+    srcs = ["tests/keras/keras_asynchronous_callbacks_test.py"],
+    shard_count = 6,
+    tags = ["hw_poplar_test"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
+        "application_compile_test",
+        "application_runtime_test",
         "assume_equal_test",
         "candidate_sampler_test",
         "config_test",
@@ -1916,6 +1995,7 @@ test_suite(
         "image_ops_test",
         "infeed_outfeed_overlap_test",
         "infeed_outfeed_test",
+        "io_tiles_hw_test",
         "io_tiles_test",
         "ipu_compiler_test",
         "ipu_estimator_replicated_test",
@@ -1926,8 +2006,10 @@ test_suite(
         "ipu_strategy_replicated_test",
         "ipu_strategy_test",
         "iteration_counter_test",
+        "keras_asynchronous_callbacks_test",
         "keras_ctc_test",
         "keras_dropout_test",
+        "keras_effective_transformer_test",
         "keras_embedding_lookup_test",
         "keras_execution_parameters_test",
         "keras_functional_model_test",
@@ -1948,12 +2030,13 @@ test_suite(
         "keras_sequential_replication_test",
         "keras_sequential_test",
         "keras_synthetic_data_test",
-        "keras_v2_optimizers",
+        "keras_v2_optimizers_test",
         "map_gradient_optimizer_test",
         "math_layers_test",
         "math_ops_test",
         "multi_conv_test",
         "nn_ops_test",
+        "op_util_test",
         "outfeed_ordinal_test",
         "pipelining_batch_serial_sequential_hw_test",
         "pipelining_batch_serial_sequential_recomputation_test",

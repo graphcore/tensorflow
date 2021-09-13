@@ -333,6 +333,64 @@ class FunctionalPipelineApiTest(test.TestCase):
         self.assertEqual(m._pipelining_accumulate_outfeed, True)  # pylint: disable=protected-access
         self.assertEqual(m._experimental_pipelining_normalize_gradients, True)  # pylint: disable=protected-access
 
+  def testPrintPipelineStageSummary(self):
+    cfg = config.IPUConfig()
+
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      d1 = layers.Input(32, name="input_a")
+      d2 = layers.Input(32, name="input_b")
+      f1 = layers.Flatten()(d1)
+      f2 = layers.Flatten()(d2)
+      c1 = layers.Concatenate()([f1, f2])
+      x1 = layers.Dense(4)(c1)
+      m = training_module.Model((d1, d2), x1)
+
+      strings = []
+
+      def print_fn(x):
+        strings.append(x)
+
+      m.print_pipeline_stage_assignment_summary(line_length=85,
+                                                print_fn=print_fn)
+
+      # pylint: disable=line-too-long
+      self.assertEqual(strings[0], 'Model: "model"')
+      self.assertEqual(strings[1], '_' * 85)
+      self.assertEqual(
+          strings[2],
+          'Layer (type) (node index)         Input Layers                      Pipeline Stage   '
+      )
+      self.assertEqual(strings[3], '=' * 85)
+      self.assertEqual(
+          strings[4],
+          'flatten (Flatten) (0)             input_a                           None             '
+      )
+      self.assertEqual(strings[5], '_' * 85)
+      self.assertEqual(
+          strings[6],
+          'flatten_1 (Flatten) (0)           input_b                           None             '
+      )
+      self.assertEqual(strings[7], '_' * 85)
+      self.assertEqual(
+          strings[8],
+          'concatenate (Concatenate) (0)     flatten                           None             '
+      )
+      self.assertEqual(
+          strings[9],
+          '                                  flatten_1                                          '
+      )
+      self.assertEqual(strings[10], '_' * 85)
+      self.assertEqual(
+          strings[11],
+          'dense (Dense) (0)                 concatenate                       None             '
+      )
+      self.assertEqual(strings[12], '=' * 85)
+      # pylint: enable=line-too-long
+
 
 if __name__ == '__main__':
   test.main()

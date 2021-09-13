@@ -22,6 +22,7 @@ Optimizer classes for the Graphcore IPU
 from tensorflow.python.ipu.optimizers.ipu_optimizer import IpuOptimizer
 from tensorflow.python.ipu.optimizers.cross_replica_optimizer import CrossReplicaOptimizer
 from tensorflow.python.ipu.optimizers.map_gradient_optimizer import MapGradientOptimizer
+from tensorflow.python.ipu.optimizers.map_gradient_optimizer import _MapGradientOptimizerInvertedChaining
 from tensorflow.python.ipu.optimizers.sharded_optimizer import ShardedOptimizer
 from tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer import GradientAccumulationOptimizerV2
 from tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer import CrossReplicaGradientAccumulationOptimizerV2

@@ -49,7 +49,7 @@ def _ipu_swish_grad(op, grad):
 @ops.RegisterGradient("MultiConv")
 def _multi_conv_grad(op, *grads):
   """The gradient of a MultiConv op."""
-  func_grad_graph, func_grad_inputs = \
+  func_grad_graph, func_grad_inputs, constant_outputs = \
     functional_ops_grad._get_gradients_for_function(op, *grads) # pylint: disable=protected-access
   outputs = gen_functional_ops.multi_conv(
       func_grad_inputs,
@@ -58,6 +58,7 @@ def _multi_conv_grad(op, *grads):
       output_shapes=func_grad_graph.output_shapes,
       option_flags=op.get_attr("option_flags"))
 
+  outputs = functional_ops._replace_outputs(outputs, constant_outputs)  # pylint: disable=protected-access
   return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
       func_grad_graph.structured_outputs, outputs)
 

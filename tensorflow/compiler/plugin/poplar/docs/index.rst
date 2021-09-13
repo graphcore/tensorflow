@@ -11,11 +11,11 @@ Targeting the IPU from TensorFlow 2
 
     intro
     device_selection
+
+    targeting_tf2
+    keras_tf2
+
     compiling
-
-    targetting_tf2
-    examples_tf2
-
     perf_training
     ipu_io
     ipu_estimator_example
@@ -27,10 +27,10 @@ Targeting the IPU from TensorFlow 2
     functions
     custom_codelet
     host_embedding
+    embedded_application_runtime
     logging
 
     api-changes
-    deprecated_profiling
     api
     supported_ops
     references

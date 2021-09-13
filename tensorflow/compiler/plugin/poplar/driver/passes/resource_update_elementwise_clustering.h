@@ -52,11 +52,6 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
 
   StatusOr<bool> Run(HloModule* module);
 
-  // Returns all computations in the module which are elementwise and can be
-  // clustered.
-  absl::flat_hash_set<const HloComputation*>
-  GetElementwiseClusterableComputations(const HloModule* module) const;
-
   // Get clusters inside of the call, where the call has to be a repeat loop or
   // a pipeline.
   StatusOr<std::vector<ElementwiseCluster>> GetClustersIn(
@@ -103,6 +98,11 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
   virtual Status UpdateClusterBackendConfig(
       const ElementwiseCluster& cluster,
       PoplarBackendConfig& backend_config) const;
+
+  // Assess a resource update and the clusters generated from it, printing
+  // helpful warnings if something doesn't look right.
+  virtual Status ValidateResourceUpdateAndClusters(
+      const HloInstruction* ru, std::vector<ElementwiseCluster> clusters) const;
 
  private:
   StatusOr<bool> RewriteCall(HloModule* module, HloInstruction* call,

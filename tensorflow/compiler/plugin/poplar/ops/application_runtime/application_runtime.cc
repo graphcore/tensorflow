@@ -20,17 +20,18 @@ namespace tensorflow {
 
 REGISTER_OP("ApplicationRuntime")
     .Input("inputs: input_types")
+    .Output("anchor: int32")
     .Attr("input_types: list(type) >= 0")
     .Attr("filename: string")
     .Attr("engine_name: string")
-    .SetIsStateful();
+    .Attr("timeout_us: int = 5000");
 
 REGISTER_OP("ApplicationCall")
     .Input("infeeds: infeed_types")
+    .Input("anchor: int32")
     .Attr("infeed_types: list(type) >= 0")
     .Output("outfeeds: outfeed_types")
     .Attr("outfeed_types: list(type) >= 0")
-    .Attr("engine_name: string")
-    .SetIsStateful();
+    .Attr("engine_name: string");
 
 }  // namespace tensorflow

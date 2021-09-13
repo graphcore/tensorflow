@@ -723,6 +723,17 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
     self.assertEqual(pb.convolution_options[1].option, 'C')
     self.assertEqual(pb.convolution_options[1].value, 'D')
 
+  def testSlicesPoplarOptions(self):
+    cfg = ipu.config.IPUConfig()
+    pb = cfg._create_protobuf()
+    self.assertEqual(len(pb.slice_options), 0)
+    cfg.slices.poplar_options = {'A': 'B', 'C': 'D'}
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.slice_options[0].option, 'A')
+    self.assertEqual(pb.slice_options[0].value, 'B')
+    self.assertEqual(pb.slice_options[1].option, 'C')
+    self.assertEqual(pb.slice_options[1].value, 'D')
+
   def testDeviceConnectionVersion(self):
     cfg = ipu.config.IPUConfig()
     pb = cfg._create_protobuf()
@@ -1036,6 +1047,14 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
     pb = cfg._create_protobuf()
     self.assertEqual(pb.max_inter_ipu_copies_buffer_size, 1024768)
 
+  def testOptimizationsMaximumReduceManyBufferSize(self):
+    cfg = ipu.config.IPUConfig()
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.max_reduce_many_buffer_size, 0)
+    cfg.optimizations.maximum_reduce_many_buffer_size = 1024768
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.max_reduce_many_buffer_size, 1024768)
+
   def testOptimizationsMaximumSendRecvClusterSize(self):
     cfg = ipu.config.IPUConfig()
     pb = cfg._create_protobuf()
@@ -1257,43 +1276,6 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
     cfg.scheduling.maximum_scheduler_search_space_size = 100
     pb = cfg._create_protobuf()
     self.assertEqual(pb.max_scheduler_search_space_size, 100)
-
-  def testVerifiedTransfersEnabled(self):
-    cfg = ipu.config.IPUConfig()
-    pb = cfg._create_protobuf()
-    self.assertEqual(pb.verified_transfers.enabled, False)
-    cfg._verified_transfers.enabled = True
-    pb = cfg._create_protobuf()
-    self.assertEqual(pb.verified_transfers.enabled, True)
-
-  def testVerifiedTransfersKeyIdPairs(self):
-    opts = ipu.utils.VerificationOptions()
-    opts.outputs.key = 2
-    opts.outfeeds["out"].start_id = 1
-    opts.outfeeds["out2"].key = 2
-    opts.infeeds["in"] = ipu.utils.KeyId(key=3, start_id=4)
-    cfg = ipu.config.IPUConfig()
-    cfg._verified_transfers.key_id_pairs = opts
-    pb = cfg._create_protobuf()
-
-    # Default key is 0
-    self.assertEqual(pb.verified_transfers.inputs.key, 0)
-    # start_id should be -1 by default
-    self.assertEqual(pb.verified_transfers.inputs.start_id, -1)
-    self.assertEqual(pb.verified_transfers.outputs.key, 2)
-    self.assertEqual(pb.verified_transfers.outputs.start_id, -1)
-    self.assertEqual(pb.verified_transfers.infeeds["in"].key, 3)
-    self.assertEqual(pb.verified_transfers.infeeds["in"].start_id, 4)
-    self.assertEqual(pb.verified_transfers.outfeeds["out"].key, 0)
-    self.assertEqual(pb.verified_transfers.outfeeds["out"].start_id, 1)
-    self.assertEqual(pb.verified_transfers.outfeeds["out2"].key, 2)
-    self.assertEqual(pb.verified_transfers.outfeeds["out2"].start_id, -1)
-    # Checkpoints are special cases: by default their id is 0.
-    # (We don't want them to automatically increment)
-    self.assertEqual(pb.verified_transfers.checkpoint_in.key, 0)
-    self.assertEqual(pb.verified_transfers.checkpoint_in.start_id, 0)
-    self.assertEqual(pb.verified_transfers.checkpoint_out.key, 0)
-    self.assertEqual(pb.verified_transfers.checkpoint_out.start_id, 0)
 
   def testCheckMetadata(self):
     """ Check that a couple of the attributes' metadata are correct """

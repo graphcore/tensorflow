@@ -16,9 +16,11 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/replica_identical_dataflow_analysis.h"
 
 #include <utility>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -27,6 +29,88 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+namespace {
+bool IsResultIdentical(const ValueCategoryTree& tree) {
+  return tree.element(RootShapeIndex()) == ValueReplicaCategory::Identical;
+}
+
+// Check whether shape is a wrapper around wrapped_shape.
+bool IsWrapperTuple(const Shape& shape, const Shape& wrapped_shape) {
+  if (shape.IsTuple() && ShapeUtil::TupleElementCount(shape) == 1) {
+    return ShapeUtil::GetTupleElementShape(shape, /*index*/ 0) == wrapped_shape;
+  }
+
+  return false;
+}
+
+bool IsVisitable(const CallGraph& call_graph,
+                 const HloComputation* computation) {
+  const auto& node = call_graph.GetNode(computation);
+  return node.context() != CallContext::kParallel;
+}
+
+// Create a new ValueCategoryTree whose nodes have
+// ValueReplicaCategory::Identity if the corresponding nodes in both lhs and rhs
+// are also identical.
+ValueCategoryTree MakeValuesIdenticalIfTreeElementsAre(
+    const ValueCategoryTree& lhs, const ValueCategoryTree& rhs) {
+  // We can ignore any layout differences since shape layouts are not used
+  // when lowering to Poplar.
+  CHECK(Shape::Equal().IgnoreLayout()(lhs.shape(), rhs.shape()));
+
+  ValueCategoryTree merged_categories(lhs.shape(),
+                                      ValueReplicaCategory::Differing);
+  merged_categories.ForEachMutableElement(
+      [&](const ShapeIndex& index, ValueReplicaCategory* category) {
+        // Both ValueCategoryTrees have the same shape, so we can merge them
+        // by just comparing elements.
+        const auto lhs_category = lhs.element(index);
+        if (lhs_category == rhs.element(index)) {
+          *category = lhs_category;
+        }
+      });
+
+  return merged_categories;
+}
+
+// Create a map of overrides for the parameters of the given HloComputation
+// using the given categories. This can be used to find the value categories of
+// comp as if it were called when parameters that have the value categories
+// given in parameter_categories
+absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>
+CreateParameterOverridesFromCategories(
+    const HloComputation* comp, const ValueCategoryTree& parameter_categories) {
+  absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>
+      parameter_overrides;
+
+  if (comp->num_parameters() == 1) {
+    // For a single parameter just copy the whole tree.
+    const HloInstruction* parameter = comp->parameter_instruction(0);
+
+    auto value_category = ValueCategoryTree(parameter->shape());
+    value_category.CopySubtreeFrom(parameter_categories, RootShapeIndex(),
+                                   RootShapeIndex());
+
+    parameter_overrides[parameter] = std::move(value_category);
+  } else {
+    const std::vector<HloInstruction*>& params = comp->parameter_instructions();
+    CHECK_EQ(params.size(), parameter_categories.shape().tuple_shapes_size());
+
+    // For multiple parameters copy the subtree for each parameter.
+    for (auto i = 0u; i < params.size(); ++i) {
+      auto* param = params[i];
+
+      auto value_categories = ValueCategoryTree(param->shape());
+      value_categories.CopySubtreeFrom(parameter_categories, {i},
+                                       RootShapeIndex());
+
+      parameter_overrides[param] = std::move(value_categories);
+    }
+  }
+
+  return parameter_overrides;
+}
+}  // namespace
 
 std::ostream& operator<<(std::ostream& stream,
                          const ValueReplicaCategory& category) {
@@ -42,7 +126,7 @@ std::ostream& operator<<(std::ostream& stream,
       stream << "Unknown";
       break;
     default:
-      CHECK(false);
+      CHECK(false) << "Got unexpected ValueReplicaCategory";
       break;
   }
   return stream;
@@ -57,37 +141,92 @@ ValuesIdenticalAcrossReplicasVisitor::ValuesIdenticalAcrossReplicasVisitor(
   MarkOverridesAsVisited(category_overrides);
 }
 
-StatusOr<ValueReplicaCategory>
-ValuesIdenticalAcrossReplicasVisitor::ValueCategory(
-    const HloInstruction* inst, const ShapeIndex& value_index) const {
-  auto inst_it = value_category_mapping_.find(inst);
-  if (inst_it != value_category_mapping_.end()) {
-    const auto category = inst_it->second.element(value_index);
-    CHECK_NE(category, ValueReplicaCategory::Unknown);
+const absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>&
+ValuesIdenticalAcrossReplicasVisitor::ValueCategoryMapping() const {
+  return value_category_mapping_;
+}
 
-    return category;
-  }
-
-  return InternalErrorStrCat(
-      "Value category for instruction '", inst->name(),
-      "' not found. Run the visitor on its computation to find its value "
-      "category.");
+bool ValuesIdenticalAcrossReplicasVisitor::Visited(
+    const HloComputation* comp) const {
+  return value_category_mapping_.contains(comp->root_instruction());
 }
 
 Status ValuesIdenticalAcrossReplicasVisitor::DefaultAction(
     const HloInstruction* inst) {
-  return SetAllInstructionValuesToIdenticalOrDiffering(
-      inst, AllOperandsIdentical(inst));
+  // If an instruction has side effects then calling it multiple times
+  // with the same operands might produce different results.
+  const bool is_identical =
+      !inst->HasSideEffect() && AllOperandsIdentical(inst);
+  return SetAllInstructionValuesToIdenticalOrDiffering(inst, is_identical);
 }
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleCall(
-    const HloInstruction* inst) {
-  auto* comp = inst->to_apply();
+    const HloInstruction* call) {
+  HloComputation* comp = call->to_apply();
 
-  if (IsFunction(inst)) {
-    return SetAllInstructionValuesToMatchComputationRoot(inst, comp);
+  if (IsFunction(call) || IsAnyPipelineStageOpOrResourceUpdate(call)) {
+    TF_ASSIGN_OR_RETURN(value_category_mapping_[call],
+                        VisitSubComputation(comp, call));
+    return Status::OK();
+  } else if (IsPipelineOp(call)) {
+    // Handle the pipeline like a repeat loop since it'll be
+    // invoked several times.
+    // A pipeline is only replica identical if its body and
+    // its `gradient_accumulation_count` instruction is. This
+    // instruction is passed as an operand to the body, so its
+    // value category will be encoded in the tuple result of the
+    // pipeline body. Which means that if its not identical then
+    // neither is the pipeline.
+    return HandleRepeatLoop(call, comp, GetPipelineRepeatCount(call));
+  } else if (IsRepeatLoop(call)) {
+    return HandleRepeatLoop(call, comp, GetRepeatLoopCount(call));
   }
 
+  return SetAllInstructionValuesToDiffering(call);
+}
+
+Status ValuesIdenticalAcrossReplicasVisitor::HandleConditional(
+    const HloInstruction* inst) {
+  const std::vector<HloComputation*>& branches = inst->branch_computations();
+
+  // Since we don't know which branch will be taken we have to makes sure that
+  // any value we set as identical is identical in all branches and that the
+  // replicas will all take the same branch. This way if a value is identical we
+  // know that it is regardless of the branch taken.
+  const bool same_branch_per_replica =
+      IsResultIdentical(value_category_mapping_.at(inst->operand(0)));
+  if (same_branch_per_replica) {
+    CHECK(!branches.empty());
+
+    // Get the value categories for each branch and merge them together so
+    // that the only values that are identical are those that are identical
+    // in all branches.
+    TF_ASSIGN_OR_RETURN(
+        value_category_mapping_[inst],
+        VisitSubComputation(branches[0],
+                            value_category_mapping_.at(inst->operand(1))));
+
+    for (auto branch_index = 1u; branch_index < branches.size();
+         ++branch_index) {
+      const HloComputation* branch = branches[branch_index];
+      const HloInstruction* branch_arg = inst->operand(branch_index + 1);
+
+      TF_ASSIGN_OR_RETURN(
+          const ValueCategoryTree branch_categories,
+          VisitSubComputation(branch, value_category_mapping_.at(branch_arg)));
+
+      value_category_mapping_[inst] = MakeValuesIdenticalIfTreeElementsAre(
+          branch_categories, value_category_mapping_[inst]);
+    }
+    return Status::OK();
+  }
+
+  // If different replicas take different branches then some replicas will visit
+  // true_comp and some false_comp, so the values will be differing across
+  // replicas.
+  for (auto* branch : branches) {
+    TF_RETURN_IF_ERROR(SetAllInstructionValuesToDiffering(branch));
+  }
   return SetAllInstructionValuesToDiffering(inst);
 }
 
@@ -101,9 +240,13 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleCustomCall(
         all_gather->GetPoplarReplicaGroups() == PoplarReplicaGroups();
     return SetAllInstructionValuesToIdenticalOrDiffering(all_gather,
                                                          gather_all_replicas);
+  } else if (IsPoplarInstruction(PoplarOp::AssumeEqualAcrossReplicas, inst)) {
+    // AssumeEqual is a special case were we always want it to be treated
+    // as replica identical.
+    return SetAllInstructionValuesToIdentical(inst);
   }
 
-  return SetAllInstructionValuesToDiffering(inst);
+  return DefaultAction(inst);
 }
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleAllReduce(
@@ -115,8 +258,11 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleAllReduce(
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleFusion(
     const HloInstruction* inst) {
-  return SetAllInstructionValuesToIdenticalOrDiffering(
-      inst, IsPopOpsFusion(inst, "wide_const"));
+  if (IsPopOpsFusion(inst, "wide_const")) {
+    return SetAllInstructionValuesToIdenticalOrDiffering(inst, true);
+  }
+
+  return DefaultAction(inst);
 }
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleGetTupleElement(
@@ -148,63 +294,237 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleTuple(
   return Status::OK();
 }
 
+Status ValuesIdenticalAcrossReplicasVisitor::HandleTupleSelect(
+    const HloInstruction* inst) {
+  // Since we don't know which tuple the select will return we can only
+  // say a value is identical if its in both on/off tuples and the pred
+  // is identical across replicas - so we get the same tuple across all
+  // replicas.
+  const bool sample_tuple_per_replica =
+      IsResultIdentical(value_category_mapping_.at(inst->operand(0)));
+  if (sample_tuple_per_replica) {
+    const ValueCategoryTree& on_value_categories =
+        value_category_mapping_.at(inst->operand(1));
+    const ValueCategoryTree& off_value_categories =
+        value_category_mapping_.at(inst->operand(2));
+
+    value_category_mapping_[inst] = MakeValuesIdenticalIfTreeElementsAre(
+        on_value_categories, off_value_categories);
+    return Status::OK();
+  }
+
+  return SetAllInstructionValuesToDiffering(inst);
+}
+
+Status ValuesIdenticalAcrossReplicasVisitor::HandleWhile(
+    const HloInstruction* inst) {
+  HloComputation* while_condition = inst->while_condition();
+  HloComputation* while_body = inst->while_body();
+
+  // We don't know ahead of time how many iterations, if any, the while
+  // loop will run for. Due to that we can only say that an output value
+  // is identical when the loop runs for the same number of iterations across
+  // all replicas and if it's identical when the loop doesn't run, runs once
+  // and runs multiple times (each of which correspond to different behaviours
+  // of the conditional). Outside of those conditions we can't be sure what
+  // values are identical, as it may differ depending on the number of
+  // iterations.
+
+  TF_ASSIGN_OR_RETURN(const ValueCategoryTree conditional_start_categories,
+                      VisitSubComputation(while_condition, inst));
+  if (IsResultIdentical(conditional_start_categories)) {
+    TF_ASSIGN_OR_RETURN(const ValueCategoryTree body_iter0_categories,
+                        VisitSubComputation(while_body, inst));
+
+    // At this point we know that the conditional is replica idential
+    // initially, now we need to check that it remains so for iter0 and
+    // iter1. This way we can know that the replicas have the same number
+    // of iterations.
+    TF_ASSIGN_OR_RETURN(
+        const ValueCategoryTree conditional_iter0_categories,
+        VisitSubComputation(while_condition, body_iter0_categories));
+    if (IsResultIdentical(conditional_iter0_categories)) {
+      // We treat this point as the loops fixed point since we expect
+      // the input and output categories from here to be the same.
+      TF_ASSIGN_OR_RETURN(
+          const ValueCategoryTree body_iter1_categories,
+          VisitSubComputation(while_body, body_iter0_categories));
+
+      TF_ASSIGN_OR_RETURN(
+          const ValueCategoryTree conditional_iter1_categories,
+          VisitSubComputation(while_condition, body_iter1_categories));
+      if (IsResultIdentical(conditional_iter1_categories)) {
+        // At this point we know that the replicas have the same
+        // number of iterations, so we just need to find which
+        // values of the loop itertions are also identical.
+
+        const ValueCategoryTree& body_start_categories =
+            value_category_mapping_.at(inst->operand(0));
+
+        value_category_mapping_[inst] = MakeValuesIdenticalIfTreeElementsAre(
+            body_start_categories,
+            MakeValuesIdenticalIfTreeElementsAre(body_iter0_categories,
+                                                 body_iter1_categories));
+        return Status::OK();
+      }
+    }
+  }
+
+  // If the conditional isn't identical then the number of iterations
+  // differ between the replicas and so will the loop body.
+  TF_RETURN_IF_ERROR(SetAllInstructionValuesToDiffering(while_body));
+  return SetAllInstructionValuesToDiffering(inst);
+}
+
+Status ValuesIdenticalAcrossReplicasVisitor::HandleRepeatLoop(
+    const HloInstruction* call, const HloComputation* body,
+    int64 repeat_count) {
+  CHECK_GT(repeat_count, 0);
+
+  if (repeat_count > 1) {
+    // To determine the value categories of a repeat body we need to run the
+    // visitor twice, since the body is first run with initial values (set via
+    // the calls operands) and then with the results from the previous call to
+    // body. Hence we run the visitor with the initial value categories given to
+    // body and then with the value categories of that first iteration, which we
+    // use as the actual categories.
+    TF_ASSIGN_OR_RETURN(ValueCategoryTree body_iter0_categories,
+                        VisitSubComputation(body, call));
+
+    // If a repeat body has only a single parameter then its ROOT value can be
+    // one of two shapes. Either a single value that matches the shape of the
+    // parameter or a single value (of the correct shape) in a tuple. If
+    // its a wrapper then we need to unwrap it to get the correct
+    // ValueCategoryTree to use, otherwise we will have a shape mismatch.
+    const bool unwrap_root =
+        body->num_parameters() == 1 &&
+        IsWrapperTuple(body_iter0_categories.shape(),
+                       body->parameter_instruction(0)->shape());
+    if (unwrap_root) {
+      TF_ASSIGN_OR_RETURN(body_iter0_categories,
+                          body_iter0_categories.SubShapeTree({0}));
+    }
+
+    TF_ASSIGN_OR_RETURN(value_category_mapping_[call],
+                        VisitSubComputation(body, body_iter0_categories));
+  } else {
+    TF_ASSIGN_OR_RETURN(value_category_mapping_[call],
+                        VisitSubComputation(body, call));
+  }
+
+  return Status::OK();
+}
+
+StatusOr<ValueCategoryTree>
+ValuesIdenticalAcrossReplicasVisitor::VisitSubComputation(
+    const HloComputation* comp, const HloInstruction* call) {
+  // To determine the value categories of a particular call we run the visitor
+  // with a set of overrides so that the categories of the computations
+  // parameters are the same as the calls operands. This should produce the
+  // same result as if the computations parameters were replaced with the
+  // calls operands but without the overhead of creating a new
+  // module/computation etc.
+  absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>
+      parameter_overrides = CreateParameterOverridesForCall(call, comp);
+
+  return VisitSubComputation(comp, parameter_overrides);
+}
+
+StatusOr<ValueCategoryTree>
+ValuesIdenticalAcrossReplicasVisitor::VisitSubComputation(
+    const HloComputation* comp, const ValueCategoryTree& parameter_categories) {
+  const absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>
+      parameter_overrides =
+          CreateParameterOverridesFromCategories(comp, parameter_categories);
+  return VisitSubComputation(comp, parameter_overrides);
+}
+
+StatusOr<ValueCategoryTree>
+ValuesIdenticalAcrossReplicasVisitor::VisitSubComputation(
+    const HloComputation* comp,
+    const absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>&
+        parameter_overrides) {
+  ValuesIdenticalAcrossReplicasVisitor comp_visitor(parameter_overrides);
+  TF_RETURN_IF_ERROR(comp->Accept(&comp_visitor));
+
+  for (auto& item : comp_visitor.value_category_mapping_) {
+    auto item_it = value_category_mapping_.find(item.first);
+    if (item_it == value_category_mapping_.end()) {
+      value_category_mapping_.insert(std::move(item));
+    } else {
+      // Instructions may be visited multiple times if they're called via
+      // a loop or another computation with repeat like semantics. In these
+      // cases we say that a value is identical if it's everytime it's visited.
+      auto* inst = item.first;
+      value_category_mapping_[inst] = MakeValuesIdenticalIfTreeElementsAre(
+          value_category_mapping_[inst], item.second);
+    }
+  }
+
+  return value_category_mapping_.at(comp->root_instruction());
+}
+
+absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>
+ValuesIdenticalAcrossReplicasVisitor::CreateParameterOverridesForCall(
+    const HloInstruction* call, const HloComputation* comp) const {
+  absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>
+      parameter_overrides;
+
+  const std::vector<HloInstruction*>& params = comp->parameter_instructions();
+  CHECK_EQ(params.size(), call->operand_count());
+
+  for (auto i = 0u; i < params.size(); ++i) {
+    parameter_overrides[params[i]] =
+        value_category_mapping_.at(call->operand(i));
+  }
+
+  return parameter_overrides;
+}
+
 bool ValuesIdenticalAcrossReplicasVisitor::AllOperandsIdentical(
     const HloInstruction* inst) const {
   bool all_operands_identical = true;
   for (auto* operand : inst->operands()) {
-    const auto root_category =
-        value_category_mapping_.at(operand).element(RootShapeIndex());
-    all_operands_identical &= root_category == ValueReplicaCategory::Identical;
+    const auto operand_identical =
+        IsResultIdentical(value_category_mapping_.at(operand));
+    all_operands_identical &= operand_identical;
   }
 
   return all_operands_identical;
-}
-
-Status ValuesIdenticalAcrossReplicasVisitor::
-    SetAllInstructionValuesToMatchComputationRoot(const HloInstruction* caller,
-                                                  const HloComputation* comp) {
-  // To determine the value categories of a particular call we run the visitor
-  // with a set of overrides so that the categories of the computations
-  // parameters are the same as the callers operands. This should produce the
-  // same result as if the computations parameters were replaced with the
-  // callers operands but without the overhead of creating a new
-  // module/computation etc.
-  absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>
-      parameter_overrides;
-
-  auto& params = comp->parameter_instructions();
-  CHECK_EQ(params.size(), caller->operand_count());
-
-  for (auto i = 0u; i < params.size(); ++i) {
-    parameter_overrides[params[i]] =
-        value_category_mapping_.at(caller->operand(i));
-  }
-
-  ValuesIdenticalAcrossReplicasVisitor comp_visitor(parameter_overrides);
-  comp->Accept(&comp_visitor);
-
-  // Note that even though comp->root_instruction is already in
-  // value_category_mapping_ we can't assign it from that since
-  // absl::flat_hash_map does not have reference stability, so the reference we
-  // try to copy from gets invalidated if value_category_mapping_ has to be
-  // reallocated.
-  value_category_mapping_[caller] =
-      comp_visitor.value_category_mapping_.at(comp->root_instruction());
-
-  // Since the caller is part of a flattened module we get a unique computation
-  // per caller, so we can just move across the sub visitor instructions without
-  // worrying about collisions.
-  value_category_mapping_.insert(
-      std::make_move_iterator(comp_visitor.value_category_mapping_.begin()),
-      std::make_move_iterator(comp_visitor.value_category_mapping_.end()));
-
-  return Status::OK();
 }
 
 Status ValuesIdenticalAcrossReplicasVisitor::SetAllInstructionValuesToIdentical(
     const HloInstruction* inst) {
   return SetAllInstructionValuesToIdenticalOrDiffering(inst,
                                                        /*identical*/ true);
+}
+
+Status ValuesIdenticalAcrossReplicasVisitor::SetAllInstructionValuesToDiffering(
+    const HloComputation* comp) {
+  struct RecursiveSetDifferingVisitor : ConstDfsHloVisitorWithDefault {
+    RecursiveSetDifferingVisitor(
+        ValuesIdenticalAcrossReplicasVisitor& outer_visitor)
+        : outer_visitor_(outer_visitor) {}
+
+    Status DefaultAction(const HloInstruction* inst) override {
+      TF_RETURN_IF_ERROR(
+          outer_visitor_.SetAllInstructionValuesToDiffering(inst));
+
+      for (auto* comp : inst->called_computations()) {
+        RecursiveSetDifferingVisitor visitor(outer_visitor_);
+        TF_RETURN_IF_ERROR(comp->Accept(&visitor));
+      }
+
+      return Status::OK();
+    }
+
+    ValuesIdenticalAcrossReplicasVisitor& outer_visitor_;
+  };
+
+  // Recursivly set all instructions within the given computation
+  // to be replica differing.
+  RecursiveSetDifferingVisitor set_differing_visitor(*this);
+  return comp->Accept(&set_differing_visitor);
 }
 
 Status ValuesIdenticalAcrossReplicasVisitor::SetAllInstructionValuesToDiffering(
@@ -241,19 +561,47 @@ void ValuesIdenticalAcrossReplicasVisitor::MarkOverridesAsVisited(
 }
 
 Status ReplicaIdenticalDataflowAnalysis::Run(const HloModule* module) {
-  auto module_call_graph = CallGraph::Build(module);
-  if (module_call_graph->IsFlattened()) {
+  auto call_graph = CallGraph::Build(module);
+  if (call_graph->IsFlattened()) {
     auto* entry_computation = module->entry_computation();
-    return entry_computation->Accept(&value_category_visitor_);
+    TF_RETURN_IF_ERROR(entry_computation->Accept(&value_category_visitor_));
+
+    // Make sure all relevant subcomputations are visited.
+    for (auto* comp : module->computations()) {
+      const bool is_visitable =
+          !Analysed(comp) && IsVisitable(*call_graph, comp);
+      if (is_visitable) {
+        TF_RETURN_IF_ERROR(comp->Accept(&value_category_visitor_));
+      }
+    }
+
+    return Status::OK();
   }
 
   return FailedPrecondition(
       "Expected the call graph of the module to be flat.");
 }
 
+bool ReplicaIdenticalDataflowAnalysis::Analysed(
+    const HloComputation* comp) const {
+  return value_category_visitor_.Visited(comp);
+}
+
 StatusOr<ValueReplicaCategory> ReplicaIdenticalDataflowAnalysis::ValueCategory(
     const HloInstruction* inst, const ShapeIndex& value_index) {
-  return value_category_visitor_.ValueCategory(inst, value_index);
+  auto& value_category_mapping = value_category_visitor_.ValueCategoryMapping();
+  auto inst_it = value_category_mapping.find(inst);
+  if (inst_it != value_category_mapping.end()) {
+    const auto category = inst_it->second.element(value_index);
+    CHECK_NE(category, ValueReplicaCategory::Unknown);
+
+    return category;
+  }
+
+  return InternalErrorStrCat(
+      "Value category for instruction '", inst->name(),
+      "' not found. Run the visitor on its module to find its value "
+      "category.");
 }
 
 StatusOr<bool> ReplicaIdenticalDataflowAnalysis::IsValueIdenticalAcrossReplicas(

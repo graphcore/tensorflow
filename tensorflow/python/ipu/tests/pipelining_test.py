@@ -267,6 +267,62 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         sess.run(r, {c: 10.01})
 
   @test_util.deprecated_graph_mode_only
+  def testRTSButNoOffloading(self):
+    """
+    Sharding the offloaded optimizer state doesn't make sense when the
+    optimizer state is not offloaded. This combination is invalid, so make sure
+    it throws an error which tells the user it needs to be offloaded.
+    """
+    dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
+    dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+    def dataset_parser(value):
+      a = value
+      b = (value + 10.) / 2.0
+      return {"a": a, "b": b}
+
+    dataset = dataset.map(dataset_parser)
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed3")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed3")
+
+    def stage1(**kwargs):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          kernel_initializer=init_ops.ones_initializer(),
+                          name='conv1')(kwargs["a"])
+        return y + kwargs["b"]
+
+    def stage2(x):
+      return math_ops.reduce_sum(x)
+
+    def stage3(x):
+      return x
+
+    def optimizer_function(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01)
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+    def my_net():
+      return pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          3,
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          device_mapping=[2, 0, 1],
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          # Invalid combination. RTS only operates on offloaded state.
+          replicated_optimizer_state_sharding=True,
+          offload_weight_update_variables=False,
+          optimizer_function=optimizer_function)
+
+    with self.assertRaisesRegex(ValueError,
+                                'optimizer state must be offloaded'):
+      with ops.device("/device:IPU:0"):
+        ipu_compiler.compile(my_net)
+
+  @test_util.deprecated_graph_mode_only
   def testPipelineInvalidDeviceMapping(self):
     dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -1258,7 +1314,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with tu.ipu_session() as sess:
 
-      def stage1(x):
+      def stage1(_, x):
         with variable_scope.variable_scope("stage1", use_resource=True):
           w = variable_scope.get_variable(name="w", initializer=1.0)
           return w * x
@@ -1276,7 +1332,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       def my_net(x):
         return pipelining_ops.pipeline([stage1, identity, identity, identity],
                                        gradient_accumulation_count=8,
-                                       inputs=[x],
+                                       inputs=[10, x],
                                        outfeed_queue=outfeed_queue,
                                        optimizer_function=optimizer_function,
                                        outfeed_loss=True)
@@ -1377,6 +1433,41 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(pipeline)
       self.assertAllEqual(np.full((1, 8), 4), sess.run(outfed))
+
+  @test_util.deprecated_graph_mode_only
+  def testConstantInput(self):
+
+    with tu.ipu_session() as sess:
+
+      def stage1(x):
+        return 2 * x
+
+      def stage2(x):
+        return x + 1
+
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+      def my_net():
+        return pipelining_ops.pipeline([stage1, stage2, stage2, stage2],
+                                       gradient_accumulation_count=8,
+                                       inputs=[42.0],
+                                       outfeed_queue=outfeed_queue)
+
+      with ops.device("/device:IPU:0"):
+        pipeline = ipu_compiler.compile(my_net)
+
+      cfg = IPUConfig()
+      cfg.ipu_model.compile_ipu_code = False
+      cfg.ipu_model.tiles_per_ipu = 2
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
+
+      outfed = outfeed_queue.dequeue()
+      sess.run(pipeline)
+
+      expected = np.ones(8, dtype=np.float32) * 2 * 42 + 3
+      actual = np.array(sess.run(outfed)).flatten()
+      self.assertAllEqual(expected, actual)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedLossAccumulated(self):
@@ -2089,6 +2180,53 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         gradient_accumulation_count, dataset_fn, optimizer_fn, self, 11326)
 
   @test_util.deprecated_graph_mode_only
+  def testInvertPermutation(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(10, shape=[4])
+      dataset = dataset.batch(batch_size=4, drop_remainder=True)
+
+      def dataset_parser(value):
+        label = math_ops.reduce_mean(value, axis=[1])
+        return math_ops.cast(value,
+                             np.int8), math_ops.cast(label / 10, np.int32)
+
+      return dataset.map(dataset_parser)
+
+    gradient_accumulation_count = 24
+    repeat_count = 2
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
+
+    def stage1(x, label):
+      x = math_ops.cast(x, np.float32)
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w2",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+      x = array_ops.transpose(x, array_ops.invert_permutation([1, 0]))
+      return x, label
+
+    def stage2(x, label):
+      return x, label
+
+    def stage3(x, label):
+      loss = math_ops.reduce_mean(
+          nn.sparse_softmax_cross_entropy_with_logits(logits=x, labels=label))
+      return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3], inputs_fn, [], repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer_fn, self, 11326)
+
+  @test_util.deprecated_graph_mode_only
   def testPipelineWithEmbeddingOptimization(self):
     dataset_size = 100
     embedding_size = 15
@@ -2276,7 +2414,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
             shape=[300, 300],
             dtype=dtypes.float16,
             initializer=init_ops.ones_initializer())
-        return embedding_ops.embedding_lookup(table, indices)
+        return array_ops.gather(table, indices)
 
     def identity(*args):
       return args

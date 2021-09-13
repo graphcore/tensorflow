@@ -500,6 +500,28 @@ Status CheckLoopOpaqueAliasing(CompilerResources& res,
   return Status::OK();
 }
 
+namespace {
+bool HasSmallGradientAccumulation(const HloInstruction* inst) {
+  // Find a resource update instruction.
+  const auto insts = inst->to_apply()->instructions();
+  auto itr = absl::c_find_if(insts, IsResourceUpdate);
+
+  // If there isn't a resource update, then there isn't a small gradient
+  // accumulation loop.
+  if (itr == insts.end()) {
+    return false;
+  }
+
+  // There is a gradient accumulation loop, so test its iteration count.
+  if (GetResourceUpdateBatchesToAccumulate(*itr) > 1) {
+    return false;
+  }
+
+  // We found a resource update and the gradient accumulation count was small.
+  return true;
+}
+}  // namespace
+
 StatusOr<std::unique_ptr<RepeatLoopVisitor>> CreateLoopVisitor(
     CompilerResources& res, const HloInstruction* inst,
     const DeferredArgRBVectors& inputs,
@@ -514,7 +536,15 @@ StatusOr<std::unique_ptr<RepeatLoopVisitor>> CreateLoopVisitor(
   // then create an overlapping repeat visitor.
   TF_ASSIGN_OR_RETURN(bool has_io_tile_inst,
                       ComputationHasIoTileInstructions(inst->to_apply()));
-  if (SingleIPUComputation(inst->to_apply()) && has_io_tile_inst) {
+
+  // We can't overlap the IO on a loop with too few iterations.
+  const int64 repeat_count = GetRepeatLoopCount(inst);
+
+  // We also can't overlap small gradient accumulation factors.
+  const bool small_gradient_accumulation = HasSmallGradientAccumulation(inst);
+
+  if (SingleIPUComputation(inst->to_apply()) && has_io_tile_inst &&
+      repeat_count > 1 && !small_gradient_accumulation) {
     return {absl::make_unique<RepeatLoopOverlapIOVisitor>(
         res, inputs, description, reallocate_inputs_info, debug_name_and_id)};
   } else {
@@ -622,6 +652,8 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
       GetFunctionNumberUnmodifiedRemoteBufferInputs(inst);
   const int64 num_remote_buffer_inputs =
       num_modified_remote_buffer_inputs + num_unmodified_remote_buffer_inputs;
+  const bool partitioned_elementwise_cluster =
+      GetFunctionPartitionedElementwiseCluster(inst);
 
   // This instruction needs to be lowered inplace on the remote buffers.
   if (num_remote_buffer_inputs) {
@@ -634,7 +666,8 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
 
   TF_ASSIGN_OR_RETURN(auto subcomp_visitor,
                       res.subcomputation_cache.GetOrCompileSubcomputation(
-                          res, deferred_inputs, comp, keep_input_layouts));
+                          res, deferred_inputs, comp, keep_input_layouts,
+                          partitioned_elementwise_cluster));
 
   // Make sure any deferred inputs to the instruction are pushed up.
   TF_RETURN_IF_ERROR(subcomp_visitor->PropagateDeferredAllocations(
@@ -751,6 +784,15 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   return seq;
 }
 
+static poplar::Tensor GetGradientAccumulationCountTensor(
+    const HloInstruction* inst, DeferredArgRBVectors& inputs) {
+  int64 index = GetAccumulationCountOperandIndex(inst);
+  const auto& input = inputs[index];
+  CHECK_EQ(input.size(), 1);
+  CHECK(static_cast<bool>(input[0]));
+  return input[0]->AsTensor();
+}
+
 StatusOr<poplar::program::Program> CreatePipelineOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
@@ -761,8 +803,10 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   HloComputation* pipeline_computation = inst->to_apply();
   TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
                       inst->backend_config<PoplarBackendConfig>());
-  int64 gradient_accumulation_count =
-      cfg.call_config().pipeline_config().gradient_accumulation_count();
+
+  auto gradient_accumulation_count = GetGradientAccumulationCount(inst);
+  CHECK(static_cast<bool>(gradient_accumulation_count));
+
   int64 repeat_count = cfg.call_config().pipeline_config().repeat_count();
 
   CHECK_EQ(inputs.size(), inst->operand_count());
@@ -776,8 +820,15 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
       auto visitor,
       GetPipelineVisitor(inst, res, inputs, HloInstructionDescription(inst),
                          debug_name_and_id));
-  TF_RETURN_IF_ERROR(
-      visitor->VerifyPipelineArguments(gradient_accumulation_count));
+
+  if (gradient_accumulation_count) {
+    // If known at compile time want run error checking before construction
+    // of the pipeline graph. Provide dummy tensor as won't be used.
+    // If not known at compile time we can't create the sequence yet as
+    // need to call PropagateDeferredAllocations first
+    visitor->VerifyPipelineArguments(
+        GetGradientAccumulationCountInstruction(inst), poplar::Tensor(), graph);
+  }
 
   auto order = pipeline_computation->parent()
                    ->schedule()
@@ -797,13 +848,20 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   // Initialize the counters.
   seq.add(execution_counters.SetInitialValuesToZero());
 
+  TF_ASSIGN_OR_RETURN(
+      poplar::program::Sequence verification_prog,
+      visitor->VerifyPipelineArguments(
+          GetGradientAccumulationCountInstruction(inst),
+          GetGradientAccumulationCountTensor(inst, inputs), graph));
+
   // Get the pipeline sequence.
   TF_ASSIGN_OR_RETURN(
       poplar::program::Sequence pipeline_prog,
-      visitor->GetPipelineSequence(gradient_accumulation_count));
+      visitor->GetPipelineSequence(*gradient_accumulation_count));
   // Increase the counters at the end of each pipeline execution.
   pipeline_prog.add(execution_counters.IncrementLiveCounters());
 
+  seq.add(verification_prog);
   seq.add(
       poplar::program::Repeat(repeat_count, pipeline_prog, debug_name_and_id));
 

@@ -172,10 +172,12 @@ cc_library(
     srcs = [
         "driver/invariant_passes/no_control_deps_checker.cc",
         "driver/invariant_passes/resource_update_checker.cc",
+        "driver/passes/add_stochastic_rounding_options.cc",
         "driver/passes/all_to_all_finder.cc",
         "driver/passes/allocation_finder.cc",
         "driver/passes/add_block_recompute.cc",
         "driver/passes/apply_recompute_suggestion.cc",
+        "driver/passes/call_optimizer.cc",
         "driver/passes/casts_elimination.cc",
         "driver/passes/combine_instructions.cc",
         "driver/passes/commutative_instruction_reorder_operands.cc",
@@ -218,6 +220,7 @@ cc_library(
         "driver/passes/io_tiles_placer.cc",
         "driver/passes/lift_recompute_suggestion.cc",
         "driver/passes/lower_frontend_attributes.cc",
+        "driver/passes/mark_replica_identical_instructions.cc",
         "driver/passes/matmul_combiner.cc",
         "driver/passes/module_flatten.cc",
         "driver/passes/multi_conv_fixer.cc",
@@ -249,6 +252,9 @@ cc_library(
         "driver/passes/pipeline_verifier.cc",
         "driver/passes/variables_offload_and_partition.cc",
         "driver/passes/poplar_algebraic_simplifier.cc",
+        "driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_convolution.cc",
+        "driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_dot.cc",
+        "driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_utils.cc",
         "driver/passes/post_serialize_gradient_accumulation.cc",
         "driver/passes/recompute_casts.cc",
         "driver/passes/recompute_instructions.cc",
@@ -290,6 +296,7 @@ cc_library(
         "driver/tools/custom_ops/assume_equal_across_replicas.cc",
         "driver/tools/custom_ops/batch_norm_stats.cc",
         "driver/tools/custom_ops/codelet_expression_op.cc",
+        "driver/tools/custom_ops/collective_reorder.cc",
         "driver/tools/custom_ops/conv_with_reverse.cc",
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
@@ -319,6 +326,7 @@ cc_library(
         "driver/tools/custom_ops/pooling.cc",
         "driver/tools/custom_ops/print_tensor.cc",
         "driver/tools/custom_ops/recv_from_host.cc",
+        "driver/tools/custom_ops/reduce_many.cc",
         "driver/tools/custom_ops/reduce_scatter.cc",
         "driver/tools/custom_ops/recompute.cc",
         "driver/tools/custom_ops/remap.cc",
@@ -373,9 +381,11 @@ cc_library(
         "driver/invariant_passes/no_control_deps_checker.h",
         "driver/invariant_passes/resource_update_checker.h",
         "driver/passes/add_block_recompute.h",
+        "driver/passes/add_stochastic_rounding_options.h",
         "driver/passes/all_to_all_finder.h",
         "driver/passes/allocation_finder.h",
         "driver/passes/apply_recompute_suggestion.h",
+        "driver/passes/call_optimizer.h",
         "driver/passes/casts_elimination.h",
         "driver/passes/combine_instructions.h",
         "driver/passes/commutative_instruction_reorder_operands.h",
@@ -418,6 +428,7 @@ cc_library(
         "driver/passes/io_tiles_placer.h",
         "driver/passes/lift_recompute_suggestion.h",
         "driver/passes/lower_frontend_attributes.h",
+        "driver/passes/mark_replica_identical_instructions.h",
         "driver/passes/matmul_combiner.h",
         "driver/passes/module_flatten.h",
         "driver/passes/multi_conv_fixer.h",
@@ -448,6 +459,9 @@ cc_library(
         "driver/passes/pipeline_tuple_remover.h",
         "driver/passes/pipeline_verifier.h",
         "driver/passes/poplar_algebraic_simplifier.h",
+        "driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_convolution.h",
+        "driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_dot.h",
+        "driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_utils.h",
         "driver/passes/post_serialize_gradient_accumulation.h",
         "driver/passes/recomputation_checkpoint_remover.h",
         "driver/passes/recomputation_input_remover.h",
@@ -491,6 +505,7 @@ cc_library(
         "driver/tools/custom_ops/candidate_sampler.h",
         "driver/tools/custom_ops/cast_to_gfloat_hlo.h",
         "driver/tools/custom_ops/codelet_expression_op.h",
+        "driver/tools/custom_ops/collective_reorder.h",
         "driver/tools/custom_ops/conv_with_reverse.h",
         "driver/tools/custom_ops/copy_into.h",
         "driver/tools/custom_ops/ctc_loss.h",
@@ -517,6 +532,7 @@ cc_library(
         "driver/tools/custom_ops/print_tensor.h",
         "driver/tools/custom_ops/recompute.h",
         "driver/tools/custom_ops/recv_from_host.h",
+        "driver/tools/custom_ops/reduce_many.h",
         "driver/tools/custom_ops/reduce_scatter.h",
         "driver/tools/custom_ops/remap.h",
         "driver/tools/custom_ops/remap_deduce.h",
@@ -559,6 +575,7 @@ cc_library(
         "driver/tools/offloading_util.h",
         "driver/tools/pipeline_util.h",
         "driver/tools/poplar_replica_groups.h",
+        "driver/tools/reduction_util.h",
         "driver/tools/replica_identical_dataflow_analysis.h",
         "driver/tools/single_hlo_matcher.h",
         "driver/tools/tensor_location.h",
@@ -689,6 +706,7 @@ cc_library(
         "driver/ops/custom_ops/popnn/pooling.cc",
         "driver/ops/custom_ops/popnn/topk.cc",
         "driver/ops/custom_ops/popops/all_gather.cc",
+        "driver/ops/custom_ops/popops/collective_reorder.cc",
         "driver/ops/custom_ops/popops/conv_ops.cc",
         "driver/ops/custom_ops/popops/elementwise.cc",
         "driver/ops/custom_ops/popops/expression_helpers.cc",
@@ -698,6 +716,7 @@ cc_library(
         "driver/ops/custom_ops/popops/multi_slice.cc",
         "driver/ops/custom_ops/popops/normalise_image.cc",
         "driver/ops/custom_ops/popops/random.cc",
+        "driver/ops/custom_ops/popops/reduce_many.cc",
         "driver/ops/custom_ops/popops/reduce_scatter.cc",
         "driver/ops/custom_ops/popops/scaled_inplace.cc",
         "driver/ops/custom_ops/popops/scatter_ops.cc",
@@ -759,15 +778,16 @@ cc_library(
         "driver/tools/poplar_range_sampler.cc",
         "driver/tools/poplar_util.cc",
         "driver/tools/progress_bar.cc",
+        "driver/tools/reduction_util.cc",
         "driver/tools/rnn_util.cc",
         "driver/tools/seed_generator.cc",
         "driver/tools/subcomputation_graph_caching.cc",
         "driver/tools/tensor_map.cc",
         "driver/tools/tracepoint.cc",
-        "driver/tools/verified_streams_indices.cc",
         "driver/visitors/deferred_visitor.cc",
         "driver/visitors/entry_visitor.cc",
         "driver/visitors/grouped_overlap_pipeline_visitor.cc",
+        "driver/visitors/partitioned_elementwise_cluster_visitor.cc",
         "driver/visitors/pipeline_stage_visitor.cc",
         "driver/visitors/pipeline_visitor.cc",
         "driver/visitors/pipeline_visitor_creator.cc",
@@ -813,17 +833,18 @@ cc_library(
         "driver/tools/poplar_range_sampler.h",
         "driver/tools/poplar_util.h",
         "driver/tools/progress_bar.h",
+        "driver/tools/reduction_util.h",
         "driver/tools/rnn_util.h",
         "driver/tools/seed_generator.h",
         "driver/tools/spsc_outfeed_queue.h",
         "driver/tools/subcomputation_graph_caching.h",
         "driver/tools/tensor_map.h",
         "driver/tools/tracepoint.h",
-        "driver/tools/verified_streams_indices.h",
         "driver/vertex_templates.h",
         "driver/visitors/deferred_visitor.h",
         "driver/visitors/entry_visitor.h",
         "driver/visitors/grouped_overlap_pipeline_visitor.h",
+        "driver/visitors/partitioned_elementwise_cluster_visitor.h",
         "driver/visitors/pipeline_stage_visitor.h",
         "driver/visitors/pipeline_visitor.h",
         "driver/visitors/pipeline_visitor_creator.h",
@@ -956,7 +977,8 @@ cc_library(
 cc_library(
     name = "kernels",
     srcs = [
-        "kernels/datastream/application_runtime.cc",
+        "kernels/application_runtime/application_compile.cc",
+        "kernels/application_runtime/application_runtime.cc",
         "kernels/datastream/dataset_benchmark.cc",
         "kernels/datastream/feeds.cc",
         "kernels/datastream/host_embedding.cc",
@@ -1016,6 +1038,7 @@ cc_library(
         ":driver",
         ":xla_util",
         "//tensorflow/compiler/jit:xla_device",
+        "//tensorflow/compiler/jit/kernels:xla_ops",
         "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/tf2xla:xla_compiler",
@@ -1372,7 +1395,10 @@ tf_custom_op_py_library(
 
 cc_library(
     name = "application_runtime",
-    srcs = ["ops/datastream/application_runtime.cc"],
+    srcs = [
+        "ops/application_runtime/application_compile.cc",
+        "ops/application_runtime/application_runtime.cc",
+    ],
     deps = [
         "//tensorflow/core:framework",
     ],
@@ -1521,6 +1547,38 @@ cc_library(
     ],
     deps = [
         "//tensorflow/compiler/xla:array3d",
+    ],
+)
+
+xla_test(
+    name = "add_stochastic_rounding_options_test",
+    srcs = ["tests/add_stochastic_rounding_options_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
+    name = "mark_replica_identical_instructions_test",
+    srcs = ["tests/mark_replica_identical_instructions_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
     ],
 )
 
@@ -1996,6 +2054,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
@@ -2280,6 +2339,22 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
+    name = "pipeline_verifier_test",
+    srcs = ["tests/pipeline_verifier_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":poplar_test_base",
         ":test_utils",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -2307,6 +2382,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         ":test_utils",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -2321,6 +2397,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
@@ -2374,6 +2451,7 @@ xla_test(
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
+        ":poplar_test_base",
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
@@ -2392,6 +2470,7 @@ xla_test(
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
+        ":poplar_test_base",
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
@@ -2453,6 +2532,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/service:hlo_query",
         "//tensorflow/compiler/xla/service:shape_inference",
@@ -3327,6 +3407,7 @@ xla_test(
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
+        ":poplar_test_base",
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
@@ -3552,12 +3633,27 @@ xla_test(
 )
 
 xla_test(
+    name = "offloading_util_test",
+    srcs = ["tests/offloading_util_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":poplar_test_base",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "opaque_handling_test",
     srcs = ["tests/opaque_handling_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
@@ -3638,6 +3734,38 @@ xla_test(
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
+    name = "call_optimizer_test",
+    size = "small",
+    srcs = ["tests/call_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
+    name = "util_test",
+    size = "small",
+    srcs = ["tests/util_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
     ],
@@ -4977,17 +5105,6 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
-    name = "logging_example_1",
-    size = "large",
-    srcs = ["docs/logging_example_1.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
     name = "perf_training_example",
     size = "large",
     srcs = ["docs/perf_training_example.py"],
@@ -5407,6 +5524,149 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "targeting_tf2_example1",
+    size = "large",
+    srcs = ["docs/targeting_tf2_example1.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "targeting_tf2_example2",
+    size = "large",
+    srcs = ["docs/targeting_tf2_example2.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "targeting_tf2_example3",
+    size = "large",
+    srcs = ["docs/targeting_tf2_example3.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example1",
+    size = "large",
+    srcs = ["docs/keras_tf2_example1.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example2",
+    size = "large",
+    srcs = ["docs/keras_tf2_example2.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example3",
+    size = "large",
+    srcs = ["docs/keras_tf2_example3.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example4",
+    size = "large",
+    srcs = ["docs/keras_tf2_example4.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example5",
+    size = "large",
+    srcs = ["docs/keras_tf2_example5.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example6",
+    size = "large",
+    srcs = ["docs/keras_tf2_example6.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example7",
+    size = "large",
+    srcs = ["docs/keras_tf2_example7.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example8",
+    size = "large",
+    srcs = ["docs/keras_tf2_example8.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example9",
+    size = "large",
+    srcs = ["docs/keras_tf2_example9.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_porting_example",
+    size = "large",
+    srcs = ["docs/keras_porting_example.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "compile_cache_test",
     size = "large",
     srcs = ["tests/compile_cache_test.py"],
@@ -5548,6 +5808,7 @@ test_suite(
         "norm_graph_caching_test",
         "not_supported_gather_expander_test",
         "not_supported_scatter_expander_test",
+        "offloading_util_test",
         "opaque_handling_test",
         "outline_remote_buffers_test",
         "outside_compilation_scope_test",
@@ -5628,6 +5889,8 @@ test_suite(
         "topk_test",
         "triangular_solve_test",
         "update_op_dependencies_test",
+        "user_op_internal_test",
+        "util_test",
         "variable_test",
         "variables_offload_and_partition_test",
         "weights_transpose_chans_flip_xy_test",
@@ -5677,10 +5940,22 @@ test_suite(
         "function_example2",
         "ipu_estimator_example",
         "ipu_pipeline_estimator_example",
-        "logging_example_1",
+        "keras_tf2_example1",
+        "keras_tf2_example2",
+        "keras_tf2_example3",
+        "keras_tf2_example4",
+        "keras_tf2_example5",
+        "keras_tf2_example6",
+        "keras_tf2_example7",
+        "keras_tf2_example8",
+        "keras_tf2_example9",
+        "keras_porting_example",
         "outfeed_example",
         "perf_training_example",
         "pre_compile_example_runner",
+        "targeting_tf2_example1",
+        "targeting_tf2_example2",
+        "targeting_tf2_example3",
         "tutorial_attributes_example",
         "tutorial_custom_codelet",
     ] + if_horovod(["distributed_training_horovod_example"]),

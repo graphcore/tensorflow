@@ -91,7 +91,7 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
 // Get all the computations called by the pipeline stage or which are reachable
 // from it. Ignores computations which are called in the Parallel context.
 StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
-    HloInstruction* pipeline_stage, CallGraph* call_graph);
+    HloInstruction* pipeline_stage, const CallGraph* call_graph);
 
 // Convert an instruction which has a tuple shape such that all the users of
 // that instruction are GetTupleElement instructions.
@@ -156,38 +156,6 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     HloInstructionSet forced_parameters = {},
     bool replace_resource_update_uses = true);
 
-// Replaces a call with a new one, including a new computation.
-// Propagates all the information to the new call and removes the old call and
-// its computation.
-StatusOr<HloInstruction*> ReplaceCallWith(
-    HloInstruction* call, std::unique_ptr<HloComputation> new_computation,
-    const std::vector<HloInstruction*> new_operands,
-    bool remove_unused_operands);
-
-// Get output tuple indices for unused call outputs.
-StatusOr<std::set<int64>> GetUnusedCallOutputIndices(
-    const HloInstruction* call);
-
-// Get parameter numbers for parameter instructions in the call which have no
-// users.
-StatusOr<std::set<int64>> GetUnusedParametersInCall(const HloInstruction* call);
-
-// Get tuple indices for call outputs which are used in multiple places.
-// Returns a map from the tuple index of first occurrence to a set of all other
-// occurrences.
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallOutputs(
-    const HloInstruction* call);
-
-// Get tuple indices for call operands which are used in multiple places.
-// Returns a map from the tuple index of first occurrence to a set of all other
-// occurrences.
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallInputs(
-    const HloInstruction* call);
-
-// Removes parameters from the call, and any operands which now have no users.
-StatusOr<HloInstruction*> RemoveParametersFromCall(
-    HloInstruction* call, const std::set<int64>& parameters_to_remove);
-
 // Inlines the provided computation and replaces the output at caller site with
 // the inlined root instruction.
 StatusOr<absl::flat_hash_map<HloInstruction*, HloInstruction*>>
@@ -204,10 +172,6 @@ GetPipelineRecomputationMode(const HloInstruction* pipeline_op);
 // Compute the fifo depth multiplier for the given schedule of a pipeline
 // operation.
 StatusOr<int> GetFifoDepthMultiplier(const HloInstruction* pipeline_op);
-
-// Removes outputs from the call, and GTEs which are not used by anything.
-Status RemoveOutputsFromCall(HloInstruction* call,
-                             const std::set<int64>& outputs_to_remove);
 
 // Helper struct for identifying pipeline stages.
 enum class StageType {

@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/while_loop_util.h"
 #include "tensorflow/compiler/xla/literal_util.h"
@@ -195,22 +196,34 @@ HloInstruction* GetFinalValue(HloInstruction* init_value_inst,
       HloInstruction::CreateConstant(LiteralUtil::CreateR0(value)));
 }
 
-HloInstruction* ConvertToRepeat(HloInstruction* while_inst,
-                                const int64 number_of_iterations) {
+Status ConvertToRepeat(HloInstruction* while_inst,
+                       const int64 number_of_iterations) {
+  HloComputation* parent_computation = while_inst->parent();
+  HloInstruction* input_tuple = while_inst->mutable_operand(0);
+  // If the number of iterations is 0, don't create a loop.
+  if (number_of_iterations == 0) {
+    return parent_computation->ReplaceInstruction(while_inst, input_tuple);
+  }
+
+  HloComputation* while_body = while_inst->while_body();
+
+  // Inline non gradient accumulation loops if the number of iterations is 1.
+  // Gradient accumulation loops are not inlined as they require a specific
+  // structure in order to be lowered correctly.
+  if (number_of_iterations == 1 &&
+      !absl::c_any_of(while_body->instructions(), IsResourceUpdate)) {
+    return InlineComputation(while_inst, while_body,
+                             /*copy_sharding=*/true)
+        .status();
+  }
+
   // We represent repeat as kCall and store the number of iterations in the
   // backend config field. We clone the repeat computation and use it as the
   // computation for the call.
-  HloComputation* parent_computation = while_inst->parent();
   HloModule* module = parent_computation->parent();
   HloComputation* repeat_body =
-      module->AddEmbeddedComputation(while_inst->while_body()->Clone());
+      module->AddEmbeddedComputation(while_body->Clone());
   HloInstruction* repeat_body_root = repeat_body->root_instruction();
-  HloInstruction* input_tuple = while_inst->mutable_operand(0);
-
-  // If the number of iterations is 0, don't create a loop.
-  if (number_of_iterations == 0) {
-    return input_tuple;
-  }
 
   // Note that we can also clone the input tuple iff it's a kTuple and then we
   // can hoist out constants to that input tuple.
@@ -318,7 +331,7 @@ HloInstruction* ConvertToRepeat(HloInstruction* while_inst,
           constant->set_sharding(user->sharding());
         }
 
-        user->ReplaceAllUsesWith(constant);
+        TF_RETURN_IF_ERROR(user->ReplaceAllUsesWith(constant));
       }
     }
   }
@@ -332,7 +345,8 @@ HloInstruction* ConvertToRepeat(HloInstruction* while_inst,
       for (auto* user : repeat_body->parameter_instruction(0)->users()) {
         if (user->opcode() == HloOpcode::kGetTupleElement &&
             user->tuple_index() == tuple_index) {
-          repeat_body_root->ReplaceOperandWith(tuple_index, user);
+          TF_RETURN_IF_ERROR(
+              repeat_body_root->ReplaceOperandWith(tuple_index, user));
           break;
         }
       }
@@ -346,7 +360,8 @@ HloInstruction* ConvertToRepeat(HloInstruction* while_inst,
         if (old_inst->has_sharding()) {
           constant->set_sharding(old_inst->sharding());
         }
-        input_tuple->ReplaceOperandWith(tuple_index, constant);
+        TF_RETURN_IF_ERROR(
+            input_tuple->ReplaceOperandWith(tuple_index, constant));
       }
     }
   }
@@ -407,7 +422,7 @@ HloInstruction* ConvertToRepeat(HloInstruction* while_inst,
     repeat_call->set_sharding(while_inst->sharding());
   }
 
-  return repeat_call;
+  return parent_computation->ReplaceInstruction(while_inst, repeat_call);
 }
 
 /**
@@ -450,6 +465,12 @@ StatusOr<bool> WhileLoopToRepeatSimplify::Run(HloModule* module) {
     for (auto* inst : comp->MakeInstructionPostOrder()) {
       if (inst->opcode() == HloOpcode::kWhile) {
         HloInstruction* while_inst = inst;
+        // Cannot simplify a while loop if the conditional has side effect
+        // instructions.
+        if (while_inst->while_condition()->HasSideEffect()) {
+          continue;
+        }
+
         // For each while loop, try and simplify the logic to convert the loop
         // into a repeat.
         auto statusor = ConvertWhileToRepeat(while_inst);
@@ -471,15 +492,9 @@ StatusOr<bool> WhileLoopToRepeatSimplify::Run(HloModule* module) {
         }
 
         if (simplified) {
-          HloInstruction* repeat_call = ConvertToRepeat(while_inst, count);
-          while_inst->ReplaceAllUsesWith(repeat_call);
-
-          VLOG(1) << "Simplified while loop " << while_inst->name()
+          VLOG(1) << "Simplifying while loop " << while_inst->name()
                   << " with a repeat of count " << count;
-
-          TF_RETURN_IF_ERROR(
-              while_inst->parent()->RemoveInstructionAndUnusedOperands(
-                  while_inst));
+          TF_RETURN_IF_ERROR(ConvertToRepeat(while_inst, count));
           PruneComputations(module);
           TF_RETURN_IF_ERROR(TupleSimplifier(true).Run(module).status());
           return true;

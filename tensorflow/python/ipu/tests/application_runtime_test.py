@@ -15,13 +15,15 @@
 
 import os
 import tempfile
-import subprocess
-from functools import partial
+from functools import partial, reduce
+import threading
 from absl.testing import parameterized
 import numpy as np
 
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import test_util
+from tensorflow.python.framework import versions
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -31,30 +33,41 @@ from tensorflow.python.ops import metrics
 from tensorflow.python.ops import nn, nn_ops
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.platform import googletest
-from tensorflow.python.platform import test
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops, dtypes
 from tensorflow.compiler.plugin.poplar.ops import gen_application_runtime
-from tensorflow.python.ipu import utils, ipu_compiler, scopes, loops, ipu_infeed_queue, ipu_outfeed_queue
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import ipu_compiler, scopes, loops, ipu_infeed_queue, ipu_outfeed_queue
 from tensorflow.python.ipu import dataset_benchmark
 from tensorflow.python.ipu import rand_ops
+from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu.ops import application_compile_op
 from tensorflow.compat.v1 import disable_v2_behavior
 from tensorflow.python.training import momentum
 from tensorflow.python.keras.datasets import mnist
 from tensorflow.compat.v1 import train
+from tensorflow.python.ipu import embedded_runtime
+from tensorflow.python.ipu import pipelining_ops
 
 ops.disable_eager_execution()
 disable_v2_behavior()
 
 L1_SIZE = 320
-L2_SIZE = 10
+L2_SIZE = 72
+L3_SIZE = 10
+NUM_PIXELS = 784
 BATCH_SIZE = 16
 NUM_ITERATIONS = 8
 NUM_ENGINE_ITERATIONS = 4
-NUM_TEST_ITERATIONS = 10
-IMG_SIZE = 784
 
-tmp_dir_obj = tempfile.TemporaryDirectory()
-tmp_dir = tmp_dir_obj.name
+NUM_ENGINES = 2
+NUM_THREADS_PER_ENGINE = 4
+NUM_SESSIONS = 4
+
+NUM_TEST_ITERATIONS = NUM_ENGINES * NUM_SESSIONS * NUM_THREADS_PER_ENGINE \
+  * NUM_ENGINE_ITERATIONS * NUM_ITERATIONS
+NUM_OUTER_ITERATIONS = NUM_ENGINES * NUM_SESSIONS * NUM_THREADS_PER_ENGINE \
+  * NUM_ENGINE_ITERATIONS
 
 
 def dense_layer(hiddenSize, input_, scope_name):
@@ -65,304 +78,774 @@ def dense_layer(hiddenSize, input_, scope_name):
         "weight",
         shape=[input_.shape[-1], hiddenSize],
         initializer=init_ops.glorot_uniform_initializer())
-    b = variable_scope.get_variable("bias",
-                                    shape=[hiddenSize],
-                                    initializer=init_ops.zeros_initializer())
+    b = variable_scope.get_variable(
+        "bias",
+        shape=[hiddenSize],
+        initializer=init_ops.glorot_uniform_initializer())
     return nn.relu_layer(input_, w, b)
 
 
-def train_model(lr, outqueue, inputs, labels):
-  h1Size = L1_SIZE
-  h2Size = L2_SIZE
-  droprate = 0.2
-
-  relu1 = dense_layer(h1Size, inputs, "d1")
-  drop1 = rand_ops.dropout(relu1, rate=droprate)
-  relu2 = dense_layer(h2Size, drop1, "d2")
-
-  with variable_scope.variable_scope("metrics",
-                                     reuse=variable_scope.AUTO_REUSE,
-                                     use_resource=True):
-    acc, acc_op = metrics.accuracy(
-        labels=labels,
-        predictions=math_ops.argmax(relu2, axis=1, output_type=dtypes.int32),
-        name="accuracy")
-    loss = nn_ops.sparse_softmax_cross_entropy_with_logits(labels=labels,
-                                                           logits=relu2)
-
-  with variable_scope.variable_scope("training",
-                                     reuse=variable_scope.AUTO_REUSE,
-                                     use_resource=True):
-    optimiser = momentum.MomentumOptimizer(learning_rate=lr,
-                                           momentum=0.0001,
-                                           use_nesterov=True,
-                                           name='optimise')
-    train_op = optimiser.minimize(loss)
-    with ops.control_dependencies([train_op, acc_op]):
-      mean_loss = math_ops.reduce_mean(loss, name='train_loss')
-
-  return outqueue.enqueue({'mean_loss': mean_loss, 'acc': acc})
-
-
 def test_model(outqueue, inputs):
-  h1Size = L1_SIZE
-  h2Size = L2_SIZE
+  relu1 = dense_layer(L1_SIZE, inputs, "d1")
+  relu2 = dense_layer(L2_SIZE, relu1, "d2")
+  relu3 = dense_layer(L3_SIZE, relu2, "d3")
 
-  relu1 = dense_layer(h1Size, inputs, "d1")
-  drop1 = relu1
-  relu2 = dense_layer(h2Size, drop1, "d2")
-  predictions = math_ops.argmax(relu2, axis=1, output_type=dtypes.int32)
-
-  return outqueue.enqueue({'predictions': predictions})
+  return outqueue.enqueue({'predictions': relu3})
 
 
-def scheduler(epoch):
-  if epoch < 1:
-    return 0.02
-  if epoch < 3:
-    return 0.01
-  return 0.001
+def test_model_pipelined(infeed_queue, outfeed_queue):
+  pipeline_depth = 2
+
+  def stage1(images):
+    relu1 = dense_layer(L1_SIZE, images, "d1")
+    return relu1
+
+  def stage2(relu1):
+    relu2 = dense_layer(L2_SIZE, relu1, "d2")
+    relu3 = dense_layer(L3_SIZE, relu2, "d3")
+    return relu3
+
+  return pipelining_ops.pipeline(
+      [stage1, stage2],
+      gradient_accumulation_count=pipeline_depth,
+      repeat_count=NUM_ITERATIONS / pipeline_depth,
+      infeed_queue=infeed_queue,
+      outfeed_queue=outfeed_queue,
+      pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
 
 def loop_builder(iterations, builder_func, infeed):
   return loops.repeat(iterations, builder_func, [], infeed)
 
 
-def run_model():
-  # Use Keras to get the dataset:
-  (x_train, y_train), (x_test, y_test) = mnist.load_data()
-  x_train, x_test = x_train / 255.0, x_test / 255.0
+def run_and_export_model(tmp_dir,
+                         poplar_exec_output_path,
+                         pipelined,
+                         freeze_variables=True,
+                         images=None):
+  n_test = BATCH_SIZE * NUM_TEST_ITERATIONS
+  if images is None:
+    images = np.random.rand(n_test, NUM_PIXELS).astype(np.float32)
 
-  n_train = 240
-  n_test = BATCH_SIZE * NUM_ITERATIONS * NUM_ENGINE_ITERATIONS
-
-  x_train = x_train[0:n_train, :, :]
-  y_train = y_train[0:n_train]
-  x_test = x_test[0:n_test, :, :]
-  y_test = y_test[0:n_test]
-
-  # Sizes/shapes for the dataset:
-  image_shape = x_train.shape[1:]
-  num_pixels = image_shape[0] * image_shape[1]
-  batch_size = BATCH_SIZE
-  num_train = y_train.shape[0]
-  num_test = y_test.shape[0]
-  data_shape = [None, num_pixels]
-
-  # Flatten the images and cast the labels:
-  x_train_flat = x_train.astype(np.float32).reshape(-1, num_pixels)
-  x_test_flat = x_test.astype(np.float32).reshape(-1, num_pixels)
-  y_train = y_train.astype(np.int32)
-  y_test = y_test.astype(np.int32)
-
-  # Decide how to split epochs into loops up front:
-  epochs = 5
-  ipu_steps_per_epoch = 15
-  batches_per_epoch = num_train // batch_size
-  test_batches = NUM_ITERATIONS
-  batches_per_step = batches_per_epoch // ipu_steps_per_epoch
-  if not batches_per_epoch % ipu_steps_per_epoch == 0:
-    raise ValueError(f"IPU steps per epoch {ipu_steps_per_epoch} " +
-                     f"must divide batches per epoch {batches_per_epoch}.")
-
-  # Put placeholders on the CPU host:
-  with ops.device("cpu"):
-    place_x = array_ops.placeholder(dtype=dtypes.float32,
-                                    shape=data_shape,
-                                    name="input")
-    place_y = array_ops.placeholder(dtype=dtypes.int32,
-                                    shape=[None],
-                                    name="label")
-    lr_placeholder = array_ops.placeholder(dtypes.float32, shape=[])
-
-  # Create dataset and IPU feeds:
-  train_dataset = dataset_ops.Dataset.from_tensor_slices((place_x, place_y))
-  train_dataset = train_dataset.cache().repeat().batch(batch_size,
-                                                       drop_remainder=True)
-
-  test_dataset = dataset_ops.Dataset.from_tensor_slices((place_x,))
-  test_dataset = test_dataset.cache().repeat().batch(batch_size,
+  test_dataset = dataset_ops.Dataset.from_tensor_slices((images,))
+  test_dataset = test_dataset.cache().repeat().batch(BATCH_SIZE,
                                                      drop_remainder=True)
 
-  infeed_train_queue = ipu_infeed_queue.IPUInfeedQueue(
-      train_dataset, feed_name="train_infeed")
-  outfeed_train_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-      feed_name="train_outfeed")
-  infeed_test_queue = ipu_infeed_queue.IPUInfeedQueue(test_dataset,
-                                                      feed_name="test_infeed")
-  outfeed_test_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-      feed_name="test_outfeed")
+  infeed_test_queue = ipu_infeed_queue.IPUInfeedQueue(test_dataset)
+  outfeed_test_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
-  # Use function binding to create all the builder functions that are neeeded:
-  bound_train_model = partial(train_model, lr_placeholder, outfeed_train_queue)
-  bound_train_loop = partial(loop_builder, batches_per_step, bound_train_model,
-                             infeed_train_queue)
-  bound_test_model = partial(test_model, outfeed_test_queue)
-  bound_test_loop = partial(loop_builder, test_batches, bound_test_model,
-                            infeed_test_queue)
+  if pipelined:
+    bound_test_loop = partial(test_model_pipelined, infeed_test_queue,
+                              outfeed_test_queue)
+  else:
+    bound_test_model = partial(test_model, outfeed_test_queue)
+    bound_test_loop = partial(loop_builder, NUM_ITERATIONS, bound_test_model,
+                              infeed_test_queue)
 
   # Use the bound builder functions to place the model on the IPU:
   with scopes.ipu_scope("/device:IPU:0"):
-    train_loop = ipu_compiler.compile(bound_train_loop, inputs=[])
-    test_loop = ipu_compiler.compile(bound_test_loop, inputs=[])
+    test_loop = ipu_compiler.compile(bound_test_loop)
 
   # Initialisers should go on the CPU:
   with ops.device("cpu"):
-    metrics_vars = ops.get_collection(ops.GraphKeys.LOCAL_VARIABLES,
-                                      scope="metrics")
-    metrics_initializer = variables.variables_initializer(
-        var_list=metrics_vars)
     saver = train.Saver()
 
   # Setup and acquire an IPU device:
-  config = utils.create_ipu_config()
-  config = utils.auto_select_ipus(config, 1)
-  utils.configure_ipu_system(config)
+  cfg = IPUConfig()
+  cfg.auto_select_ipus = 2 if pipelined else 1
+  tu.add_hw_ci_connection_options(cfg)
+  cfg.configure_ipu_system()
 
   # These allow us to retrieve the results of IPU feeds:
-  dequeue_train_outfeed = outfeed_train_queue.dequeue()
   dequeue_test_outfeed = outfeed_test_queue.dequeue()
-
-  # Create a benchmark program for the infeed to determine maximum achievable throughput:
-  infeed_perf = dataset_benchmark.infeed_benchmark(infeed_train_queue, epochs,
-                                                   num_train, True)
 
   # Run the model:
   with sl.Session() as sess:
-    print(f"  Benchmarking the infeed...")
-    sess.run(infeed_perf, feed_dict={place_x: x_train_flat, place_y: y_train})
-
     sess.run(variables.global_variables_initializer())
-    sess.run(infeed_train_queue.initializer,
-             feed_dict={
-                 place_x: x_train_flat,
-                 place_y: y_train
-             })
-
-    print(f"  Training...")
-    for e in range(epochs):
-      sess.run(metrics_initializer)
-      for _ in range(ipu_steps_per_epoch):
-        sess.run(train_loop, feed_dict={lr_placeholder: scheduler(e)})
-        result = sess.run(dequeue_train_outfeed)
 
     model_save_path = f'{tmp_dir}/model'
     saver.save(sess, model_save_path)
 
     print(f"  Testing...")
 
-    out_labels = np.empty([NUM_ENGINE_ITERATIONS, NUM_ITERATIONS, BATCH_SIZE],
-                          dtype='int32')
+    output = np.empty(
+        [NUM_OUTER_ITERATIONS, NUM_ITERATIONS, BATCH_SIZE, L3_SIZE],
+        dtype='float32')
 
-    sess.run(metrics_initializer)
-    sess.run(infeed_test_queue.initializer, feed_dict={place_x: x_test_flat})
-    for ei in range(NUM_ENGINE_ITERATIONS):
+    sess.run(infeed_test_queue.initializer)
+
+    for ei in range(NUM_OUTER_ITERATIONS):
       sess.run(test_loop)
-      result = sess.run(dequeue_test_outfeed)
-      out_labels[ei, :, :] = result['predictions']
+      result = sess.run(dequeue_test_outfeed,)
+      if pipelined:
+        output[ei, :, :, :] = result[0] if versions.VERSION.startswith(
+            '1') else result
+      else:
+        output[ei, :, :, :] = result['predictions']
 
     d1_bias = train.load_variable(model_save_path, 'd1/bias')
     d1_weight = train.load_variable(model_save_path, 'd1/weight')
     d2_bias = train.load_variable(model_save_path, 'd2/bias')
     d2_weight = train.load_variable(model_save_path, 'd2/weight')
+    d3_bias = train.load_variable(model_save_path, 'd3/bias')
+    d3_weight = train.load_variable(model_save_path, 'd3/weight')
 
-    mnist_ref = dict(d1_bias=d1_bias,
+    model_ref = dict(d1_bias=d1_bias,
                      d1_weight=d1_weight,
                      d2_bias=d2_bias,
                      d2_weight=d2_weight,
-                     images=x_test_flat,
-                     labels=out_labels)
+                     d3_bias=d3_bias,
+                     d3_weight=d3_weight,
+                     images=images,
+                     output=output)
 
-    return mnist_ref
+  # Use a new graph and session for the compilation.
+  with ops.Graph().as_default(), sl.Session() as sess:
+    compile_op = application_compile_op.experimental_application_compile_op(
+        bound_test_loop,
+        output_path=poplar_exec_output_path,
+        freeze_variables=freeze_variables)
+
+    # Load the weights into the new session.
+    train.Saver().restore(sess, model_save_path)
+
+    print(f"  Compiling and exporting...")
+    sess.run(compile_op)
+
+  return model_ref
+
+
+def _build_executable(tmp_dir_obj,
+                      pipelined=False,
+                      freeze_variables=True,
+                      poplar_exec_filepath=None,
+                      images=None):
+  tmp_dir = tmp_dir_obj.name
+
+  if poplar_exec_filepath is None:
+    poplar_exec_filepath = os.path.join(tmp_dir, "application.poplar_exec")
+
+  model_ref = run_and_export_model(tmp_dir,
+                                   poplar_exec_filepath,
+                                   pipelined,
+                                   freeze_variables=freeze_variables,
+                                   images=images)
+
+  return (model_ref, poplar_exec_filepath)
+
+
+TESTCASES = [{
+    'testcase_name':
+    (f'_pipelined_{pipelined}_multiple_sessions_{multiple_sessions}_' +
+     f'multiple_threads_{multiple_threads}_' +
+     f'multiple_engines_{multiple_engines}'),
+    'pipelined':
+    pipelined,
+    'multiple_sessions':
+    multiple_sessions,
+    'multiple_threads':
+    multiple_threads,
+    'multiple_engines':
+    multiple_engines,
+} for pipelined in [False, True] for multiple_sessions in [False, True]
+             for multiple_threads in [False, True]
+             for multiple_engines in [False, True]]
 
 
 class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
                              parameterized.TestCase):
+  reference_cache_initiazed = False
+  initializer_lock = threading.Lock()
+
+  @staticmethod
+  def __init_reference_data():
+    with ApplicationRuntimeTest.initializer_lock:
+      if not ApplicationRuntimeTest.reference_cache_initiazed:
+        ApplicationRuntimeTest.tmp_dir_obj = tempfile.TemporaryDirectory()
+        tmp_dir_obj = ApplicationRuntimeTest.tmp_dir_obj
+        tmp_dir = tmp_dir_obj.name
+
+        ApplicationRuntimeTest.non_pipelined_poplar_exec_filepath = \
+          os.path.join(tmp_dir,
+                       "non_pipelined_application.poplar_exec")
+        ApplicationRuntimeTest.pipelined_poplar_exec_filepath = \
+          os.path.join(tmp_dir,
+                       "pipelined_application.poplar_exec")
+
+        n_test = NUM_TEST_ITERATIONS * BATCH_SIZE
+        ApplicationRuntimeTest.images = np.random.rand(
+            n_test, NUM_PIXELS).astype(np.float32)
+        images = ApplicationRuntimeTest.images
+
+        ApplicationRuntimeTest.non_pipelined_model_ref, _ = _build_executable(
+            tmp_dir_obj,
+            pipelined=False,
+            freeze_variables=True,
+            poplar_exec_filepath=ApplicationRuntimeTest.
+            non_pipelined_poplar_exec_filepath,
+            images=images)
+
+        ApplicationRuntimeTest.pipelined_model_ref, _ = _build_executable(
+            tmp_dir_obj,
+            pipelined=True,
+            freeze_variables=True,
+            poplar_exec_filepath=ApplicationRuntimeTest.
+            pipelined_poplar_exec_filepath,
+            images=images)
+
+        ApplicationRuntimeTest.reference_cache_initiazed = True
+
+  @parameterized.named_parameters(*TESTCASES)
+  @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
-  def testApplicationRuntime(self):
-    poplar_flags = os.environ.get('TF_POPLAR_FLAGS', '')
-    poplar_flags += f' --executable_cache_path={tmp_dir}'
+  def test(self, pipelined, multiple_sessions, multiple_threads,
+           multiple_engines):
+    ApplicationRuntimeTest.__init_reference_data()
 
-    with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
-      print('Running MNIST example')
-      mnist_ref = run_model()
-      print('Example done')
+    if (multiple_sessions or multiple_engines
+        or pipelined) and not multiple_threads:
+      return
 
-    ret = subprocess.run(['/bin/ls', '-At', f'{tmp_dir}/'],
-                         stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE,
-                         encoding='utf-8')
+    if multiple_engines and not multiple_sessions:
+      return
 
-    poplar_exec_filepath = f'{tmp_dir}/{ret.stdout.strip().split()[0]}'
+    if pipelined:
+      poplar_exec_filepath = \
+        ApplicationRuntimeTest.pipelined_poplar_exec_filepath
+      ref_output = ApplicationRuntimeTest.pipelined_model_ref['output']
+    else:
+      poplar_exec_filepath = \
+        ApplicationRuntimeTest.non_pipelined_poplar_exec_filepath
+      ref_output = ApplicationRuntimeTest.non_pipelined_model_ref['output']
 
-    print('Running MNIST through embedded runtime')
+    images = ApplicationRuntimeTest.images
+
+    num_engines = NUM_ENGINES if multiple_engines else 1
+    num_threads_per_engine = NUM_THREADS_PER_ENGINE if multiple_threads else 1
+
+    num_threads = num_engines * num_threads_per_engine
+
+    images_ph = array_ops.placeholder(dtypes.float32,
+                                      shape=[BATCH_SIZE, NUM_PIXELS],
+                                      name='images')
+
+    test_shape = (num_threads, NUM_ENGINE_ITERATIONS, NUM_ITERATIONS)
+    n_test = reduce(lambda p, x: p * x, test_shape)
+
+    images_local = images.reshape((-1, BATCH_SIZE, NUM_PIXELS))
+    images_local = images_local[0:n_test, :, :]
+    images_local = images_local.reshape(*(test_shape +
+                                          (BATCH_SIZE, NUM_PIXELS)))
+
+    ref_output = ref_output.reshape((-1, BATCH_SIZE, L3_SIZE))
+    ref_output = ref_output[0:n_test, :, :]
+    ref_output = ref_output.reshape(*(test_shape + (BATCH_SIZE, L3_SIZE)))
+
+    output = np.empty(ref_output.shape, dtype='float32')
+
+    engine_name_prefix = f'engine_pipelined_{pipelined}'
+
+    def run_loops(sess, result, infeeds, t):
+      for ei in range(NUM_ENGINE_ITERATIONS):
+        for li in range(NUM_ITERATIONS):
+          images_host = images_local[t, ei, li, :, :]
+
+          results = sess.run(
+              result,
+              feed_dict={
+                  infeeds: (images_host,),  # pylint: disable=cell-var-from-loop
+              })
+          output[t, ei, li, :, :] = results[0]
+
+    def inference_thread(sess, res, infeeds_, t):
+      if multiple_engines:
+        engine_name = f'{engine_name_prefix}_{t % NUM_ENGINES}'
+      else:
+        engine_name = engine_name_prefix
+
+      if multiple_sessions:
+        with sl.Session() as session:
+          run_app = gen_application_runtime.application_runtime(
+              inputs=(),
+              filename=poplar_exec_filepath,
+              engine_name=engine_name)
+
+          images_ph = array_ops.placeholder(dtypes.float32,
+                                            shape=[BATCH_SIZE, NUM_PIXELS],
+                                            name='images')
+
+          infeeds = (images_ph,)
+          result = gen_application_runtime.application_call(
+              infeeds,
+              anchor=run_app,
+              outfeed_types=[dtypes.float32],
+              engine_name=engine_name)
+
+          session.graph.finalize()
+          run_loops(session, result, infeeds, t)
+      else:
+        with sess.graph.as_default():
+          with sess.as_default():
+            if multiple_engines:
+              run_app = gen_application_runtime.application_runtime(
+                  inputs=(),
+                  filename=poplar_exec_filepath,
+                  engine_name=engine_name)
+
+              images_ph = array_ops.placeholder(dtypes.float32,
+                                                shape=[BATCH_SIZE, NUM_PIXELS],
+                                                name=f'images')
+
+              infeeds = (images_ph,)
+              result = gen_application_runtime.application_call(
+                  infeeds,
+                  anchor=run_app,
+                  outfeed_types=[dtypes.float32],
+                  engine_name=engine_name)
+
+              run_loops(sess, result, infeeds, t)
+            else:
+              run_loops(sess, res, infeeds_, t)
+
+    def run_across_threads(session=None, result=None, infeeds=None):
+      thread_list = []
+      for t in range(num_threads):
+        if multiple_threads:
+          thread = threading.Thread(target=inference_thread,
+                                    args=(session, result, infeeds, t))
+          thread_list.append(thread)
+          thread.start()
+        else:
+          inference_thread(session, result, infeeds, t)
+
+      for thread in thread_list:
+        thread.join()
+
+    if multiple_sessions:
+      run_across_threads()
+    elif multiple_engines:
+      with sl.Session() as session:
+        run_across_threads(session, None, None)
+    else:
+      with sl.Session() as session:
+        run_app = gen_application_runtime.application_runtime(
+            inputs=(),
+            filename=poplar_exec_filepath,
+            engine_name=engine_name_prefix)
+
+        images_ph = array_ops.placeholder(dtypes.float32,
+                                          shape=[BATCH_SIZE, NUM_PIXELS],
+                                          name='images')
+
+        infeeds = (images_ph,)
+        result = gen_application_runtime.application_call(
+            infeeds,
+            anchor=run_app,
+            outfeed_types=[dtypes.float32],
+            engine_name=engine_name_prefix)
+
+        session.graph.finalize()
+        run_across_threads(session, result, infeeds)
+
+    self.assertAllClose(ref_output, output)
+
+
+class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
+                          parameterized.TestCase):
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_wrapper(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+
+    model_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                        pipelined=False,
+                                                        freeze_variables=False)
 
     input_descs = [
-        ('XLA_Args/d1/bias', [L1_SIZE], dtypes.float32),  #0
-        ('XLA_Args/d1/weight', [IMG_SIZE, L1_SIZE], dtypes.float32),  #1
-        ('XLA_Args/d2/bias', [L2_SIZE], dtypes.float32),  #2
-        ('XLA_Args/d2/weight', [L1_SIZE, L2_SIZE], dtypes.float32),  #3
-        ('XLA_Args/metrics_1/accuracy/count', [], dtypes.float32),  #4
-        ('XLA_Args/metrics_1/accuracy/total', [], dtypes.float32),  #5
+        ('XLA_Args/d1/weight', [NUM_PIXELS, L1_SIZE], dtypes.float32, 0),
+        ('XLA_Args/d1/bias', [L1_SIZE], dtypes.float32, 1),
+        ('XLA_Args/d2/weight', [L1_SIZE, L2_SIZE], dtypes.float32, 2),
+        ('XLA_Args/d2/bias', [L2_SIZE], dtypes.float32, 3),
+        ('XLA_Args/d3/weight', [L2_SIZE, L3_SIZE], dtypes.float32, 4),
+        ('XLA_Args/d3/bias', [L3_SIZE], dtypes.float32, 5),
     ]
 
+    inputs = {
+        'XLA_Args/d1/weight': model_ref['d1_weight'],
+        'XLA_Args/d1/bias': model_ref['d1_bias'],
+        'XLA_Args/d2/weight': model_ref['d2_weight'],
+        'XLA_Args/d2/bias': model_ref['d2_bias'],
+        'XLA_Args/d3/weight': model_ref['d3_weight'],
+        'XLA_Args/d3/bias': model_ref['d3_bias'],
+    }
+
     input_placeholders = []
-    for name, shape, dtype in input_descs:
+    input_list = [None] * len(input_descs)
+    for name, shape, dtype, order in input_descs:
       input_ph = array_ops.placeholder(dtype, shape=shape, name=name)
       input_placeholders.append(input_ph)
+      input_list[order] = inputs[name]
 
-    inputs = [None] * 6
-    inputs[0] = mnist_ref['d1_bias']
-    inputs[1] = mnist_ref['d1_weight']
-    inputs[2] = mnist_ref['d2_bias']
-    inputs[3] = mnist_ref['d2_weight']
-    inputs[4] = np.float32(0)
-    inputs[5] = np.float32(0)
+    input_tuple = tuple(input_list)
 
-    inputs = tuple(inputs)
     input_placeholders = tuple(input_placeholders)
 
+    n_test = NUM_TEST_ITERATIONS
+
     images = array_ops.placeholder(dtypes.float32,
-                                   shape=[BATCH_SIZE, IMG_SIZE],
+                                   shape=[BATCH_SIZE, NUM_PIXELS],
                                    name='images')
 
-    images_all = mnist_ref['images'].reshape(
-        (NUM_ENGINE_ITERATIONS * NUM_ITERATIONS, BATCH_SIZE, IMG_SIZE))
-    images_all = images_all[0:NUM_TEST_ITERATIONS, :, :]
+    images_all = model_ref['images'].reshape((-1, BATCH_SIZE, NUM_PIXELS))
+    images_all = images_all[0:n_test, :, :]
 
-    labels_all = np.empty([NUM_TEST_ITERATIONS, BATCH_SIZE], dtype='int32')
+    labels_all = np.ones([n_test, BATCH_SIZE, L3_SIZE], dtype='float32')
 
-    labels_ref = mnist_ref['labels'].reshape(
-        (NUM_ENGINE_ITERATIONS * NUM_ITERATIONS, BATCH_SIZE))
-    labels_ref = labels_ref[0:NUM_TEST_ITERATIONS, :]
+    labels_ref = model_ref['output'].reshape((-1, BATCH_SIZE, L3_SIZE))
+    labels_ref = labels_ref[0:n_test, :, :]
 
     with sl.Session() as session:
-      for i in range(1):
-        engine_name = f'mnist_engine_{i}'
+      engine_name = f'engine_{self.id()}'
 
-        run_app = gen_application_runtime.application_runtime(
-            inputs=inputs,
-            filename=poplar_exec_filepath,
-            engine_name=engine_name)
+      ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath,
+                                                    inputs, engine_name)
 
-        with ops.control_dependencies([run_app]):
-          infeeds = (images,)
-          result = gen_application_runtime.application_call(
-              infeeds, outfeed_types=[dtypes.int32], engine_name=engine_name)
+      infeeds = (images,)
+      result = embedded_runtime.embedded_runtime_call(infeeds, ctx)
 
-          session.run(variables.global_variables_initializer())
-          for j in range(NUM_TEST_ITERATIONS):
-            images_host = images_all[j, :, :]
+      session.run(variables.global_variables_initializer())
+      for j in range(n_test):
+        images_host = images_all[j, :, :]
 
-            results = session.run(result,
-                                  feed_dict={
-                                      infeeds: (images_host,),
-                                      input_placeholders: inputs,
-                                  })
-
-            labels_all[j, :] = results[0]
+        results = session.run(result,
+                              feed_dict={
+                                  infeeds: (images_host,),
+                                  input_placeholders: input_tuple,
+                              })
+        labels_all[j, :, :] = results[0]
 
     self.assertAllClose(labels_ref, labels_all)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_input_error(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    model_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                        pipelined=False,
+                                                        freeze_variables=False)
+
+    inputs = {
+        'XLA_Args/d1/bias': model_ref['d1_bias'],
+        'XLA_Args/d1/weight': model_ref['d1_weight'],
+        'XLA_Args/d2/bias': model_ref['d2_bias'],
+        'XLA_Args/d3/bias': model_ref['d3_bias'],
+        'XLA_Args/d3/weight': model_ref['d3_weight'],
+    }
+
+    with sl.Session():
+      engine_name = f'engine_{self.id()}'
+
+      with self.assertRaisesRegex(
+          Exception,
+          "Failed to find input tensor with name 'XLA_Args/d2/weight' in "
+          "input dictionary."):
+        embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
+                                                engine_name)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_no_list(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    _, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                freeze_variables=False)
+
+    with sl.Session():
+      engine_name = f'engine_{self.id()}'
+
+      with self.assertRaisesRegex(Exception,
+                                  "Expected the inputs to be a list."):
+        embedded_runtime.embedded_runtime_start(poplar_exec_filepath, 4,
+                                                engine_name)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_too_many_inputs(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    mnist_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                        freeze_variables=False)
+
+    inputs = [
+        mnist_ref['d1_bias'], mnist_ref['d1_weight'], mnist_ref['d2_bias'],
+        mnist_ref['d2_weight'], mnist_ref['d3_bias'], mnist_ref['d1_weight'],
+        mnist_ref['d1_weight']
+    ]
+
+    with sl.Session():
+      engine_name = f'engine_{self.id()}'
+
+      with self.assertRaisesRegex(
+          Exception,
+          "Embedded application runtime expects 6 inputs, but 7 were "
+          "provided."):
+        embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
+                                                engine_name)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_too_few_inputs(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    mnist_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                        freeze_variables=False)
+
+    inputs = [
+        mnist_ref['d1_bias'], mnist_ref['d1_weight'], mnist_ref['d2_bias']
+    ]
+
+    with sl.Session():
+      engine_name = f'engine_{self.id()}'
+
+      with self.assertRaisesRegex(
+          Exception,
+          "Embedded application runtime expects 6 inputs, but 3 were "
+          "provided."):
+        embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
+                                                engine_name)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_wrong_shape(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    model_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                        freeze_variables=False)
+
+    inputs = [
+        model_ref['d1_weight'], model_ref['d1_bias'], model_ref['d2_bias'],
+        model_ref['d1_weight'], model_ref['d3_bias'], model_ref['d3_weight']
+    ]
+
+    with sl.Session():
+      engine_name = f'engine_{self.id()}'
+
+      with self.assertRaisesRegex(
+          Exception,
+          "Mismatched input shape at position 0 \\('XLA_Args/d1/bias'\\). "
+          "Expected \\[320\\], but input 0 has shape \\[784, 320\\]."):
+        embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
+                                                engine_name)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_wrong_type(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    mnist_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                        freeze_variables=False)
+
+    inputs = [
+        np.ones((320), dtype=np.int32),
+        mnist_ref['d1_weight'],
+        mnist_ref['d2_bias'],
+        mnist_ref['d2_weight'],
+        mnist_ref['d3_bias'],
+        mnist_ref['d3_weight'],
+    ]
+
+    with sl.Session():
+      engine_name = f'engine_{self.id()}'
+
+      with self.assertRaisesRegex(
+          Exception,
+          "Mismatched input dtype at position 0 \\('XLA_Args/d1/bias'\\). "
+          "Expected <dtype: 'float32'>, but input 0 has dtype int32."):
+        embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
+                                                engine_name)
+
+  @tu.test_uses_ipus(num_ipus=2)
+  @test_util.deprecated_graph_mode_only
+  def test_pipeline_flush(self):
+    dataset = tu.create_single_increasing_dataset(5, shape=[2])
+    dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def stage1(x):
+      return x @ constant_op.constant(1.0, shape=[2, 2])
+
+    def stage2(x):
+      return math_ops.reduce_sum(x)
+
+    def my_net():
+      return pipelining_ops.pipeline([stage1, stage2],
+                                     12,
+                                     infeed_queue=infeed_queue,
+                                     outfeed_queue=outfeed_queue)
+
+    with tu.ipu_session() as sess:
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 2
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
+
+      with tempfile.TemporaryDirectory() as tmp_dir:
+        poplar_exec_filepath = os.path.join(tmp_dir, "application.poplar_exec")
+
+        compile_op = application_compile_op.experimental_application_compile_op(
+            my_net, output_path=poplar_exec_filepath)
+        sess.run(compile_op)
+
+        ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
+                                                      "pipeline_flush")
+        input_data = array_ops.placeholder(np.float32, shape=[2, 2])
+        result = embedded_runtime.embedded_runtime_call([input_data], ctx)
+        outputs1 = sess.run(
+            result,
+            feed_dict={input_data: np.full([2, 2], 1.0, dtype=np.float32)})
+        self.assertAllClose(outputs1[0], 8.)
+        outputs2 = sess.run(
+            result,
+            feed_dict={input_data: np.full([2, 2], 2.0, dtype=np.float32)})
+        self.assertAllClose(outputs2[0], 16.)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_io_overlap_flush(self):
+    dataset = tu.create_single_increasing_dataset(5, shape=[2])
+    dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def body(x):
+      x = x @ constant_op.constant(1.0, shape=[2, 2])
+      x = math_ops.reduce_sum(x)
+      return outfeed_queue.enqueue(x)
+
+    def my_net():
+      return loops.repeat(10, body, [], infeed_queue)
+
+    with tu.ipu_session() as sess:
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.io_tiles.num_io_tiles = 32
+      cfg.io_tiles.place_ops_on_io_tiles = True
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
+
+      with tempfile.TemporaryDirectory() as tmp_dir:
+        poplar_exec_filepath = os.path.join(tmp_dir, "application.poplar_exec")
+
+        compile_op = application_compile_op.experimental_application_compile_op(
+            my_net, output_path=poplar_exec_filepath)
+        sess.run(compile_op)
+
+        ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
+                                                      "io_overlap_flush")
+        input_data = array_ops.placeholder(np.float32, shape=[2, 2])
+        result = embedded_runtime.embedded_runtime_call([input_data], ctx)
+        outputs1 = sess.run(
+            result,
+            feed_dict={input_data: np.full([2, 2], 1.0, dtype=np.float32)})
+        self.assertAllClose(outputs1[0], 8.)
+        outputs2 = sess.run(
+            result,
+            feed_dict={input_data: np.full([2, 2], 2.0, dtype=np.float32)})
+        self.assertAllClose(outputs2[0], 16.)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_multiple_infeeds(self):
+    a = np.array([2, 3], dtype='float32')
+    b = np.array([4, 5], dtype='float32')
+    c = np.array([6, 7], dtype='float32')
+
+    ds = dataset_ops.Dataset.from_tensor_slices((a, b, c))
+    ds = ds.cache().repeat().batch(2, drop_remainder=True)
+
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def my_net(outq, a, b, c):
+      return outq.enqueue({'result': a * b + c})
+
+    model = partial(my_net, outfeed_queue)
+    model = partial(loop_builder, 1, model, infeed_queue)
+
+    a_ph = array_ops.placeholder(dtypes.float32, shape=(2), name='a')
+    b_ph = array_ops.placeholder(dtypes.float32, shape=(2), name='b')
+    c_ph = array_ops.placeholder(dtypes.float32, shape=(2), name='c')
+
+    with tu.ipu_session() as sess, tempfile.TemporaryDirectory() as tmp_dir:
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
+
+      poplar_exec_filepath = os.path.join(
+          tmp_dir, f'application_{self.id()}.poplar_exec')
+
+      compile_op = application_compile_op.experimental_application_compile_op(
+          model, output_path=poplar_exec_filepath)
+      sess.run(compile_op)
+
+      ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
+                                                    "multiple_infeeds")
+      result = embedded_runtime.embedded_runtime_call([a_ph, b_ph, c_ph], ctx)
+      outputs = sess.run(result, feed_dict={a_ph: a, b_ph: b, c_ph: c})
+
+      self.assertAllClose(outputs[0], [14, 22])
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_exception(self):
+    # The dataset for feeding the graphs.
+    ds = dataset_ops.Dataset.from_tensors(constant_op.constant(1.0, shape=[1]))
+    ds = ds.repeat()
+
+    # The host side queues.
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def body(x):
+      return outfeed_queue.enqueue(12.0 / x)
+
+    # Wrap in a loop.
+    def my_net():
+      r = loops.repeat(16, body, [], infeed_queue)
+      return r
+
+    def exception_executable(tmp_dir):
+      poplar_exec_filepath = os.path.join(tmp_dir.name,
+                                          "application.poplar_exec")
+
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.floating_point_behaviour.div0 = True
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
+
+      # Compile the application.
+      compile_op = application_compile_op.experimental_application_compile_op(
+          my_net, output_path=poplar_exec_filepath)
+      with sl.Session() as sess:
+        sess.run(compile_op)
+
+      return poplar_exec_filepath
+
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    poplar_exec_filepath = exception_executable(tmp_dir_obj)
+
+    engine_name = f'engine_{self.id()}'
+    ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
+                                                  engine_name)
+    result = embedded_runtime.embedded_runtime_call(
+        [np.zeros((1), dtype=np.float32)], ctx)
+
+    with sl.Session() as sess:
+      with self.assertRaisesRegex(
+          Exception,
+          r"\[Poplar\]\[Execute engine\] application_runtime_error: Tiles in "
+          r"excepted state.*"):
+        sess.run(result)
 
 
 if __name__ == "__main__":

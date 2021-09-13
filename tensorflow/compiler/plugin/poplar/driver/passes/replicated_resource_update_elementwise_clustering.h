@@ -24,20 +24,24 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+class CompilerAnnotations;
+
 class ReplicatedResourceUpdateElementwiseClustering final
     : public ResourceUpdateElementwiseClustering {
   using Base = ResourceUpdateElementwiseClustering;
 
  public:
   ReplicatedResourceUpdateElementwiseClustering(
-      uint32 partition_replication_factor, uint32 global_replication_factor)
-      : partition_replication_factor_(partition_replication_factor),
+      CompilerAnnotations& annotations, uint32 partition_replication_factor,
+      uint32 global_replication_factor)
+      : annotations_(annotations),
+        partition_replication_factor_(partition_replication_factor),
         global_replication_factor_(global_replication_factor) {}
 
   explicit ReplicatedResourceUpdateElementwiseClustering(
-      uint32 replication_factor)
-      : ReplicatedResourceUpdateElementwiseClustering(replication_factor,
-                                                      replication_factor) {}
+      CompilerAnnotations& annotations, uint32 replication_factor)
+      : ReplicatedResourceUpdateElementwiseClustering(
+            annotations, replication_factor, replication_factor) {}
 
   absl::string_view name() const override {
     return "replicated-resource-update-elementwise-clustering";
@@ -74,7 +78,12 @@ class ReplicatedResourceUpdateElementwiseClustering final
       const ElementwiseCluster& cluster,
       PoplarBackendConfig& backend_config) const override;
 
+  Status ValidateResourceUpdateAndClusters(
+      const HloInstruction* ru,
+      std::vector<ElementwiseCluster> clusters) const override;
+
  private:
+  CompilerAnnotations& annotations_;
   uint32 partition_replication_factor_;
   uint32 global_replication_factor_;
 };

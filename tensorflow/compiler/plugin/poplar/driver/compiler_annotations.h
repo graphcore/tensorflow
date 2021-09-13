@@ -16,11 +16,12 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_ANNOTATIONS_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_ANNOTATIONS_H_
 
+#include <map>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/host_embedding.h"
@@ -67,6 +68,25 @@ struct HostEmbeddingInfo {
   HostEmbeddingSplittingStrategy strategy;
 };
 
+struct RemoteParameterHostRearrangement {
+  using GatheredToRefSlice = std::vector<std::pair<int64, int64>>;
+
+  int32 replication_factor = 0;
+  int64 total_elements_per_replica = 0;
+  GatheredToRefSlice gathered_to_ref_slice;
+  std::vector<uint32> element_map;
+
+  RemoteParameterHostRearrangement() = default;
+  RemoteParameterHostRearrangement(
+      int32 replication_factor, int64 total_elements_per_replica,
+      const GatheredToRefSlice& gathered_to_ref_slice,
+      const std::vector<uint32>& element_map)
+      : replication_factor(replication_factor),
+        total_elements_per_replica(total_elements_per_replica),
+        gathered_to_ref_slice(gathered_to_ref_slice),
+        element_map(element_map) {}
+};
+
 struct RemoteParameterInfo {
   // Constructor used for lookups.
   explicit RemoteParameterInfo(int64 parameter_number)
@@ -75,12 +95,14 @@ struct RemoteParameterInfo {
   explicit RemoteParameterInfo(int64 parameter_number,
                                bool is_replica_partitioned,
                                const std::string& buffer_name,
-                               int64 buffer_offset, int64 num_merged)
+                               int64 buffer_offset, int64 num_merged,
+                               int64 host_rearrangement_id = 0)
       : parameter_number(parameter_number),
         is_replica_partitioned(is_replica_partitioned),
         buffer_name(buffer_name),
         buffer_offset(buffer_offset),
-        num_merged(num_merged) {}
+        num_merged(num_merged),
+        host_rearrangement_id(host_rearrangement_id) {}
 
   RemoteParameterInfo() = delete;
 
@@ -89,6 +111,7 @@ struct RemoteParameterInfo {
   const std::string buffer_name;
   const int64 buffer_offset;
   const int64 num_merged;
+  const int64 host_rearrangement_id;
 
   bool operator<(const RemoteParameterInfo& other) const {
     return parameter_number < other.parameter_number;
@@ -120,6 +143,8 @@ struct OutputInfo {
 using SendRecvInfos = std::vector<SendRecvInfo>;
 using HostEmbeddingInfos = std::vector<HostEmbeddingInfo>;
 using RemoteParameterInfos = std::set<RemoteParameterInfo>;
+using RemoteParameterHostRearrangements =
+    std::map<int64, RemoteParameterHostRearrangement>;
 using InputInfos = std::set<InputInfo>;
 using OutputInfos = std::set<OutputInfo>;
 
@@ -218,6 +243,7 @@ struct CompilerAnnotations {
   HostEmbeddingInfos host_embedding_notify_infos;
 
   RemoteParameterInfos remote_parameter_infos;
+  RemoteParameterHostRearrangements remote_parameter_host_rearrangements;
 
   std::unique_ptr<HloModule> flattened_module;
 

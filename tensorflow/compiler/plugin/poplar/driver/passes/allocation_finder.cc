@@ -44,29 +44,119 @@ struct AllocationLocation {
   Shape shape;
 };
 
-std::vector<AllocationLocation> FindAllocatingInstructions(
-    const HloComputation* comp) {
+std::vector<Shape> GetAllocationShapes(const HloInstruction* inst) {
+  auto shape = inst->shape();
+  if (auto* infeed = DynCast<HloInfeedInstruction>(inst)) {
+    shape = infeed->infeed_shape();
+  }
+
+  return FlattenedXlaShape(shape);
+}
+
+std::vector<AllocationLocation> GetAllocationLocations(
+    const HloInstruction* inst) {
   std::vector<AllocationLocation> allocation_locations;
 
-  for (auto* inst : comp->MakeInstructionPostOrder()) {
-    const bool allocating =
-        CallHloInstructionExtension<AllocatingOutputExtension>(inst);
-    if (allocating) {
-      auto shape = inst->shape();
-      if (auto* infeed = DynCast<HloInfeedInstruction>(inst)) {
-        shape = infeed->infeed_shape();
-      }
+  // Return empty list if instruction is not allocating.
+  if (!CallHloInstructionExtension<AllocatingOutputExtension>(inst)) {
+    return allocation_locations;
+  }
 
-      const auto shapes = FlattenedXlaShape(shape);
-      for (unsigned int i = 0; i < shapes.size(); i++) {
-        allocation_locations.push_back({TensorLocation{inst, i}, shapes[i]});
-      }
-    }
+  const auto shapes = GetAllocationShapes(inst);
+  allocation_locations.reserve(shapes.size());
+
+  for (unsigned int i = 0; i < shapes.size(); i++) {
+    allocation_locations.push_back({TensorLocation{inst, i}, shapes[i]});
   }
 
   return allocation_locations;
 }
 }  // namespace
+
+bool AllocationFinder::CanInferTarget(const TensorLocation& src,
+                                      const HloInstruction* tgt) const {
+  // An instruction cannot infer a target from itself.
+  if (src.instruction == tgt) {
+    return false;
+  }
+  // Instructions inside fusion computations do not get targets.
+  if (IsPopOpsFusion(src.instruction->parent())) {
+    return false;
+  }
+
+  // If instruction is not allocating it will not have a target.
+  return CallHloInstructionExtension<AllocatingOutputExtension>(tgt);
+}
+
+// An inferred target is compatible if it contains all of the information we
+// would accumulate if we continued traversing the graph normally.
+bool AllocationFinder::IsInferredTargetCompatible(
+    const TensorLocation& src, const TensorTarget& inferred_target) const {
+  auto itr = tensor_allocation_map.find(src);
+  if (itr == tensor_allocation_map.end()) {
+    // If we have no target yet, then the inferred target is trivially
+    // compatible as src is in same state as tgt was when it traversed the
+    // graph.
+    return true;
+  }
+  TensorTarget current_target = itr->second;
+
+  // If neither target is a multi-slice/update then both will update
+  // purely based on priority, so the inferred target is compatible.
+  if (!IsMultiSliceOrUpdate(current_target.tgt) &&
+      !IsMultiSliceOrUpdate(inferred_target.tgt)) {
+    return true;
+  }
+  // If the targets are slice-plan compatible then they are both
+  // multi-slice/updates and are accumulating the same slice plans.
+  if (SlicePlanCompatibleTarget(inferred_target, current_target)) {
+    return true;
+  }
+  // If target and new_target are not slice-plan compatible then they would
+  // accumulate different slice plans when traversing the graph.
+  // If new_target is higher priority than target, then this doesn't matter
+  // because target will be entirely overridden anyway.
+  return ReplaceTarget(inferred_target, current_target);
+}
+
+TensorTarget AllocationFinder::InferTarget(
+    int64 index, const absl::optional<std::vector<int64>>& permutation,
+    const TensorTarget& tgt_tensor_target,
+    std::vector<const HloInstruction*>& path) const {
+  // Create backward path.
+  std::vector<const HloInstruction*> backward_path;
+  backward_path.reserve(path.size() + tgt_tensor_target.backward_path.size() -
+                        1);
+  backward_path.insert(backward_path.end(), path.begin() + 1, path.end());
+  backward_path.insert(backward_path.end(),
+                       tgt_tensor_target.backward_path.begin(),
+                       tgt_tensor_target.backward_path.end());
+
+  // Merge permutations by applying tgt permutation to src permutation.
+  absl::optional<std::vector<int64>> combined_permutation;
+  if (permutation.has_value() && tgt_tensor_target.permutation.has_value()) {
+    int64 size = tgt_tensor_target.permutation.value().size();
+    combined_permutation = std::vector<int64>(size);
+    for (int64 i = 0; i < size; ++i) {
+      combined_permutation.value()[i] =
+          permutation.value()[tgt_tensor_target.permutation.value()[i]];
+    }
+  }
+
+  TensorTarget tensor_target =
+      TensorTarget(tgt_tensor_target.tgt, tgt_tensor_target.input_index,
+                   backward_path, combined_permutation);
+
+  // Take sliceable dimension.
+  tensor_target.sliceable_dimension = tgt_tensor_target.sliceable_dimension;
+
+  // Take slice plans.
+  tensor_target.compatible_slice_plans =
+      absl::flat_hash_set<const HloInstruction*>(
+          tgt_tensor_target.compatible_slice_plans);
+
+  return tensor_target;
+}
 
 int64 AllocationFinder::GetAllocationPriority(
     const TensorTarget& target) const {
@@ -150,6 +240,7 @@ bool AllocationFinder::SlicePlanCompatibleTarget(const TensorTarget& a,
   return false;
 }
 
+// Returns true if the tensor target for source was affected by the new target.
 void AllocationFinder::AddTensorTarget(const TensorLocation& source,
                                        const TensorTarget& new_target) {
   // Check whether we should replace the tensor target.
@@ -182,8 +273,37 @@ void AllocationFinder::AddTensorTarget(const TensorLocation& source,
 
 void AllocationFinder::FindConsumers(
     const TensorLocation& src, const HloInstruction* tgt, int64 index,
-    absl::optional<std::vector<int64>> permutation) {
+    absl::optional<std::vector<int64>> permutation,
+    std::vector<const HloInstruction*>& path) {
   path.emplace_back(tgt);
+
+  // Targets can usually be inferred from allocating instructions without
+  // needing to re-traverse the graph.
+  if (CanInferTarget(src, tgt)) {
+    auto tgt_location = TensorLocation{tgt, index};
+
+    // If allocation finding has not been run for tgt yet then run it now.
+    if (!completed.contains(tgt_location)) {
+      const auto shape = GetAllocationShapes(tgt)[index];
+      FindAllocation(tgt_location, shape);
+    }
+
+    auto itr = tensor_allocation_map.find(tgt_location);
+    if (itr == tensor_allocation_map.end()) {
+      // If we have run allocaiton finding there is no target then we can
+      // infer that there are no targets in this part of the graph so we do not
+      // need to traverse it.
+      path.pop_back();
+      return;
+    }
+    TensorTarget new_target =
+        InferTarget(index, permutation, itr->second, path);
+    if (IsInferredTargetCompatible(src, new_target)) {
+      AddTensorTarget(src, new_target);
+      path.pop_back();
+      return;
+    }
+  }
 
   for (auto user : tgt->users()) {
     int repeated_operand_offset = 0;
@@ -289,12 +409,13 @@ void AllocationFinder::FindConsumers(
           // Ignore the element type (paths can contain casts).
           if (shapes[src.flattened_output_tuple_index].dimensions() ==
               user->shape().dimensions()) {
-            FindConsumers(src, user, index, permutation);
+            FindConsumers(src, user, index, permutation, path);
           }
           break;
         }
         case DoFindConsumers::TRUE: {
-          FindConsumers(src, result.tgt, result.index, result.permutation);
+          FindConsumers(src, result.tgt, result.index, result.permutation,
+                        path);
           break;
         }
         case DoFindConsumers::FALSE:
@@ -310,13 +431,35 @@ void AllocationFinder::FindConsumers(
     if (callsites.size() == 1) {
       auto caller = callsites.front().instruction();
       if (caller->shape() == tgt->shape()) {
-        FindConsumers(src, caller, index, permutation);
+        FindConsumers(src, caller, index, permutation, path);
       }
     }
   }
 
   path.pop_back();
   return;
+}
+
+void AllocationFinder::FindAllocation(const TensorLocation& location,
+                                      const Shape& shape) {
+  if (completed.contains(location)) {
+    return;
+  }
+  // Skip over opaque types
+  if (shape.IsOpaque()) {
+    return;
+  }
+
+  // Starting dimensions permutation is just all the dimensions mapping to
+  // themselves.
+  std::vector<int64> permutation(shape.rank());
+  absl::c_iota(permutation, 0);
+  std::vector<const HloInstruction*> path;
+  FindConsumers(location, location.instruction,
+                location.flattened_output_tuple_index, permutation, path);
+
+  // Mark this location as completed (has had allocation finding run).
+  completed.insert(location);
 }
 
 StatusOr<bool> AllocationFinder::Run(HloModule* module) {
@@ -326,21 +469,12 @@ StatusOr<bool> AllocationFinder::Run(HloModule* module) {
   }
 
   for (const auto& comp : module->MakeComputationPostOrder()) {
-    if (!IsPopOpsFusion(comp)) {
-      for (auto allocation_location : FindAllocatingInstructions(comp)) {
-        // Skip over opaque types
-        if (allocation_location.shape.IsOpaque()) {
-          continue;
-        }
-
-        // Starting dimensions permutation is just all the dimensions mapping to
-        // themselves.
-        std::vector<int64> permutation(allocation_location.shape.rank());
-        absl::c_iota(permutation, 0);
-        FindConsumers(allocation_location.location,
-                      allocation_location.location.instruction,
-                      allocation_location.location.flattened_output_tuple_index,
-                      permutation);
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+    for (auto* inst : comp->MakeInstructionPostOrder()) {
+      for (auto& allocation_location : GetAllocationLocations(inst)) {
+        FindAllocation(allocation_location.location, allocation_location.shape);
       }
     }
   }

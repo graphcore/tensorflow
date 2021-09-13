@@ -45,6 +45,7 @@ class TriangularSolvePerformanceTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg, output_execution_profile=True)
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 4
     cfg.optimizations.triangular_solve_expander_block_size = block_size
     cfg.configure_ipu_system()
 
@@ -74,33 +75,33 @@ class TriangularSolvePerformanceTest(xla_test.XLATestCase):
     report_helper = self._solveTestImpl(64, 64, 16, True, True)
     report = pva.openReport(report_helper.find_report())
     self.assert_number_of_executions(report, 1)
-    self.assert_execution_report_cycles(report, 0, 497693, tolerance=0.1)
-    self.assert_max_tile_memory(report, 3279, tolerance=0.1)
-    self.assert_total_tile_memory(report, 370565, tolerance=0.1)
+    self.assert_execution_report_cycles(report, 0, 1110077, tolerance=0.1)
+    self.assert_max_tile_memory(report, 34526, tolerance=0.1)
+    self.assert_total_tile_memory(report, 130713, tolerance=0.1)
 
   def testLowerNonAdjoint(self):
     report_helper = self._solveTestImpl(64, 64, 16, True, False)
     report = pva.openReport(report_helper.find_report())
     self.assert_number_of_executions(report, 1)
-    self.assert_execution_report_cycles(report, 0, 500080, tolerance=0.1)
-    self.assert_max_tile_memory(report, 3988, tolerance=0.1)
-    self.assert_total_tile_memory(report, 374656, tolerance=0.1)
+    self.assert_execution_report_cycles(report, 0, 1098318, tolerance=0.1)
+    self.assert_max_tile_memory(report, 34703, tolerance=0.1)
+    self.assert_total_tile_memory(report, 127188, tolerance=0.1)
 
   def testUpperAdjoint(self):
     report_helper = self._solveTestImpl(64, 64, 16, False, True)
     report = pva.openReport(report_helper.find_report())
     self.assert_number_of_executions(report, 1)
-    self.assert_execution_report_cycles(report, 0, 509228, tolerance=0.1)
-    self.assert_max_tile_memory(report, 4166, tolerance=0.1)
-    self.assert_total_tile_memory(report, 379172, tolerance=0.1)
+    self.assert_execution_report_cycles(report, 0, 1302396, tolerance=0.1)
+    self.assert_max_tile_memory(report, 39611, tolerance=0.1)
+    self.assert_total_tile_memory(report, 148162, tolerance=0.1)
 
   def testUpperNonAdjoint(self):
     report_helper = self._solveTestImpl(64, 64, 16, False, False)
     report = pva.openReport(report_helper.find_report())
     self.assert_number_of_executions(report, 1)
-    self.assert_execution_report_cycles(report, 0, 470171, tolerance=0.1)
-    self.assert_max_tile_memory(report, 3110, tolerance=0.1)
-    self.assert_total_tile_memory(report, 369874, tolerance=0.1)
+    self.assert_execution_report_cycles(report, 0, 1098082, tolerance=0.1)
+    self.assert_max_tile_memory(report, 34149, tolerance=0.1)
+    self.assert_total_tile_memory(report, 126310, tolerance=0.1)
 
 
 if __name__ == "__main__":

@@ -16,9 +16,17 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/combine_instructions.h"
 
 #include <algorithm>
+#include <poplar/DeviceManager.hpp>
+#include <poplar/IPUModel.hpp>
+#include <poplin/codelets.hpp>
+#include <popnn/codelets.hpp>
+#include <popops/codelets.hpp>
+#include <poprand/RandomGen.hpp>
+#include <poprand/codelets.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_fuser.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_barrier_inserter.h"
@@ -30,20 +38,21 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recv_from_host.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/send_to_host.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/test.h"
-#include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 
 namespace xla {
 namespace poplarplugin {
 namespace {
 
-using CombineInstructionsTest = HloTestBase;
+using CombineInstructionsTest = HloPoplarTestBase;
 
 TEST_F(CombineInstructionsTest, TestSyncScheduler) {
   std::string hlo_string = R"(
@@ -765,6 +774,264 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   EXPECT_EQ(barrier_inst->control_predecessors()[0], send_inst);
   EXPECT_EQ(barrier_inst->control_successors().size(), 1);
   EXPECT_EQ(barrier_inst->control_successors()[0], recv_inst);
+}
+
+TEST_F(CombineInstructionsTest, TestCombineReductionsIntoReduceMany) {
+  std::string hlo_string = R"(
+HloModule top
+
+add {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT add.1 = f32[] add(p0, p1)
+}
+
+multiply {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT multiply.1 = f32[] multiply(p0, p1)
+}
+
+cluster_1  {
+  arg0 = f32[512,8] parameter(0)
+  arg1 = f32[512,8] parameter(1)
+  arg2 = f32[512,8] parameter(2)
+  c0 = f32[] constant(0)
+  c1 = f32[] constant(0)
+  c2 = f32[] constant(1)
+  r0 = f32[512] reduce(arg0, c0), dimensions={1}, to_apply=add
+  r1 = f32[512] reduce(arg1, c1), dimensions={1}, to_apply=multiply
+  r2 = f32[512] reduce(arg2, c2), dimensions={1}, to_apply=add
+  ROOT %tuple = (f32[512], f32[512], f32[512]) tuple(r0, r1, r2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string, config));
+
+  CompilerAnnotations annotations(module.get());
+  auto* entry = module.get()->entry_computation();
+
+  ASSERT_EQ(absl::c_count_if(entry->instructions(), IsReduceAddOrMultiply), 3);
+
+  uint64 node_size = 4 * 512;  // float32 * 512.
+  // Schedule and combine.
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              CompilerInformation().set_max_reduce_many_buffer_size(
+                  2 * node_size)))));  // 2 nodes out of the 3 in the graph.
+
+  EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(CombineInstructions().Run(module.get()).ValueOrDie());
+
+  auto s = module.get()->schedule().sequence(entry);
+  auto seq = s.instructions();
+
+  // Two reduces should be combined into a reduce many, while one is left
+  // unmodified.
+  ASSERT_EQ(absl::c_count_if(seq, IsPoplarInstruction(PoplarOp::ReduceMany)),
+            1);
+  ASSERT_EQ(absl::c_count_if(seq, IsReduceAddOrMultiply), 1);
+}
+
+TEST_F(CombineInstructionsTest, TestCombineReduceFusionsIntoReduceMany) {
+  std::string hlo_string = R"(
+HloModule top
+
+add {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT add.1 = f32[] add(p0, p1)
+}
+
+multiply {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT multiply.1 = f32[] multiply(p0, p1)
+}
+
+_pop_op_reduction_fp16_input {
+  p0 = f16[512,8] parameter(0)
+  p1 = f32[] parameter(1)
+  convert = f32[512,8] convert(p0)
+  ROOT reduce = f32[512] reduce(convert, p1), dimensions={1}, to_apply=multiply
+}
+
+_pop_op_reduction_square_add {
+  p0 = f16[512,8] parameter(0)
+  p1 = f32[] parameter(1)
+  multiply = f16[512,8] multiply(p0, p0)
+  convert = f32[512,8] convert(multiply)
+  ROOT reduce = f32[512] reduce(convert, p1), dimensions={1}, to_apply=add
+}
+
+cluster_1  {
+  arg0 = f16[512,8] parameter(0)
+  arg1 = f16[512,8] parameter(1)
+  c0 = f32[] constant(0)
+  c1 = f32[] constant(1)
+  r0 = f32[512] fusion(arg0, c0), kind=kCustom, calls=_pop_op_reduction_square_add
+  r1 = f32[512] fusion(arg1, c1), kind=kCustom, calls=_pop_op_reduction_fp16_input
+  ROOT %tuple = (f32[512], f32[512]) tuple(r0, r1)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string, config));
+
+  CompilerAnnotations annotations(module.get());
+  auto* entry = module.get()->entry_computation();
+
+  ASSERT_EQ(absl::c_count_if(entry->instructions(), IsReductionFusion), 2);
+
+  uint64 node_size = 4 * 512;  // float32 * 512.
+  // Schedule and combine.
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              CompilerInformation().set_max_reduce_many_buffer_size(
+                  2 * node_size)))));  // Sufficient for both reduces.
+
+  EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(CombineInstructions().Run(module.get()).ValueOrDie());
+
+  auto s = module.get()->schedule().sequence(entry);
+  auto seq = s.instructions();
+
+  // Both reduce fusions should be combined into a ReduceMany.
+  ASSERT_EQ(absl::c_count_if(seq, IsPoplarInstruction(PoplarOp::ReduceMany)),
+            1);
+  ASSERT_EQ(absl::c_count_if(seq, IsReductionFusion), 0);
+}
+
+TEST_F(CombineInstructionsTest, TestOutputOfCombinedReducesIntoReduceMany) {
+  std::string hlo_string = R"(
+HloModule top
+
+add {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT add.1 = f32[] add(p0, p1)
+}
+
+multiply {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT multiply.1 = f32[] multiply(p0, p1)
+}
+
+_pop_op_reduction_fp16_input {
+  p0 = f16[16,8] parameter(0)
+  p1 = f32[] parameter(1)
+  convert = f32[16,8] convert(p0)
+  ROOT reduce = f32[16] reduce(convert, p1), dimensions={1}, to_apply=multiply
+}
+
+_pop_op_reduction_square_add {
+  p0 = f16[16,8] parameter(0)
+  p1 = f32[] parameter(1)
+  multiply = f16[16,8] multiply(p0, p0)
+  convert = f32[16,8] convert(multiply)
+  ROOT reduce = f32[16] reduce(convert, p1), dimensions={1}, to_apply=add
+}
+
+ENTRY cluster_1  {
+  arg0 = f16[] constant(2)
+  arg1 = f32[] constant(2)
+  b0 = f16[16,8] broadcast(arg0), dimensions={}
+  b1 = f32[16,8] broadcast(arg1), dimensions={}
+  c0 = f32[] constant(5)
+  c1 = f32[] constant(3)
+  c2 = f32[] constant(0)
+  r0 = f32[16] fusion(b0, c0), kind=kCustom, calls=_pop_op_reduction_square_add
+  r1 = f32[16] fusion(b0, c1), kind=kCustom, calls=_pop_op_reduction_fp16_input
+  r2 = f32[16] reduce(b1, c2), dimensions={1}, to_apply=add
+  ROOT %tuple = (f32[16], f32[16], f32[16]) tuple(r0, r1, r2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string, config));
+
+  CompilerAnnotations annotations(module.get());
+  auto* entry = module.get()->entry_computation();
+
+  uint64 node_size = 4 * 32;  // float32 * 32.
+  // Schedule and combine.
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              CompilerInformation().set_max_reduce_many_buffer_size(
+                  4 * node_size)))));  // Sufficient for all reduces.
+
+  EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(CombineInstructions().Run(module.get()).ValueOrDie());
+
+  // Prepare to execute graph.
+  auto device = CreateIpuModel(1, 32);
+  auto resources = GetMockResources(device, module.get());
+
+  auto order = module->schedule().sequence(entry).instructions();
+  EntryVisitor visitor(*resources, entry);
+  TF_CHECK_OK(entry->AcceptOrdered(&visitor, order));
+
+  poplar::program::Sequence main_program;
+  main_program.add(resources->preamble_sequence);
+  main_program.add(visitor.GetSequenceAndInitializeCounters());
+
+  poplar::Engine engine(*resources->main_graph, main_program);
+
+  // Connect i/o
+  auto& io_map = resources->annotations.input_output_aliasing_map;
+  auto& outputs = io_map.GetEntryOutputInfos();
+  EXPECT_EQ(outputs.size(), 3);
+  EXPECT_EQ(outputs[0].Handles().size(), 1);
+  EXPECT_EQ(outputs[1].Handles().size(), 1);
+  EXPECT_EQ(outputs[2].Handles().size(), 1);
+
+  std::array<float, 16> out0, out1, out2;
+  engine.connectStream(outputs[0].Handles()[0], out0.data(),
+                       out0.data() + out0.size());
+  engine.connectStream(outputs[1].Handles()[0], out1.data(),
+                       out1.data() + out1.size());
+  engine.connectStream(outputs[2].Handles()[0], out2.data(),
+                       out2.data() + out2.size());
+
+  // Run the program.
+  device.attach();
+  engine.load(device);
+  engine.run(0);
+  device.detach();
+
+  // Check outputs
+  for (auto& n : out0) {
+    ASSERT_EQ(n, 37);  // 5 + ((2^2) * 8)
+  }
+  for (auto& n : out1) {
+    ASSERT_EQ(n, 768);  // 3 * (2 ^ 8)
+  }
+  for (auto& n : out2) {
+    ASSERT_EQ(n, 16);  // 0 + (2 * 8)
+  }
 }
 
 TEST_F(CombineInstructionsTest, TestInplace) {

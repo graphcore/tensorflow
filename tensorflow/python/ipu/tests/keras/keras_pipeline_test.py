@@ -28,11 +28,9 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import test_util
-from tensorflow.python.keras.engine import training_utils
-from tensorflow.python.keras.utils import vis_utils
+from tensorflow.python.keras import backend as K
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
-from tensorflow.python.training import gradient_descent
 
 
 def simple_model(layer_sizes, layer_stages, w=None, pipeline=False):
@@ -765,6 +763,43 @@ class IPUPipelineTest(test.TestCase):
 
       # Ensure fit runs through successfully.
       m.fit(test_language_dataset(), steps_per_epoch=4)
+
+  @test_util.run_v2_only
+  def testPipelineTrainArgument(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.tiles_per_ipu = 8
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
+    class TestLayer(keras.layers.Layer):
+      def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.training = None
+
+      def call(self, x, training=None):  #pylint: disable=arguments-differ
+        if training is None:
+          training = K.learning_phase()
+        self.training = training
+        return x
+
+    test_layer = TestLayer()
+
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      with ipu.keras.PipelineStage(0):
+        x = keras.layers.Dense(32)(input_layer)
+      with ipu.keras.PipelineStage(1):
+        x = test_layer(x)
+
+      m = keras.Model(input_layer, x)
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=4,
+                               device_mapping=[0, 0])
+
+      m.compile('sgd', loss='mse', steps_per_execution=4)
+      m.fit(test_language_dataset(), steps_per_epoch=4)
+
+      self.assertEqual(test_layer.training, True)
 
 
 if __name__ == '__main__':

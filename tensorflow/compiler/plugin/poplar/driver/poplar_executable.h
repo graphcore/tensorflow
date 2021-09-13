@@ -23,6 +23,8 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
+
 #include "tensorflow/compiler/xla/service/executable.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_module_config.h"
@@ -30,8 +32,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/feed_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
 
+#include <gcl/CollectiveBalancedReorder.hpp>
 #include <poplar/Engine.hpp>
 
 namespace xla {
@@ -40,6 +42,15 @@ struct CompilerAnnotations;
 struct CompilerResources;
 
 struct PoplarExecutableInfo {
+  int64 num_IPUs;
+  std::string target_type;
+  std::string target_arch;
+  bool gateway_mode;
+  bool supports_remote_buffers;
+  bool executable_can_stall;
+  uint32 tf_major_version;
+  uint32 tf_minor_version;
+  std::string tf_git_version;
   uint32 replication_factor;
   CanonicalInfeedInfos infeed_infos;
   CanonicalOutfeedInfos outfeed_infos;
@@ -49,14 +60,16 @@ struct PoplarExecutableInfo {
   HostEmbeddingInfos host_embedding_update_infos;
   HostEmbeddingInfos host_embedding_notify_infos;
   RemoteParameterInfos remote_parameter_infos;
+  RemoteParameterHostRearrangements remote_parameter_host_rearrangements;
   InputInfos entry_input_infos;
   InputInfos feed_input_infos;
   OutputInfos entry_output_infos;
   OutputInfos feed_output_infos;
   bool logging_cycle_count;
-  VerifiedStreamsIndices::KeyIdMappings key_id_mappings;
-  std::vector<string> checkpoint_feeds_order;
 };
+
+using CollectiveBalanceReorderHostRerrangements =
+    absl::flat_hash_map<int64, gcl::CollectiveBalancedHostRearrangement>;
 
 class PoplarExecutableCore {
  public:
@@ -106,6 +119,17 @@ class PoplarExecutableCore {
     return info_.remote_parameter_infos;
   }
 
+  const RemoteParameterHostRearrangements&
+  GetRemoteParameterHostRearrangements() const {
+    return info_.remote_parameter_host_rearrangements;
+  }
+
+  const gcl::CollectiveBalancedHostRearrangement*
+  GetCollectiveBalanceReorderHostRerrangement(int64 id) const {
+    auto it = cbr_host_rearrangements_.find(id);
+    return it != cbr_host_rearrangements_.end() ? &it->second : nullptr;
+  }
+
   const StreamInfos& GetStreamInfos() const { return stream_infos_; }
 
   const StreamMetaInfos& GetStreamMetaInfos() const {
@@ -130,14 +154,6 @@ class PoplarExecutableCore {
 
   bool LoggingCycleCount() const { return info_.logging_cycle_count; }
 
-  const VerifiedStreamsIndices::KeyIdMappings& KeyIdMappings() const {
-    return info_.key_id_mappings;
-  }
-
-  const std::vector<string>& CheckpointFeedsOrder() const {
-    return info_.checkpoint_feeds_order;
-  }
-
   Status Serialize(const std::string& filepath) const;
 
   struct RuntimeReplicaOptions {
@@ -152,12 +168,8 @@ class PoplarExecutableCore {
 
   static Status Serialize(const ModuleFilenames& filenames,
                           const poplar::Executable& executable,
-                          const CompilerAnnotations& annotations,
-                          uint32 replication_count,
                           const poplar::OptionFlags& opts,
-                          bool logging_cycle_count,
-                          const VerifiedStreamsIndices::KeyIdMappings& mappings,
-                          const std::vector<string>& checkpoint_feeds_order);
+                          const PoplarExecutableInfo& info);
 
   static Status Export(const ModuleFilenames& filenames,
                        const poplar::Executable& executable,
@@ -193,6 +205,9 @@ class PoplarExecutableCore {
 
   // All the other info that is serialized.
   PoplarExecutableInfo info_;
+  CollectiveBalanceReorderHostRerrangements cbr_host_rearrangements_;
+
+  void PopulateCollectiveBalanceReorderHostRerrangements();
 
   TF_DISALLOW_COPY_AND_ASSIGN(PoplarExecutableCore);
 };
@@ -297,16 +312,13 @@ class PoplarExecutable : public Executable {
     return executable_core_->LoggingCycleCount();
   }
 
-  const VerifiedStreamsIndices::KeyIdMappings& KeyIdMappings() const {
-    return executable_core_->KeyIdMappings();
-  }
-
-  const std::vector<string>& CheckpointFeedsOrder() const {
-    return executable_core_->CheckpointFeedsOrder();
-  }
-
   Status Serialize(const std::string& filepath) const {
     return executable_core_->Serialize(filepath);
+  }
+
+  const gcl::CollectiveBalancedHostRearrangement*
+  GetCollectiveBalanceReorderHostRerrangement(int64 id) const {
+    return executable_core_->GetCollectiveBalanceReorderHostRerrangement(id);
   }
 
  private:

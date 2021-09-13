@@ -30,6 +30,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
+#include "tensorflow/core/public/version.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -55,6 +56,7 @@ PoplarExecutableCore::PoplarExecutableCore(
       stream_meta_infos_(std::move(stream_meta_info)),
       info_(std::move(info)) {
   TENSORFLOW_TRACEPOINT();
+  PopulateCollectiveBalanceReorderHostRerrangements();
 }
 
 PoplarExecutableCore::~PoplarExecutableCore() {
@@ -68,11 +70,45 @@ PoplarExecutableCore::~PoplarExecutableCore() {
   }
 }
 
+void PoplarExecutableCore::PopulateCollectiveBalanceReorderHostRerrangements() {
+  cbr_host_rearrangements_.clear();
+  for (auto& param_host_rearrangement_entry :
+       GetRemoteParameterHostRearrangements()) {
+    int64 id = param_host_rearrangement_entry.first;
+    auto& param_host_rearrangement = param_host_rearrangement_entry.second;
+    gcl::CollectiveBalancedHostRearrangement host_rearrangement;
+    host_rearrangement.replicationFactor =
+        param_host_rearrangement.replication_factor;
+    host_rearrangement.totalElementsPerReplica =
+        param_host_rearrangement.total_elements_per_replica;
+    host_rearrangement.gatheredToRefSlices.reserve(
+        param_host_rearrangement.gathered_to_ref_slice.size());
+    for (auto& slice : param_host_rearrangement.gathered_to_ref_slice) {
+      host_rearrangement.gatheredToRefSlices.emplace_back(slice.first,
+                                                          slice.second);
+    }
+    host_rearrangement.elementMap = param_host_rearrangement.element_map;
+    cbr_host_rearrangements_[id] = std::move(host_rearrangement);
+  }
+}
+
 namespace {
 
 PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
                                poplar::OptionFlags* engine_options) {
   PoplarExecutableInfo info;
+
+  auto& ertc = proto.embedded_runtime_config();
+  info.num_IPUs = ertc.num_ipus();
+  info.target_type = ertc.target_type();
+  info.target_arch = ertc.target_arch();
+  info.gateway_mode = ertc.gateway_mode();
+  info.supports_remote_buffers = ertc.supports_remote_buffers();
+  info.executable_can_stall = ertc.executable_can_stall();
+
+  info.tf_major_version = proto.tf_major_version();
+  info.tf_minor_version = proto.tf_minor_version();
+  info.tf_git_version = proto.tf_git_version();
 
   info.replication_factor = proto.replication_factor();
 
@@ -118,21 +154,34 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
         remote_parameter.parameter_number(),
         remote_parameter.is_replica_partitioned(),
         remote_parameter.buffer_name(), remote_parameter.buffer_offset(),
-        remote_parameter.num_merged()});
+        remote_parameter.num_merged(),
+        remote_parameter.host_rearrangement_id()});
+  }
+
+  for (const auto& remote_parameter_host_rearrangement :
+       proto.collective_balanced_host_rearrangements()) {
+    int64 id = remote_parameter_host_rearrangement.id();
+    RemoteParameterHostRearrangement host_rearrangement;
+    host_rearrangement.replication_factor =
+        remote_parameter_host_rearrangement.replication_factor();
+    host_rearrangement.total_elements_per_replica =
+        remote_parameter_host_rearrangement.total_elements_per_replica();
+    auto& gathered_to_ref_slices =
+        remote_parameter_host_rearrangement.gathered_to_ref_slices();
+    host_rearrangement.gathered_to_ref_slice.reserve(
+        gathered_to_ref_slices.size());
+    for (const auto& slice : gathered_to_ref_slices) {
+      host_rearrangement.gathered_to_ref_slice.emplace_back(slice.begin(),
+                                                            slice.end());
+    }
+    auto& element_map = remote_parameter_host_rearrangement.element_map();
+    host_rearrangement.element_map.assign(
+        element_map.data(), element_map.data() + element_map.size());
+    info.remote_parameter_host_rearrangements.emplace(
+        id, std::move(host_rearrangement));
   }
 
   info.logging_cycle_count = proto.logging_cycle_count();
-
-  for (const auto& mapping : proto.key_id_mappings()) {
-    info.key_id_mappings.emplace(
-        mapping.handle(),
-        VerifiedStreamsIndices::KeyIdPair(mapping.key(), mapping.start_id()));
-  }
-
-  std::vector<std::string> checkpoint_feeds_order;
-  for (auto feed : proto.checkpoint_feeds_order()) {
-    info.checkpoint_feeds_order.push_back(feed);
-  }
 
   // Load the additional Poplar engine options that we need to restore.
   CHECK_NOTNULL(engine_options);
@@ -146,6 +195,18 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
 PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
                               const poplar::OptionFlags& poplar_options = {}) {
   PoplarExecutableProto proto;
+
+  auto ertc = proto.mutable_embedded_runtime_config();
+  ertc->set_num_ipus(info.num_IPUs);
+  ertc->set_target_type(info.target_type);
+  ertc->set_target_arch(info.target_arch);
+  ertc->set_gateway_mode(info.gateway_mode);
+  ertc->set_supports_remote_buffers(info.supports_remote_buffers);
+  ertc->set_executable_can_stall(info.executable_can_stall);
+
+  proto.set_tf_major_version(info.tf_major_version);
+  proto.set_tf_minor_version(info.tf_minor_version);
+  proto.set_tf_git_version(info.tf_git_version);
 
   proto.set_replication_factor(info.replication_factor);
 
@@ -208,25 +269,37 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
     remote_parameter->set_buffer_name(remote_parameter_info.buffer_name);
     remote_parameter->set_buffer_offset(remote_parameter_info.buffer_offset);
     remote_parameter->set_num_merged(remote_parameter_info.num_merged);
+    remote_parameter->set_host_rearrangement_id(
+        remote_parameter_info.host_rearrangement_id);
   }
 
-  for (const auto& key_id_mapping : info.key_id_mappings) {
-    auto* mapping = proto.add_key_id_mappings();
-    mapping->set_handle(key_id_mapping.first);
-    mapping->set_key(key_id_mapping.second.key);
-    mapping->set_start_id(key_id_mapping.second.id);
-  }
-
-  for (const auto& feed : info.checkpoint_feeds_order) {
-    std::string* proto_feed = proto.add_checkpoint_feeds_order();
-    *proto_feed = feed;
+  for (const auto& remote_parameter_host_rearrangement_entry :
+       info.remote_parameter_host_rearrangements) {
+    int64 id = remote_parameter_host_rearrangement_entry.first;
+    auto& src_host_rearrangement =
+        remote_parameter_host_rearrangement_entry.second;
+    auto* host_rearrangement =
+        proto.add_collective_balanced_host_rearrangements();
+    host_rearrangement->set_id(id);
+    host_rearrangement->set_replication_factor(
+        src_host_rearrangement.replication_factor);
+    host_rearrangement->set_total_elements_per_replica(
+        src_host_rearrangement.total_elements_per_replica);
+    for (auto& slice : src_host_rearrangement.gathered_to_ref_slice) {
+      auto* interval = host_rearrangement->add_gathered_to_ref_slices();
+      interval->set_begin(slice.first);
+      interval->set_end(slice.second);
+    }
+    auto& element_map = src_host_rearrangement.element_map;
+    *host_rearrangement->mutable_element_map() = {element_map.begin(),
+                                                  element_map.end()};
   }
 
   proto.set_logging_cycle_count(info.logging_cycle_count);
 
   // Items that don't need deserialising.
   for (const auto& input_info : info.entry_input_infos) {
-    auto input = proto.mutable_signature()->add_inputs();
+    auto input = ertc->mutable_signature()->add_inputs();
     input->set_name(input_info.name);
     input->set_handle(input_info.handle);
     input->set_argument(input_info.argument);
@@ -235,7 +308,7 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
   }
 
   for (const auto& streamed_input_info : info.feed_input_infos) {
-    auto input = proto.mutable_signature()->add_streamed_inputs();
+    auto input = ertc->mutable_signature()->add_streamed_inputs();
     input->set_name(streamed_input_info.name);
     input->set_handle(streamed_input_info.handle);
     input->set_argument(streamed_input_info.argument);
@@ -244,7 +317,7 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
   }
 
   for (const auto& output_info : info.entry_output_infos) {
-    auto output = proto.mutable_signature()->add_outputs();
+    auto output = ertc->mutable_signature()->add_outputs();
     output->set_name(output_info.name);
     output->set_handle(output_info.handle);
     output->set_tuple_index(output_info.tuple_index);
@@ -252,7 +325,7 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
   }
 
   for (const auto& streamed_output_info : info.feed_output_infos) {
-    auto output = proto.mutable_signature()->add_streamed_outputs();
+    auto output = ertc->mutable_signature()->add_streamed_outputs();
     output->set_name(streamed_output_info.name);
     output->set_handle(streamed_output_info.handle);
     output->set_tuple_index(streamed_output_info.tuple_index);
@@ -319,32 +392,10 @@ PoplarExecutableCore::Deserialize(
 
 /*static*/ Status PoplarExecutableCore::Serialize(
     const ModuleFilenames& filenames, const poplar::Executable& executable,
-    const CompilerAnnotations& annotations, uint32 replication_count,
-    const poplar::OptionFlags& opts, bool logging_cycle_count,
-    const VerifiedStreamsIndices::KeyIdMappings& mappings,
-    const std::vector<string>& checkpoint_feeds_order) {
+    const poplar::OptionFlags& opts, const PoplarExecutableInfo& info) {
   TENSORFLOW_TRACEPOINT();
 
-  const PoplarExecutableProto proto = ToProto(
-      PoplarExecutableInfo{
-          replication_count,
-          annotations.infeed_infos,
-          annotations.outfeed_infos,
-          annotations.send_infos,
-          annotations.recv_infos,
-          annotations.host_embedding_lookup_infos,
-          annotations.host_embedding_update_infos,
-          annotations.host_embedding_notify_infos,
-          annotations.remote_parameter_infos,
-          annotations.entry_input_infos,
-          annotations.feed_input_infos,
-          annotations.entry_output_infos,
-          annotations.feed_output_infos,
-          logging_cycle_count,
-          mappings,
-          checkpoint_feeds_order,
-      },
-      opts);
+  const PoplarExecutableProto proto = ToProto(info, opts);
 
   return PoplarExecutableBinaryFile::Write(
       filenames.CachedExecutableFilename(), proto,
@@ -359,9 +410,7 @@ Status ExportInternal(
     const HostEmbeddingInfos& lookups, const HostEmbeddingInfos& updates,
     const InputOutputAliasingMap& io_map, uint32 replication_count,
     const poplar::OptionFlags& device_opts,
-    const poplar::OptionFlags& engine_opts, const poplar::Target& target,
-    const VerifiedStreamsIndices::KeyIdMappings& indices,
-    const std::vector<string> checkpoint_feeds_order) {
+    const poplar::OptionFlags& engine_opts, const poplar::Target& target) {
   if (!sends.empty()) {
     return tensorflow::errors::FailedPrecondition(
         "Failed to export the PoplarExecutable because it contains Sends "
@@ -388,8 +437,7 @@ Status ExportInternal(
     TF_ASSIGN_OR_RETURN(
         ipu::Metadata metadata,
         CreateExecutableMetadata(io_map, infeeds, outfeeds, replication_count,
-                                 device_opts, engine_opts, target, indices,
-                                 checkpoint_feeds_order));
+                                 device_opts, engine_opts, target));
     std::string json_metadata = metadata.ToJson();
     VLOG(1) << "Module JSON Metadata: " << json_metadata;
     // For security reasons don't store the verification information inside the
@@ -410,7 +458,7 @@ Status ExportInternal(
     TF_RETURN_IF_ERROR(file->Append(json_metadata));
     TF_RETURN_IF_ERROR(file->Close());
   } catch (const std::exception& e) {
-    return PoplarExceptionToTensorflowStatus("[Serialize] ", e);
+    return PoplarExceptionToTensorflowStatus("[Serialize]", e);
   }
   return Status::OK();
 }
@@ -449,9 +497,7 @@ Status PoplarExecutableCore::Serialize(const std::string& filepath) const {
       resources.annotations.host_embedding_lookup_infos,
       resources.annotations.host_embedding_update_infos,
       resources.annotations.input_output_aliasing_map, replication_count,
-      device_opts, engine_opts, target,
-      resources.streams_indices.GetAssignedIds(),
-      resources.streams_indices.CheckpointFeedsOrder());
+      device_opts, engine_opts, target);
 }
 
 /*static*/ Status PoplarExecutableCore::Export(
@@ -466,8 +512,7 @@ Status PoplarExecutableCore::Serialize(const std::string& filepath) const {
       executable_core.GetHostEmbeddingLookupInfos(),
       executable_core.GetHostEmbeddingUpdateInfos(),
       executable_core.GetInputOutputAliasingMap(),
-      executable_core.GetReplicationFactor(), device_opts, engine_opts, target,
-      executable_core.KeyIdMappings(), executable_core.CheckpointFeedsOrder());
+      executable_core.GetReplicationFactor(), device_opts, engine_opts, target);
 }
 
 PoplarExecutable::PoplarExecutable(
@@ -592,12 +637,6 @@ StatusOr<ExecutionOutput> PoplarExecutable::ExecuteAsyncOnStream(
       }
       break;
     }
-  }
-
-  if (Engine() && poplar_executor->UseVerifiedTransfers()) {
-    return InvalidArgument(
-        "Executables using verified transfers can't be run "
-        "in TensorFlow");
   }
 
   se::DeviceMemoryAllocator* memory_allocator = run_options->allocator();

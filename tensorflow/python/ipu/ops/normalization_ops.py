@@ -16,12 +16,12 @@
 Popnn normalization operators
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
-
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import variable_scope
+from tensorflow.python.platform import tf_logging as logging
 
 # This implementation is based on:
 # tensorflow/contrib/layers/python/layers/normalization.py
@@ -48,7 +48,7 @@ def _group_norm_impl(inputs,
                      channels_axis=-1,
                      center=True,
                      scale=True,
-                     epsilon=1e-6,
+                     epsilon=1.53e-5,
                      param_initializers=None,
                      reuse=None,
                      variables_collections=None,
@@ -164,7 +164,7 @@ def group_norm(inputs,
                channels_axis=-1,
                center=True,
                scale=True,
-               epsilon=1e-6,
+               epsilon=1.53e-5,
                param_initializers=None,
                reuse=None,
                variables_collections=None,
@@ -217,6 +217,12 @@ def group_norm(inputs,
     ValueError: If channels dimension is not 1 or 3.
     ValueError: If number of groups is not commensurate with number of channels.
   """
+  if epsilon < 1.53e-5:
+    logging.warning(
+        'The epsilon value of group_norm is too low, which can lead to '
+        'NaN values or floating point exceptions. To avoid this, increase '
+        'it to a value higher than 1.53e-5.')
+
   return _group_norm_impl(inputs, groups, channels_axis, center, scale,
                           epsilon, param_initializers, reuse,
                           variables_collections, training, trainable, scope,
@@ -227,7 +233,7 @@ def layer_norm(inputs,
                channels_axis=-1,
                center=True,
                scale=True,
-               epsilon=1e-6,
+               epsilon=1.53e-5,
                param_initializers=None,
                reuse=None,
                variables_collections=None,
@@ -287,6 +293,12 @@ def layer_norm(inputs,
   if channels_axis > (inputs.shape.ndims - 1):
     raise ValueError('Axis is out of bounds.')
 
+  if epsilon < 1.53e-5:
+    logging.warning(
+        'The epsilon value of layer_norm is too low, which can lead to '
+        'NaN values or floating point exceptions. To avoid this, increase '
+        'it to a value higher than 1.53e-5.')
+
   groups = 1
 
   return _group_norm_impl(inputs, groups, channels_axis, center, scale,
@@ -299,7 +311,7 @@ def instance_norm(inputs,
                   channels_axis=-1,
                   center=True,
                   scale=True,
-                  epsilon=1e-6,
+                  epsilon=1.53e-5,
                   param_initializers=None,
                   reuse=None,
                   variables_collections=None,
@@ -352,6 +364,12 @@ def instance_norm(inputs,
     raise ValueError('Inputs %s has undefined rank.' % inputs.name)
   if channels_axis > (inputs.shape.ndims - 1):
     raise ValueError('Axis is out of bounds.')
+
+  if epsilon < 1.53e-5:
+    logging.warning(
+        'The epsilon value of instance_norm is too low, which can lead to '
+        'NaN values or floating point exceptions. To avoid this, increase '
+        'it to a value higher than 1.53e-5.')
 
   if channels_axis < 0:
     channels_axis = inputs.shape.ndims + channels_axis

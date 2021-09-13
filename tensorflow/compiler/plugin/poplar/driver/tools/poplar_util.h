@@ -37,7 +37,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_replica_groups.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -105,15 +104,14 @@ poplar::Graph& GetGraphWithOutputIndex(CompilerResources&,
 
 // Convert a poplar/poplibs exception to a Tensorflow error Status
 Status PoplarExceptionToTensorflowStatus(const std::string& origin,
-                                         const std::exception& e);
+                                         const std::exception& e,
+                                         bool recoverable_reset = true);
 
 void SetFlagIfNotPresent(poplar::OptionFlags& opts, const std::string& key,
                          const std::string& value);
 
 poplar::OptionFlags GetReplicatedCollectiveOptions(
     const CompilerResources& res);
-
-poplar::OptionFlags GetReplicateAllReduceOptions(const CompilerResources& res);
 
 StatusOr<gcl::CommGroup> ToGclCommGroup(PoplarReplicaGroups replica_groups,
                                         const CompilerResources& res);
@@ -142,6 +140,9 @@ StatusOr<poplar::OptionFlags> GetCholeskyOptionsForInst(
 
 StatusOr<poplar::OptionFlags> GetTriangularSolveOptionsForInst(
     const HloInstruction* inst, CompilerResources& res);
+
+StatusOr<poplar::OptionFlags> GetSliceOptionsForInst(const HloInstruction* inst,
+                                                     CompilerResources& res);
 
 void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t,
                              const poplar::DebugNameAndId& debug_name_and_id);
@@ -225,9 +226,7 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const CanonicalInfeedInfos& infeed_infos,
     const CanonicalOutfeedInfos& outfeed_infos, uint32 replication_count,
     const poplar::OptionFlags& device_opts,
-    const poplar::OptionFlags& engine_opts, const poplar::Target& target,
-    const VerifiedStreamsIndices::KeyIdMappings& indices,
-    const std::vector<string>& checkpoint_feeds_order);
+    const poplar::OptionFlags& engine_opts, const poplar::Target& target);
 
 // Zero the given remote buffer at the given repeat offset.
 void ZeroRemoteBuffer(CompilerResources& res, poplar::Graph& graph,

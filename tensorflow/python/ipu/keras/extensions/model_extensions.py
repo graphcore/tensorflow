@@ -18,6 +18,10 @@ IPU specific Keras Model extensions
 """
 import copy
 import math
+import sys
+import threading
+import time
+import six
 from collections import OrderedDict
 from functools import partial
 
@@ -30,6 +34,7 @@ from tensorflow.python.ipu.keras.extensions import data_adapter as ipu_data_adap
 from tensorflow.python.ipu.keras import optimizers as ipu_optimizers
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.keras import callbacks as callbacks_module
+from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine import base_layer
 from tensorflow.python.keras.engine import training as training_module
 from tensorflow.python.keras.engine import training_utils
@@ -63,6 +68,160 @@ class _NormalizedKerasOptimizerWrapper(  # pylint: disable=abstract-method
     return grad, var
 
 
+class _PollingThread(threading.Thread):
+  def __init__(self,
+               output_iterator,
+               num_steps,
+               replication_factor,
+               batch_begin_fn,
+               batch_end_fn,
+               unpack_step_results=False):
+    super().__init__()
+    self._cancelled = threading.Event()
+    self._result = None
+    self._output_iterator = output_iterator
+    self._num_steps = num_steps
+    self._replication_factor = replication_factor
+    self._batch_begin_fn = batch_begin_fn
+    self._batch_end_fn = batch_end_fn
+    self._unpack_step_results = unpack_step_results
+
+    # The polling mechanism works as follows:
+    # 1. Until there is data, wait for `initial_wait_time` seconds.
+    # 2. Get the time stamp when the outfeed first has data (first_timestamp).
+    # 3. Get the time stamp when the outfeed has data for the second time
+    #    (second_timestamp).
+    # 4. Update the `wait_time` to:
+    #    min((second_timestamp - first_timestamp) /
+    #        (number_of_samples_processed * fudge_factor),
+    #        initial_wait_time)
+    self._initial_wait_time = 0.001
+    self._first_timestamp = None
+    self._second_timestamp = None
+    self._fudge_factor = 1.9
+    self._wait_time = self._initial_wait_time
+
+  def postprocess(self, num_samples_processed):
+    """Functions which should be called after an iteration of a polling loop is
+    complete. If no results were processed, a sleep is inserted."""
+
+    if num_samples_processed:
+      if not self._first_timestamp:
+        self._first_timestamp = time.time()
+      elif not self._second_timestamp:
+        self._second_timestamp = time.time()
+        self._wait_time = min(
+            (self._second_timestamp - self._first_timestamp) /
+            (num_samples_processed * self._fudge_factor),
+            self._initial_wait_time)
+    else:
+      time.sleep(self._wait_time)
+
+  def cancel(self):
+    """A thread should only be cancelled when an exception occurs."""
+    self._cancelled.set()
+    self.join()
+
+  def cancelled(self):
+    return self._cancelled.is_set()
+
+  def get_result(self):
+    return self._result
+
+  def _iterate_over_replica_results(self, data):
+    """Function which slices out the per replica results."""
+    if self._replication_factor == 1:
+      yield data
+      return
+
+    # Each tensor has an extra dimension
+    for replica in range(self._replication_factor):
+      yield nest.map_structure(lambda t: t[replica], data)  # pylint: disable=cell-var-from-loop
+
+  def run(self):
+    step = 0
+    end_step = self._num_steps
+
+    self._batch_begin_fn(step)
+
+    while step != end_step:
+      # Check whether the thread was cancelled (could be an exception).
+      if self.cancelled():
+        return
+
+      begin_step = step
+
+      # Get the data (including replication).
+      for all_data in self._output_iterator:
+        # Get each step outputs.
+        for data in self._iterate_over_replica_results(all_data):
+          data = data[0] if self._unpack_step_results else data
+
+          # Call the callbacks for this step.
+          self._batch_end_fn(step, data)
+
+          self._result = data
+          step += 1
+
+          # Call the callbacks for the next step.
+          if step != end_step:
+            self._batch_begin_fn(step)
+
+      self.postprocess(step - begin_step)
+
+
+class _PredictPollingThread(_PollingThread):
+  """Optimized version of the PollingThread for predict function."""
+  def run(self):
+    step = 0
+    end_step = self._num_steps
+
+    self._batch_begin_fn(step)
+
+    while step != end_step:
+      # Check whether the thread was cancelled (could be an exception).
+      if self.cancelled():
+        return
+
+      results = self._output_iterator.dequeue()
+      flat_results = nest.flatten(results)
+      # Skip if no results are ready.
+      if not flat_results:
+        self.postprocess(0)
+        continue
+
+      num_iterations = array_ops.shape(flat_results[0]).numpy()[0]
+      if not num_iterations:
+        self.postprocess(0)
+        continue
+
+      begin_step = step
+
+      # Call the callback for each step.
+      for iteration in range(num_iterations):
+        all_replicas_data_flat = [result[iteration] for result in flat_results]
+        for flat_data in self._iterate_over_replica_results(
+            all_replicas_data_flat):
+          data = nest.pack_sequence_as(results, flat_data)
+          self._batch_end_fn(step, data)
+
+          step += 1
+
+          # Call the callbacks for the next step.
+          if step != end_step:
+            self._batch_begin_fn(step)
+
+      # Append the results.
+      merged_results = _merge_into_batch_dimension(results,
+                                                   self._replication_factor)
+      if self._result is None:
+        self._result = [merged_results]
+      else:
+        self._result.append(merged_results)
+
+      self.postprocess(step - begin_step)
+
+
 class ModelExtension(base_layer.KerasExtension):
   @trackable.no_automatic_dependency_tracking
   def __init__(self):
@@ -75,6 +234,7 @@ class ModelExtension(base_layer.KerasExtension):
     self._pipelining_accumulate_outfeed = None
     self._experimental_pipelining_normalize_gradients = None
     self._pipelining_kwargs = dict()
+    self._asynchronous_callbacks = False
 
     # Following values are runtime only.
     self._ipu_train_function = None
@@ -310,16 +470,7 @@ class ModelExtension(base_layer.KerasExtension):
           flat_buffers)
 
     results = outfeed_queue.dequeue()
-
-    def merge_fn(x):
-      # Merge the steps, batches (and replication) dimensions.
-      flat_shape = [x.shape[0] * x.shape[1]] + x.shape[2:]
-      if replication_factor > 1:
-        flat_shape = [flat_shape[0] * flat_shape[1]] + flat_shape[2:]
-
-      return array_ops.reshape(x, flat_shape)
-
-    return nest.map_structure(merge_fn, results)
+    return _merge_into_batch_dimension(results, replication_factor)
 
   def _make_single_ipu_train_function(self):
     @def_function.function(experimental_compile=True)
@@ -400,6 +551,8 @@ class ModelExtension(base_layer.KerasExtension):
                      gradient_accumulation_steps_per_replica,
                      add_loss=False,
                      add_optimizer=False):
+    training = add_loss and add_optimizer
+
     @def_function.function(experimental_compile=True)
     def pipeline_function(_steps_per_execution, iterator, outfeed):
       # Get the shapes for all the inputs.
@@ -543,7 +696,7 @@ class ModelExtension(base_layer.KerasExtension):
       # When training loss and metrics are the outputs from the last
       # computational stage, but we only want to outfeed the metrics so mask out
       # the loss.
-      outfeed_mask = [True, False] if add_loss and add_optimizer else None
+      outfeed_mask = [True, False] if training else None
 
       def optimizer_function(loss, *_):
         replication_factor = self._get_replication_factor()
@@ -555,18 +708,27 @@ class ModelExtension(base_layer.KerasExtension):
 
       opt = optimizer_function if add_optimizer else None
 
-      pipelining_ops.pipeline(
-          computational_stages,
-          gradient_accumulation_count=gradient_accumulation_steps_per_replica,
-          repeat_count=iterations,
-          device_mapping=self._pipelining_device_mapping,
-          accumulate_outfeed=self._pipelining_accumulate_outfeed,
-          inputs=[],
-          infeed_queue=iterator._infeed_queue,  # pylint: disable=protected-access
-          outfeed_queue=outfeed,
-          optimizer_function=opt,
-          outfeed_mask=outfeed_mask,
-          **self._pipelining_kwargs)
+      accumulate_outfeed = self._pipelining_accumulate_outfeed and (
+          add_loss or add_optimizer)
+
+      # Create a dummy call context when evaluating the pipeline op.
+      call_context = base_layer_utils.call_context()
+      with call_context.enter(layer=self,
+                              inputs=[],
+                              build_graph=True,
+                              training=training):
+        pipelining_ops.pipeline(
+            computational_stages,
+            gradient_accumulation_count=gradient_accumulation_steps_per_replica,
+            repeat_count=iterations,
+            device_mapping=self._pipelining_device_mapping,
+            accumulate_outfeed=accumulate_outfeed,
+            inputs=[],
+            infeed_queue=iterator._infeed_queue,  # pylint: disable=protected-access
+            outfeed_queue=outfeed,
+            optimizer_function=opt,
+            outfeed_mask=outfeed_mask,
+            **self._pipelining_kwargs)
 
     return pipeline_function
 
@@ -751,6 +913,10 @@ class ModelExtension(base_layer.KerasExtension):
     return wrapper
 
   @trackable.no_automatic_dependency_tracking
+  def _set_asynchronous_callbacks_impl(self, asynchronous):
+    self._asynchronous_callbacks = asynchronous
+
+  @trackable.no_automatic_dependency_tracking
   def _set_gradient_accumulation_options_impl(
       self, gradient_accumulation_steps_per_replica,
       experimental_normalize_gradients,
@@ -769,7 +935,7 @@ class ModelExtension(base_layer.KerasExtension):
         gradient_accumulation_steps_per_replica
       reset_extension = True
 
-    if experimental_normalize_gradients:
+    if experimental_normalize_gradients is not None:
       self._experimental_gradient_accumulation_normalize_gradients = \
         experimental_normalize_gradients
       reset_extension = True
@@ -826,11 +992,11 @@ class ModelExtension(base_layer.KerasExtension):
       self._pipelining_device_mapping = pipelining_device_mapping
       reset_extension = True
 
-    if accumulate_outfeed:
+    if accumulate_outfeed is not None:
       self._pipelining_accumulate_outfeed = accumulate_outfeed
       reset_extension = True
 
-    if experimental_normalize_gradients:
+    if experimental_normalize_gradients is not None:
       self._experimental_pipelining_normalize_gradients = \
         experimental_normalize_gradients
       reset_extension = True
@@ -887,6 +1053,7 @@ class ModelExtension(base_layer.KerasExtension):
       self._experimental_gradient_accumulation_normalize_gradients
     config["experimental_pipelining_normalize_gradients"] = \
       self._experimental_pipelining_normalize_gradients
+    config["asynchronous_callbacks"] = self._asynchronous_callbacks
 
     if self._gradient_accumulation_optimizer_kwargs:
       logging.info(
@@ -924,6 +1091,7 @@ class ModelExtension(base_layer.KerasExtension):
         "pipelining_accumulate_outfeed", None)
     self._experimental_pipelining_normalize_gradients = config.get(
         "experimental_pipelining_normalize_gradients", None)
+    self._asynchronous_callbacks = config.get("asynchronous_callbacks", False)
 
   def _fit_supported(self, *args, **kwargs):  # pylint:disable=unused-argument
     return True
@@ -1024,6 +1192,20 @@ class ModelExtension(base_layer.KerasExtension):
               inferred_steps, original_steps_per_execution_value,
               steps_per_execution_value)
 
+        # Indicates how many steps the statistics are accumulated over.
+        steps_accumulation_factor = (gradient_accumulation_steps_per_replica
+                                     if self._pipelining_accumulate_outfeed
+                                     else 1)
+
+        # Due to outfeed masking, when pipelined results are wrapped in a list
+        # from the outfeed.
+        unpack_step_results = self._is_pipelined()
+
+        # Per step callbacks do not make sense if the results are accumulated
+        # over multiple steps.
+        asynchronous_callbacks = (self._asynchronous_callbacks
+                                  and steps_accumulation_factor == 1)
+
         pipeline_iterations = (steps_per_execution_per_replica //
                                gradient_accumulation_steps_per_replica)
         train_function = train_function_wrapper(
@@ -1035,6 +1217,24 @@ class ModelExtension(base_layer.KerasExtension):
         self.reset_metrics()
         callbacks.on_epoch_begin(epoch)
 
+        def batch_begin_fn(step):
+          callbacks.on_train_batch_begin(step)
+
+        def batch_end_fn(step, data):
+          training_module.write_scalar_summaries(data, step=step)
+          callbacks.on_train_batch_end(step, data)
+
+        outfeed_thread = None
+        if asynchronous_callbacks:
+          outfeed_thread = _PollingThread(
+              outfeed,
+              inferred_steps,
+              replication_factor,
+              batch_begin_fn,
+              batch_end_fn,
+              unpack_step_results=unpack_step_results)
+          outfeed_thread.start()
+
         for step in data_handler.steps():
           end_step = step + data_handler.step_increment
           with trace.Trace('train',
@@ -1042,22 +1242,34 @@ class ModelExtension(base_layer.KerasExtension):
                            step_num=step,
                            batch_size=batch_size,
                            _r=1):
+            if not asynchronous_callbacks:
+              batch_begin_fn(step)
 
-            callbacks.on_train_batch_begin(step)
-            self.distribute_strategy.run(train_function,
-                                         args=(steps_per_execution_per_replica,
-                                               iterator, outfeed))
+            try:
+              self.distribute_strategy.run(
+                  train_function,
+                  args=(steps_per_execution_per_replica, iterator, outfeed))
+            except Exception:  # pylint:disable=broad-except
+              if outfeed_thread:
+                # Make sure to stop the thread.
+                outfeed_thread.cancel()
+              six.reraise(*sys.exc_info())
+
             self._train_counter.assign_add(steps_per_execution_value)
-            data = self._get_last_batch_results(outfeed, replication_factor)
 
-            # Due to outfeed masking, when pipelined results are wrapped in
-            # a list from the outfeed.
-            logs = data[0] if self._is_pipelined() else data
-            training_module.write_scalar_summaries(logs, step=end_step)
-            callbacks.on_train_batch_end(end_step, logs)
+            if not asynchronous_callbacks:
+              data = self._get_last_batch_results(outfeed, replication_factor)
+              logs = data[0] if unpack_step_results else data
+              batch_end_fn(end_step, logs)
 
           if self.stop_training:
+            if asynchronous_callbacks:
+              outfeed_thread.cancel()
             break
+
+        if asynchronous_callbacks:
+          outfeed_thread.join()
+          logs = outfeed_thread.get_result()
 
         if logs is None:
           raise ValueError('Expect x to be a non-empty array or dataset.')
@@ -1187,25 +1399,64 @@ class ModelExtension(base_layer.KerasExtension):
         self._log_steps_per_execution_warning(steps_per_execution_value,
                                               steps_per_execution_per_replica)
 
-        # When outputs are accumulated we need to repeat the same data multiple
-        # times to make sure each callback gets data.
-        accumulation_factor = (steps_per_execution_per_replica
-                               if self._pipelining_accumulate_outfeed else 1)
+        # Indicates how many steps the statistics are accumulated over.
+        steps_accumulation_factor = (steps_per_execution_per_replica
+                                     if self._pipelining_accumulate_outfeed
+                                     else 1)
+
+        # Due to accumulating, the outfeed is nested.
+        unpack_step_results = steps_accumulation_factor > 1
+
+        # Per step callbacks do not make sense if the results are accumulated
+        # over multiple steps.
+        asynchronous_callbacks = (self._asynchronous_callbacks
+                                  and steps_accumulation_factor == 1)
 
         self.reset_metrics()
+
+        def batch_begin_fn(step):
+          callbacks.on_test_batch_begin(step)
+
+        def batch_end_fn(step, data):
+          callbacks.on_test_batch_end(step, data)
+
+        outfeed_thread = None
+        if asynchronous_callbacks:
+          outfeed_thread = _PollingThread(
+              outfeed,
+              inferred_steps,
+              replication_factor,
+              batch_begin_fn,
+              batch_end_fn,
+              unpack_step_results=unpack_step_results)
+          outfeed_thread.start()
 
         for step in data_handler.steps():
           end_step = step + data_handler.step_increment
           with trace.Trace('test', step_num=step, _r=1):
-            callbacks.on_test_batch_begin(step)
-            self.distribute_strategy.run(test_function,
-                                         args=(steps_per_execution_per_replica,
-                                               iterator, outfeed))
+            if not asynchronous_callbacks:
+              batch_begin_fn(step)
+
+            try:
+              self.distribute_strategy.run(
+                  test_function,
+                  args=(steps_per_execution_per_replica, iterator, outfeed))
+            except Exception:  # pylint:disable=broad-except
+              if outfeed_thread:
+                # Make sure to stop the thread.
+                outfeed_thread.cancel()
+              six.reraise(*sys.exc_info())
+
             self._test_counter.assign_add(steps_per_execution_value)
-            data = self._get_last_batch_results(outfeed, replication_factor)
-            # Due to accumulating, the outfeed is nested.
-            logs = data[0] if accumulation_factor > 1 else data
-            callbacks.on_test_batch_end(end_step, logs)
+
+            if not asynchronous_callbacks:
+              data = self._get_last_batch_results(outfeed, replication_factor)
+              logs = data[0] if unpack_step_results else data
+              batch_end_fn(end_step, logs)
+
+      if asynchronous_callbacks:
+        outfeed_thread.join()
+        logs = outfeed_thread.get_result()
 
       logs = tf_utils.to_numpy_or_python_type(logs)
       callbacks.on_test_end(logs=logs)
@@ -1292,26 +1543,60 @@ class ModelExtension(base_layer.KerasExtension):
         self._log_steps_per_execution_warning(steps_per_execution_value,
                                               steps_per_execution_per_replica)
 
-        for step in data_handler.steps():
-          end_step = step + data_handler.step_increment
+        def batch_begin_fn(step):
           callbacks.on_predict_batch_begin(step)
-          self.distribute_strategy.run(predict_function,
-                                       args=(steps_per_execution_per_replica,
-                                             iterator, outfeed))
-          self._predict_counter.assign_add(steps_per_execution_value)
 
-          batch_outputs = self._get_all_batch_results(
-              outfeed, replication_factor, steps_per_execution_value)
-          if outputs is None:
-            outputs = nest.map_structure(lambda batch_output: [batch_output],
-                                         batch_outputs)
+        def batch_end_fn(step, data):
+          callbacks.on_predict_batch_end(step, {'outputs': data})
+
+        def process_batch(outs, batch):
+          if outs is None:
+            outs = nest.map_structure(lambda batch_output: [batch_output],
+                                      batch)
           else:
             nest.map_structure_up_to(
-                batch_outputs,
-                lambda output, batch_output: output.append(batch_output),
-                outputs, batch_outputs)
+                batch,
+                lambda output, batch_output: output.append(batch_output), outs,
+                batch)
+          return outs
 
-          callbacks.on_predict_batch_end(end_step, {'outputs': batch_outputs})
+        outfeed_thread = None
+        if self._asynchronous_callbacks:
+          outfeed_thread = _PredictPollingThread(outfeed, inferred_steps,
+                                                 replication_factor,
+                                                 batch_begin_fn, batch_end_fn)
+          outfeed_thread.start()
+
+        for step in data_handler.steps():
+          end_step = step + data_handler.step_increment
+
+          if not self._asynchronous_callbacks:
+            batch_begin_fn(step)
+
+          try:
+            self.distribute_strategy.run(predict_function,
+                                         args=(steps_per_execution_per_replica,
+                                               iterator, outfeed))
+          except Exception:  # pylint:disable=broad-except
+            if outfeed_thread:
+              # Make sure to stop the thread.
+              outfeed_thread.cancel()
+            six.reraise(*sys.exc_info())
+
+          self._predict_counter.assign_add(steps_per_execution_value)
+
+          if not self._asynchronous_callbacks:
+            batch_outputs = self._get_all_batch_results(
+                outfeed, replication_factor, steps_per_execution_value)
+            batch_end_fn(end_step, batch_outputs)
+            outputs = process_batch(outputs, batch_outputs)
+
+      if self._asynchronous_callbacks:
+        outfeed_thread.join()
+        batches = outfeed_thread.get_result()
+        for batch in batches:
+          batch_outputs = batch
+          outputs = process_batch(outputs, batch_outputs)
 
       if batch_outputs is None:
         raise ValueError('Expect x to be a non-empty array or dataset.')
@@ -1333,6 +1618,45 @@ class ModelExtension(base_layer.KerasExtension):
 
   def reset_pipeline_stage_assignment(self):
     raise NotImplementedError
+
+  def print_pipeline_stage_assignment_summary(self,
+                                              line_length=None,
+                                              print_fn=None):
+    raise NotImplementedError
+
+  def _print_pipeline_stage_assignment_summary_impl(self, print_assignment_fn,
+                                                    headers, column_widths,
+                                                    line_length, print_fn):
+    """Implementation function for the print_pipeline_stage_assignment_summary.
+    """
+    print_fn = print_fn if print_fn else print
+    assignments = self.get_pipeline_stage_assignment()
+
+    positions = [int(line_length * p) for p in column_widths]
+
+    def print_row(fields):
+      assert len(fields) == len(positions)
+      line = ''
+      for i, field in enumerate(fields):
+        if i > 0:
+          line = line[:-1] + ' '
+        line += str(field)
+        line = line[:positions[i]]
+        line += ' ' * (positions[i] - len(line))
+      print_fn(line)
+
+    print_fn('Model: "{}"'.format(self.name))
+    print_fn('_' * line_length)
+    print_row(headers)
+    print_fn('=' * line_length)
+
+    for i, assignment in enumerate(assignments):
+      print_assignment_fn(assignment, print_row)
+
+      if i == len(assignments) - 1:
+        print_fn('=' * line_length)
+      else:
+        print_fn('_' * line_length)
 
   def _get_pipeline_maximum_pipeline_stage(self):
     """Returns the maximum pipeline stage assignment"""
@@ -1362,3 +1686,16 @@ class ModelExtension(base_layer.KerasExtension):
   def _make_predict_function_overridden(self):
     return (self.make_predict_function.__func__ !=
             training_module.Model.make_predict_function)
+
+
+def _merge_into_batch_dimension(tensors, replication_factor):
+  """Merges steps (and replication) into batch dimension"""
+  def merge_fn(x):
+    # Merge the steps, batches (and replication) dimensions.
+    flat_shape = [x.shape[0] * x.shape[1]] + x.shape[2:]
+    if replication_factor > 1:
+      flat_shape = [flat_shape[0] * flat_shape[1]] + flat_shape[2:]
+
+    return array_ops.reshape(x, flat_shape)
+
+  return nest.map_structure(merge_fn, tensors)

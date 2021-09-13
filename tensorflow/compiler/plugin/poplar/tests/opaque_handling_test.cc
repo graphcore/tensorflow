@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -29,7 +30,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
-#include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 
 #define TF_ASSERT_OK(rexpr) \
   auto statusor = (rexpr);  \
@@ -40,58 +40,7 @@ namespace m = match;
 namespace poplarplugin {
 namespace {
 
-using OpaqueHandlingTest = HloTestBase;
-
-std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
-                                                    bool merge_infeeds) {
-  auto res = CompilerResources::CreateTestDefault(module);
-  res->merge_infeed_io_copies = merge_infeeds;
-  res->streams_indices.InitializeIndexTensors(*res, {}, {});
-  res->module_call_graph = CallGraph::Build(module);
-  res->main_graph = absl::make_unique<poplar::Graph>(
-      poplar::Device::createCPUDevice(), poplar::replication_factor(1));
-  poplin::addCodelets(*res->main_graph);
-  popnn::addCodelets(*res->main_graph);
-  popops::addCodelets(*res->main_graph);
-  poprand::addCodelets(*res->main_graph);
-  return std::move(res);
-}
-
-poplar::Device createIpuModel(int IPUCount = 1, int IPUTileCount = 1216) {
-  poplar::IPUModel model;
-
-  model.numIPUs = IPUCount;
-  model.tilesPerIPU = IPUTileCount;
-
-  return model.createDevice();
-}
-
-std::unique_ptr<CompilerResources> GetMockResources(
-    HloModule* module, bool merge_infeeds, int number_of_vgraphs,
-    int64 max_inter_ipu_copies_buffer_size = 0) {
-  const auto info = CompilerInformation().set_max_inter_ipu_copies_buffer_size(
-      max_inter_ipu_copies_buffer_size);
-  auto resources = CompilerResources::CreateTestDefault(module, info);
-  resources->merge_infeed_io_copies = merge_infeeds;
-  resources->streams_indices.InitializeIndexTensors(*resources, {}, {});
-  resources->module_call_graph = CallGraph::Build(module);
-  resources->main_graph = absl::make_unique<poplar::Graph>(
-      createIpuModel(number_of_vgraphs, 4), poplar::replication_factor(1));
-
-  // Add mock vgraphs
-  for (int i = 0; i < number_of_vgraphs; ++i) {
-    resources->shard_compute_graphs.emplace_back(
-        resources->main_graph->createVirtualGraph(i * 4, (i + 1) * 4));
-  }
-  resources->shard_to_ipu_id.resize(number_of_vgraphs);
-  absl::c_iota(resources->shard_to_ipu_id, 0);
-
-  poplin::addCodelets(*resources->main_graph);
-  popnn::addCodelets(*resources->main_graph);
-  popops::addCodelets(*resources->main_graph);
-  poprand::addCodelets(*resources->main_graph);
-  return std::move(resources);
-}
+using OpaqueHandlingTest = HloPoplarTestBase;
 
 TEST_F(OpaqueHandlingTest, SimpleCall) {
   const string& hlo = R"(
@@ -307,7 +256,8 @@ ENTRY pipeline {
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo));
 
-  auto res = GetMockResources(module.get(), false, 2);
+  auto device = CreateIpuModel(2, 4);
+  auto res = GetMockResources(device, module.get(), false, 2);
 
   TF_ASSERT_OK_AND_ASSIGN(
       HloSchedule schedule,

@@ -135,10 +135,11 @@ class IPUInfeedQueue:
       prefetch_depth: the number of elements Poplar will prefetch.
         The depth of the Poplar datastream buffer size which may be prefetched
         before being read by the device. By default the prefetch_depth size is
-        automatically determined. Increasing the size of the prefetch_depth
-        allows for prefetching of multiple entries, increasing the probability
-        there will be a valid entry in the buffer for the device to read
-        before falling back to synchronously fetching the next entry.
+        automatically determined (currently defaults to 1). Increasing the size
+        of the prefetch_depth allows for prefetching of multiple entries,
+        increasing the probability there will be a valid entry in the buffer for
+        the device to read before falling back to synchronously fetching the
+        next entry. This value has to be greater than zero.
 
     Raises:
       ValueError: if all dimensions of shapes of dataset.output_shapes are not

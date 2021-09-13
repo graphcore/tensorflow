@@ -30,8 +30,8 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-StatusOr<poplar::Device> HloPoplarTestBase::CreateIpuModel(int32 num_ipus,
-                                                           int32 num_tiles) {
+poplar::Device HloPoplarTestBase::CreateIpuModel(int32 num_ipus,
+                                                 int32 num_tiles) {
   poplar::IPUModel model;
   if (num_ipus) {
     model.numIPUs = num_ipus;
@@ -62,9 +62,47 @@ StatusOr<poplar::Device> HloPoplarTestBase::CreateIpuDevice(int32 num_ipus,
 }
 
 std::unique_ptr<CompilerResources> HloPoplarTestBase::GetMockResources(
-    poplar::Device& device, HloModule* module, int32 replication_factor) {
-  auto resources = CompilerResources::CreateTestDefault(module);
-  resources->streams_indices.InitializeIndexTensors(*resources, {}, {});
+    HloModule* module) {
+  auto device = poplar::Device::createCPUDevice();
+  return GetMockResources(device, module);
+}
+
+std::unique_ptr<CompilerResources> HloPoplarTestBase::GetMockResources(
+    HloModule* module, bool merge_infeeds) {
+  auto device = poplar::Device::createCPUDevice();
+  auto resources = GetMockResources(device, module);
+  resources->merge_infeed_io_copies = merge_infeeds;
+  return std::move(resources);
+}
+
+std::unique_ptr<CompilerResources> HloPoplarTestBase::GetMockResources(
+    poplar::Device& device, HloModule* module, bool merge_infeeds,
+    int number_of_vgraphs, int64 max_inter_ipu_copies_buffer_size) {
+  const auto info = CompilerInformation().set_max_inter_ipu_copies_buffer_size(
+      max_inter_ipu_copies_buffer_size);
+  auto resources = HloPoplarTestBase::GetMockResources(
+      device, module, /*replication factor*/ 1, info);
+  resources->merge_infeed_io_copies = merge_infeeds;
+
+  auto target = resources->main_graph->getTarget();
+  auto tiles_per_ipu = target.getTilesPerIPU();
+
+  // Add mock vgraphs
+  for (int i = 0; i < number_of_vgraphs; ++i) {
+    resources->shard_compute_graphs.emplace_back(
+        resources->main_graph->createVirtualGraph(i * tiles_per_ipu,
+                                                  (i + 1) * tiles_per_ipu));
+  }
+  resources->shard_to_ipu_id.resize(number_of_vgraphs);
+  absl::c_iota(resources->shard_to_ipu_id, 0);
+
+  return std::move(resources);
+}
+
+std::unique_ptr<CompilerResources> HloPoplarTestBase::GetMockResources(
+    poplar::Device& device, HloModule* module, int32 replication_factor,
+    const CompilerInformation& info) {
+  auto resources = CompilerResources::CreateTestDefault(module, info);
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph = absl::make_unique<poplar::Graph>(
       device, poplar::replication_factor(replication_factor));

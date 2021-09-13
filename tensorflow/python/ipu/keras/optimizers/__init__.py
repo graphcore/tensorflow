@@ -21,4 +21,5 @@ from tensorflow.python.ipu.keras.optimizers.ipu_wrappers import _TensorflowOptim
 from tensorflow.python.ipu.keras.optimizers.ipu_wrappers import _KerasOptimizerWrapper
 from tensorflow.python.ipu.keras.optimizers.cross_replica_optimizer import CrossReplicaOptimizer
 from tensorflow.python.ipu.keras.optimizers.map_gradient_optimizer import MapGradientOptimizer
-from tensorflow.python.ipu.keras.optimizers.gradient_accumulate_optimizer import GradientAccumulationOptimizer
+from tensorflow.python.ipu.keras.optimizers.map_gradient_optimizer import MapGradientOptimizerInvertedChaining
+from tensorflow.python.ipu.keras.optimizers.gradient_accumulation_optimizer import GradientAccumulationOptimizer

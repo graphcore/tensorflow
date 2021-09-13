@@ -270,6 +270,70 @@ class IpuLstmTest(test.TestCase):
     layer_ipu = ipu.layers.PopnnLSTM(num_hidden)
     layer_ipu.build((batch_size, timesteps, num_input))
     self.assertTrue(all(w.dtype == dtypes.float16 for w in layer_ipu.weights))
+    keras.backend.set_floatx('float32')
+
+  @test_util.run_v2_only
+  def test_upstream_layer(self):
+    # Prepare Data
+    xs, h, c = self._get_random_inputs(num_samples=2)
+    x_fit, x_predict = xs[0], xs[1]
+    y = np.random.rand(batch_size, num_hidden).astype(data_type)
+
+    # Setup CPU LSTM layer
+    layer_cpu = _getLSTMLayer(recurrent_v2.LSTM,
+                              kernel_initializer='truncated_normal',
+                              recurrent_initializer='normal',
+                              bias_initializer='truncated_normal',
+                              return_state=False)
+    layer_cpu.build((batch_size, timesteps, num_input))
+    initial_weights = layer_cpu.get_weights()
+
+    # Create CPU graph
+    initial_h_cpu = keras.Input(batch_shape=(batch_size, num_hidden))
+    initial_c_cpu = keras.Input(batch_shape=(batch_size, num_hidden))
+    inputs_cpu = keras.Input(batch_shape=(batch_size, timesteps, num_input))
+    outputs_cpu = layer_cpu(inputs_cpu,
+                            initial_state=(initial_h_cpu, initial_c_cpu))
+
+    # Create, fit, and make prediction with CPU model
+    model_cpu = keras.Model(inputs=(inputs_cpu, initial_h_cpu, initial_c_cpu),
+                            outputs=outputs_cpu)
+    model_cpu.compile(loss='categorical_crossentropy', optimizer='adam')
+    model_cpu.fit((x_fit, h, c), y, batch_size=batch_size)
+    results_cpu = model_cpu.predict((x_predict, h, c), batch_size=batch_size)
+    weights_cpu = layer_cpu.get_weights()
+
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      layer_ipu = _getLSTMLayer(recurrent_v2.LSTM, return_state=False)
+      layer_ipu.build((batch_size, timesteps, num_input))
+      layer_ipu.set_weights(initial_weights)
+
+      # Create IPU graph
+      initial_h_ipu = keras.Input(batch_shape=(batch_size, num_hidden))
+      initial_c_ipu = keras.Input(batch_shape=(batch_size, num_hidden))
+      inputs_ipu = keras.Input(batch_shape=(batch_size, timesteps, num_input))
+      outputs_ipu = layer_ipu(inputs_ipu,
+                              initial_state=(initial_h_ipu, initial_c_ipu))
+
+      # Create, fit, and make prediction with IPU model
+      model_ipu = keras.Model(inputs=(inputs_ipu, initial_h_ipu,
+                                      initial_c_ipu),
+                              outputs=outputs_ipu)
+      model_ipu.compile(loss='categorical_crossentropy', optimizer='adam')
+      model_ipu.fit((x_fit, h, c), y, batch_size=batch_size)
+      results_ipu = model_ipu.predict((x_predict, h, c), batch_size=batch_size)
+      weights_ipu = layer_ipu.get_weights()
+
+    self.assertAllClose(results_ipu, results_cpu)
+    self.assertAllClose(weights_ipu, weights_cpu)
+
+  @test_util.run_v2_only
+  def test_get_config(self):
+    layer = _getLSTMLayer(ipu.layers.PopnnLSTM)
+    config = layer.get_config()
+    layer2 = ipu.layers.PopnnLSTM.from_config(config)
+    self.assertEqual(config, layer2.get_config())
 
 
 def _getGRULayer(keras_layer=None,
@@ -463,7 +527,7 @@ class IpuGruTest(test.TestCase):
     self.assertAllClose(ipu_result, cpu_result)
 
   @test_util.run_v2_only
-  def test_gru_ipu_vs_cpu_results_reset_after(self):
+  def test_upstream_layer(self):
     # Prepare Data
     xs, init = self._get_random_inputs(num_samples=2)
     x_fit, x_predict = xs[0], xs[1]
@@ -495,7 +559,7 @@ class IpuGruTest(test.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Setup IPU GRU layer
-      layer_ipu = _getGRULayer(ipu.layers.PopnnGRU,
+      layer_ipu = _getGRULayer(recurrent_v2.GRU,
                                reset_after=True,
                                return_state=False)
       layer_ipu.build((batch_size, timesteps, num_input))
@@ -531,6 +595,68 @@ class IpuGruTest(test.TestCase):
     layer_ipu = ipu.layers.PopnnGRU(num_hidden)
     layer_ipu.build((batch_size, timesteps, num_input))
     self.assertTrue(all(w.dtype == dtypes.float16 for w in layer_ipu.weights))
+    keras.backend.set_floatx('float32')
+
+  @test_util.run_v2_only
+  def test_gru_ipu_vs_cpu_results_reset_after(self):
+    # Prepare Data
+    xs, init = self._get_random_inputs(num_samples=2)
+    x_fit, x_predict = xs[0], xs[1]
+    y = np.random.rand(batch_size, num_hidden).astype(data_type)
+
+    # Setup CPU GRU layer
+    layer_cpu = _getGRULayer(recurrent_v2.GRU,
+                             kernel_initializer='truncated_normal',
+                             recurrent_initializer='normal',
+                             bias_initializer='truncated_normal',
+                             reset_after=True,
+                             return_state=False)
+    layer_cpu.build((batch_size, timesteps, num_input))
+    initial_weights = layer_cpu.get_weights()
+
+    # Create CPU graph
+    initial_state_cpu = keras.Input(batch_shape=(batch_size, num_hidden))
+    inputs_cpu = keras.Input(batch_shape=(batch_size, timesteps, num_input))
+    outputs_cpu = layer_cpu(inputs_cpu, initial_state=initial_state_cpu)
+
+    # Create, fit, and make prediction with CPU model
+    model_cpu = keras.Model(inputs=(inputs_cpu, initial_state_cpu),
+                            outputs=outputs_cpu)
+    model_cpu.compile(loss='categorical_crossentropy', optimizer='adam')
+    model_cpu.fit((x_fit, init), y, batch_size=batch_size)
+    results_cpu = model_cpu.predict((x_predict, init), batch_size=batch_size)
+    weights_cpu = layer_cpu.get_weights()
+
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      layer_ipu = _getGRULayer(ipu.layers.PopnnGRU,
+                               reset_after=True,
+                               return_state=False)
+      layer_ipu.build((batch_size, timesteps, num_input))
+      layer_ipu.set_weights(initial_weights)
+
+      # Create IPU graph
+      initial_state_ipu = keras.Input(batch_shape=(batch_size, num_hidden))
+      inputs_ipu = keras.Input(batch_shape=(batch_size, timesteps, num_input))
+      outputs_ipu = layer_ipu(inputs_ipu, initial_state=initial_state_ipu)
+
+      # Create, fit, and make prediction with IPU model
+      model_ipu = keras.Model(inputs=(inputs_ipu, initial_state_ipu),
+                              outputs=outputs_ipu)
+      model_ipu.compile(loss='categorical_crossentropy', optimizer='adam')
+      model_ipu.fit((x_fit, init), y, batch_size=batch_size)
+      results_ipu = model_ipu.predict((x_predict, init), batch_size=batch_size)
+      weights_ipu = layer_ipu.get_weights()
+
+    self.assertAllClose(results_ipu, results_cpu)
+    self.assertAllClose(weights_ipu, weights_cpu)
+
+  @test_util.run_v2_only
+  def test_get_config(self):
+    layer = _getGRULayer(ipu.layers.PopnnGRU)
+    config = layer.get_config()
+    layer2 = ipu.layers.PopnnGRU.from_config(config)
+    self.assertEqual(config, layer2.get_config())
 
 
 if __name__ == '__main__':

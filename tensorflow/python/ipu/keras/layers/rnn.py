@@ -94,9 +94,6 @@ class _PopnnRNN(ipu_layer.IPULayer):
     self._recurrent_activation = recurrent_activation
     self._partials_dtype = partials_dtype
     self._num_units = num_units
-    self._kernel_initializer = kernel_initializer
-    self._recurrent_initializer = recurrent_initializer
-    self._bias_initializer = bias_initializer
     self._dropout = dropout
     self._dropout_seed = dropout_seed
     self._seed = seed
@@ -104,6 +101,24 @@ class _PopnnRNN(ipu_layer.IPULayer):
     self._return_sequences = return_sequences
     self._time_major = time_major
     self._stateful = stateful
+
+    # Create the initializers.
+    if kernel_initializer is None:
+      self._kernel_initializer = init_ops.glorot_uniform_initializer(
+          self._seed)
+    else:
+      self._kernel_initializer = initializers.get(kernel_initializer)
+
+    if recurrent_initializer is None:
+      self._recurrent_initializer = init_ops.orthogonal_initializer(self._seed)
+    else:
+      self._recurrent_initializer = initializers.get(recurrent_initializer)
+
+    if bias_initializer is None:
+      self._bias_initializer = init_ops.zeros_initializer()
+    else:
+      self._bias_initializer = initializers.get(bias_initializer)
+
     # Initialize input_size to None, which will be set after build().
     self._input_size = None
     self._saveable = None
@@ -166,21 +181,6 @@ class _PopnnRNN(ipu_layer.IPULayer):
       raise ValueError("The last dimension of the inputs to `_PopnnRNN` "
                        "should be defined. Found `None`.")
     self._input_size = input_shape[-1]
-
-    # Create the variables
-    if self._kernel_initializer is None:
-      self._kernel_initializer = init_ops.glorot_uniform_initializer(
-          self._seed)
-
-    if self._recurrent_initializer is None:
-      self._recurrent_initializer = init_ops.orthogonal_initializer(self._seed)
-
-    if self._bias_initializer is None:
-      self._bias_initializer = init_ops.zeros_initializer()
-
-    self._kernel_initializer = initializers.get(self._kernel_initializer)
-    self._recurrent_initializer = initializers.get(self._recurrent_initializer)
-    self._bias_initializer = initializers.get(self._bias_initializer)
 
     # Initialize the input weight tensor.
     kernel_shape = self.canonical_weight_shape
@@ -376,9 +376,6 @@ class PopnnLSTM(_PopnnRNN):
 
     if implementation == 2:
       implementation = 1
-
-    if recurrent_activation == 'hard_sigmoid':
-      recurrent_activation = 'sigmoid'
 
     if not use_bias:
       raise ValueError(
@@ -594,6 +591,40 @@ class PopnnLSTM(_PopnnRNN):
       res.append(array_ops.zeros(sp, dtype=self.dtype))
     return rnn_cell.LSTMStateTuple(*res)
 
+  def get_config(self):
+    return {
+        "units":
+        self._num_units,
+        "activation":
+        self._activation,
+        "recurrent_activation":
+        self._recurrent_activation,
+        "kernel_initializer":
+        initializers.serialize(self._kernel_initializer),
+        "recurrent_initializer":
+        initializers.serialize(self._recurrent_initializer),
+        "bias_initializer":
+        initializers.serialize(self._bias_initializer),
+        "unit_forget_bias":
+        self.unit_forget_bias,
+        "dropout":
+        self._dropout,
+        "dropout_seed":
+        self._dropout_seed,
+        "return_sequences":
+        self._return_sequences,
+        "return_state":
+        self._return_state,
+        "stateful":
+        self._stateful,
+        "partials_dtype":
+        self._partials_dtype,
+        "seed":
+        self._seed,
+        "time_major":
+        self._time_major,
+    }
+
 
 class PopnnGRU(_PopnnRNN):
   # pylint:disable=line-too-long
@@ -726,9 +757,6 @@ class PopnnGRU(_PopnnRNN):
 
     if implementation == 2:
       implementation = 1
-
-    if recurrent_activation == 'hard_sigmoid':
-      recurrent_activation = 'sigmoid'
 
     if not use_bias:
       raise ValueError(
@@ -929,6 +957,40 @@ class PopnnGRU(_PopnnRNN):
 
   def _zero_state(self, batch_size):
     return array_ops.zeros(self.state_shape(batch_size), dtype=self.dtype)
+
+  def get_config(self):
+    return {
+        "units":
+        self._num_units,
+        "activation":
+        self._activation,
+        "recurrent_activation":
+        self._recurrent_activation,
+        "kernel_initializer":
+        initializers.serialize(self._kernel_initializer),
+        "recurrent_initializer":
+        initializers.serialize(self._recurrent_initializer),
+        "bias_initializer":
+        initializers.serialize(self._bias_initializer),
+        "reset_after":
+        self._reset_after,
+        "dropout":
+        self._dropout,
+        "dropout_seed":
+        self._dropout_seed,
+        "return_sequences":
+        self._return_sequences,
+        "return_state":
+        self._return_state,
+        "stateful":
+        self._stateful,
+        "partials_dtype":
+        self._partials_dtype,
+        "seed":
+        self._seed,
+        "time_major":
+        self._time_major,
+    }
 
 
 # Alias the 2 classes without the Popnn prefix

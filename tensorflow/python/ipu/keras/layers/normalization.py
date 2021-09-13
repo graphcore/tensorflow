@@ -19,9 +19,11 @@ Normalization Keras layers
 from functools import reduce
 import operator
 
-from tensorflow.python.framework import smart_cond
 from tensorflow.python.ipu.keras.layers import ipu_layer
 from tensorflow.python.keras import backend as K
+from tensorflow.python.keras import constraints
+from tensorflow.python.keras import initializers
+from tensorflow.python.keras import regularizers
 from tensorflow.python.ops import array_ops
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
@@ -75,8 +77,8 @@ class GroupNormalization(ipu_layer.IPULayer):
     self.scale = scale
     self.epsilon = epsilon
 
-    self.beta_initializer = beta_initializer
-    self.gamma_initializer = gamma_initializer
+    self.beta_initializer = initializers.get(beta_initializer)
+    self.gamma_initializer = initializers.get(gamma_initializer)
 
     self.strided_channel_grouping = strided_channel_grouping
 
@@ -141,9 +143,6 @@ class GroupNormalization(ipu_layer.IPULayer):
     Returns:
       The tensor resulting from applying normalization.
     """
-    if training is None:
-      training = K.learning_phase()
-
     params_shape = [self.channels]
 
     # TensorFlow doesn't like constants being created in the build func.
@@ -187,10 +186,24 @@ class GroupNormalization(ipu_layer.IPULayer):
           strided_channel_grouping=self.strided_channel_grouping)
       return outputs
 
-    outputs = smart_cond.smart_cond(training, group_norm_training,
-                                    group_norm_inference)
+    outputs = K.in_train_phase(group_norm_training,
+                               group_norm_inference,
+                               training=training)
 
     return outputs
+
+  def get_config(self):
+    return {
+        "groups": self.groups,
+        "channels_axis": self.channels_axis,
+        "center": self.center,
+        "scale": self.scale,
+        "epsilon": self.epsilon,
+        "beta_initializer": initializers.serialize(self.beta_initializer),
+        "gamma_initializer": initializers.serialize(self.gamma_initializer),
+        "strided_channel_grouping": self.strided_channel_grouping,
+        "trainable": self.trainable,
+    }
 
 
 class InstanceNormalization(GroupNormalization):
@@ -244,6 +257,17 @@ class InstanceNormalization(GroupNormalization):
   # pylint: disable=useless-super-delegation
   def call(self, inputs, training=None):
     return super().call(inputs, training)
+
+  def get_config(self):
+    return {
+        "channels_axis": self.channels_axis,
+        "center": self.center,
+        "scale": self.scale,
+        "epsilon": self.epsilon,
+        "beta_initializer": initializers.serialize(self.beta_initializer),
+        "gamma_initializer": initializers.serialize(self.gamma_initializer),
+        "trainable": self.trainable,
+    }
 
 
 class LayerNormalization(GroupNormalization):
@@ -312,6 +336,11 @@ class LayerNormalization(GroupNormalization):
     self._check_unsupported(beta_constraint, "beta_constraint")
     self._check_unsupported(gamma_constraint, "gamma_constraint")
 
+    self.beta_regularizer = regularizers.get(beta_regularizer)
+    self.gamma_regularizer = regularizers.get(gamma_regularizer)
+    self.beta_constraint = constraints.get(beta_constraint)
+    self.gamma_constraint = constraints.get(gamma_constraint)
+
   def build(self, input_shape):
     ndims = len(input_shape)
     if ndims is None:
@@ -335,7 +364,9 @@ class LayerNormalization(GroupNormalization):
       raise ValueError('Duplicate axis: {}'.format(tuple(self.axis)))
 
     if any([input_shape[dim] is None for dim in self.axis]):
-      raise ValueError('Input shape %s has unknown dimensions.' % input_shape)
+      raise ValueError(
+          "Input shape %s has unknown dimensions - all dimensions need to be "
+          "fully specified." % input_shape)
 
     # Reshape into a 2D tensor, with the 0th dimension corresponding to the
     # non-reduced dimensions and the 1st dimension corresponding to the reduced
@@ -355,6 +386,11 @@ class LayerNormalization(GroupNormalization):
   # pylint: disable=useless-super-delegation
   def call(self, inputs, training=None):
     input_shape = inputs.shape
+
+    if any([input_shape[dim] is None for dim in self.non_reduced_dims]):
+      raise ValueError(
+          "Input shape %s has unknown dimensions - all dimensions need to be "
+          "fully specified." % input_shape)
 
     # Create the 2D shape.
     num_non_reduced_elements = reduce(
@@ -380,6 +416,21 @@ class LayerNormalization(GroupNormalization):
     outputs.set_shape(input_shape)
 
     return outputs
+
+  def get_config(self):
+    return {
+        "axis": self.axis,
+        "epsilon": self.epsilon,
+        "center": self.center,
+        "scale": self.scale,
+        "beta_initializer": initializers.serialize(self.beta_initializer),
+        "gamma_initializer": initializers.serialize(self.gamma_initializer),
+        "beta_regularizer": regularizers.serialize(self.beta_regularizer),
+        "gamma_regularizer": regularizers.serialize(self.gamma_regularizer),
+        "beta_constraint": constraints.serialize(self.beta_constraint),
+        "gamma_constraint": constraints.serialize(self.gamma_constraint),
+        "trainable": self.trainable,
+    }
 
 
 GroupNorm = GroupNormalization

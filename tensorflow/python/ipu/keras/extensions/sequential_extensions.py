@@ -140,6 +140,25 @@ class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=a
 
     return self.pop(__extension_delegate=False)
 
+  def set_asynchronous_callbacks(self, asynchronous=False):
+    """Sets the asynchronous callbacks options when calling `fit()`, `evaluate()`
+    and `predict()`.
+
+    When running `fit()`, `evaluate()` and `predict()` the callbacks the model
+    is configured with are executed after `steps_per_execution` have executed.
+    Enabling asynchronous callbacks means that the callbacks are invoked after
+    every step, even when `steps_per_execution > 1`. This can reduce the latency
+    of receiving per step results and metrics at a cost of an extra thread
+    running in the background of the application.
+    Note that this option is ignored for the `fit()` and `evaluate()` when
+    running a pipelined model and `accumulate_outfeed=True` (configured via
+    `set_pipelining_options`).
+
+    Args:
+      asynchronous: Whether asynchronous callbacks should be enabled.
+    """
+    self._set_asynchronous_callbacks_impl(asynchronous)
+
   def set_gradient_accumulation_options(
       self,
       gradient_accumulation_steps_per_replica=None,
@@ -439,6 +458,36 @@ class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=a
 
     # Pipelining has changed therefore functions need to be recompiled.
     self._reset_ipu_extension()
+
+  def print_pipeline_stage_assignment_summary(self,
+                                              line_length=None,
+                                              print_fn=None):
+    """Prints a summary of the pipeline stage assignment of the model.
+
+    Arguments:
+        line_length: Total length of printed lines (e.g. set this to adapt the
+          display to different terminal window sizes).
+        print_fn: Print function to use. It will be called on each line of the
+          summary. You can set it to a custom function in order to capture the
+          string summary. It defaults to `print` (prints to stdout).
+    """
+    line_length = line_length or 60
+
+    def print_assignment_fn(assignment, print_row):
+      layer = assignment.layer
+      pipeline_stage = str(assignment.pipeline_stage)
+
+      name = layer.name
+      cls_name = layer.__class__.__name__
+
+      fields = [name + ' (' + cls_name + ')', pipeline_stage]
+      print_row(fields)
+
+    headers = ['Layer (type)', 'Pipeline Stage']
+    column_widths = [.5, 1.]
+    self._print_pipeline_stage_assignment_summary_impl(print_assignment_fn,
+                                                       headers, column_widths,
+                                                       line_length, print_fn)
 
   @trackable.no_automatic_dependency_tracking
   def _get_pipeline_maximum_pipeline_stage(self):

@@ -19,7 +19,11 @@ import pva
 import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
+from tensorflow.python.eager import def_function
 from tensorflow.python.platform import googletest
+from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
@@ -795,6 +799,74 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       report_json.assert_device_to_host_event_names(
           [], "w should be copied to device once and "
           "that should be the only io event")
+
+  def testGetConstantOutOfResourceVariable(self):
+    with ops.device("/device:IPU:0"):
+
+      # Use floats to force device placement.
+      a = variables.Variable(50.0)
+      b = variables.Variable(2.0)
+
+      @def_function.function(experimental_compile=True)
+      def f(x):
+        return array_ops.reshape(
+            x,
+            [math_ops.cast(a, dtypes.int32),
+             math_ops.cast(b, dtypes.int32)])
+
+      # OK since the value is known at compile time.
+      out = f(random_ops.random_normal([10, 10]))
+      self.assertEqual(out.shape[0], 50)
+      self.assertEqual(out.shape[1], 2)
+
+  def testGetConstantOutOfResourceVariableAfterWrite(self):
+    with ops.device("/device:IPU:0"):
+
+      # Use floats to force device placement.
+      a = variables.Variable(50.0)
+      b = variables.Variable(2.0)
+
+      @def_function.function(experimental_compile=True)
+      def f(x, val1, val2):
+        a.assign(math_ops.cast(val1, dtypes.float32))
+        b.assign(math_ops.cast(val2, dtypes.float32))
+        return array_ops.reshape(
+            x,
+            [math_ops.cast(a, dtypes.int32),
+             math_ops.cast(b, dtypes.int32)])
+
+      val1 = constant_op.constant(2)
+      val2 = constant_op.constant(50)
+
+      # Returns an error, since the value known at compile time was overriden.
+      with self.assertRaisesRegex(errors.InvalidArgumentError,
+                                  'concrete values at compile time'):
+        f(random_ops.random_normal([10, 10]), val1, val2)
+
+  def testGetConstantOutOfResourceVariableBeforeWrite(self):
+    with ops.device("/device:IPU:0"):
+
+      # Use floats to force device placement.
+      a = variables.Variable(50.0)
+      b = variables.Variable(2.0)
+
+      @def_function.function(experimental_compile=True)
+      def f(x, val1, val2):
+        out = array_ops.reshape(
+            x,
+            [math_ops.cast(a, dtypes.int32),
+             math_ops.cast(b, dtypes.int32)])
+        a.assign(math_ops.cast(val1, dtypes.float32))
+        b.assign(math_ops.cast(val2, dtypes.float32))
+        return out
+
+      val1 = constant_op.constant(2)
+      val2 = constant_op.constant(50)
+
+      # OK since the write happens after the reshape.
+      out = f(random_ops.random_normal([10, 10]), val1, val2)
+      self.assertEqual(out.shape[0], 50)
+      self.assertEqual(out.shape[1], 2)
 
 
 if __name__ == "__main__":

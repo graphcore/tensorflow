@@ -84,33 +84,6 @@ ResourceUpdateElementwiseClustering::CreateValidator(
                          [](int64) { return true; });
 }
 
-absl::flat_hash_set<const HloComputation*>
-ResourceUpdateElementwiseClustering::GetElementwiseClusterableComputations(
-    const HloModule* module) const {
-  // This is primarily for the fusions, but could be useful for other
-  // computations as well. Go through all computations and populate the
-  // elementwise set. Elementwise computation defined as a set of instructions
-  // which are either
-  // - valid cluster input (constant, parameter, reduce-all, etc)
-  // - elementwise instruction
-  // - fusion uses elementwise computation from this set.
-  absl::flat_hash_set<const HloComputation*> elementwise_comps;
-  for (auto comp : module->computations()) {
-    // In fusion computations all parameters are allowed as parameter inputs.
-    auto validator = CreateValidator(comp, [](int64) { return true; });
-    CHECK(validator) << "Internal error: null validator";
-    if (absl::c_all_of(comp->instructions(), [&elementwise_comps, &validator](
-                                                 const HloInstruction* inst) {
-          return ElementwiseCluster::CanCluster(inst, /*allow_inputs=*/true,
-                                                elementwise_comps, *validator);
-        })) {
-      VLOG(2) << "Found elementwise computation " << comp->name();
-      elementwise_comps.insert(comp);
-    }
-  }
-  return elementwise_comps;
-}
-
 StatusOr<std::vector<ElementwiseCluster>>
 ResourceUpdateElementwiseClustering::GetClustersIn(
     HloInstruction* const call,
@@ -120,15 +93,14 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
   // Make sure that the root of the call op is a tuple instruction.
   TF_RETURN_IF_ERROR(FixRootInstruction(call_comp).status());
 
-  std::vector<ElementwiseCluster> clusters;
   // Find the resource update.
   std::vector<HloInstruction*> resource_updates;
   absl::c_copy_if(call_comp->MakeInstructionPostOrder(),
                   std::back_inserter(resource_updates), IsResourceUpdate);
   if (resource_updates.empty()) {
-    return clusters;
+    return std::vector<ElementwiseCluster>{};
   } else if (resource_updates.size() > 1) {
-    return FailedPrecondition("Detected multiple resource update.");
+    return FailedPrecondition("Detected multiple resource updates.");
   }
 
   HloInstruction* resource_update = resource_updates[0];
@@ -144,17 +116,27 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
 
   // Do not optimize if this is not a op inside an entry computation.
   if (call->parent() != call->GetModule()->entry_computation()) {
-    return clusters;
+    return std::vector<ElementwiseCluster>{};
   }
 
   HloInstruction* call_root = call_comp->root_instruction();
   if (call_root->user_count() > 0) {
-    return clusters;
+    return std::vector<ElementwiseCluster>{};
   }
 
   auto validator = CreateValidator(call, resource_update);
-  return ElementwiseCluster::GetClustersIn(resource_update, elementwise_comps,
-                                           *validator);
+  TF_ASSIGN_OR_RETURN(std::vector<ElementwiseCluster> clusters,
+                      ElementwiseCluster::GetClustersIn(
+                          resource_update, elementwise_comps, *validator));
+  // Try to print some helpful warnings if things don't look right.
+  TF_RETURN_IF_ERROR(
+      ValidateResourceUpdateAndClusters(resource_update, clusters));
+  return clusters;
+}
+
+Status ResourceUpdateElementwiseClustering::ValidateResourceUpdateAndClusters(
+    const HloInstruction* ru, std::vector<ElementwiseCluster> clusters) const {
+  return Status::OK();
 }
 
 // Returns the instruction which should be the input to the outlined
@@ -351,12 +333,13 @@ StatusOr<HloInstruction*> ResourceUpdateElementwiseClustering::OutlineCluster(
   // Connect up all the users of the cluster output.
   int64 output_idx = 0;
   for (auto cluster_output : cluster.GetOutputs()) {
+    VLOG(2) << "Replacing cluster output " << cluster_output->ToString();
     TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                         MakeGetTupleElementHlo(call, output_idx++));
+    VLOG(2) << "  with " << gte->ToString();
 
     for (auto user : computation_output_users.at(cluster_output)) {
       HloInstruction* to_replace_with = gte;
-      VLOG(2) << "Replacing " << user.ToString();
       for (int64 index : user.indices) {
         TF_RETURN_IF_ERROR(
             user.instruction->ReplaceOperandWith(index, to_replace_with));
@@ -397,7 +380,7 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::RewriteCall(
                       GetClustersIn(call, elementwise_comps));
 
   if (clusters.empty()) {
-    VLOG(2) << "No clusters found.";
+    VLOG(1) << "No clusters found.";
     return false;
   }
 
@@ -458,7 +441,7 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
   }
 
   const absl::flat_hash_set<const HloComputation*> elementwise_comps =
-      GetElementwiseClusterableComputations(module);
+      ElementwiseCluster::GetElementwiseClusterableComputations(module);
 
   bool module_changed = false;
   for (auto call : to_optimize) {

@@ -41,7 +41,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/progress_bar.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/subcomputation_graph_caching.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 
 namespace xla {
@@ -49,6 +48,7 @@ class HloInstruction;
 class CallGraph;
 
 namespace poplarplugin {
+class PartitionedElementwiseClusterVisitor;
 
 // This structure contains additional information required to lower the graph
 // from an XLA graph to a poplar graph.
@@ -90,7 +90,7 @@ struct CompilerResources {
 
   const poplar::OptionFlags default_pooling_options;
 
-  bool use_verified_transfers;
+  const poplar::OptionFlags default_slice_options;
 
   bool clear_matmul_pass_type;
 
@@ -155,8 +155,6 @@ struct CompilerResources {
   absl::flat_hash_map<std::string, std::unique_ptr<RemoteBufferHolder>>
       remote_buffers;
 
-  VerifiedStreamsIndices streams_indices;
-
   bool enable_experimental_remote_buffer_embedding;
 
   bool enable_fast_math;
@@ -181,6 +179,8 @@ struct CompilerResources {
   absl::flat_hash_map<const HloInstruction*, std::uint64_t>
       hlo_instruction_to_debug_id_mapping;
 
+  PartitionedElementwiseClusterVisitor* current_cluster_visitor;
+
   // The implementation of the progress bar.
   std::unique_ptr<ProgressBarBase> progress_bar;
 
@@ -188,10 +188,11 @@ struct CompilerResources {
       HloModule* module, const CompilerInformation& information,
       const poplar::OptionFlags& conv_options,
       const poplar::OptionFlags& matmul_options,
-      const poplar::OptionFlags& pooling_options, bool verified_transfers,
-      bool clear_matmul_pass_type, bool disable_graph_outlining,
-      bool merge_infeed_io_copies, uint32 replication_factor,
-      uint32 local_replication_factor, uint32 partition_replication_factor,
+      const poplar::OptionFlags& pooling_options,
+      const poplar::OptionFlags& slice_options, bool clear_matmul_pass_type,
+      bool disable_graph_outlining, bool merge_infeed_io_copies,
+      uint32 replication_factor, uint32 local_replication_factor,
+      uint32 partition_replication_factor,
       const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
       bool always_rearrange_copies_on_host,
       IpuSchedulingAlgorithm scheduler_selection, bool recomputation_enabled,
@@ -208,7 +209,7 @@ struct CompilerResources {
         default_conv_options(conv_options),
         default_matmul_options(matmul_options),
         default_pooling_options(pooling_options),
-        use_verified_transfers(verified_transfers),
+        default_slice_options(slice_options),
         clear_matmul_pass_type(clear_matmul_pass_type),
         disable_graph_outlining(disable_graph_outlining),
         replication_factor(replication_factor),
@@ -232,7 +233,8 @@ struct CompilerResources {
         enable_fast_math(enable_fast_math),
         num_io_tiles(num_io_tiles),
         io_tile_available_memory_proportion(
-            io_tile_available_memory_proportion) {
+            io_tile_available_memory_proportion),
+        current_cluster_visitor(nullptr) {
     if (enable_progress_bar) {
       progress_bar = absl::make_unique<ProgressBar>(module);
     } else {
@@ -247,7 +249,8 @@ struct CompilerResources {
         module, information,
         /*conv_options=*/poplar::OptionFlags(),
         /*matmul_options=*/poplar::OptionFlags(),
-        /*pooling_options=*/poplar::OptionFlags(), /*verified_transfers=*/false,
+        /*pooling_options=*/poplar::OptionFlags(),
+        /*slice_options=*/poplar::OptionFlags(),
         /*clear_matmul_pass_type=*/false,
         /*disable_graph_outlining=*/false, /*merge_infeed_io_copies=*/false,
         /*replication_factor=*/1, /*local_replication_factor=*/1,

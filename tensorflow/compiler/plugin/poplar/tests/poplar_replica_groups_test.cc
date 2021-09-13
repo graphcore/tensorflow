@@ -204,7 +204,7 @@ struct PoplarReplicaGroupsHloTest : public HloTestBase {
     auto* all_reduce = builder.AddInstruction(HloInstruction::CreateAllReduce(
         shape, std::vector<HloInstruction*>{param}, reduction,
         groups.ToXlaReplicaGroups(),
-        /*constrain_layout=*/true,
+        /*constrain_layout=*/false,
         /*channel_id=*/absl::nullopt, /*use_global_device_ids=*/false));
     module->AddEntryComputation(builder.Build(all_reduce));
 

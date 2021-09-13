@@ -63,8 +63,12 @@ REGISTER_OP("GradientAccumulatorSink")
     .Input("input: dtype")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32}")
-    .Attr("num_mini_batches: int")
     .SetIsStateful()
     .SetShapeFn(shape_inference::UnchangedShape);
+
+REGISTER_OP("GradientAccumulationCount")
+    .Input("value: int32")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::NoOutputs);
 
 }  // namespace tensorflow

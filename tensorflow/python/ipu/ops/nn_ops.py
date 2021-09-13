@@ -168,7 +168,8 @@ def multi_conv(func=None, options=None):
 
       args = functional_ops._convert_to_list(args)  # pylint: disable=protected-access
       with ops.name_scope("multi_conv") as scope:
-        func_graph, captured_args = functional_ops._compile_function(  # pylint: disable=protected-access
+        func_graph, captured_args, constant_outputs = \
+          functional_ops._compile_function(  # pylint: disable=protected-access
             func_wrapper,
             args,
             scope, [],
@@ -181,6 +182,7 @@ def multi_conv(func=None, options=None):
               Tout=func_graph.output_types,
               output_shapes=func_graph.output_shapes,
               option_flags=json_format.MessageToJson(option_proto))
+          outputs = functional_ops._replace_outputs(outputs, constant_outputs)  # pylint: disable=protected-access
 
       return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
           func_graph.structured_outputs, outputs)

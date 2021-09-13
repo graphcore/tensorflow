@@ -20,6 +20,7 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_EXECUTOR_H_
 
 #include <condition_variable>
+#include <gcl/CollectiveBalancedReorder.hpp>
 #include <list>
 #include <map>
 #include <memory>
@@ -137,15 +138,19 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     PrimitiveType element_type = PRIMITIVE_TYPE_INVALID;
     std::atomic<uint32> ref_count;
     bool on_device = false;
-    absl::optional<RemoteParameterInfo> in_memory_remote_parameter_info;
+    const RemoteParameterInfo* in_memory_remote_parameter_info = nullptr;
     absl::optional<ArgHandle> input_handle;
     absl::optional<ArgHandle> output_handle;
+    const gcl::CollectiveBalancedHostRearrangement* host_rearrangement =
+        nullptr;
     ConversionFn output_convertor;
     std::vector<char> converted_data;
     char* data;
 
     explicit TensorControl(size_t size_);
     ~TensorControl();
+
+    std::size_t GetRemoteBufferSize() const;
 
     TF_DISALLOW_COPY_AND_ASSIGN(TensorControl);
   };
@@ -428,12 +433,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   bool FloatingPointBehaviourFlagsSet() const {
     const IpuOptions::FloatingPointBehaviour& flags = FloatingPointBehaviour();
-    return flags.inv() || flags.div0() || flags.oflo() || flags.esr() ||
-           flags.nanoo();
-  }
-
-  const IpuOptions::VerifiedTransfers& VerifiedTransfers() const {
-    return current_config_.verified_transfers();
+    const auto esr =
+        flags.esr() == StochasticRoundingBehaviour::StochasticRounding_On;
+    return flags.inv() || flags.div0() || flags.oflo() || esr || flags.nanoo();
   }
 
   IpuDeviceConnectionType ConnectionType() const {
@@ -471,9 +473,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   poplar::OptionFlags GetPoolingOptions() const { return pooling_options_; }
 
-  bool UseVerifiedTransfers() const {
-    return current_config_.verified_transfers().enabled();
-  }
+  poplar::OptionFlags GetSliceOptions() const { return slice_options_; }
 
   bool ClearMatmulPassType() const {
     return current_config_.clear_matmul_pass_type();
@@ -538,6 +538,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.max_inter_ipu_copies_buffer_size();
   }
 
+  int64 GetMaxReduceManyBufferSize() const {
+    return current_config_.max_reduce_many_buffer_size();
+  }
+
   int64 GetMaxSchedulerLookaheadDepth() const {
     return std::max<int64>(1, current_config_.max_scheduler_lookahead_depth());
   }
@@ -568,6 +572,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   }
 
   bool EnableFastMath() const { return current_config_.enable_fast_math(); }
+
+  IpuOptions_IpuAlgebraicSimplifierConfig AlgebraicSimplifierConfig() const {
+    return current_config_.algebraic_simplifier_config();
+  }
 
   IpuSelectionOrder GetSelectionOrder() const {
     return current_config_.selection_order();
@@ -1017,6 +1025,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   poplar::OptionFlags pooling_options_;
 
+  poplar::OptionFlags slice_options_;
+
   poplar::OptionFlags graph_options_;
 
   poplar::OptionFlags execution_options_;
@@ -1055,6 +1065,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
         std::unique_ptr<OutfeedQueueType, void (*)(OutfeedQueueType*)>;
     std::vector<std::vector<OutfeedQueueStorage>> callback_to_io_thread_queues;
     std::deque<std::vector<tensorflow::Tensor>> io_thread_output_queues;
+    // An atomic used to indicate whether there are any elements in the outfeed
+    // queue - means that the mutex doesn't need to be acquired which can block
+    // processing of results.
+    std::atomic<std::size_t> queue_size{0};
     // Mutex to prevent TF CPU op reading from the outfeed whilst we are
     // moving a tensor from the device.
     std::recursive_mutex mutex;

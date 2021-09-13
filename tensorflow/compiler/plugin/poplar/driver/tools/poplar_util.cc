@@ -214,77 +214,50 @@ Status SetVertexField(poplar::Graph& graph, const poplar::FieldRef& field,
 }
 
 Status PoplarExceptionToTensorflowStatus(const std::string& origin,
-                                         const std::exception& e) {
-  const std::string prefix = "[Error]" + origin;
-  /* NOTE: Reduce this list if/when Poplar errors are subclassed */
+                                         const std::exception& e,
+                                         bool recoverable_reset) {
+  const std::string prefix = "[Poplar]" + origin + " ";
   try {
     std::rethrow_exception(std::current_exception());
-  } catch (const poplar::file_load_error& e) {
-    return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::missing_perf_estimate& e) {
-    return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::symbol_error& e) {
-    return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::unknown_field& e) {
-    return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::unknown_vertex_type& e) {
-    return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::no_environment& e) {
-    return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::parse_error& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::invalid_option& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::invalid_machine_model& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::stream_connection_error& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::graph_cycle_error& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::invalid_tile_mapping& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::type_error& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::no_size_specified& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::profiling_disabled& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::control_program_error& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
+  } catch (const poplar::recoverable_runtime_error& e) {
+    auto runtime_error =
+        static_cast<const poplar::recoverable_runtime_error*>(&e);
+    // Recoverable runtime error with IPU_RESET action is handled by resetting
+    // the engine to nullptr, otherwise it's a fatal error.
+    if (runtime_error->getRecoveryAction() ==
+            poplar::RecoveryAction::IPU_RESET &&
+        recoverable_reset) {
+      return tensorflow::errors::Internal(
+          prefix, runtime_error->type, ": ", e.what(),
+          ". IPU will be reset the next time a program is executed.");
+    } else {
+      LOG(FATAL) << prefix << runtime_error->type << ": " << e.what()
+                 << " Recovery action required: "
+                 << poplar::toString(runtime_error->getRecoveryAction());
+    }
+  } catch (const poplar::application_runtime_error& e) {
+    // Application errors require an engine reset.
+    auto runtime_error =
+        static_cast<const poplar::application_runtime_error*>(&e);
+    return tensorflow::errors::Internal(prefix, runtime_error->type, ": ",
+                                        e.what());
   } catch (const poplar::runtime_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::overflow_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::tensor_io_state_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::graph_connection_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::graph_object_load_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::graph_object_creation_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::graph_program_compilation_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poputil::poplibs_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
+    auto runtime_error = static_cast<const poplar::runtime_error*>(&e);
+    // Default case for runtime errors which we can't recover from.
+    LOG(FATAL) << prefix << runtime_error->type << ": " << e.what();
   } catch (const poplar::link_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::stream_memory_allocation_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::graph_memory_allocation_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::tensor_creation_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::memory_elem_constraints_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::index_error& e) {
-    return tensorflow::errors::OutOfRange(prefix, e.what());
+    auto link_error = static_cast<const poplar::link_error*>(&e);
+    return tensorflow::errors::Internal(prefix, link_error->type, ": ",
+                                        e.what(),
+                                        " Output: ", link_error->output);
   } catch (const poplar::poplar_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
+    auto poplar_error = static_cast<const poplar::poplar_error*>(&e);
+    return tensorflow::errors::Internal(prefix, poplar_error->type, ": ",
+                                        e.what());
   } catch (const std::exception& e) {
   }
 
-  return tensorflow::errors::Unknown(prefix, e.what());
+  return tensorflow::errors::Unknown(e.what());
 }
 
 void SetFlagIfNotPresent(poplar::OptionFlags& opts, const std::string& key,
@@ -306,12 +279,6 @@ poplar::OptionFlags GetReplicatedCollectiveOptions(
     options.set(opt.first, opt.second);
   }
 
-  return options;
-}
-
-poplar::OptionFlags GetReplicateAllReduceOptions(const CompilerResources& res) {
-  poplar::OptionFlags options = GetReplicatedCollectiveOptions(res);
-  options.set("useReplicatedImplementation", "true");
   return options;
 }
 
@@ -398,6 +365,19 @@ StatusOr<poplar::OptionFlags> GetTriangularSolveOptionsForInst(
   poplar::OptionFlags opts = res.default_matmul_options;
   opts.set("blockSize",
            std::to_string(res.triangular_solve_expander_block_size));
+  return opts;
+}
+
+StatusOr<poplar::OptionFlags> GetSliceOptionsForInst(const HloInstruction* inst,
+                                                     CompilerResources& res) {
+  poplar::OptionFlags opts = res.default_slice_options;
+
+  // Set the options from the backend config.
+  TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
+                      inst->backend_config<PoplarBackendConfig>());
+  for (const auto& opt : poplar_backend_config.slice_options()) {
+    opts.set(opt.option(), opt.value());
+  }
   return opts;
 }
 
@@ -586,13 +566,10 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const CanonicalInfeedInfos& infeed_infos,
     const CanonicalOutfeedInfos& outfeed_infos, uint32 replication_count,
     const poplar::OptionFlags& device_opts,
-    const poplar::OptionFlags& engine_opts, const poplar::Target& target,
-    const VerifiedStreamsIndices::KeyIdMappings& indices,
-    const std::vector<string>& checkpoint_feeds_order) {
+    const poplar::OptionFlags& engine_opts, const poplar::Target& target) {
   try {
     ipu::MetadataBuilder builder;
     std::map<int64, InputOutputAliasingMap::InputInfo> params_handle_map;
-    const bool use_verified_transfers = !indices.empty();
     for (auto input : io_map.GetEntryInputInfos()) {
       VLOG(1) << "Processing input " << input.Name();
       if (input.Shape().IsTuple()) {
@@ -602,10 +579,6 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
       ipu::VerificationInfo info;
       t.SetHandle(input.Handles().at(0));
       t.SetName(UnmangleInputName(input.Name()));
-      if (use_verified_transfers) {
-        auto key_id = indices.at(t.Handle());
-        info.SetInfo(key_id.key, key_id.id);
-      }
       TF_RETURN_IF_ERROR(SetIpuShape(t, input.Shape()));
       if (input.IsStreaming()) {
         builder.AddInput(t, info);
@@ -624,10 +597,6 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
       ipu::VerificationInfo info;
       t.SetName(output.Name());
       t.SetHandle(output.Handles().at(0));
-      if (use_verified_transfers) {
-        auto key_id = indices.at(t.Handle());
-        info.SetInfo(key_id.key, key_id.id);
-      }
       TF_RETURN_IF_ERROR(SetIpuShape(t, output.Shape()));
       if (output.IsStreaming()) {
         builder.AddOutput(t, info);
@@ -667,10 +636,6 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
         t.SetHandle(GetInfeedCopyHandle(infeed.config.feed_id(), stream_idx));
         t.SetName(absl::StrCat(infeed.config.feed_id(), ".", stream_idx));
         TF_RETURN_IF_ERROR(SetIpuShape(t, shape));
-        if (use_verified_transfers) {
-          auto key_id = indices.at(infeed.config.feed_id());
-          info.SetInfo(key_id.key, key_id.id);
-        }
         builder.AddInfeedStream(infeed.config.feed_id(), t, info);
         stream_idx++;
       }
@@ -695,10 +660,6 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
         t.SetHandle(GetOutfeedCopyHandle(outfeed.config.feed_id(), stream_idx));
         t.SetName(absl::StrCat(outfeed.config.feed_id(), ".", stream_idx));
         TF_RETURN_IF_ERROR(SetIpuShape(t, shape));
-        if (use_verified_transfers) {
-          auto key_id = indices.at(outfeed.config.feed_id());
-          info.SetInfo(key_id.key, key_id.id);
-        }
         builder.AddOutfeedStream(outfeed.config.feed_id(), t, info);
         stream_idx++;
       }
@@ -717,20 +678,6 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
           "The target's type must be poplar::TargetType::IPU");
     }
 
-    if (!checkpoint_feeds_order.empty()) {
-      VLOG(1) << "Creating checkpoint";
-      if (!use_verified_transfers) {
-        return xla::FailedPrecondition(
-            "Can't use checkpoints without verified transfers");
-      }
-      ipu::VerificationInfo checkpointIn, checkpointOut;
-      auto key_id = indices.at(ipu::Metadata::InputCheckpointHandle());
-      checkpointIn.SetInfo(key_id.key, key_id.id);
-      key_id = indices.at(ipu::Metadata::OutputCheckpointHandle());
-      checkpointOut.SetInfo(key_id.key, key_id.id);
-      builder.AddCheckpoint(checkpoint_feeds_order, checkpointIn,
-                            checkpointOut);
-    }
     return builder.BuildMetadata();
   } catch (const std::exception& e) {
     return tensorflow::errors::Internal(e.what());

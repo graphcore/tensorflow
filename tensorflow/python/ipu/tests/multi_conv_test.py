@@ -65,6 +65,7 @@ def _compare_ipu_to_cpu(test_wrapper,
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.optimizations.algebraic_simplifier.enable_dot_strength = False
     cfg.configure_ipu_system()
 
     g = ops.Graph()
@@ -440,7 +441,8 @@ class MultiConvTest(test_util.TensorFlowTestCase):
       session.run(variables.global_variables_initializer())
       with self.assertRaisesRegex(
           Exception,
-          r"\[Error\]\[Build graph\] Unrecognised option \'invalidFlag\'"):
+          r"\[Poplar\]\[Build graph\] invalid_option: Unrecognised option "
+          r"\'invalidFlag\'"):
         session.run(res, {x: np.ones(x.shape) for x in [a, b]})
 
 

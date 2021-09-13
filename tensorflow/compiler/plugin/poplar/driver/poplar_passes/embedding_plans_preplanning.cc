@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
 #include <poplar/Target.hpp>
@@ -106,8 +107,11 @@ StatusOr<SlicePlanMap> GetSlicePlans(const InputToSliceUsersMap& user_map,
       poplar::Graph& graph =
           shards.size() > 1 ? GetMasterGraph(res) : GetGraph(res, operand);
 
+      TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
+                          GetSliceOptionsForInst(operand, res));
+
       res.slice_plans.push_back(popops::embedding::plan(
-          graph, data_type, input_size, output_size, lookups, {}));
+          graph, data_type, input_size, output_size, lookups, opts));
       result[operand] = {&res.slice_plans.back(), lookups};
     }
   }

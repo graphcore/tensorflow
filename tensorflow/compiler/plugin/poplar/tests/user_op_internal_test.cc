@@ -42,12 +42,22 @@ TEST_F(UserOperator, UserOpDefaults) {
   xla::Shape shape;
 
   // Call into the instruction directly.
-  HloUserOpInstruction inst{{},           shape,        "my_gc_file.gc",
-                            function_ptr, metadata_ptr, allocator_ptr,
-                            false};
+  const int64 gradient_size = 0;
+  const int64 partial_derivative_index = 0;
+  const bool is_user_read_write = false;
+  const std::string attributes;
+  HloUserOpInstruction inst{{},
+                            shape,
+                            "my_gc_file.gc",
+                            function_ptr,
+                            metadata_ptr,
+                            allocator_ptr,
+                            gradient_size,
+                            partial_derivative_index,
+                            is_user_read_write,
+                            attributes};
 
   EXPECT_EQ(inst.NumInputs(), 0);
-  EXPECT_EQ(inst.NumberOfInplaceOperands(), 0);
   EXPECT_EQ(inst.IsPopOpsElementwise(), false);
   EXPECT_EQ(inst.IsGradient(), false);
   EXPECT_EQ(inst.GetPointerToFunc(), nullptr);
@@ -79,22 +89,35 @@ TEST_F(UserOperator, UserOpReadMetadata) {
   // Get the symbol from the library for each of the functions.
   tensorflow::Env::Default()->GetSymbolFromLibrary(handle, "Build",
                                                    &function_ptr);
+  ASSERT_TRUE(function_ptr);
 
   void* metadata_ptr = nullptr;
   tensorflow::Env::Default()->GetSymbolFromLibrary(handle, "Build_metadata",
                                                    &metadata_ptr);
+  ASSERT_TRUE(metadata_ptr);
 
   void* allocator_ptr = nullptr;
   tensorflow::Env::Default()->GetSymbolFromLibrary(handle, "Build_allocator",
                                                    &allocator_ptr);
+  ASSERT_TRUE(allocator_ptr);
 
   // Call into the instruction directly.
-  HloUserOpInstruction inst{{},           shape,        "my_gc_file.gc",
-                            function_ptr, metadata_ptr, allocator_ptr,
-                            false};
+  const int64 gradient_size = 0;
+  const int64 partial_derivative_index = 0;
+  const bool is_user_read_write = false;
+  const std::string attributes;
+  HloUserOpInstruction inst{{},
+                            shape,
+                            "my_gc_file.gc",
+                            function_ptr,
+                            metadata_ptr,
+                            allocator_ptr,
+                            gradient_size,
+                            partial_derivative_index,
+                            is_user_read_write,
+                            attributes};
 
   EXPECT_EQ(inst.NumInputs(), 0);
-  EXPECT_EQ(inst.NumberOfInplaceOperands(), 12);
   EXPECT_EQ(inst.IsPopOpsElementwise(), true);
   EXPECT_EQ(inst.IsGradient(), false);
   EXPECT_NE(inst.GetPointerToFunc(), nullptr);
@@ -102,17 +125,12 @@ TEST_F(UserOperator, UserOpReadMetadata) {
   EXPECT_EQ(inst.GetPath(), "my_gc_file.gc");
 
   absl::flat_hash_set<int64> alloc_indices = inst.AllocatingIndices();
-  absl::flat_hash_map<int64, int64> layout_deps = inst.LayoutDependencies();
 
   EXPECT_EQ(alloc_indices.size(), 4);
   EXPECT_TRUE(alloc_indices.contains(0));
   EXPECT_TRUE(alloc_indices.contains(1));
   EXPECT_TRUE(alloc_indices.contains(2));
   EXPECT_TRUE(alloc_indices.contains(3));
-
-  EXPECT_EQ(layout_deps.size(), 2);
-  EXPECT_EQ(layout_deps[0], 2);
-  EXPECT_EQ(layout_deps[1], 3);
 }
 
 }  // namespace

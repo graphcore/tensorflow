@@ -19,7 +19,9 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/collective_reorder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_scatter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/replication_index.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/elementwise_cluster.h"
@@ -35,11 +37,6 @@ namespace {
 
 bool IsParameter(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kParameter;
-}
-
-bool IsGlobalAllReduce(const HloInstruction* inst) {
-  return inst->opcode() == HloOpcode::kAllReduce &&
-         inst->replica_groups().empty();
 }
 
 StatusOr<Shape> GetNewShape(const ElementwiseCluster& cluster,
@@ -69,6 +66,13 @@ StatusOr<HloComputation*> CloneAndReshapeComputation(
   for (auto inst : cloned_comp->instructions()) {
     TF_ASSIGN_OR_RETURN(Shape new_shape, GetNewShape(cluster, inst));
     *inst->mutable_shape() = new_shape;
+  }
+  HloInstruction* root = cloned_comp->root_instruction();
+  if (root->opcode() == HloOpcode::kReduce) {
+    TF_RETURN_IF_ERROR(cloned_comp->ReplaceWithNewInstruction(
+        root, HloInstruction::CreateReduce(
+                  root->shape(), root->mutable_operand(0),
+                  root->mutable_operand(1), {0}, root->to_apply())));
   }
   return cloned_comp;
 }
@@ -189,8 +193,7 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
   const Shape in_comp_shape =
       ShapeUtil::MakeShape(cluster_input_type, cluster.GetShardDimensions());
 
-  // If it's reshape(all-gather(reshape(remote-parameter-load))), remove
-  // all-gather.
+  // If it's replicated parameter load, allow it as is without slicing.
   if (IsReplicatedParameterLoad(cluster_input)) {
     HloInstruction* remote_load = cluster_input->mutable_operand(0);
     if (remote_load->shape().dimensions() == cluster.GetShardDimensions()) {
@@ -239,8 +242,11 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
     // Add any necessary padding before scatter.
     TF_ASSIGN_OR_RETURN(parameter, PadInput(cluster, parameter, builder));
 
+    HloInstruction* scatter_input =
+        builder->AddInstruction(CreateCollectiveReorderInstruction(parameter));
+
     HloInstruction* scatter = builder->AddInstruction(CreateReduceScatter(
-        in_comp_shape, {parameter}, CollectiveOperator::COLLECTIVE_OP_ADD,
+        in_comp_shape, {scatter_input}, CollectiveOperator::COLLECTIVE_OP_ADD,
         PoplarReplicaGroups::Consecutive(partition_replication_factor_)));
 
     if (partition_replication_factor_ == global_replication_factor_) {
@@ -288,7 +294,7 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
         builder->AddInstruction(HloInstruction::CreateAllReduce(
             scatter->shape(), std::vector<HloInstruction*>{scatter},
             sum_reduction, orthogonal_groups.ToXlaReplicaGroups(),
-            /*constrain_layout=*/true,
+            /*constrain_layout=*/false,
             /*channel_id=*/absl::nullopt, /*use_global_device_ids=*/false));
 
     context->MapInstruction(cluster_input, all_reduce);
@@ -314,6 +320,9 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
         HloInstruction::CreateReshape(all_shards_shape, parameter));
   }
 
+  HloInstruction* scatter_input =
+      builder->AddInstruction(CreateCollectiveReorderInstruction(parameter));
+
   // Slice off this replica's storage elements.
   const Shape slice_shape =
       ShapeUtil::MakeShape(cluster_input_type, {cluster.GetShardSize()});
@@ -322,7 +331,7 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
   // input tensor and does nothing with the values. This is more memory/cycles
   // efficient than doing dynamic-slice(replication-index() * shard_size).
   HloInstruction* slice = builder->AddInstruction(CreateReduceScatter(
-      slice_shape, {parameter}, CollectiveOperator::COLLECTIVE_OP_LOCAL,
+      slice_shape, {scatter_input}, CollectiveOperator::COLLECTIVE_OP_LOCAL,
       PoplarReplicaGroups::Consecutive(partition_replication_factor_)));
 
   if (!ShapeUtil::Compatible(in_comp_shape, slice->shape())) {
@@ -381,6 +390,9 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterOutput(
       {in_cluster_output}, all_gather_shape,
       PoplarReplicaGroups::Consecutive(partition_replication_factor_)));
 
+  output =
+      builder->AddInstruction(CreateUndoCollectiveReorderInstruction(output));
+
   const Shape flat_cluster_shape =
       ShapeUtil::MakeShape(inst_element_type, {cluster.GetClusterSize()});
   const Shape aligned_cluster_shape = ShapeUtil::MakeShape(
@@ -416,7 +428,39 @@ Status ReplicatedResourceUpdateElementwiseClustering::AddClusterInstruction(
   }
 
   TF_ASSIGN_OR_RETURN(Shape new_shape, GetNewShape(cluster, inst));
-  return CloneInstruction(new_shape, inst, builder, context);
+  TF_RETURN_IF_ERROR(CloneInstruction(new_shape, inst, builder, context));
+
+  if (IsReductionFusion(inst) || inst->opcode() == HloOpcode::kReduce) {
+    CHECK(IsScalar(inst));
+
+    HloComputation* fusion_comp =
+        context->GetComputation(inst->fused_instructions_computation());
+    CHECK_NOTNULL(fusion_comp);
+
+    HloInstruction* cloned_inst = context->GetInstruction(inst);
+    CHECK_NOTNULL(cloned_inst);
+
+    // Note that this trick of replacing a local-reduce to a sharded
+    // local-reduce then an all-reduce is only valid when the values aren't
+    // getting near to the limit of the data type.
+    // For example, a whole can be greater than the sum of its parts if each
+    // part is rounded down to be representable but the whole is rounded up.
+    VLOG(2) << "Adding all-reduce after instruction " << cloned_inst->name()
+            << " in the RTS cluster to make it replica-identical";
+    HloComputation* sum_reduction = context->module()->AddEmbeddedComputation(
+        CreateSumReduction(cloned_inst->shape(), "sum-" + cloned_inst->name()));
+
+    HloInstruction* all_reduce =
+        builder->AddInstruction(HloInstruction::CreateAllReduce(
+            cloned_inst->shape(), std::vector<HloInstruction*>{cloned_inst},
+            sum_reduction, {}, /*constrain_layout=*/false,
+            /*channel_id=*/absl::nullopt, /*use_global_device_ids=*/false));
+
+    // Replace all usage of the old local reduction with the new all-reduction
+    // by using the clone context map.
+    context->MapInstruction(inst, all_reduce);
+  }
+  return Status::OK();
 }
 
 StatusOr<HloInstruction*>
@@ -451,6 +495,37 @@ ReplicatedResourceUpdateElementwiseClustering::PadInput(
     VLOG(2) << "pad: " << input->ToString();
   }
   return input;
+}
+
+Status ReplicatedResourceUpdateElementwiseClustering::
+    ValidateResourceUpdateAndClusters(
+        const HloInstruction* ru,
+        std::vector<ElementwiseCluster> clusters) const {
+  auto partition_variables = GetResourceUpdatePartitionOffloadedVariables(ru);
+  auto offload_variables = GetResourceUpdateOffloadVariables(ru);
+  if (clusters.empty()) {
+    if (partition_variables != THREESTATE_OFF) {
+      std::string cause = "";
+      if (offload_variables == THREESTATE_OFF) {
+        cause =
+            "This is because optimizer state is not being offloaded."
+            " Offload optimizer state via offload_weight_update_variables";
+      } else {
+        cause =
+            "This can occur when the optimizer contains operations that"
+            " don't do the same thing on each replica, such as most non"
+            " elementwise operations, dependencies or operations with side"
+            " effects.";
+      }
+      LOG(WARNING)
+          << "Failed to shard optimizer state across the replicas:"
+          << " replicated_optimizer_state_sharding is on, but optimizer state"
+          << " could not be sharded across replicas, as no suitable RTS"
+          << " clusters could be found in the computation "
+          << ru->to_apply()->name() << ". " << cause;
+    }
+  }
+  return Status::OK();
 }
 
 ClusterOutlinePolicy

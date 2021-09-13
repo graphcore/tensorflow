@@ -26,12 +26,13 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 
 # Error threshold for forward pass test.
-THRESHOLD = 0.03
+THRESHOLD = 0.1
 
 # Dimensions of the random data tensor.
-DIMS = (1024, 1024, 4)
+DIMS = (64, 64, 4)
 
 # Initialise with a random seed.
 SEED = np.random.randint(np.iinfo(np.int32).max, size=[2], dtype=np.int32)
@@ -95,16 +96,17 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(f, inputs=[input_data])
 
-      cfg = IPUConfig()
-      cfg.ipu_model.compile_ipu_code = False
+      cfg = ipu.config.IPUConfig()
+      cfg.auto_select_ipus = 1
+      tu.add_hw_ci_connection_options(cfg)
       cfg.configure_ipu_system()
 
       return r, input_data
 
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testInvalidNoiseShape(self):
     in_data = np.random.rand(16, 8, 16)
-    print(in_data.shape)
     seed = np.array([12, 34], dtype=np.int32)
 
     with sl.Session() as sess:
@@ -125,6 +127,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
         _ = sess.run(r, {input_data: in_data})
 
   @parameterized.named_parameters(*TEST_CASES)
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testDropout(self, rate, seed, noise_shape):
     def _run_dropout(w):
@@ -148,8 +151,13 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
       self.assertTrue(is_roughly_close < THRESHOLD)
 
   @parameterized.named_parameters(*TEST_CASES)
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testUserSeed(self, rate, seed, noise_shape):
+    # When the seed is None, we aren't testing user seeds.
+    if seed is None:
+      return
+
     def _run_dropout(w):
       return self._ipu_dropout(w, rate, seed, noise_shape, False)
 
@@ -170,6 +178,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
         self.assertAllEqual(first_result, result)
 
   @parameterized.named_parameters(*TEST_CASES)
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testDropoutBackwardPass(self, rate, seed, noise_shape):
     def _run_dropout(w):
@@ -197,6 +206,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
                           np.count_nonzero(gradients))
 
   @parameterized.named_parameters(*TEST_CASES)
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testScaling(self, rate, seed, noise_shape):
     def _run_dropout(w):

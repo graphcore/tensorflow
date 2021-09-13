@@ -1399,10 +1399,9 @@ bool PoplarShapeMatchesXLAShape(TensorOrRemoteBuffer torb,
   if (torb.IsReplicaPartitioned()) {
     element_count *= resources.partition_replication_factor;
 
-    // Check the remote buffer shape is correct, allowing for padding.
-    return element_count >= ShapeUtil::ElementsIn(shape) &&
-           (ShapeUtil::ElementsIn(shape) +
-            resources.partition_replication_factor) > element_count;
+    // Check the remote buffer shape is correct, allowing for padding and CBR
+    // extra elements.
+    return element_count >= ShapeUtil::ElementsIn(shape);
   }
 
   // Check the remote buffer shape is correct.

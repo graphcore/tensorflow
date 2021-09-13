@@ -56,15 +56,11 @@ class CTCLoss(layers.Layer):
     from_logits: Whether to expect the input data in the form of logits
         (`True`) or log probabilities (`False`).
         Default value is `False`.
-    name: A name for this op. Defaults to "ctc_loss" or "ctc_loss_with_logits".
   """
-  def __init__(self, blank_index=0, from_logits=False, name=None):
-    super().__init__(name=name)
+  def __init__(self, blank_index=0, from_logits=False, **kwargs):
+    super().__init__(**kwargs)
     self.blank_index = blank_index
-    if from_logits:
-      self.loss_function = nn_ops.ctc_loss_v2
-    else:
-      self.loss_function = nn_ops.ctc_loss_with_log_probs
+    self.from_logits = from_logits
 
   def call(self, labels, data, label_length, data_length, **kwargs):  # pylint: disable=W0221
     """
@@ -78,8 +74,22 @@ class CTCLoss(layers.Layer):
     Returns:
       The calculated loss.
     """
-    loss = self.loss_function(labels, data, label_length, data_length,
-                              self.blank_index)
+    if self.from_logits:
+      loss_function = nn_ops.ctc_loss_v2
+    else:
+      loss_function = nn_ops.ctc_loss_with_log_probs
+
+    loss = loss_function(labels, data, label_length, data_length,
+                         self.blank_index)
     loss = math_ops.reduce_mean(loss)
     loss = array_ops.reshape(loss, [1])
     return loss
+
+  def get_config(self):
+    config = {
+        'blank_index': self.blank_index,
+        'from_logits': self.from_logits,
+    }
+
+    base_config = super().get_config()
+    return dict(list(base_config.items()) + list(config.items()))

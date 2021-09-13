@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
+#include "tensorflow/compiler/xla/service/hlo_dataflow_analysis.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
 namespace xla {
@@ -55,6 +56,24 @@ bool IsReplicatedParameterLoad(const HloInstruction* inst) {
 bool IsReplicatedParameterStore(const HloInstruction* inst) {
   return IsReplicatedParameterStoreFusion(inst) && inst->user_count() == 1 &&
          IsPoplarInstruction(PoplarOp::RemoteParameterStore)(inst->users()[0]);
+}
+
+bool IsGradientAccumulatorSink(const HloInstruction* inst) {
+  return IsPoplarInstruction(GradientAccumulatorSink, inst);
+}
+
+bool IsReshape(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kReshape;
+}
+
+bool IsRemoteBufferStore(const HloInstruction* inst) {
+  return IsPoplarInstruction(RemoteParameterStore, inst) ||
+         IsPoplarInstruction(BufferStoreSlice, inst);
+}
+
+bool IsRemoteBufferPassthrough(const HloInstruction* inst) {
+  return IsRemoteBufferStore(inst) || IsGradientAccumulatorSink(inst) ||
+         IsReshape(inst);
 }
 
 const Shape GetReplicatedParameterLoadFusionAllGatherShape(
@@ -115,6 +134,55 @@ std::size_t PartitionedByteCountPerReplica(std::size_t byte_count,
                                         partition_replication_factor);
 
   return partitioned_element_count * bytes_per_element;
+}
+
+StatusOr<int64> GetRemoteBufferEntryParameterNumber(
+    const HloInstruction* inst) {
+  TF_ASSIGN_OR_RETURN(auto dfa,
+                      HloDataflowAnalysis::Run(*inst->parent()->parent()));
+
+  return GetRemoteBufferEntryParameterNumber(*dfa, inst);
+}
+
+StatusOr<int64> GetRemoteBufferEntryParameterNumber(
+    const HloDataflowAnalysis& dfa, const HloInstruction* inst) {
+  VLOG(2) << "GetRemoteBufferParameterNumber " << inst->ToString();
+
+  const HloModule* module = inst->GetModule();
+  const HloInstruction* source = inst;
+  do {
+    if (IsReplicatedParameterStore(source)) {
+      VLOG(2) << "remote store instruction: " << source->ToString();
+      source = source->users()[0]->operand(0);
+    } else if (IsReplicatedParameterLoad(source)) {
+      VLOG(2) << "remote load instruction: " << source->ToString();
+      source = source->operand(0)->operand(0);
+    } else if (IsRemoteBufferPassthrough(source) ||
+               IsPoplarInstruction(RemoteParameterLoad, source)) {
+      VLOG(2) << "remote parameter instruction: " << source->ToString();
+      source = source->operand(0);
+    }
+    const auto value_set = dfa.GetFlattenedValueSet(source);
+    if (value_set.values().size() != 1) {
+      return FailedPrecondition(
+          "Failed to determine remote buffer source. Is complex control "
+          "flow used to pass remote buffers? Found %d sources for: %s.",
+          value_set.values().size(), source->ToString());
+    }
+    const auto* next = value_set.values()[0]->instruction();
+    if (next == source) {
+      VLOG(2) << "stopped at instruction " << next->ToString();
+      break;
+    }
+    source = next;
+  } while (source->opcode() != HloOpcode::kParameter);
+
+  if (source->parent() == module->entry_computation()) {
+    return source->parameter_number();
+  } else {
+    return InternalErrorStrCat("Can't find an entry parameter index for ",
+                               inst->name());
+  }
 }
 
 }  // namespace poplarplugin

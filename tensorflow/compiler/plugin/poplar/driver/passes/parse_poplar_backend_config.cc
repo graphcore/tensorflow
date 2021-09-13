@@ -26,14 +26,19 @@ namespace xla {
 namespace poplarplugin {
 using pipeline_config = PoplarBackendConfig::CallConfig::PipelineConfig;
 namespace {
+
 StatusOr<std::string> GetAttribute(const FrontendAttributes& attributes,
-                                   const FrontendAttributeId id) {
-  std::string id_string = FrontendAttributeId_Name(id);
+                                   const std::string& id_string) {
   auto itr = attributes.map().find(id_string);
   if (itr == attributes.map().end()) {
     return FailedPrecondition("Expected an attribute %s.", id_string);
   }
   return itr->second;
+}
+StatusOr<std::string> GetAttribute(const FrontendAttributes& attributes,
+                                   const FrontendAttributeId id) {
+  std::string id_string = FrontendAttributeId_Name(id);
+  return GetAttribute(attributes, id_string);
 }
 
 StatusOr<ThreeState> ParseThreeState(const std::string& value) {
@@ -70,13 +75,6 @@ static Status InitialiseFunctionConfig(
 static Status InitialisePipelineConfig(
     const FrontendAttributes& attributes,
     PoplarBackendConfig::CallConfig::PipelineConfig* pipeline_config) {
-  // Get the pipeline depth.
-  TF_ASSIGN_OR_RETURN(std::string gradient_accumulation_count_str,
-                      GetAttribute(attributes, GRADIENT_ACCUMULATION_COUNT));
-  int64 gradient_accumulation_count =
-      std::stoll(gradient_accumulation_count_str);
-  pipeline_config->set_gradient_accumulation_count(gradient_accumulation_count);
-
   // Get the batch serialization iterations.
   TF_ASSIGN_OR_RETURN(
       std::string batch_serialization_iterations_str,
@@ -137,6 +135,12 @@ static Status InitialisePipelineConfig(
   TF_ASSIGN_OR_RETURN(auto recomputation_mode,
                       ParseRecomputationMode(recomputation_mode_str));
   pipeline_config->set_recomputation_mode(recomputation_mode);
+
+  TF_ASSIGN_OR_RETURN(
+      std::string gradient_accumulation_index,
+      GetAttribute(attributes, "GradientAccumulationOperandIndex"));
+  pipeline_config->set_gradient_accumulation_index(
+      std::stoll(gradient_accumulation_index));
   return Status::OK();
 }
 

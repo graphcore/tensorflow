@@ -193,6 +193,13 @@ class GroupNorm(test.TestCase):
     layer.build((1, 1, 1, 2))
     self.assertTrue(all(w.dtype == dtypes.float16 for w in layer.weights))
 
+  @test_util.run_v2_only
+  def testGetConfig(self):
+    layer = ipu.layers.GroupNormalization()
+    config = layer.get_config()
+    layer2 = ipu.layers.GroupNormalization.from_config(config)
+    self.assertEqual(config, layer2.get_config())
+
 
 class LayerTest(test.TestCase):
   def doTest(self,
@@ -322,6 +329,18 @@ class LayerTest(test.TestCase):
     layer.build((1, 1, 1, 2))
     self.assertTrue(all(w.dtype == dtypes.float16 for w in layer.weights))
 
+  @test_util.run_v2_only
+  def testGetConfig(self):
+    layer = ipu.layers.LayerNormalization()
+    config = layer.get_config()
+    layer2 = ipu.layers.LayerNormalization.from_config(config)
+    self.assertEqual(config, layer2.get_config())
+
+  @test_util.run_v2_only
+  def testUnknownShape(self):
+    with self.assertRaisesRegex(ValueError, "Input shape"):
+      _ = ipu.layers.LayerNormalization()(keras.Input((2, 2, 1)))
+
 
 class InstanceTest(test.TestCase):
   def doTest(self,
@@ -430,6 +449,13 @@ class InstanceTest(test.TestCase):
     layer = ipu.layers.InstanceNormalization()
     layer.build((1, 1, 1, 2))
     self.assertTrue(all(w.dtype == dtypes.float16 for w in layer.weights))
+
+  @test_util.run_v2_only
+  def testGetConfig(self):
+    layer = ipu.layers.InstanceNormalization()
+    config = layer.get_config()
+    layer2 = ipu.layers.InstanceNormalization.from_config(config)
+    self.assertEqual(config, layer2.get_config())
 
 
 if __name__ == '__main__':

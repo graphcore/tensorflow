@@ -213,14 +213,7 @@ class GradientAccumulatorSink : public XlaOpKernel, IpuOpKernel {
   explicit GradientAccumulatorSink(
       OpKernelConstruction* ctx,
       PoplarOp op = PoplarOp::GradientAccumulatorSink)
-      : XlaOpKernel(ctx), IpuOpKernel(), op_(op) {
-    int32 num_mini_batches;
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("num_mini_batches", &num_mini_batches));
-    OP_REQUIRES(
-        ctx, num_mini_batches > 0,
-        errors::FailedPrecondition("num_mini_batches needs to be at least 1."));
-    attribute_map_.AddAttribute("num_mini_batches", num_mini_batches);
-  }
+      : XlaOpKernel(ctx), IpuOpKernel(), op_(op) {}
 
   void Compile(XlaOpKernelContext* ctx) override {
     const DataType dtype = output_type(0);
@@ -244,5 +237,24 @@ class GradientAccumulatorSink : public XlaOpKernel, IpuOpKernel {
 };
 
 REGISTER_IPU_OP("GradientAccumulatorSink", GradientAccumulatorSink);
+
+class GradientAccumulationCount : public XlaOpKernel, IpuOpKernel {
+ public:
+  explicit GradientAccumulationCount(
+      OpKernelConstruction* ctx,
+      PoplarOp op = PoplarOp::GradientAccumulationCount)
+      : XlaOpKernel(ctx), IpuOpKernel(), op_(op) {}
+  void Compile(XlaOpKernelContext* ctx) override {
+    xla::XlaBuilder* b = ctx->builder();
+
+    xla::CustomCall(b, PoplarOp_Name(op_), {ctx->Input(0)},
+                    xla::ShapeUtil::MakeNil());
+  }
+
+ private:
+  const PoplarOp op_;
+};
+
+REGISTER_IPU_OP("GradientAccumulationCount", GradientAccumulationCount);
 
 }  // namespace tensorflow

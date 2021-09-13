@@ -16,6 +16,7 @@
 Convenience wrappers for v2 optimizers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
+from tensorflow.python.keras.optimizer_v1 import TFOptimizer
 from tensorflow.python.keras.optimizer_v2.optimizer_v2 import OptimizerV2
 from tensorflow.python.training.optimizer import Optimizer
 
@@ -39,22 +40,123 @@ class IpuOptimizer(OptimizerV2):
       name: The name to be passed to OptimizerV2 constructor.
       kwargs: The keyword arguments to be passed to OptimizerV2 constructor.
     """
-    super(IpuOptimizer, self).__init__(name, **kwargs)
     self._opt = opt
+    super().__init__(name=name, **kwargs)
+
+  def __setattr__(self, name, value):
+    """
+    Default wrapper for setattr to support dynamic hyperparameter setting
+    for the wrapped optimizer.
+
+    Args:
+      name: The name of the atrribute to set.
+      value: The value to set.
+    """
+    # Delegate setting hyperparameter to inner optimizer if the attribute does
+    # not exist on the LossScaleOptimizer
+    try:
+      # We cannot check for the 'iterations' attribute as it cannot be set after
+      # it is accessed.
+      if name != 'iterations':
+        object.__getattribute__(self, name)
+      has_attribute = True
+    except AttributeError:
+      has_attribute = False
+
+    if (name != '_opt' and name in self._opt._hyper and not has_attribute):  # pylint: disable=protected-access
+      self._opt._set_hyper(name, value)  # pylint: disable=protected-access
+    else:
+      super().__setattr__(name, value)
+
+  def __getattribute__(self, name):
+    """
+    Default wrapper to support hyperparameter access for the
+    wrapped optimizer.
+
+    Args:
+      name: The name of the attribute to get.
+    """
+    try:
+      return object.__getattribute__(self, name)
+    except AttributeError as e:
+      if name == '_opt' or name == '_hyper':
+        # Avoid infinite recursion
+        raise e
+
+      # Delegate hyperparameter accesses to inner optimizer.
+      if name in self._opt._hyper:  # pylint: disable=protected-access
+        return self._opt._get_hyper(name)  # pylint: disable=protected-access
+      raise e
+
+  def __dir__(self):
+    """
+    Default wrapper to support listing attributes of the wrapped optimizer.
+    """
+    result = set(super().__dir__())
+
+    if '_opt' in result:
+      result |= self._opt._hyper.keys()  # pylint: disable=protected-access
+    return list(result)
 
   def _create_slots(self, var_list):
     """
-    Default wrapper that calls the wrapped optimizer's _create_slots.
-
-    Args:
-      var_list: The var_list to be passed to wrapped optimizer's _create_slots.
+    Default wrapper that calls the wrapped optimizer's `_create_slots`.
     """
     return self._opt._create_slots(var_list)  # pylint: disable=protected-access
 
+  def _create_hypers(self):
+    """
+    Default wrapper that calls the wrapped optimizer's `_create_hypers`.
+    """
+    return self._opt._create_hypers()  # pylint: disable=protected-access
+
+  def _create_all_weights(self, var_list):
+    """
+    Default wrapper that calls the wrapped optimizer's `_create_all_weights`.
+    """
+    _ = self.iterations
+    return self._opt._create_all_weights(var_list)  # pylint: disable=protected-access
+
+  def _prepare(self, var_list):
+    """
+    Default wrapper that calls the wrapped optimizer's `_prepare`.
+    """
+    self._opt._prepare(var_list)  # pylint: disable=protected-access
+
+  def _transform_unaggregated_gradients(self, grads_and_vars):
+    """
+    Default wrapper that calls the wrapped optimizer's
+    `_transform_unaggregated_gradients`.
+    """
+    return self._opt._transform_unaggregated_gradients(grads_and_vars)  # pylint: disable=protected-access
+
+  def _aggregate_gradients(self, grads_and_vars):
+    """
+    Default wrapper that calls the wrapped optimizer's
+    `_aggregate_gradients`.
+    """
+    return self._opt._aggregate_gradients(grads_and_vars)  # pylint: disable=protected-access
+
+  def _transform_gradients(self, grads_and_vars):
+    """
+    Default wrapper that calls the wrapped optimizer's
+    `_transform_gradients`.
+    """
+    return self._opt._transform_gradients(grads_and_vars)  # pylint: disable=protected-access
+
+  def get_gradients(self, loss, params):
+    """
+    Default wrapper that calls the wrapped optimizer's `get_gradients`.
+
+    Args:
+      loss: A loss to compute gradients of.
+      params: A list of variables to compute gradients with respect to.
+    """
+    return self._opt.get_gradients(loss, params)  # pylint: disable=protected-access
+
   def _resource_apply_dense(self, grad, handle, apply_state):
     """
-    Default wrapper that calls the wrapped
-    optimizer's _resource_apply_dense.
+    Default wrapper that calls the wrapped optimizer's `_resource_apply_dense`.
 
     Args:
       grad: A `Tensor` representing the gradient.
@@ -70,7 +172,7 @@ class IpuOptimizer(OptimizerV2):
   def _resource_apply_sparse(self, grad, handle, indices, apply_state):
     """
     Default wrapper to call through to wrapped
-    optimizers _resource_apply_sparse.
+    optimizers `_resource_apply_sparse`.
 
     Args:
       grad: A `Tensor` representing the gradient for the affected indices.
@@ -86,11 +188,102 @@ class IpuOptimizer(OptimizerV2):
     return self._opt._resource_apply_sparse(  # pylint: disable=protected-access
         grad, handle, indices, apply_state)
 
+  @staticmethod
+  def _verify_config(config):
+    """Verifies an `IpuOptimizer` configuration.
+    """
+    if not 'inner_optimizer_config' in config:
+      raise ValueError(
+          "IpuOptimizer configuration dicts must contain a configuration "
+          "dict for the wrapped optimizer, inner_optimizer_config.")
+
+    if not 'inner_optimizer_type' in config:
+      raise ValueError("IpuOptimizer configuration dicts must contain a type "
+                       "for the wrapped optimizer, inner_optimizer_type.")
+
+    opt_type = config['inner_optimizer_type']
+    if not issubclass(opt_type, OptimizerV2):
+      raise ValueError(
+          "inner_optimizer_type must be a class derived from Keras OptimizerV2."
+      )
+
   def get_config(self):
+    """Returns the config of the `IpuOptimizer` instance.
+
+    An optimizer config is a Python dictionary (serializable)
+    containing the configuration of an optimizer.
+    The same optimizer can be reinstantiated later
+    (without any saved state) from this configuration.
+
+    The returned config will contain at a minimum, `inner_optimizer_config`,
+    `inner_optimizer_type` and `name`.
+
+    Returns:
+        Python dictionary.
     """
-    Default wrapper to call through to wrapped optimizers get_config.
+    return {
+        'inner_optimizer_config': self._opt.get_config(),
+        'inner_optimizer_type': self._opt.__class__,
+        'name': self._name
+    }
+
+  def get_slot(self, var, slot_name):
     """
-    return self._opt.get_config()  # pylint: disable=protected-access
+    Default wrapper that calls the wrapped optimizer's `get_slot`.
+
+    Args:
+      var: A variable to look up.
+      slot_name: The name of the slot.
+    """
+    return self.get_slot(var, slot_name)
+
+  def add_slot(self, var, slot_name, initializer="zeros"):
+    """
+    Default wrapper that calls the wrapped optimizer's `add_slot`.
+
+    Args:
+      var: A variable to add.
+      slot_name: The name of the slot.
+      initializer: Default initializer for `var`.
+    """
+    return self._opt.add_slot(var, slot_name, initializer=initializer)
+
+  def get_slot_names(self):
+    """
+    Default wrapper that calls the wrapped optimizer's `get_slot_names`.
+    """
+    return self._opt.get_slot_names()
+
+  def get_weights(self):
+    """
+    Default wrapper that calls the wrapped optimizer's `get_weights`.
+    """
+    return self._opt.get_weights()
+
+  def set_weights(self, weights):
+    """
+    Default wrapper that calls the wrapped optimizer's `set_weights`.
+
+    Args:
+      weights: The weights to set.
+    """
+    return self._opt.set_weights(weights)
+
+  def _restore_slot_variable(self, slot_name, variable, slot_variable):
+    """
+    Default wrapper that calls the wrapped optimizer's
+    `_restore_slot_variable`.
+    """
+    return self._opt._restore_slot_variable(slot_name, variable, slot_variable)  # pylint: disable=protected-access
+
+  def _create_or_restore_slot_variable(self, slot_variable_position, slot_name,
+                                       variable):
+    """
+    Default wrapper that calls the wrapped optimizer's
+    `_create_or_restore_slot_variable`.
+    """
+    return self._opt._create_or_restore_slot_variable(  # pylint: disable=protected-access
+        slot_variable_position, slot_name, variable)
 
   def preprocess_gradients(self, grad, var):
     """
@@ -100,6 +293,40 @@ class IpuOptimizer(OptimizerV2):
     if isinstance(self._opt, IpuOptimizer):
       return self._opt.preprocess_gradients(grad, var)
     return (grad, var)
+
+  def variables(self):
+    """
+    Returns the variables of the wrapped optimizer.
+    """
+    return self.weights
+
+  @property
+  def weights(self):
+    return self._opt.weights
+
+  @property
+  def clipnorm(self):
+    return self._opt.clipnorm
+
+  @clipnorm.setter
+  def clipnorm(self, val):
+    self._opt.clipnorm = val
+
+  @property
+  def global_clipnorm(self):
+    return self._opt.global_clipnorm
+
+  @global_clipnorm.setter
+  def global_clipnorm(self, val):
+    self._opt.global_clipnorm = val
+
+  @property
+  def clipvalue(self):
+    return self._opt.clipvalue
+
+  @clipvalue.setter
+  def clipvalue(self, val):
+    self._opt.clipvalue = val
 
 
 class _TensorflowOptimizerWrapper(Optimizer):
@@ -169,8 +396,12 @@ class _KerasOptimizerWrapper(Optimizer):
 
     v = var_list if not self._model else self._model.trainable_weights
 
-    grads = self._optimizer.get_gradients(loss, v)
-    grads_and_vars = zip(grads, v)
+    if isinstance(self._optimizer, TFOptimizer):
+      grads_and_vars = self._optimizer.get_grads(loss, v)
+    else:
+      grads = self._optimizer.get_gradients(loss, v)
+      grads_and_vars = zip(grads, v)
+
     return list(map(self.preprocess_gradients, grads_and_vars))
 
   def apply_gradients(self, grads_and_vars, global_step=None, name=None):
