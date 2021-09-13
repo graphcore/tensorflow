@@ -356,6 +356,7 @@ cc_library(
         "driver/tools/hlo_matcher.cc",
         "driver/tools/hlo_poplar_buffer_util.cc",
         "driver/tools/hlo_poplar_buffer.cc",
+        "driver/tools/hlo_poplar_dataflow_analysis.cc",
         "driver/tools/inplace_util.cc",
         "driver/tools/input_output_aliasing_map.cc",
         "driver/tools/instruction_colocator_helper.cc",
@@ -564,6 +565,7 @@ cc_library(
         "driver/tools/hlo_matcher.h",
         "driver/tools/hlo_poplar_buffer.h",
         "driver/tools/hlo_poplar_buffer_util.h",
+        "driver/tools/hlo_poplar_dataflow_analysis.h",
         "driver/tools/inplace_util.h",
         "driver/tools/input_output_aliasing_map.h",
         "driver/tools/instruction_colocator_helper.h",
@@ -4381,6 +4383,19 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "hlo_poplar_dataflow_analysis_test",
+    srcs = ["tests/hlo_poplar_dataflow_analysis_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
 tf_xla_py_test(
     name = "fuse_ops_test",
     size = "medium",
@@ -5772,6 +5787,7 @@ test_suite(
         "hlo_matcher_test",
         "hlo_poplar_buffer_test",
         "hlo_poplar_buffer_util_test",
+        "hlo_poplar_dataflow_analysis_test",
         "host_compute_barrier_inserter_test",
         "host_compute_schedule_optimizer_test",
         "inplace_test",

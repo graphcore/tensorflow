@@ -1,0 +1,610 @@
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_dataflow_analysis.h"
+
+#include <algorithm>
+#include <queue>
+#include <utility>
+#include <vector>
+
+#include "absl/container/flat_hash_set.h"
+#include "absl/container/inlined_vector.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
+
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+
+#include "tensorflow/compiler/xla/map_util.h"
+#include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_computation.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_instructions.h"
+#include "tensorflow/compiler/xla/service/hlo_opcode.h"
+#include "tensorflow/compiler/xla/shape_util.h"
+#include "tensorflow/compiler/xla/status.h"
+#include "tensorflow/compiler/xla/types.h"
+#include "tensorflow/compiler/xla/util.h"
+
+namespace xla {
+namespace poplarplugin {
+
+using ComputationInputBufferSets = std::vector<InstructionPoplarBufferSet*>;
+
+class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
+ public:
+  DataflowAnalysisBufferVisitor(
+      HloPoplarDataflowAnalysis* analysis,
+      const CompilerAnnotations& annotations,
+      ComputationInputBufferSets input_buffer_sets = {},
+      bool is_entry_computation = false)
+      : analysis_(analysis),
+        annotations_(annotations),
+        input_buffer_sets_(input_buffer_sets),
+        is_entry_computation_(is_entry_computation) {}
+
+  Status DefaultAction(HloInstruction* inst) override {
+    return UnimplementedStrCat("Trying to obtain buffer information for ",
+                               inst->ToString(), " which is not implemented.");
+  }
+
+  Status Postprocess(HloInstruction* inst) override {
+    const auto& instruction_set = analysis_->GetInstructionBufferSet(inst);
+
+    // Check each shape is defined at a leaf.
+    for (auto& indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
+      if (instruction_set.GetOutputBufferSet(indexed_shape.index).size() == 0) {
+        return InternalErrorStrCat("Cannot find buffer outputs for ",
+                                   inst->ToString(), " output index ",
+                                   indexed_shape.index.ToString());
+      }
+    }
+
+    return Status::OK();
+  }
+
+  Status HandleParameter(HloInstruction* inst) override {
+    // Create a buffer for each shape.
+    for (auto& indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
+      HloPoplarBufferSet buffer_set;
+      if (input_buffer_sets_.size()) {
+        // A buffer set was passed in at the callsite.
+        CHECK_LT(inst->parameter_number(), input_buffer_sets_.size());
+        buffer_set =
+            input_buffer_sets_[inst->parameter_number()]->GetOutputBufferSet(
+                indexed_shape.index);
+      } else {
+        // A buffer was not passed in at the callsite - create one.
+
+        // Check whether this buffer is a remote buffer.
+        const bool is_remote_buffer_parameter =
+            is_entry_computation_ &&
+            ContainsKey(annotations_.remote_parameter_infos,
+                        RemoteParameterInfo(inst->parameter_number()));
+
+        const BufferLocality locality = is_remote_buffer_parameter
+                                            ? BufferLocality::kRemoteMemory
+                                            : BufferLocality::kDeviceMemory;
+
+        HloPoplarBuffer* buffer =
+            analysis_->NewHloPoplarBuffer(inst, indexed_shape.index, locality);
+        buffer_set = HloPoplarBufferSet({buffer});
+      }
+
+      analysis_->SetInstructionBufferSetOutput(inst, indexed_shape.index,
+                                               buffer_set);
+    }
+    return Status::OK();
+  }
+
+  Status HandleFusion(HloInstruction* inst) override {
+    if (!IsPopOpsFusion(inst)) {
+      // A non poplibs fusion is inplace on all operands and the output buffers
+      // are derrived from the evaluated fusion computation.
+      return HandleInplaceVisitor(inst, inst->fused_instructions_computation());
+    }
+    // Get the input to output aliasing description.
+    TF_ASSIGN_OR_RETURN(auto backend_config,
+                        inst->backend_config<PoplarBackendConfig>());
+    const auto& fusion_config = backend_config.fusion_config();
+    const auto& inplace_descriptions_proto =
+        fusion_config.inplace_descriptions();
+
+    InstructionPoplarBufferSet instruction_set(inst->shape());
+    // Forward the buffer sets accordingly.
+    for (const auto& inplace_description_proto : inplace_descriptions_proto) {
+      const auto inplace_description =
+          HloPoplarUseDescription::FromProto(inplace_description_proto);
+      const HloInstruction* operand =
+          inst->operand(inplace_description.operand_number());
+      const auto& operand_buffer_set =
+          analysis_->GetBufferSet(operand, inplace_description.operand_index());
+
+      VLOG(2) << "Forwarding buffer set " << operand_buffer_set << " from "
+              << operand->ToString() << " to " << inst->ToString();
+
+      instruction_set.SetOutputToBufferSetUnion(
+          inplace_description.output_index(), operand_buffer_set);
+    }
+
+    // Generate buffers for all the outputs which don't have aliasing.
+    for (auto& indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
+      if (instruction_set.GetOutputBufferSet(indexed_shape.index).size() == 0) {
+        HloPoplarBuffer* buffer = analysis_->NewHloPoplarBuffer(
+            inst, indexed_shape.index,
+            /*locality=*/BufferLocality::kDeviceMemory);
+        instruction_set.SetOutputBufferSet(indexed_shape.index,
+                                           HloPoplarBufferSet({buffer}));
+      }
+    }
+
+    analysis_->SetInstructionBufferSet(inst, instruction_set);
+    return Status::OK();
+  }
+
+  Status HandleCustomCall(HloInstruction* inst) override {
+    if (!IsPoplibsHloCustomOp(inst)) {
+      return DefaultAction(inst);
+    }
+
+    InstructionPoplarBufferSet instruction_set(inst->shape());
+    auto poplar_inst = Cast<HloPoplarInstruction>(inst);
+    // First populate the uses.
+    for (const auto& use_description : poplar_inst->GetUseDescriptions()) {
+      const HloInstruction* operand =
+          inst->operand(use_description.operand_number());
+      const auto& operand_buffer_set =
+          analysis_->GetBufferSet(operand, use_description.operand_index());
+
+      VLOG(2) << "Forwarding buffer set " << operand_buffer_set << " from "
+              << operand->ToString() << " to " << inst->ToString();
+
+      instruction_set.SetOutputToBufferSetUnion(use_description.output_index(),
+                                                operand_buffer_set);
+    }
+
+    // Then create the output buffers.
+    for (const auto& buffer_description :
+         poplar_inst->GetBufferDescriptions()) {
+      HloPoplarBuffer* buffer =
+          analysis_->NewHloPoplarBuffer(inst, buffer_description.output_index(),
+                                        buffer_description.locality());
+
+      instruction_set.SetOutputToBufferSetUnion(
+          buffer_description.output_index(), HloPoplarBufferSet({buffer}));
+    }
+    analysis_->SetInstructionBufferSet(inst, instruction_set);
+
+    return Status::OK();
+  }
+
+#define HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(Name)                             \
+  Status Name(HloInstruction* inst) override {                                \
+    return HandleSimpleInplace(inst,                                          \
+                               /*kind=*/BufferUseKind::USE_ALIAS_READ_WRITE); \
+  }
+
+  // Unary Elementwise Ops - inplace on 0th operand.
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleAbs)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleCeil)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleClz)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleCos)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleExp)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleExpm1)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleFloor)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleLog1p)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleLog)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleNegate)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleNot)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandlePopulationCount)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleReal)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleRound)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleRsqrt)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleSign)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleSin)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleSqrt)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleTanh)
+  // Binary Elementwise ops - inplace on 0th operand.
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleAdd)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleAtan2)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleComplex)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleDivide)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleMaximum)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleMinimum)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleMultiply)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandlePower)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleRemainder)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleSubtract)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleShiftLeft)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleShiftRightArithmetic)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleShiftRightLogical)
+  // These ops are implemented as inplace ops on operand 0 as well.
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleDynamicUpdateSlice)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleScatter)
+
+#undef HANDLE_AS_SIMPLE_INPLACE_READ_WRITE
+
+#define HANDLE_LOGICAL_BINARY_ELEMENTWISE(Name)  \
+  Status Name(HloInstruction* inst) override {   \
+    return HandleLogicalBinaryElementwise(inst); \
+  }
+
+  HANDLE_LOGICAL_BINARY_ELEMENTWISE(HandleAnd)
+  HANDLE_LOGICAL_BINARY_ELEMENTWISE(HandleOr)
+  HANDLE_LOGICAL_BINARY_ELEMENTWISE(HandleXor)
+
+#undef HANDLE_LOGICAL_BINARY_ELEMENTWISE
+
+#define HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(Name)                             \
+  Status Name(HloInstruction* inst) override {                               \
+    return HandleSimpleInplace(inst,                                         \
+                               /*kind=*/BufferUseKind::USE_ALIAS_READ_ONLY); \
+  }
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleAddDependency)
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleBitcastConvert)
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleBroadcast)
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleReshape)
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleReverse)
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleSlice)
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleTranspose)
+
+#undef HANDLE_AS_SIMPLE_INPLACE_READ_ONLY
+
+#define HANDLE_AS_NOT_INPLACE(Name) \
+  Status Name(HloInstruction* inst) override { return HandleNotInplace(inst); }
+
+  HANDLE_AS_NOT_INPLACE(HandleAfterAll)
+  HANDLE_AS_NOT_INPLACE(HandleAllToAll)
+  HANDLE_AS_NOT_INPLACE(HandleBatchNormGrad)
+  HANDLE_AS_NOT_INPLACE(HandleBatchNormInference)
+  HANDLE_AS_NOT_INPLACE(HandleBatchNormTraining)
+  HANDLE_AS_NOT_INPLACE(HandleCompare)
+  HANDLE_AS_NOT_INPLACE(HandleConstant)
+  HANDLE_AS_NOT_INPLACE(HandleConvert)
+  HANDLE_AS_NOT_INPLACE(HandleConvolution)
+  HANDLE_AS_NOT_INPLACE(HandleCopy)
+  HANDLE_AS_NOT_INPLACE(HandleDomain)
+  HANDLE_AS_NOT_INPLACE(HandleDot)
+  HANDLE_AS_NOT_INPLACE(HandleDynamicSlice)
+  HANDLE_AS_NOT_INPLACE(HandleGather)
+  HANDLE_AS_NOT_INPLACE(HandleInfeed)
+  HANDLE_AS_NOT_INPLACE(HandleIota)
+  HANDLE_AS_NOT_INPLACE(HandleIsFinite)
+  HANDLE_AS_NOT_INPLACE(HandleOutfeed)
+  HANDLE_AS_NOT_INPLACE(HandleReduce)
+  HANDLE_AS_NOT_INPLACE(HandleReducePrecision)
+  HANDLE_AS_NOT_INPLACE(HandleReduceWindow)
+  HANDLE_AS_NOT_INPLACE(HandleRng)
+  HANDLE_AS_NOT_INPLACE(HandleSelectAndScatter)
+  HANDLE_AS_NOT_INPLACE(HandleTupleSelect)
+  // TODO(T20398): Clamp and Select could be inplace on operand index 1.
+  HANDLE_AS_NOT_INPLACE(HandleClamp)
+  HANDLE_AS_NOT_INPLACE(HandleSelect)
+
+#undef HANDLE_AS_NOT_INPLACE
+
+ private:
+  // Handles instructions which are inplace on all the inputs, call the "comp"
+  // computation and the output is the buffer outputs from the root instruction
+  // of that computation.
+  Status HandleInplaceVisitor(HloInstruction* inst, HloComputation* comp) {
+    ComputationInputBufferSets map_input_buffer_sets(inst->operand_count());
+    for (int64 i = 0; i != inst->operand_count(); ++i) {
+      map_input_buffer_sets[i] =
+          &analysis_->GetInstructionBufferSet(inst->operand(i));
+    }
+
+    DataflowAnalysisBufferVisitor visitor(analysis_, annotations_,
+                                          map_input_buffer_sets);
+    HloInstruction* root = comp->root_instruction();
+
+    // Run the visitor on the mapped computation.
+    TF_RETURN_IF_ERROR(comp->Accept(&visitor));
+
+    // Get the output buffers.
+    auto& root_set = analysis_->GetInstructionBufferSet(root);
+
+    VLOG(2) << "Forwarding instruction buffer set " << root_set << " from "
+            << root->ToString() << " to " << inst->ToString();
+    analysis_->SetInstructionBufferSet(inst, root_set);
+    return Status::OK();
+  }
+
+  // Inplace read-only which forward all the buffer sets from operands to an
+  // array shaped output.
+  Status HandleForwardsUnionOfAllOperands(HloInstruction* inst) {
+    CHECK_GT(inst->operand_count(), 0);
+    CHECK(inst->shape().IsArray());
+
+    std::vector<const HloPoplarBufferSet*> buffer_sets;
+    for (const HloInstruction* operand : inst->operands()) {
+      CHECK(operand->shape().IsArray());
+      buffer_sets.push_back(&analysis_->GetBufferSet(operand, {}));
+    }
+    HloPoplarBufferSet buffer_set;
+    buffer_set.AssignUnionOf(buffer_sets);
+
+    VLOG(2) << "Setting a union of buffer sets " << buffer_set << " to "
+            << inst->ToString();
+
+    analysis_->SetInstructionBufferSetOutput(inst, ShapeIndex{}, buffer_set);
+    return Status::OK();
+  }
+
+  // Inplace instructions where for each operand at index i, all the
+  // buffers for operand i are forward to the corresponding output index with
+  // prefix "i".
+  Status HandleInplaceForwardAllBuffers(HloInstruction* inst,
+                                        BufferUseKind kind) {
+    for (int64 i = 0; i != inst->operand_count(); ++i) {
+      HloInstruction* operand = inst->mutable_operand(i);
+      for (auto& indexed_shape : ShapeUtil::GetLeafShapes(operand->shape())) {
+        const HloPoplarPosition input_position{operand, indexed_shape.index};
+
+        ShapeIndex output_index = indexed_shape.index;
+        output_index.push_front(i);
+        const HloPoplarPosition output_position{inst, output_index};
+
+        const auto& buffer_set = analysis_->GetBufferSet(input_position);
+
+        VLOG(2) << "Forwarding buffer set " << buffer_set << " from "
+                << input_position << " to " << output_position;
+
+        analysis_->SetInstructionBufferSetOutput(inst, output_index,
+                                                 buffer_set);
+      }
+    }
+    return Status::OK();
+  }
+
+  // Simply defines instructions with non-tuple shapes as inplace on the 0th
+  // operand.
+  Status HandleSimpleInplace(HloInstruction* inst, BufferUseKind kind) {
+    CHECK_GT(inst->operand_count(), 0);
+    HloInstruction* operand_0 = inst->mutable_operand(0);
+
+    auto is_tuple_shape = [](const HloInstruction* a) {
+      return a->shape().IsTuple();
+    };
+
+    if (is_tuple_shape(inst) ||
+        absl::c_any_of(inst->operands(), is_tuple_shape)) {
+      return InternalErrorStrCat("Cannot handle tuple shaped instruction ",
+                                 inst->ToString(),
+                                 " as a simple inplace instruction");
+    }
+
+    // Simply forward the buffer set.
+    const auto& buffer_set = analysis_->GetBufferSet(operand_0);
+    analysis_->SetInstructionBufferSetOutput(inst, ShapeIndex{}, buffer_set);
+
+    VLOG(2) << "Forwarding buffer set " << buffer_set << " from "
+            << operand_0->ToString() << " to " << inst->ToString();
+    return Status::OK();
+  }
+
+  // Logical binary elementwise ops are inplace if their input/output type is
+  // the same.
+  Status HandleLogicalBinaryElementwise(HloInstruction* inst) {
+    if (inst->shape().element_type() ==
+        inst->operand(0)->shape().element_type()) {
+      return HandleSimpleInplace(inst,
+                                 /*kind=*/BufferUseKind::USE_ALIAS_READ_WRITE);
+    } else {
+      return HandleNotInplace(inst);
+    }
+  }
+
+  // A not inplace instruction defines all the output buffers on device.
+  Status HandleNotInplace(HloInstruction* inst) {
+    for (auto& indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
+      HloPoplarBuffer* buffer = analysis_->NewHloPoplarBuffer(
+          inst, indexed_shape.index,
+          /*locality=*/BufferLocality::kDeviceMemory);
+      analysis_->SetInstructionBufferSetOutput(inst, indexed_shape.index,
+                                               HloPoplarBufferSet({buffer}));
+    }
+    return Status::OK();
+  }
+
+  HloPoplarDataflowAnalysis* analysis_;
+  const CompilerAnnotations& annotations_;
+  const bool is_entry_computation_;
+  const ComputationInputBufferSets input_buffer_sets_;
+};
+
+HloPoplarDataflowAnalysis::HloPoplarDataflowAnalysis(const HloModule* module)
+    : module_(module) {}
+
+HloPoplarBuffer* HloPoplarDataflowAnalysis::NewHloPoplarBuffer(
+    HloInstruction* instruction, const ShapeIndex& index,
+    BufferLocality locality) {
+  const HloPoplarBuffer::Id buffer_id = next_buffer_id_++;
+  auto emplaced = buffers_.emplace(
+      std::piecewise_construct, std::forward_as_tuple(buffer_id),
+      std::forward_as_tuple(buffer_id, HloPoplarPosition{instruction, index},
+                            locality));
+  CHECK(emplaced.second);
+
+  VLOG(2) << "New HloPoplarBuffer = " << emplaced.first->second.ToString();
+
+  return &emplaced.first->second;
+}
+
+bool HloPoplarDataflowAnalysis::BufferIsDefinedAt(
+    const HloInstruction* instruction, const ShapeIndex& index) const {
+  const HloPoplarBufferSet& buffer_set = GetBufferSet(instruction, index);
+  if (buffer_set.size() != 1) {
+    return false;
+  }
+  return buffer_set.GetUniqueBuffer().instruction() == instruction;
+}
+
+const HloPoplarBuffer& HloPoplarDataflowAnalysis::GetBufferDefinedAt(
+    const HloInstruction* instruction, const ShapeIndex& index) const {
+  CHECK(BufferIsDefinedAt(instruction, index)) << instruction->ToString();
+  return GetUniqueBufferAt(instruction, index);
+}
+
+HloPoplarBuffer& HloPoplarDataflowAnalysis::GetBufferDefinedAt(
+    const HloInstruction* instruction, const ShapeIndex& index) {
+  CHECK(BufferIsDefinedAt(instruction, index));
+  return GetUniqueBufferAt(instruction, index);
+}
+
+std::string HloPoplarDataflowAnalysis::ToString() const {
+  std::string out =
+      absl::StrCat("HloPoplarDataflowAnalysis, module ", module_->name(), "\n");
+  absl::StrAppend(&out, "  Instruction buffer sets:\n");
+  for (const HloComputation* computation :
+       module_->MakeComputationPostOrder()) {
+    for (const HloInstruction* instruction :
+         computation->MakeInstructionPostOrder()) {
+      absl::StrAppend(&out, "Instruction: \n  ", instruction->name(), ":\n");
+      if (instruction->shape().IsTuple()) {
+        for (auto& indexed_shape :
+             ShapeUtil::GetLeafShapes(instruction->shape())) {
+          absl::StrAppend(&out, "      tuple index ",
+                          indexed_shape.index.ToString(), ":\n");
+          const HloPoplarBufferSet& buffer_set =
+              GetBufferSet(instruction, indexed_shape.index);
+          for (const HloPoplarBuffer* buffer : buffer_set.buffers()) {
+            absl::StrAppend(&out, "        ", buffer->ToString(),
+                            BufferIsDefinedAt(instruction, indexed_shape.index)
+                                ? " (def)"
+                                : "",
+                            "\n");
+          }
+        }
+      } else {
+        const HloPoplarBufferSet& buffer_set =
+            GetBufferSet(instruction, /*index=*/{});
+        for (const HloPoplarBuffer* buffer : buffer_set.buffers()) {
+          absl::StrAppend(&out, "      ", buffer->ToString(),
+                          BufferIsDefinedAt(instruction) ? " (def)" : "", "\n");
+        }
+      }
+    }
+  }
+  absl::StrAppend(&out, "\nHloPoplarBuffers:\n");
+  for (auto pair : buffers_) {
+    absl::StrAppend(&out, pair.second.ToString(), "\n");
+  }
+  return out;
+}
+
+const HloPoplarBuffer& HloPoplarDataflowAnalysis::GetBuffer(
+    HloPoplarBuffer::Id buffer_id) const {
+  CHECK(ContainsKey(buffers_, buffer_id));
+  return buffers_.at(buffer_id);
+}
+
+HloPoplarBuffer& HloPoplarDataflowAnalysis::GetBuffer(
+    HloPoplarBuffer::Id buffer_id) {
+  CHECK(ContainsKey(buffers_, buffer_id));
+  return buffers_.at(buffer_id);
+}
+
+const HloPoplarBufferSet& HloPoplarDataflowAnalysis::GetBufferSet(
+    const HloInstruction* instruction, const ShapeIndex& index) const {
+  return GetInstructionBufferSet(instruction).GetOutputBufferSet(index);
+}
+
+HloPoplarBufferSet& HloPoplarDataflowAnalysis::GetBufferSet(
+    const HloInstruction* instruction, const ShapeIndex& index) {
+  return GetInstructionBufferSet(instruction).GetMutableOutputBufferSet(index);
+}
+
+const HloPoplarBufferSet& HloPoplarDataflowAnalysis::GetBufferSet(
+    const HloPoplarPosition& position) const {
+  return GetBufferSet(position.instruction, position.index);
+}
+
+HloPoplarBufferSet& HloPoplarDataflowAnalysis::GetBufferSet(
+    const HloPoplarPosition& position) {
+  return GetBufferSet(position.instruction, position.index);
+}
+
+void HloPoplarDataflowAnalysis::SetInstructionBufferSetOutput(
+    const HloInstruction* instruction, const ShapeIndex& index,
+    const HloPoplarBufferSet& buffer_set) {
+  auto itr = buffer_sets_.find(instruction);
+  if (itr == buffer_sets_.end()) {
+    itr = buffer_sets_
+              .emplace(instruction,
+                       InstructionPoplarBufferSet(instruction->shape()))
+              .first;
+  }
+  itr->second.SetOutputBufferSet(index, buffer_set);
+}
+
+void HloPoplarDataflowAnalysis::SetInstructionBufferSet(
+    const HloInstruction* instruction,
+    const InstructionPoplarBufferSet& instruction_buffer_set) {
+  CHECK(!ContainsKey(buffer_sets_, instruction));
+  buffer_sets_.emplace(instruction, instruction_buffer_set);
+}
+
+const InstructionPoplarBufferSet&
+HloPoplarDataflowAnalysis::GetInstructionBufferSet(
+    const HloInstruction* instruction) const {
+  CHECK(ContainsKey(buffer_sets_, instruction));
+  return buffer_sets_.at(instruction);
+}
+
+InstructionPoplarBufferSet& HloPoplarDataflowAnalysis::GetInstructionBufferSet(
+    const HloInstruction* instruction) {
+  CHECK(ContainsKey(buffer_sets_, instruction));
+  return buffer_sets_.at(instruction);
+}
+
+Status HloPoplarDataflowAnalysis::InitializeAndPropagate(
+    const CompilerAnnotations& annotations) {
+  DataflowAnalysisBufferVisitor visitor(this, annotations,
+                                        /*input_buffer_sets=*/{},
+                                        /*is_entry_computation=*/true);
+  HloComputation* entry = module_->entry_computation();
+  TF_RETURN_IF_ERROR(entry->Accept(&visitor));
+  return Status::OK();
+}
+
+/* static */
+StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>>
+HloPoplarDataflowAnalysis::Run(const HloModule* module,
+                               const CompilerAnnotations& annotations) {
+  VLOG(1) << "HloPoplarDataflowAnalysis::Run on module " << module->name();
+  XLA_VLOG_LINES(3, module->ToString());
+
+  auto call_graph = CallGraph::Build(module);
+  if (!call_graph->IsFlattened()) {
+    return FailedPrecondition(
+        "Cannot perform HloPoplarDataflowAnalysis as the module is not flat.");
+  }
+
+  auto dataflow_analysis =
+      absl::WrapUnique(new HloPoplarDataflowAnalysis(module));
+
+  TF_RETURN_IF_ERROR(dataflow_analysis->InitializeAndPropagate(annotations));
+
+  XLA_VLOG_LINES(3, dataflow_analysis->ToString());
+
+  return std::move(dataflow_analysis);
+}
+}  // namespace poplarplugin
+}  // namespace xla
