@@ -52,7 +52,7 @@ namespace tensorflow {
 
 namespace {
 
-static constexpr int32 kApiLevel = 4;
+static constexpr int32 kApiLevel = 5;
 
 // From kernels/datatsteam/feeds.cc
 void XlaShapesFromAttr(OpKernelConstruction* ctx,

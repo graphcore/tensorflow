@@ -14,6 +14,24 @@ ________________
 
   These will require changes to any code that uses them.
 
+Custom user op metadata interface updates
+'''''''''''''''''''''''''''''''''''''''''
+
+The metadata interface for custom user ops has been updated with an additional parameter.
+
+Existing user ops must update their `custom_op_api_level` value to `5` and update their
+metadata function to match the following signature
+
+.. code-block:: cpp
+  :linenos:
+
+  void Build_metadata(
+    std::vector<std::int64_t>& allocating_indices,
+    std::vector<std::int64_t>& replica_identical_output_indices,
+    std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
+    bool& is_elementwise, bool& is_stateless, bool& is_hashable,
+    std::uint32_t num_inputs);
+
 The verified transfers feature has been removed
 '''''''''''''''''''''''''''''''''''''''''''''''
 

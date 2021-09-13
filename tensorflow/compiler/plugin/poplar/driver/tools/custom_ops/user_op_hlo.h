@@ -27,6 +27,11 @@ namespace poplarplugin {
 
 class HloUserOpInstruction : public HloPoplarInstruction {
  public:
+  using MetadataFn = void (*)(std::vector<std::int64_t>&,
+                              std::vector<std::int64_t>&,
+                              std::map<std::int64_t, std::int64_t>&, bool&,
+                              bool&, bool&, std::uint32_t);
+
   explicit HloUserOpInstruction(absl::Span<HloInstruction* const> operands,
                                 const Shape& shape, const std::string& gp_path,
                                 void*, void*, void*, int64 gradient_size,
@@ -35,6 +40,7 @@ class HloUserOpInstruction : public HloPoplarInstruction {
                                 const std::string& attributes);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64> ReplicaIdenticalOutputIndices() const;
   bool AllocatingOutput() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
@@ -92,15 +98,11 @@ class HloUserOpInstruction : public HloPoplarInstruction {
   std::string gp_path_;
 
   struct MetadataStructure {
-    MetadataStructure()
-        : allocating_indices_({}),
-          input_to_output_tensor_aliasing_({}),
-          is_elementwise_(false),
-          is_hashable_(false) {}
     std::vector<std::int64_t> allocating_indices_;
+    std::vector<std::int64_t> replica_identical_output_indices_;
     std::map<std::int64_t, std::int64_t> input_to_output_tensor_aliasing_;
-    bool is_elementwise_;
-    bool is_hashable_;
+    bool is_elementwise_ = false;
+    bool is_hashable_ = false;
   };
 
   MetadataStructure metadata_;
