@@ -145,7 +145,7 @@ inline void MaxPool(const PoolParams& params, const RuntimeShape& input_shape,
   }
 }
 
-inline void AveragePool16(const PoolParams& params,
+inline bool AveragePool16(const PoolParams& params,
                           const RuntimeShape& input_shape,
                           const int8* input_data,
                           const RuntimeShape& output_shape, int8* output_data) {
@@ -194,6 +194,7 @@ inline void AveragePool16(const PoolParams& params,
               std::min(params.filter_height, input_height - in_y_origin);
           const int filter_count =
               (filter_x_end - filter_x_start) * (filter_y_end - filter_y_start);
+          if (filter_count == 0) return false;
           memset(acc, 0, tranche_depth * sizeof(acc[0]));
           const int8* input_ptr =
               input_data + depth_base +
@@ -281,16 +282,18 @@ inline void AveragePool16(const PoolParams& params,
       }
     }
   }
+  return true;
 }
 
-inline void AveragePool(const PoolParams& params,
+inline bool AveragePool(const PoolParams& params,
                         const RuntimeShape& input_shape, const int8* input_data,
                         const RuntimeShape& output_shape, int8* output_data) {
   if (params.filter_height * params.filter_width > 16 * 16) {
-    reference_integer_ops::AveragePool(params, input_shape, input_data,
-                                       output_shape, output_data);
+    return reference_integer_ops::AveragePool(params, input_shape, input_data,
+                                              output_shape, output_data);
   } else {
-    AveragePool16(params, input_shape, input_data, output_shape, output_data);
+    return AveragePool16(params, input_shape, input_data, output_shape,
+                         output_data);
   }
 }
 
