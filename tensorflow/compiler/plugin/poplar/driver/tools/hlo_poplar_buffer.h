@@ -269,6 +269,10 @@ class HloPoplarBufferSet {
   // Add a buffer to the current set - returns true iff a buffer was added.
   bool AddBuffer(const HloPoplarBuffer* buffer);
 
+  // Sets this buffer set to the union of the given buffer sets. Returns whether
+  // this value set changed.
+  bool AssignUnionOf(absl::Span<const HloPoplarBufferSet* const> buffer_sets);
+
   bool operator==(const HloPoplarBufferSet& other) const;
   bool operator!=(const HloPoplarBufferSet& other) const;
 
@@ -297,9 +301,18 @@ class InstructionPoplarBufferSet {
   // Set the buffer set for a particular output index.
   void SetOutputBufferSet(const ShapeIndex& output_index,
                           const HloPoplarBufferSet& buffer_set);
+  // Gets the output buffer set at the output index, and reassigns it to the
+  // union of the current set and the input set.
+  void SetOutputToBufferSetUnion(const ShapeIndex& output_index,
+                                 const HloPoplarBufferSet& buffer_set);
 
   // Get the buffer set for a particular output index.
-  const HloPoplarBufferSet& GetOutputBufferSet(const ShapeIndex& output_index);
+  const HloPoplarBufferSet& GetOutputBufferSet(
+      const ShapeIndex& output_index) const;
+  HloPoplarBufferSet& GetMutableOutputBufferSet(const ShapeIndex& output_index);
+
+  bool operator==(const InstructionPoplarBufferSet& other) const;
+  bool operator!=(const InstructionPoplarBufferSet& other) const;
 
   std::string ToString() const;
 

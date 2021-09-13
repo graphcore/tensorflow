@@ -264,6 +264,22 @@ bool HloPoplarBufferSet::AddBuffer(const HloPoplarBuffer* buffer) {
   return false;
 }
 
+bool HloPoplarBufferSet::AssignUnionOf(
+    absl::Span<const HloPoplarBufferSet* const> buffer_sets) {
+  HloPoplarBufferSet union_set;
+  for (const HloPoplarBufferSet* buffer_set : buffer_sets) {
+    for (const HloPoplarBuffer* buffer : buffer_set->buffers()) {
+      union_set.buffers_.push_back(buffer);
+    }
+  }
+  union_set.SortAndUniquifyBuffers();
+  if (*this != union_set) {
+    *this = union_set;
+    return true;
+  }
+  return false;
+}
+
 bool HloPoplarBufferSet::operator==(const HloPoplarBufferSet& other) const {
   if (buffers_.size() != other.buffers_.size()) {
     return false;
@@ -313,11 +329,37 @@ void InstructionPoplarBufferSet::SetOutputBufferSet(
   *buffer_sets_.mutable_element(index_view) = buffer_set;
 }
 
+void InstructionPoplarBufferSet::SetOutputToBufferSetUnion(
+    const ShapeIndex& output_index, const HloPoplarBufferSet& buffer_set) {
+  ShapeIndexView index_view(output_index);
+  CHECK(buffer_sets_.IsLeaf(index_view));
+  HloPoplarBufferSet union_set;
+  union_set.AssignUnionOf({&buffer_sets_.element(index_view), &buffer_set});
+  *buffer_sets_.mutable_element(index_view) = union_set;
+}
+
 const HloPoplarBufferSet& InstructionPoplarBufferSet::GetOutputBufferSet(
-    const ShapeIndex& output_index) {
+    const ShapeIndex& output_index) const {
   ShapeIndexView index_view(output_index);
   CHECK(buffer_sets_.IsLeaf(index_view));
   return buffer_sets_.element(index_view);
+}
+
+HloPoplarBufferSet& InstructionPoplarBufferSet::GetMutableOutputBufferSet(
+    const ShapeIndex& output_index) {
+  ShapeIndexView index_view(output_index);
+  CHECK(buffer_sets_.IsLeaf(index_view));
+  return *buffer_sets_.mutable_element(index_view);
+}
+
+bool InstructionPoplarBufferSet::operator==(
+    const InstructionPoplarBufferSet& other) const {
+  return buffer_sets_ == other.buffer_sets_;
+}
+
+bool InstructionPoplarBufferSet::operator!=(
+    const InstructionPoplarBufferSet& other) const {
+  return !(*this == other);
 }
 
 std::string InstructionPoplarBufferSet::ToString() const {
