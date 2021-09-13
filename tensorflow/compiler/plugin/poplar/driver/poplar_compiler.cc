@@ -1201,8 +1201,6 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         " The number of shards needs to divide the number of local IPUs.");
   }
 
-  CHECK_LE(local_replication_factor, replication_factor);
-
   // Currently we only support performing replica partitioning across the local
   // replicas in each process, as this allows access to all the parts of a
   // partitioned remote buffer locally. This means that copying to/from all the
@@ -1210,8 +1208,28 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   // inter-process collective communication.
   const auto partition_replication_factor = local_replication_factor;
 
+  // The IPU-link domain size is the number of IPUs per IPU-link domain.
+  // A CPU target cannot be trusted to report a sensible value.
+  const auto num_ipu_link_domain_ipus =
+      target.getTargetType() == poplar::TargetType::CPU
+          ? num_ipus
+          : std::min(num_ipus, target.getIpuLinkDomainSize());
+  CHECK_GE(num_ipu_link_domain_ipus, num_shards);
+  CHECK_EQ(num_ipu_link_domain_ipus % num_shards, 0);
+  const auto ipu_link_domain_replication_factor =
+      num_ipu_link_domain_ipus / num_shards;
+
+  // Replication factor invariant: local <= ipu_link_domain <= global.
+  CHECK_LE(local_replication_factor, ipu_link_domain_replication_factor);
+  CHECK_LE(ipu_link_domain_replication_factor, replication_factor);
+
+  CHECK_EQ(replication_factor % ipu_link_domain_replication_factor, 0);
+  CHECK_EQ(ipu_link_domain_replication_factor % local_replication_factor, 0);
+
   VLOG(1) << "Local replication factor " << local_replication_factor
           << ", global replication factor " << replication_factor
+          << ", IPU-link domain replication factor "
+          << ipu_link_domain_replication_factor
           << ", partition replication factor " << partition_replication_factor;
 
   const auto information =
@@ -1434,7 +1452,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<PipelineFIFOInserter>(resources.remote_memory_supported);
       pipeline.AddPass<ReplicatedResourceUpdateElementwiseClustering>(
           resources.annotations, resources.partition_replication_factor,
-          resources.replication_factor);
+          resources.replication_factor, ipu_link_domain_replication_factor);
       {
         auto inline_fusion = [](const HloInstruction* inst) {
           return IsReplicatedParameterLoadFusion(inst) ||
