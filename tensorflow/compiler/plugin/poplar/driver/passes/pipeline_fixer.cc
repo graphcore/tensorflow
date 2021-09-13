@@ -635,14 +635,15 @@ StatusOr<bool> PipelineFixer::FixConstantGradients(
     }
     HloInstruction* rhs = sink_input->mutable_operand(1);
     VLOG(3) << "Replacing an accumulated constant gradient with a constant.";
-    const int32 multiplier =
-        GetResourceUpdateBatchesToAccumulate(resource_update) *
-        batch_serialization_iterations;
+
     // Create the constant for the gradient accumulation.
     Literal literal(ShapeUtil::MakeShape(S32, operand->shape().dimensions()));
-    literal.PopulateWithValue(multiplier);
+    literal.PopulateWithValue(static_cast<int32>(
+        batch_serialization_iterations *
+        (*GetResourceUpdateBatchesToAccumulate(resource_update))));
     HloInstruction* const_multiplier = pipeline_comp->AddInstruction(
         HloInstruction::CreateConstant(std::move(literal)));
+
     // Convert it to the right type.
     HloInstruction* cast_multiplier = pipeline_comp->AddInstruction(
         HloInstruction::CreateConvert(operand->shape(), const_multiplier));
@@ -799,6 +800,7 @@ Status PipelineFixer::InsertDummyBackwardStages(HloComputation* pipeline_comp) {
 
 Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   HloComputation* pipeline_comp = pipeline_op->to_apply();
+
   TF_RETURN_IF_ERROR(RemovePipelineWrapper(pipeline_comp));
 
   TF_RETURN_IF_ERROR(InsertDummyBackwardStages(pipeline_comp));

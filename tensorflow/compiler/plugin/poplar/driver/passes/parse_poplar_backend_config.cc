@@ -177,12 +177,6 @@ static Status InitialiseResourceUpdateConfig(
   resource_update_config->set_partition_offloaded_variables(
       partition_offload_variables);
 
-  // Get the num batches to accumulate flag.
-  TF_ASSIGN_OR_RETURN(std::string num_batches_to_accumulate_str,
-                      GetAttribute(attributes, NUM_BATCHES_TO_ACCUMULATE));
-  auto num_batches_to_accumulate = std::stoi(num_batches_to_accumulate_str);
-  resource_update_config->set_num_batches_to_accumulate(
-      num_batches_to_accumulate);
   return Status::OK();
 }
 

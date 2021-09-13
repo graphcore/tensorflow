@@ -116,6 +116,40 @@ Status GradientAccumulationVerifier::VerifyStatefulGradientAccumulation(
 }
 
 namespace {
+
+static StatusOr<HloInstruction*> FindCorrespondingResourceUpdate(
+    HloInstruction* sink) {
+  // Make sure the sink is only used by a resource update.
+  if (sink->user_count() != 1) {
+    return InternalErrorStrCat(
+        "Expected the gradient accumulation sink to only have a single "
+        "user, but has ",
+        sink->user_count(), " users.");
+  }
+  HloInstruction* candidate = sink->users()[0];
+  if (IsResourceUpdate(candidate)) {
+    return candidate;
+  }
+  return InternalErrorStrCat(
+      "Expected the gradient accumulation sink to be used by a resource "
+      "update, but was used by ",
+      candidate->name(), " instead.");
+}
+
+static Status HasGradientAccumulationInstruction(const HloInstruction* inst) {
+  CHECK(IsResourceUpdate(inst));
+  const bool check = absl::c_any_of(
+      inst->to_apply()->instructions(), [](const HloInstruction* candidate) {
+        return IsPoplarInstruction(PoplarOp::GradientAccumulationCount)(
+            candidate);
+      });
+  return check ? Status::OK()
+               : InternalErrorStrCat(
+                     "No gradient accumulation count instruction found for"
+                     " resource update instruction ",
+                     inst->name());
+}
+
 StatusOr<int64> VerifyGradientAccumulationInsideComputation(
     const HloComputation* computation, int64 parameter_index) {
   // Expect the gradient accumulator to be used serially, with the final use in
@@ -210,6 +244,10 @@ std::vector<const HloInstruction*> GetGTEUsers(const HloInstruction* root_gte) {
 
 Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
     HloInstruction* const inst, CallGraph* call_graph) {
+  if (IsResourceUpdate(inst)) {
+    return HasGradientAccumulationInstruction(inst);
+  }
+
   if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst)) {
     return Status::OK();
   }
@@ -274,34 +312,30 @@ Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
       user = next_user;
     }
 
-    // Make sure the sink is only used by a resource update.
-    if (user->user_count() != 1) {
-      return InternalErrorStrCat(
-          "Expected the gradient accumulation sink to only have a single "
-          "user, but has ",
-          user->user_count(), " users.");
-    }
+    TF_ASSIGN_OR_RETURN(HloInstruction * resource_update,
+                        FindCorrespondingResourceUpdate(user));
 
-    const HloInstruction* resource_update = user->users()[0];
-    if (!IsResourceUpdate(resource_update)) {
-      return InternalErrorStrCat(
-          "Expected the gradient accumulation sink to be used by a resource "
-          "update, but was used by ",
-          user->user_count(), " instead.");
-    }
+    TF_RETURN_IF_ERROR(HasGradientAccumulationInstruction(resource_update));
 
     // Make sure that the number of iterations divides the number of mini
     // batches to accumulate.
     const int64 repeat_count = GetRepeatLoopCount(caller);
-    const int64 num_batches_to_accumulate =
+    const auto num_batches_to_accumulate =
         GetResourceUpdateBatchesToAccumulate(resource_update);
-    if (repeat_count % num_batches_to_accumulate) {
+    if (!num_batches_to_accumulate) {
+      // If want to enable this should only have to change the repeat loop
+      // visitor program generation
+      return FailedPrecondition(
+          "Can't have runtime num mini batches for"
+          " resource update");
+    }
+    if (repeat_count % *num_batches_to_accumulate) {
       return FailedPrecondition(
           "Detected a gradient accumulation operation with %d number of "
           "mini batches inside a loop with %d iterations.\n"
           "It is required that the number of mini batches to accumulate "
           "evenly divides the number of loop iterations.",
-          num_batches_to_accumulate, repeat_count);
+          *num_batches_to_accumulate, repeat_count);
     }
 
     // Make sure the resource update is only used by the root (via GTEs).

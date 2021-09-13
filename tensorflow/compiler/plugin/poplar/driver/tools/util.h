@@ -183,7 +183,11 @@ ThreeState GetPipelineOffloadGradientAccumulationBuffers(const HloInstruction*);
 ThreeState GetPipelinePartitionVariables(const HloInstruction*);
 ThreeState GetPipelineOffloadVariables(const HloInstruction*);
 int64 GetPipelineStageID(const HloInstruction*);
-int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction*);
+const HloInstruction* GetResourceUpdateNumMiniBatchesInstruction(
+    const HloInstruction*);
+HloInstruction* GetResourceUpdateNumMiniBatchesInstruction(HloInstruction*);
+absl::optional<int64> GetResourceUpdateBatchesToAccumulate(
+    const HloInstruction*);
 ThreeState GetResourceUpdateOffloadVariables(const HloInstruction*);
 ThreeState GetResourceUpdatePartitionOffloadedVariables(const HloInstruction*);
 bool GetFunctionPartitionedElementwiseCluster(const HloInstruction*);

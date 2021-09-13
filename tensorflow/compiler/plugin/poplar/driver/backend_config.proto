@@ -177,9 +177,8 @@ message PoplarBackendConfig {
     }
 
     message ResourceUpdateConfig {
-      int64 num_batches_to_accumulate = 1;
-      ThreeState offload_variables = 2;
-      ThreeState partition_offloaded_variables = 3;
+      ThreeState offload_variables = 1;
+      ThreeState partition_offloaded_variables = 2;
     }
 
     Type type = 1;

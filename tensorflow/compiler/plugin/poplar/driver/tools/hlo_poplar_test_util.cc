@@ -85,6 +85,9 @@ std::string GetTemplateHloString(const std::string& wu, int n, int m,
     arg2 = f32[$N,$M] parameter(2)
     arg3 = f32[$N,$M] parameter(3)
 
+    %counter_0 = s32[] constant($B)
+    gac = () custom-call(s32[] %counter_0), custom_call_target="GradientAccumulationCount"
+
     $WU
   }
 
@@ -99,7 +102,7 @@ std::string GetTemplateHloString(const std::string& wu, int n, int m,
     arg3 = f32[$N,$M] parameter(3)
     add.1 = f32[$N,$M] add(input, arg0)
     add.2 = f32[$N,$M] add(input, arg1)
-    call = (f32[$N,$M],f32[$N,$M],f32[$N,$M],f32[$N,$M]) call(add.1, add.2, arg2, arg3), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\", \"num_batches_to_accumulate\": $B}}}"
+    call = (f32[$N,$M],f32[$N,$M],f32[$N,$M],f32[$N,$M]) call(add.1, add.2, arg2, arg3), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
     gte0 = f32[$N,$M] get-tuple-element(call), index=0
     gte1 = f32[$N,$M] get-tuple-element(call), index=1
     gte2 = f32[$N,$M] get-tuple-element(call), index=2

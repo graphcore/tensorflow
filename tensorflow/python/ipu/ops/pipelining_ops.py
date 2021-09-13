@@ -705,6 +705,10 @@ def pipeline(computational_stages,
     if gradient_accumulation_count > np.iinfo(np.int32).max:
       raise ValueError("gradient_accumulation_count must be < max int32.")
 
+  gradient_accumulation_count = math_ops.cast(
+      ops.convert_to_tensor(gradient_accumulation_count,
+                            dtype_hint=dtypes.int32), dtypes.int32)
+
   # Ensure inputs is a list, without casting inputs to a boolean. Casting
   # a tf.Tensor to a boolean will be interpreted as an operation in the
   # graph by Autograph.
@@ -882,7 +886,8 @@ def pipeline(computational_stages,
   control_outputs = []
 
   def _pipeline(*args):
-    outputs = args
+    outputs = args[1:]
+    captured_gradient_accumulation_count = args[0]
     training = optimizer_function is not None
 
     outfeed_sinks = []
@@ -1006,7 +1011,8 @@ def pipeline(computational_stages,
       # allow external caputres here.
       resource_update_ops = []
 
-      def resource_update_():
+      def resource_update_(accumulation_count):
+        gen_poputil_ops.gradient_accumulation_count(accumulation_count)
         if training:
           apply_grads = opt.apply_gradients(accumulated_grads_and_vars,
                                             *apply_gradients_args,
@@ -1025,7 +1031,7 @@ def pipeline(computational_stages,
       outputs = op_util.create_resource_update(
           resource_update_, name, resource_update_ops,
           offload_weight_update_variables, replicated_optimizer_state_sharding,
-          gradient_accumulation_count)
+          captured_gradient_accumulation_count)
 
     if not isinstance(outputs, ops.Operation):
       if not outfeed_queue:
@@ -1043,6 +1049,7 @@ def pipeline(computational_stages,
 
   with ops.name_scope(name) as scope:
     # pylint: disable=protected-access
+    inputs = [gradient_accumulation_count] + inputs
     try:
       func_graph, captured_args, _ = functional_ops._compile_function(
           _pipeline, inputs, scope, control_outputs)
@@ -1052,10 +1059,6 @@ def pipeline(computational_stages,
           " needs to be passed as either part of the `input` or `infeed_queue`"
           " of the pipeline." % (str(e)))
     # pylint: enable=protected-access
-
-    gradient_accumulation_count = math_ops.cast(
-        ops.convert_to_tensor(gradient_accumulation_count,
-                              dtype_hint=dtypes.int32), dtypes.int32)
 
     # Create the pipeline and lower the function into XLA.
     with ops.control_dependencies(list(func_graph.control_captures)):

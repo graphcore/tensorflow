@@ -501,7 +501,7 @@ Status CheckLoopOpaqueAliasing(CompilerResources& res,
 }
 
 namespace {
-bool HasSmallGradientAccumulation(const HloInstruction* inst) {
+bool CouldHaveSmallGradientAccumulation(const HloInstruction* inst) {
   // Find a resource update instruction.
   const auto insts = inst->to_apply()->instructions();
   auto itr = absl::c_find_if(insts, IsResourceUpdate);
@@ -513,7 +513,8 @@ bool HasSmallGradientAccumulation(const HloInstruction* inst) {
   }
 
   // There is a gradient accumulation loop, so test its iteration count.
-  if (GetResourceUpdateBatchesToAccumulate(*itr) > 1) {
+  const auto batches = GetResourceUpdateBatchesToAccumulate(*itr);
+  if (batches && *batches > 1) {
     return false;
   }
 
@@ -541,7 +542,8 @@ StatusOr<std::unique_ptr<RepeatLoopVisitor>> CreateLoopVisitor(
   const int64 repeat_count = GetRepeatLoopCount(inst);
 
   // We also can't overlap small gradient accumulation factors.
-  const bool small_gradient_accumulation = HasSmallGradientAccumulation(inst);
+  const bool small_gradient_accumulation =
+      CouldHaveSmallGradientAccumulation(inst);
 
   if (SingleIPUComputation(inst->to_apply()) && has_io_tile_inst &&
       repeat_count > 1 && !small_gradient_accumulation) {

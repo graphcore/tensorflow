@@ -52,8 +52,9 @@ Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
     poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
 
     has_resource_update_ = true;
+    // gradient_accumulation_verifier should ensure this optional is filled
     num_mini_batches_to_accumulate_ =
-        GetResourceUpdateBatchesToAccumulate(inst);
+        *GetResourceUpdateBatchesToAccumulate(inst);
 
     TF_ASSIGN_OR_RETURN(
         DeferredArgRBVectors inputs,

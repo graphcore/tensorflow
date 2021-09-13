@@ -80,6 +80,8 @@ std::string GetTemplateHloString() {
     %arg2_convert = $DT[$R,$E] convert(%arg2)
     %add = $DT[$R,$E] add($DT[$R,$E] %arg0, $DT[$R,$E] %arg2_convert), metadata={op_type="ResourceApplyMomentum" op_name="Add"}, backend_config="{}"
     ROOT %mul = $DT[$R,$E] subtract($DT[$R,$E] %arg1, $DT[$R,$E] %add), metadata={op_type="ResourceApplyMomentum" op_name="Mul"}, backend_config="{}"
+    %counter_0 = s32[] constant($BN)
+    gac = () custom-call(s32[] %counter_0), custom_call_target="GradientAccumulationCount"
     }
 
     %RepeatLoopBody {
@@ -96,7 +98,7 @@ std::string GetTemplateHloString() {
     %custom-call.2 = $DT[$R,$E] custom-call($DT[$R,$E] %arg1, s32[$BS,1] %broadcast.indices, $DT[$BS,$E] %broadcast.update, $DT[] %const.scale), custom_call_target="MultiUpdateAdd", metadata={op_type="IpuMultiUpdateAdd" op_name="gradients/embedding_lookup_grad/IpuMultiUpdateAdd"}, backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"serialization_factor\":1}"
     %custom-call.3 = $AT[$R,$E] custom-call($AT[$R,$E] %custom-call.1, $DT[$R,$E] %custom-call.2), custom_call_target="GradientAccumulatorAdd", metadata={op_type="GradientAccumulatorAdd" op_name="GradientAccumulatorAdd"}, backend_config="{}"
     %custom-call.4 = $AT[$R,$E] custom-call($AT[$R,$E] %custom-call.3), custom_call_target="GradientAccumulatorSink", metadata={op_type="GradientAccumulatorSink" op_name="GradientAccumulatorSink"}, backend_config="{\"num_mini_batches\":$BN}"
-    ROOT %call.1 = $DT[$R,$E] call($DT[$R,$E] %arg0, $DT[$R,$E] %arg1, $AT[$R,$E] %custom-call.4), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"numBatchesToAccumulate\":\"$BN\",\"offloadVariables\":\"THREESTATE_ON\"}}}"
+    ROOT %call.1 = $DT[$R,$E] call($DT[$R,$E] %arg0, $DT[$R,$E] %arg1, $AT[$R,$E] %custom-call.4), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\"}}}"
     }
 
     ENTRY %main {
@@ -119,6 +121,8 @@ std::string GetPipelineTemplateHloString() {
     %arg2_convert = $DT[$R,$E] convert(%arg2)
     %add = $DT[$R,$E] add($DT[$R,$E] %arg0, $DT[$R,$E] %arg2_convert), metadata={op_type="ResourceApplyMomentum" op_name="Add"}, backend_config="{}"
     ROOT %mul = $DT[$R,$E] subtract($DT[$R,$E] %arg1, $DT[$R,$E] %add), metadata={op_type="ResourceApplyMomentum" op_name="Mul"}, backend_config="{}"
+    %counter_0 = s32[] constant($BN)
+    gac = () custom-call(s32[] %counter_0), custom_call_target="GradientAccumulationCount"
     }
 
     %PipelineStage {
@@ -156,7 +160,7 @@ std::string GetPipelineTemplateHloString() {
     %get-tuple-element.dummy.6 = $DT[$E] get-tuple-element(%call.1), index=1
     %get-tuple-element.dummy.7 = $DT[$E] get-tuple-element(%call.1), index=1
     %custom-call.2 = $AT[$R,$E] custom-call($AT[$R,$E] %get-tuple-element.1), custom_call_target="GradientAccumulatorSink", metadata={op_type="GradientAccumulatorSink" op_name="GradientAccumulatorSink"}, backend_config="{\"num_mini_batches\":$BN}"
-    ROOT %call.2 = $DT[$R,$E] call(%arg0, %arg1, %custom-call.2, %get-tuple-element.2), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"numBatchesToAccumulate\":\"$BN\",\"offloadVariables\":\"THREESTATE_ON\"}}}"
+    ROOT %call.2 = $DT[$R,$E] call(%arg0, %arg1, %custom-call.2, %get-tuple-element.2), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\"}}}"
     }
 
     ENTRY %main {
