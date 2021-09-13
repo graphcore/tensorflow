@@ -21,7 +21,7 @@ limitations under the License.
 #include <popops/ElementWise.hpp>
 
 extern "C" {
-int32_t custom_op_api_level = 4;
+int32_t custom_op_api_level = 5;
 }
 
 namespace pe = popops::expr;
@@ -43,6 +43,7 @@ extern "C" poplar::program::Program UnhashableTest(
 
 extern "C" void UnhashableTest_metadata(
     std::vector<std::int64_t>& allocating_indices,
+    std::vector<std::int64_t>& replica_identical_output_indices,
     std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
     bool& is_elementwise, bool& is_stateless, bool& is_hashable,
     std::uint32_t num_inputs) {
@@ -66,6 +67,7 @@ extern "C" poplar::program::Program HashableTest(
 
 extern "C" void HashableTest_metadata(
     std::vector<std::int64_t>& allocating_indices,
+    std::vector<std::int64_t>& replica_identical_output_indices,
     std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
     bool& is_elementwise, bool& is_stateless, bool& is_hashable,
     std::uint32_t num_inputs) {

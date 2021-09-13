@@ -22,7 +22,7 @@ limitations under the License.
 #include <unordered_set>
 
 extern "C" {
-int32_t custom_op_api_level = 4;
+int32_t custom_op_api_level = 5;
 }
 
 namespace pe = popops::expr;

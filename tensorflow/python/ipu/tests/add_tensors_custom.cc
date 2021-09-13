@@ -18,7 +18,7 @@ limitations under the License.
 #include <poplar/Tensor.hpp>
 
 extern "C" {
-int32_t custom_op_api_level = 4;
+int32_t custom_op_api_level = 5;
 }
 
 extern "C" void Callback(const std::vector<void*>& data,
