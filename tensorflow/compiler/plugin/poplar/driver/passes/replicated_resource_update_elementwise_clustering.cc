@@ -280,6 +280,19 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
     // replica 3: 0 1 1 1                       1 2                     3 4
     //            -------                   -------                 -------
 
+    if (ipu_link_domain_replication_factor_ < global_replication_factor_ &&
+        partition_replication_factor_ < ipu_link_domain_replication_factor_) {
+      // TODO(T45704): GCL does not support this and will report an error, but
+      // the message might be hard to understand for the user. So we catch it
+      // here to attempt to report a more understandable error message.
+      return Unimplemented(
+          "Replicated partitioning is not supported when there are multiple "
+          "instances per IPU-link domain. The number of local replicas per "
+          "partitioning domain (%u) is less than the number of replicas "
+          "per IPU-link domain (%u).",
+          partition_replication_factor_, ipu_link_domain_replication_factor_);
+    }
+
     CHECK_NE(partition_replication_factor_, 0);
     CHECK_EQ(global_replication_factor_ % partition_replication_factor_, 0);
     const uint64 orthogonal_group_size =
@@ -549,7 +562,7 @@ ReplicatedResourceUpdateElementwiseClustering::UpdateClusterBackendConfig(
           cluster, backend_config));
   auto* call_config = backend_config.mutable_call_config();
   auto* function_config = call_config->mutable_function_config();
-  // Setting parititoned_elementwise_cluster attribute indicates that we will
+  // Setting partitioned_elementwise_cluster attribute indicates that we will
   // process those clusters differently:
   // - Remote buffer outlining pass will outline load/stores regardless if it's
   // unique or not.
