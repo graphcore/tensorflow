@@ -467,8 +467,7 @@ StatusOr<absl::flat_hash_set<HloComputation*>> GetComputationsToSkip(
   // interefering.
   std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
   absl::flat_hash_set<HloComputation*> computations_to_skip;
-  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
-                      GetPipelines(module));
+  TF_ASSIGN_OR_RETURN(auto pipeline_ops, GetPipelines(module));
   for (HloInstruction* pipeline_op : pipeline_ops) {
     TF_ASSIGN_OR_RETURN(
         absl::flat_hash_set<HloComputation*> pipeline_comps,

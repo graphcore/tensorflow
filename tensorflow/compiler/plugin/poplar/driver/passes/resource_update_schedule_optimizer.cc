@@ -72,8 +72,7 @@ StatusOr<bool> ResourceUpdateScheduleOptimizer::Run(HloModule* module) {
   bool changed = false;
 
   // Run it for pipelines.
-  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
-                      GetPipelines(module));
+  TF_ASSIGN_OR_RETURN(auto pipeline_ops, GetPipelines(module));
   for (HloInstruction* pipeline_op : pipeline_ops) {
     HloComputation* pipeline_comp = pipeline_op->to_apply();
     TF_ASSIGN_OR_RETURN(PipelineStages stages,

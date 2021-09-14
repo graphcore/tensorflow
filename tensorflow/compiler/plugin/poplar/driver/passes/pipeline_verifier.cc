@@ -168,8 +168,7 @@ Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
 StatusOr<bool> PipelineVerifier::Run(HloModule* module) {
   // First verify the usage of PipelineStatefulGradientAccumulate.
   std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
-  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
-                      GetPipelines(module));
+  TF_ASSIGN_OR_RETURN(auto pipeline_ops, GetPipelines(module));
   if (pipeline_ops.empty()) {
     // No pipeline ops found - nothing to verify.
     return false;

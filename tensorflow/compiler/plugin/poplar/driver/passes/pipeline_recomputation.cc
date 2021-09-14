@@ -509,8 +509,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
 
 StatusOr<std::vector<HloInstruction*>>
 PipelineRecomputation::GetInstructionsToRecompute(HloModule* module) {
-  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
-                      GetPipelines(module));
+  TF_ASSIGN_OR_RETURN(auto pipeline_ops, GetPipelines(module));
   std::vector<HloInstruction*> instructions_to_recompute;
 
   for (HloInstruction* pipeline_op : pipeline_ops) {
@@ -540,8 +539,7 @@ StatusOr<bool> PipelineRecomputation::Run(HloModule* module) {
     return false;
   }
 
-  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
-                      GetPipelines(module));
+  TF_ASSIGN_OR_RETURN(auto pipeline_ops, GetPipelines(module));
   if (pipeline_ops.empty()) {
     // No pipeline ops found - nothing to fix.
     return false;
