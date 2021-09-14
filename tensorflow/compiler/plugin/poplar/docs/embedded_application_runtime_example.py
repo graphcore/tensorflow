@@ -62,11 +62,13 @@ inputs = []
 engine_name = "my_engine"
 ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
                                               engine_name)
+# Create the call op and the input placeholder.
+input_placeholder = tf.placeholder(tf.float32, shape=[element_count])
+call_result = embedded_runtime.embedded_runtime_call([input_placeholder], ctx)
 
 # Call the application.
 # This should print the even numbers 0 to 30.
 for i in range(loop_count):
   with tf.Session() as sess:
-    call_result = embedded_runtime.embedded_runtime_call(
-        [np.ones(element_count, dtype=np.float32) * i], ctx)
-    print(sess.run(call_result))
+    input_data = np.ones(element_count, dtype=np.float32) * i
+    print(sess.run(call_result, feed_dict={input_placeholder: input_data}))
