@@ -91,8 +91,10 @@ class ValuesIdenticalAcrossReplicasVisitor
 #undef HandleAsReplicaDiffering
 
  private:
+  Status HandleAllGather(const HloInstruction* inst);
   Status HandleRepeatLoop(const HloInstruction* call,
                           const HloComputation* body, int64 repeat_count);
+  Status HandleUserOp(const HloInstruction* inst);
 
   // Visit a HloComputation using a specific value category for each of its
   // parameters, returning the value categories of the root instruction and

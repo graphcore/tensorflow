@@ -19,6 +19,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -245,17 +246,13 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleConditional(
 Status ValuesIdenticalAcrossReplicasVisitor::HandleCustomCall(
     const HloInstruction* inst) {
   if (IsPoplarInstruction(PoplarOp::AllGather, inst)) {
-    const auto* all_gather = Cast<HloPoplarAllGatherInstruction>(inst);
-    // A default constructed PoplarReplicaGroups refers to a single group
-    // containing all replicas
-    const auto gather_all_replicas =
-        all_gather->GetPoplarReplicaGroups() == PoplarReplicaGroups();
-    return SetAllInstructionValuesToIdenticalOrDiffering(all_gather,
-                                                         gather_all_replicas);
+    return HandleAllGather(inst);
   } else if (IsPoplarInstruction(PoplarOp::AssumeEqualAcrossReplicas, inst)) {
     // AssumeEqual is a special case were we always want it to be treated
     // as replica identical.
     return SetAllInstructionValuesToIdentical(inst);
+  } else if (IsPoplarInstruction(PoplarOp::UserOp, inst)) {
+    return HandleUserOp(inst);
   }
 
   return DefaultAction(inst);
@@ -393,6 +390,17 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleWhile(
   return SetAllInstructionValuesToDiffering(inst);
 }
 
+Status ValuesIdenticalAcrossReplicasVisitor::HandleAllGather(
+    const HloInstruction* inst) {
+  const auto* all_gather = Cast<HloPoplarAllGatherInstruction>(inst);
+  // A default constructed PoplarReplicaGroups refers to a single group
+  // containing all replicas
+  const auto gather_all_replicas =
+      all_gather->GetPoplarReplicaGroups() == PoplarReplicaGroups();
+  return SetAllInstructionValuesToIdenticalOrDiffering(all_gather,
+                                                       gather_all_replicas);
+}
+
 Status ValuesIdenticalAcrossReplicasVisitor::HandleRepeatLoop(
     const HloInstruction* call, const HloComputation* body,
     int64 repeat_count) {
@@ -429,6 +437,41 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleRepeatLoop(
   } else {
     TF_ASSIGN_OR_RETURN(value_category_mapping_[call],
                         VisitSubComputation(body, call));
+  }
+
+  return Status::OK();
+}
+
+Status ValuesIdenticalAcrossReplicasVisitor::HandleUserOp(
+    const HloInstruction* inst) {
+  const auto* user_op = Cast<HloUserOpInstruction>(inst);
+
+  // This set contains the output indices that are replica identical. So if our
+  // user op returns a tuple then the values of that tuple are identical if
+  // their index is in this set. Otherwise we only produce a single value and so
+  // are replica identical if the set contains index 0.
+  const absl::flat_hash_set<int64>& replica_identical_output_indices =
+      user_op->ReplicaIdenticalOutputIndices();
+
+  const auto user_op_shape = user_op->shape();
+  if (user_op_shape.IsTuple()) {
+    value_category_mapping_[inst] = ValueCategoryTree(user_op_shape);
+
+    bool all_values_identical = true;
+    for (int64 i = 0, end = ShapeUtil::TupleElementCount(user_op_shape);
+         i < end; ++i) {
+      const bool output_identical =
+          replica_identical_output_indices.contains(i);
+      all_values_identical &= output_identical;
+
+      SetInstrucionValueToIdenticalOrDiffering(inst, {i}, output_identical);
+    }
+    SetInstrucionValueToIdenticalOrDiffering(inst, RootShapeIndex(),
+                                             all_values_identical);
+  } else {
+    CHECK_LE(replica_identical_output_indices.size(), 1);
+    return SetAllInstructionValuesToIdenticalOrDiffering(
+        user_op, replica_identical_output_indices.contains(0));
   }
 
   return Status::OK();
