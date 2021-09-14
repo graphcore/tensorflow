@@ -502,6 +502,9 @@ StatusOr<GroupedInstructions> ChooseCreatorsToMerge(
 
   for (auto& group : buffer_creators) {
     std::map<int64, std::vector<HloInstruction*>> to_merge;
+    absl::flat_hash_map<const HloComputation*, int64, HloComputationHash,
+                        HloComputationEquals>
+        cluster_ids;
 
     // We attempt to merge remote buffers that have at least one user that
     // would benefit from merging.
@@ -521,12 +524,21 @@ StatusOr<GroupedInstructions> ChooseCreatorsToMerge(
             TF_ASSIGN_OR_RETURN(bool is_rearranged,
                                 IsInsideElementwiseCluster(user, call_graph));
             if (is_rearranged) {
-              int64 new_cluster_id = comp->unique_id();
-              if (cluster_id != -1 && new_cluster_id != cluster_id) {
-                return InternalErrorStrCat(
-                    "Remote buffers shared between different clusters");
+              // Expect that identical clusters will be merged later in
+              // subcomputation graph caching code.
+              if (!comp->HasSideEffect()) {
+                auto it = cluster_ids.find(comp);
+                if (it != cluster_ids.end()) {
+                  CHECK(cluster_id == -1 || cluster_id == it->second)
+                      << "The same cluster id is used across different "
+                         "clusters.";
+                  cluster_id = it->second;
+                }
               }
-              cluster_id = new_cluster_id;
+              if (cluster_id == -1) {
+                cluster_id = cluster_ids.size();
+                cluster_ids.emplace(comp, cluster_id);
+              }
             }
           }
         }
@@ -557,6 +569,14 @@ Status AddMergedInfo(const GroupedInstructions& creators_to_merge,
 
     VLOG(2) << "Merged " << num_merged << " remote buffers into one with name '"
             << buffer_name << "'";
+
+    std::vector<int64> merged_params;
+    for (std::size_t i = 0; i < creators.size(); ++i) {
+      auto* inst = creators[i];
+      if (IsRemoteParameter(inst, annotations)) {
+        merged_params.push_back(inst->parameter_number());
+      }
+    }
 
     for (std::size_t i = 0; i < creators.size(); ++i) {
       auto* inst = creators[i];
@@ -592,7 +612,7 @@ Status AddMergedInfo(const GroupedInstructions& creators_to_merge,
 
         const auto merged_info = RemoteParameterInfo(
             found_info->parameter_number, found_info->is_replica_partitioned,
-            buffer_name, buffer_offset, num_merged);
+            buffer_name, buffer_offset, num_merged, merged_params);
 
         // Replace the existing info with the merged info.
         annotations.remote_parameter_infos.erase(found_info);

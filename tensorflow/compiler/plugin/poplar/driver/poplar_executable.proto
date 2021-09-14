@@ -44,7 +44,8 @@ message RemoteParameterConfig {
   string buffer_name = 3;
   int64 buffer_offset = 4;
   int64 num_merged = 5;
-  int64 host_rearrangement_id = 6;
+  repeated uint64 merged_params = 6 [packed = true];
+  int64 host_rearrangement_id = 7;
 }
 
 message KeyIdMapping {

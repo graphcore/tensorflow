@@ -211,6 +211,52 @@ PartitionedElementwiseClusterVisitor::MakeParameterAllocationFunction(
   };
 }
 
+Status PartitionedElementwiseClusterVisitor::SetRemoteBufferHostRearrangementId(
+    poplar::Graph& graph, const HloComputation* entry_comp,
+    int64 entry_param_idx, int64 host_rearrangement_id,
+    int64 elements_per_replica) {
+  auto& annotations = resources_.annotations;
+  auto& remote_parameter_infos = annotations.remote_parameter_infos;
+  auto old_info =
+      remote_parameter_infos.find(RemoteParameterInfo(entry_param_idx));
+  CHECK(old_info != remote_parameter_infos.end());
+
+  if (old_info->host_rearrangement_id) {
+    if (old_info->host_rearrangement_id == host_rearrangement_id) {
+      return Status::OK();
+    }
+    return InternalErrorStrCat(
+        "Collective rearrangement group conflict for entry parameter ",
+        entry_param_idx);
+  }
+  const HloInstruction* param =
+      entry_comp->parameter_instruction(entry_param_idx);
+
+  RemoteParameterInfo info(
+      old_info->parameter_number, old_info->is_replica_partitioned,
+      old_info->buffer_name, old_info->buffer_offset, old_info->num_merged,
+      old_info->merged_params, host_rearrangement_id);
+
+  TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(param->shape()));
+  auto found_buffer = resources_.remote_buffers.find(info.buffer_name);
+  if (found_buffer == resources_.remote_buffers.end()) {
+    return InternalErrorStrCat("No remote buffer with handle ",
+                               info.buffer_name);
+  }
+  TF_ASSIGN_OR_RETURN(
+      auto rbuffer_holder,
+      GetOrCreateRemoteBuffer(graph, resources_, info.buffer_name, poplar_type,
+                              elements_per_replica,
+                              /*num_repeats=*/1, info.num_merged));
+  TF_RETURN_IF_ERROR(rbuffer_holder.AsRemoteBufferHolder().SetNumElements(
+      elements_per_replica));
+
+  remote_parameter_infos.erase(old_info);
+  CHECK_EQ(remote_parameter_infos.insert(std::move(info)).second, true);
+
+  return Status::OK();
+}
+
 StatusOr<bool>
 PartitionedElementwiseClusterVisitor::UpdateRemoteBufferInformation(
     int64 entry_param_idx, const HloInstruction* entry_param) {
@@ -237,15 +283,6 @@ PartitionedElementwiseClusterVisitor::UpdateRemoteBufferInformation(
             << " is not replica parititoned.";
     return true;
   }
-  if (old_info->host_rearrangement_id) {
-    return InternalErrorStrCat(
-        "Collective rearrangement group conflict for entry parameter ",
-        entry_param_idx);
-  }
-  const HloInstruction* param = entry_param->parent()
-                                    ->parent()
-                                    ->entry_computation()
-                                    ->parameter_instruction(entry_param_idx);
 
   if (remote_parameter_host_rearrangements.find(
           cbr_info->host_rearrangement_id) ==
@@ -262,27 +299,21 @@ PartitionedElementwiseClusterVisitor::UpdateRemoteBufferInformation(
         std::move(host_rearrangement);
   }
 
-  RemoteParameterInfo info(
-      old_info->parameter_number, old_info->is_replica_partitioned,
-      old_info->buffer_name, old_info->buffer_offset, old_info->num_merged,
-      cbr_info->host_rearrangement_id);
-
-  TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(param->shape()));
-  auto found_buffer = resources_.remote_buffers.find(info.buffer_name);
-  if (found_buffer == resources_.remote_buffers.end()) {
-    return InternalErrorStrCat("No remote buffer with handle ",
-                               info.buffer_name);
+  // Propagate the same host rearrangement id for all merged remote buffers.
+  // Copy indices, because old_info will be replaced by new one.
+  const HloComputation* entry_comp =
+      entry_param->parent()->parent()->entry_computation();
+  auto merged_params = old_info->merged_params;
+  if (merged_params.empty()) {
+    // This buffer was not merged, set rearrangement only on entry_param_idx
+    merged_params.push_back(entry_param_idx);
   }
-  TF_ASSIGN_OR_RETURN(
-      auto rbuffer_holder,
-      GetOrCreateRemoteBuffer(graph, resources_, info.buffer_name, poplar_type,
-                              src.totalElementsPerReplica,
-                              /*num_repeats=*/1, info.num_merged));
-  TF_RETURN_IF_ERROR(rbuffer_holder.AsRemoteBufferHolder().SetNumElements(
-      src.totalElementsPerReplica));
+  for (auto param_idx : merged_params) {
+    TF_RETURN_IF_ERROR(SetRemoteBufferHostRearrangementId(
+        graph, entry_comp, param_idx, cbr_info->host_rearrangement_id,
+        src.totalElementsPerReplica));
+  }
 
-  remote_parameter_infos.erase(old_info);
-  CHECK_EQ(remote_parameter_infos.insert(std::move(info)).second, true);
   return true;
 }
 
