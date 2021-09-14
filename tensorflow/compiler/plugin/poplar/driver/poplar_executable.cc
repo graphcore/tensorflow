@@ -150,11 +150,16 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
   }
 
   for (const auto& remote_parameter : proto.remote_parameters()) {
+    std::vector<int64> merged_params;
+    for (const auto& merged_param : merged_params) {
+      merged_params.push_back(merged_param);
+    }
+
     info.remote_parameter_infos.emplace(RemoteParameterInfo{
         remote_parameter.parameter_number(),
         remote_parameter.is_replica_partitioned(),
         remote_parameter.buffer_name(), remote_parameter.buffer_offset(),
-        remote_parameter.num_merged(),
+        remote_parameter.num_merged(), merged_params,
         remote_parameter.host_rearrangement_id()});
   }
 
@@ -261,6 +266,7 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
   }
 
   for (const auto& remote_parameter_info : info.remote_parameter_infos) {
+    const auto& merged_params = remote_parameter_info.merged_params;
     auto* remote_parameter = proto.add_remote_parameters();
     remote_parameter->set_parameter_number(
         remote_parameter_info.parameter_number);
@@ -269,6 +275,8 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
     remote_parameter->set_buffer_name(remote_parameter_info.buffer_name);
     remote_parameter->set_buffer_offset(remote_parameter_info.buffer_offset);
     remote_parameter->set_num_merged(remote_parameter_info.num_merged);
+    *remote_parameter->mutable_merged_params() = {merged_params.begin(),
+                                                  merged_params.end()};
     remote_parameter->set_host_rearrangement_id(
         remote_parameter_info.host_rearrangement_id);
   }

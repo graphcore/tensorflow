@@ -96,12 +96,14 @@ struct RemoteParameterInfo {
                                bool is_replica_partitioned,
                                const std::string& buffer_name,
                                int64 buffer_offset, int64 num_merged,
+                               const std::vector<int64>& merged_params = {},
                                int64 host_rearrangement_id = 0)
       : parameter_number(parameter_number),
         is_replica_partitioned(is_replica_partitioned),
         buffer_name(buffer_name),
         buffer_offset(buffer_offset),
         num_merged(num_merged),
+        merged_params(merged_params),
         host_rearrangement_id(host_rearrangement_id) {}
 
   RemoteParameterInfo() = delete;
@@ -111,6 +113,7 @@ struct RemoteParameterInfo {
   const std::string buffer_name;
   const int64 buffer_offset;
   const int64 num_merged;
+  const std::vector<int64> merged_params;
   const int64 host_rearrangement_id;
 
   bool operator<(const RemoteParameterInfo& other) const {

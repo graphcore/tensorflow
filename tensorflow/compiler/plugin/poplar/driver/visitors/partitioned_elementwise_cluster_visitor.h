@@ -73,6 +73,11 @@ class PartitionedElementwiseClusterVisitor : public DeferredVisitor {
   StatusOr<bool> UpdateRemoteBufferInformation(
       int64 entry_param_idx, const HloInstruction* entry_param);
   Status UpdateRemoteBuffersInformation();
+  Status SetRemoteBufferHostRearrangementId(poplar::Graph& graph,
+                                            const HloComputation* entry_comp,
+                                            int64 entry_param_idx,
+                                            int64 host_rearrangement_id,
+                                            int64 elements_per_replica);
 
   Status FinishDeferedAllocationVisit(HloInstruction* inst) override;
 

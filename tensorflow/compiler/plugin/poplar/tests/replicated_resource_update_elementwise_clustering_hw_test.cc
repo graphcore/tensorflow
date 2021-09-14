@@ -211,8 +211,8 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
               PartitionedElementCountPerReplica(size, param.replication_factor);
           auto aligned_size = per_replica_size * param.replication_factor;
 
-          VLOG(1) << "Uploading data to " << info.buffer_name
-                  << ", offset: " << info.buffer_offset
+          VLOG(1) << "Uploading " << size << "/" << aligned_size << " bytes to "
+                  << info.buffer_name << ", offset: " << info.buffer_offset
                   << ", replicated: " << info.is_replica_partitioned
                   << ", cluster id: " << info.host_rearrangement_id;
 
@@ -244,6 +244,7 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
             CHECK_EQ(gcl.replicationFactor, param.replication_factor);
             per_replica_size = gcl.totalElementsPerReplica;
             aligned_size = per_replica_size * gcl.replicationFactor;
+            buffer.resize(aligned_size);
 
             std::vector<float> tmp(aligned_size);
             VLOG(1) << "Rearranging for collective...";
