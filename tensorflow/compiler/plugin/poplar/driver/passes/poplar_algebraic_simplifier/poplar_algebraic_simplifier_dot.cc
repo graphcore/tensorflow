@@ -662,7 +662,6 @@ StatusOr<HloInstruction*> OptimizeDotStrengthReduction(
 
   TF_ASSIGN_OR_RETURN(HloInstruction * new_dot,
                       MakeBinaryHlo(HloOpcode::kMultiply, new_lhs, new_rhs));
-  new_dot->set_metadata(dot->metadata());
 
   // We want to reduce the source operand to its original rank.
   std::vector<int64> reduce_dimensions(lhs_contracting_dimensions.size());

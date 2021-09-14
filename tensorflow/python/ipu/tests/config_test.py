@@ -1109,10 +1109,28 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
   def testOptimizationsEnableFastMath(self):
     cfg = ipu.config.IPUConfig()
     pb = cfg._create_protobuf()
+    self.assertEqual(pb.algebraic_simplifier_config.enable_fast_math, False)
     self.assertEqual(pb.enable_fast_math, False)
+
+    cfg.optimizations.math.fast = True
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.algebraic_simplifier_config.enable_fast_math, True)
+    self.assertEqual(pb.enable_fast_math, False)
+
     cfg.optimizations.enable_fast_math = True
     pb = cfg._create_protobuf()
+    self.assertEqual(pb.algebraic_simplifier_config.enable_fast_math, True)
     self.assertEqual(pb.enable_fast_math, True)
+
+    cfg.optimizations.math.fast = False
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.algebraic_simplifier_config.enable_fast_math, False)
+    self.assertEqual(pb.enable_fast_math, True)
+
+    cfg.optimizations.enable_fast_math = False
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.algebraic_simplifier_config.enable_fast_math, False)
+    self.assertEqual(pb.enable_fast_math, False)
 
   def testPoolingPoplarOptions(self):
     cfg = ipu.config.IPUConfig()

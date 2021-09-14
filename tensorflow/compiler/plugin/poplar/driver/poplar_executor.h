@@ -583,7 +583,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return block_size <= 0 ? 128 : block_size;
   }
 
-  bool EnableFastMath() const { return current_config_.enable_fast_math(); }
+  bool EnableFastMath() const {
+    return current_config_.enable_fast_math() ||
+           current_config_.algebraic_simplifier_config().enable_fast_math();
+  }
 
   IpuOptions_IpuAlgebraicSimplifierConfig AlgebraicSimplifierConfig() const {
     return current_config_.algebraic_simplifier_config();

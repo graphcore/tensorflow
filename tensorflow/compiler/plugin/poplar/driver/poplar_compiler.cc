@@ -1330,8 +1330,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<HloCSE>(false);
 
       pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
-          poplar_executor->GetIpuOptions().algebraic_simplifier_config(),
-          resources.enable_fast_math);
+          poplar_executor->GetIpuOptions().algebraic_simplifier_config());
       {
         auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
             "pipeline-gradient-accumulation-optimizer-wrapper");
@@ -1346,8 +1345,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<ReshapeMover>();
       pipeline.AddPass<MapInliner>();
       pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
-          poplar_executor->GetIpuOptions().algebraic_simplifier_config(),
-          resources.enable_fast_math);
+          poplar_executor->GetIpuOptions().algebraic_simplifier_config());
       pipeline.AddPass<ZeroSizedHloElimination>();
       pipeline.AddPass<FlattenCallGraph>();
       pipeline.AddPass<DistributedBatchNormDecomposer>(
@@ -1375,8 +1373,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         pass.AddPass<HloDCE>();
         pass.AddPass<WhileLoopConstantSinking>();
         pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
-            poplar_executor->GetIpuOptions().algebraic_simplifier_config(),
-            resources.enable_fast_math);
+            poplar_executor->GetIpuOptions().algebraic_simplifier_config());
         pass.AddPass<ReshapeMover>();
         pass.AddPass<SortSimplifier>();
         pass.AddPass<FunctionOptimizer>();
@@ -1408,8 +1405,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         pass.AddPass<MultiUpdateScaleApply>(resources.annotations);
         pass.AddPass<MultiUpdateApply>(resources.annotations);
         pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
-            poplar_executor->GetIpuOptions().algebraic_simplifier_config(),
-            resources.enable_fast_math);
+            poplar_executor->GetIpuOptions().algebraic_simplifier_config());
         pass.AddPass<HloCSE>(true);
         pass.AddPass<HloDCE>();
       }

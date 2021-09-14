@@ -99,7 +99,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.auto_select_ipus = 4
     cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
-    cfg.optimizations.algebraic_simplifier.enable_dot_strength = False
+    cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 
     # Check that we get all classifications for a simple conv
@@ -167,7 +167,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.auto_select_ipus = 4
     cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
-    cfg.optimizations.algebraic_simplifier.enable_dot_strength = False
+    cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 
     # Check that we get all classifications for a small resnet correct
@@ -236,7 +236,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.auto_select_ipus = 4
     cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
-    cfg.optimizations.algebraic_simplifier.enable_dot_strength = False
+    cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 
     # Check that we get all classifications for a simple conv
@@ -306,7 +306,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.auto_select_ipus = 4
     cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
-    cfg.optimizations.algebraic_simplifier.enable_dot_strength = False
+    cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 
     # Check that we get all classifications for a simple conv
@@ -376,7 +376,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.auto_select_ipus = 4
     cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
-    cfg.optimizations.algebraic_simplifier.enable_dot_strength = False
+    cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 
     # Check that we get all classifications for a simple conv

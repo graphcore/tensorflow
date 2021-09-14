@@ -31,8 +31,7 @@ namespace xla {
 class PoplarAlgebraicSimplifier : public HloModulePass {
  public:
   explicit PoplarAlgebraicSimplifier(
-      poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig config = {},
-      bool enable_fast_math = false);
+      poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig config = {});
   ~PoplarAlgebraicSimplifier() override = default;
   absl::string_view name() const override {
     return "poplar-algebraic-simplifier";
@@ -53,7 +52,6 @@ class PoplarAlgebraicSimplifier : public HloModulePass {
 
  private:
   const poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig config_;
-  const bool enable_fast_math_;
 };
 
 // AlgebraicSimplifierVisitor traverses the HLO computation and reduces certain
@@ -64,11 +62,8 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
  public:
   explicit AlgebraicSimplifierVisitor(
       PoplarAlgebraicSimplifier* simplifier,
-      poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig config,
-      bool enable_fast_math)
-      : config_(std::move(config)),
-        simplifier_(simplifier),
-        enable_fast_math_(enable_fast_math) {}
+      poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig config)
+      : config_(std::move(config)), simplifier_(simplifier) {}
 
   friend StatusOr<HloInstruction*>
   xla::poplarplugin::algebraic_simplifier::dot::OptimizeDotOfConcatHelper(
@@ -244,8 +239,6 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   PoplarAlgebraicSimplifier* simplifier_ = nullptr;
 
   const poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig config_;
-
-  const bool enable_fast_math_;
 };
 
 }  // namespace xla
