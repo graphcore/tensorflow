@@ -44,10 +44,14 @@ bool IsWrapperTuple(const Shape& shape, const Shape& wrapped_shape) {
   return false;
 }
 
-bool IsVisitable(const CallGraph& call_graph,
-                 const HloComputation* computation) {
-  const auto& node = call_graph.GetNode(computation);
-  return node.context() != CallContext::kParallel;
+bool IsVisitable(CallGraph& call_graph, HloComputation* computation) {
+  const auto called = !call_graph.GetComputationCallers(computation).empty();
+  if (called) {
+    const auto& node = call_graph.GetNode(computation);
+    return node.context() != CallContext::kParallel;
+  }
+
+  return false;
 }
 
 // Create a new ValueCategoryTree whose nodes have

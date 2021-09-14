@@ -5451,6 +5451,7 @@ test_suite(
     tests = [
         "64_bit_test",
         "add_block_recompute_test",
+        "add_stochastic_rounding_options_test",
         "all_to_all_finder_test",
         "allocation_finder_priority_test",
         "allocation_finder_test",
@@ -5540,6 +5541,7 @@ test_suite(
         "lstm_test",
         "map_hlo_instruction_to_debug_id_test",
         "mapping_test",
+        "mark_replica_identical_instructions_test",
         "matmul_combiner_test",
         "matmul_graph_caching_test",
         "matmul_option_test",

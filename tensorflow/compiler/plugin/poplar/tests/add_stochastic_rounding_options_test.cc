@@ -32,7 +32,14 @@ MATCHER_P(HasStochasticRounding, state, "") {
   auto statusor_backend = instr->template backend_config<PoplarBackendConfig>();
   if (statusor_backend.ok()) {
     auto backend_cfg = statusor_backend.ValueOrDie();
-    return backend_cfg.stochastic_rounding() == state;
+    auto stochastic_rounding = backend_cfg.stochastic_rounding();
+
+    *result_listener << "instruction '" << instr->name()
+                     << "' has stochastic rounding set to "
+                     << ThreeState_Name(stochastic_rounding) << " expected "
+                     << ThreeState_Name(state);
+
+    return stochastic_rounding == state;
   }
 
   *result_listener << "Failed to get PoplarBackendConfig for instruction '"
@@ -44,7 +51,14 @@ MATCHER_P(HasDeterministicWorker, state, "") {
   auto statusor_backend = instr->template backend_config<PoplarBackendConfig>();
   if (statusor_backend.ok()) {
     auto backend_cfg = statusor_backend.ValueOrDie();
-    return backend_cfg.deterministic_workers() == state;
+    auto deterministic_workers = backend_cfg.deterministic_workers();
+
+    *result_listener << "instruction '" << instr->name()
+                     << "' has deterministic workers set to "
+                     << ThreeState_Name(deterministic_workers) << " expected "
+                     << ThreeState_Name(state);
+
+    return deterministic_workers == state;
   }
 
   *result_listener << "Failed to get PoplarBackendConfig for instruction '"
@@ -111,12 +125,21 @@ struct AddStochasticRoundingOptionsTest : HloTestFixture {
 const char* stochastic_rounding_attrs = R"(
 HloModule test
 ENTRY test {
-  stochastic_rounding_on = f32[] parameter(0), frontend_attributes={STOCHASTIC_ROUNDING="THREESTATE_ON"}
+  stochastic_rounding_on = f32[] parameter(0)
   ROOT stochastic_rounding_default = f32[] parameter(1)
 }
 )";
 TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingDefault) {
   ASSERT_TRUE(SetUpHloModule(stochastic_rounding_attrs));
+
+  auto* stochastic_rounding_on =
+      FindInstruction(hlo_module_, "stochastic_rounding_on");
+
+  // Enable stochastic rounding for the stochastic_rounding_on instruction.
+  // We cant set it in the Hlo due to a bug in TF1.15.
+  FrontendAttributes frontend_attributes;
+  (*frontend_attributes.mutable_map())["STOCHASTIC_ROUNDING"] = "THREESTATE_ON";
+  stochastic_rounding_on->set_frontend_attributes(frontend_attributes);
 
   AddStochasticRoundingOptions add_stochastic_rounding_options(
       StochasticRounding_Off);
@@ -127,8 +150,6 @@ TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingDefault) {
 
   // Check that the default is only applied to instructions w/o a stochastic
   // rounding frontend attribute.
-  auto* stochastic_rounding_on =
-      FindInstruction(hlo_module_, "stochastic_rounding_on");
   ASSERT_THAT(stochastic_rounding_on, HasStochasticRounding(THREESTATE_ON));
 
   auto* stochastic_rounding_default =
@@ -197,6 +218,44 @@ TEST_F(AddStochasticRoundingOptionsTest, SettingDeterministicWorkers) {
   ASSERT_THAT(ReplicaIdenticalModuleInstructions(),
               Each(HasDeterministicWorker(THREESTATE_ON)));
   ASSERT_THAT(ReplicaDifferingModuleInstructions(),
+              Each(HasDeterministicWorker(THREESTATE_UNDEFINED)));
+}
+
+const char* poplar_fusion_hlo = R"(
+HloModule test
+
+_pop_op_arithmetic_expression {
+  param0 = s32[4] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_UNDEFINED\", \"deterministic_workers\":\"THREESTATE_ON\"}"
+  add0 = s32[4] add(param0, param0), backend_config="{\"stochastic_rounding\":\"THREESTATE_UNDEFINED\", \"deterministic_workers\":\"THREESTATE_ON\"}"
+  param1 = s32[4] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_UNDEFINED\", \"deterministic_workers\":\"THREESTATE_ON\"}"
+  ROOT add1 = s32[4] add(add0, param1), backend_config="{\"stochastic_rounding\":\"THREESTATE_UNDEFINED\", \"deterministic_workers\":\"THREESTATE_ON\"}"
+}
+
+ENTRY test {
+ param0 = s32[4] parameter(0)
+ param1 = s32[4] parameter(1)
+ ROOT fusion = s32[4]{0} fusion(param0, param1), kind=kCustom, calls=_pop_op_arithmetic_expression
+}
+)";
+TEST_F(AddStochasticRoundingOptionsTest, SettingOptionsForPoplarFusions) {
+  using ::testing::Each;
+
+  ASSERT_TRUE(SetUpHloModule(poplar_fusion_hlo));
+
+  AddStochasticRoundingOptions add_stochastic_rounding_options(
+      StochasticRounding_On);
+
+  TF_ASSERT_OK_AND_ASSIGN(bool modified,
+                          add_stochastic_rounding_options.Run(hlo_module_));
+  ASSERT_TRUE(modified);
+
+  // Make sure that we don't skip instructions in poplar fusions. If we did then
+  // neither option would be applied and we'd use the existing value
+  // (which defaults to THREESTATE_OFF).
+  ASSERT_THAT(AllModuleInstructions(),
+              Each(HasStochasticRounding(THREESTATE_ON)));
+  // Undefined since none of the instructions are replica identical.
+  ASSERT_THAT(AllModuleInstructions(),
               Each(HasDeterministicWorker(THREESTATE_UNDEFINED)));
 }
 
