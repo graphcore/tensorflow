@@ -423,7 +423,8 @@ These runtime errors are handled in the following manner:
 * ``recoverable_runtime_error`` with a recovery action ``poplar::RecoveryAction::IPU_RESET`` - a ``tensorflow.errors.InternalError`` error
   is raised. The error message contains the reason why the error occurred. An
   IPU reset will be performed before the next execution of a Poplar program.
-* All other runtime errors - the process executing the Poplar program is
-  terminated and the full error message is logged to the console. When these
-  errors occur manual intervention might be required before the system is
-  operational again. The error message might contain a required recovery action.
+* All other runtime errors - a ``tensorflow.errors.InternalError`` error
+  is raised. The error message might contain the reason why the error occurred.
+  When these errors occur manual intervention might be required before the
+  system is operational again. The error message might contain a required
+  recovery action.
