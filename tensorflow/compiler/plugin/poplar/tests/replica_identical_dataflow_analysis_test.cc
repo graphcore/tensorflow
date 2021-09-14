@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/replica_identical_dataflow_analysis.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 
 #include "tensorflow/compiler/xla/service/flatten_call_graph.h"
@@ -1520,6 +1521,162 @@ TEST_P(ReplicaValueCategoryRepeatTest, MultiIterationRepeatValueCategory) {
   auto* root = FindRootInstruction();
   ASSERT_CATEGORY_EQ(analysis.ValueCategory(root, {0}),
                      ValueReplicaCategory::Differing);
+}
+
+struct ReplicaIdenticalUserOpTest : ReplicaIdenticalDataflowAnalysisTest {
+  HloModule* BuildModule() {
+    auto computation = builder_.Build();
+    hlo_module_owner_ = CreateNewVerifiedModule();
+    hlo_module_owner_->AddEntryComputation(std::move(computation));
+    return hlo_module_owner_.get();
+  }
+
+  HloInstruction* AddUserOpInstruction(
+      const Shape& shape, HloUserOpInstruction::MetadataFn metadata_fn) {
+    return builder_.AddInstruction(CreateUserOp(
+        {}, shape, "", nullptr, reinterpret_cast<void*>(metadata_fn), nullptr,
+        0, 0, false, ""));
+  }
+
+  HloComputation::Builder builder_ = HloComputation::Builder(TestName());
+};
+TEST_F(ReplicaIdenticalUserOpTest, UserOpArrayDifferingValueCategory) {
+  HloUserOpInstruction::MetadataFn empty_indices_metadata{
+      [](std::vector<std::int64_t>&,
+         std::vector<std::int64_t>& replica_identical_output_indices,
+         std::map<std::int64_t, std::int64_t>&, bool&, bool&, bool&,
+         std::uint32_t) {
+        // an empty replica_identical_output_indices vector should mean that
+        // there are no replica identical outputs.
+      }};
+  HloUserOpInstruction::MetadataFn bad_index_metadata{
+      [](std::vector<std::int64_t>&,
+         std::vector<std::int64_t>& replica_identical_output_indices,
+         std::map<std::int64_t, std::int64_t>&, bool&, bool&, bool&,
+         std::uint32_t) { replica_identical_output_indices.push_back(2); }};
+
+  Shape shape = ShapeUtil::MakeShape(F32, {});
+  auto* empty_indicies_inst =
+      AddUserOpInstruction(shape, empty_indices_metadata);
+  auto* bad_index_inst = AddUserOpInstruction(shape, bad_index_metadata);
+  auto* default_inst = AddUserOpInstruction(shape, nullptr);
+  HloModule* module = BuildModule();
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(module));
+
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(empty_indicies_inst),
+                     ValueReplicaCategory::Differing);
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(bad_index_inst),
+                     ValueReplicaCategory::Differing);
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(default_inst),
+                     ValueReplicaCategory::Differing);
+}
+
+TEST_F(ReplicaIdenticalUserOpTest, UserOpArrayIdenticalValueCategory) {
+  HloUserOpInstruction::MetadataFn valid_index_metadata{
+      [](std::vector<std::int64_t>&,
+         std::vector<std::int64_t>& replica_identical_output_indices,
+         std::map<std::int64_t, std::int64_t>&, bool&, bool&, bool&,
+         std::uint32_t) { replica_identical_output_indices.push_back(0); }};
+
+  Shape shape = ShapeUtil::MakeShape(F32, {});
+  auto* valid_output_inst = AddUserOpInstruction(shape, valid_index_metadata);
+  HloModule* module = BuildModule();
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(module));
+
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(valid_output_inst),
+                     ValueReplicaCategory::Identical);
+}
+
+TEST_F(ReplicaIdenticalUserOpTest, UserOpTupleDifferingValueCategory) {
+  HloUserOpInstruction::MetadataFn differing_output_metadata{
+      [](std::vector<std::int64_t>&,
+         std::vector<std::int64_t>& replica_identical_output_indices,
+         std::map<std::int64_t, std::int64_t>&, bool&, bool&, bool&,
+         std::uint32_t) {
+        // an empty replica_identical_output_indices vector should mean that
+        // there are no replica identical outputs.
+      }};
+
+  Shape inner_shape = ShapeUtil::MakeShape(F32, {});
+  Shape outer_shape =
+      ShapeUtil::MakeTupleShape({inner_shape, inner_shape, inner_shape});
+  auto* differing_user_inst =
+      AddUserOpInstruction(outer_shape, differing_output_metadata);
+  auto* default_user_inst = AddUserOpInstruction(outer_shape, nullptr);
+  HloModule* module = BuildModule();
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(module));
+
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(differing_user_inst),
+                     ValueReplicaCategory::Differing);
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(default_user_inst),
+                     ValueReplicaCategory::Differing);
+}
+
+TEST_F(ReplicaIdenticalUserOpTest, UserOpTupleMixedValueCategory) {
+  HloUserOpInstruction::MetadataFn mixed_output_metadata{
+      [](std::vector<std::int64_t>&,
+         std::vector<std::int64_t>& replica_identical_output_indices,
+         std::map<std::int64_t, std::int64_t>&, bool&, bool&, bool&,
+         std::uint32_t) {
+        replica_identical_output_indices.push_back(0);
+        replica_identical_output_indices.push_back(2);
+      }};
+
+  Shape inner_shape = ShapeUtil::MakeShape(F32, {});
+  Shape outer_shape =
+      ShapeUtil::MakeTupleShape({inner_shape, inner_shape, inner_shape});
+  auto* mixed_user_inst =
+      AddUserOpInstruction(outer_shape, mixed_output_metadata);
+  HloModule* module = BuildModule();
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(module));
+
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(mixed_user_inst),
+                     ValueReplicaCategory::Differing);
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(mixed_user_inst, {0}),
+                     ValueReplicaCategory::Identical);
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(mixed_user_inst, {1}),
+                     ValueReplicaCategory::Differing);
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(mixed_user_inst, {2}),
+                     ValueReplicaCategory::Identical);
+}
+
+TEST_F(ReplicaIdenticalUserOpTest, UserOpTupleIdenticalValueCategory) {
+  HloUserOpInstruction::MetadataFn identical_output_metadata{
+      [](std::vector<std::int64_t>&,
+         std::vector<std::int64_t>& replica_identical_output_indices,
+         std::map<std::int64_t, std::int64_t>&, bool&, bool&, bool&,
+         std::uint32_t) {
+        replica_identical_output_indices.push_back(0);
+        replica_identical_output_indices.push_back(1);
+        replica_identical_output_indices.push_back(2);
+      }};
+
+  Shape inner_shape = ShapeUtil::MakeShape(F32, {});
+  Shape outer_shape =
+      ShapeUtil::MakeTupleShape({inner_shape, inner_shape, inner_shape});
+  auto* identical_user_inst =
+      AddUserOpInstruction(outer_shape, identical_output_metadata);
+  HloModule* module = BuildModule();
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(module));
+
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(identical_user_inst),
+                     ValueReplicaCategory::Identical);
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(identical_user_inst, {0}),
+                     ValueReplicaCategory::Identical);
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(identical_user_inst, {1}),
+                     ValueReplicaCategory::Identical);
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(identical_user_inst, {2}),
+                     ValueReplicaCategory::Identical);
 }
 
 INSTANTIATE_TEST_SUITE_P(
