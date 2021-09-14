@@ -30,7 +30,17 @@ class PopopsMultiSliceOp : public XlaOpKernel, IpuOpKernel {
 
   void Compile(XlaOpKernelContext* ctx) override {
     const TensorShape input_shape = ctx->InputShape(0);
-    TensorShape output_shape = ctx->InputShape(1);
+    const TensorShape indices_shape = ctx->InputShape(1);
+
+    OP_REQUIRES(ctx, TensorShapeUtils::IsMatrix(input_shape),
+                errors::InvalidArgument("input shape must be 2D, but got: ",
+                                        input_shape.DebugString()));
+
+    OP_REQUIRES(ctx, TensorShapeUtils::IsVector(indices_shape),
+                errors::InvalidArgument("indices shape must be 1D, but got: ",
+                                        indices_shape.DebugString()));
+
+    TensorShape output_shape = indices_shape;
     output_shape.AddDim(input_shape.dim_size(1));
 
     xla::PrimitiveType input_type;
@@ -63,10 +73,18 @@ class PopopsMultiUpdateOp : public XlaOpKernel, IpuOpKernel {
     const TensorShape input_shape = ctx->InputShape(0);
     const TensorShape indices_shape = ctx->InputShape(1);
     const TensorShape updates_shape = ctx->InputShape(2);
-    xla::PrimitiveType input_type;
-    OP_REQUIRES_OK(ctx,
-                   DataTypeToPrimitiveType(ctx->input_type(0), &input_type));
 
+    OP_REQUIRES(ctx, TensorShapeUtils::IsMatrix(input_shape),
+                errors::InvalidArgument("input shape must be 2D, but got: ",
+                                        input_shape.DebugString()));
+
+    OP_REQUIRES(ctx, TensorShapeUtils::IsVector(indices_shape),
+                errors::InvalidArgument("indices shape must be 1D, but got: ",
+                                        indices_shape.DebugString()));
+
+    OP_REQUIRES(ctx, TensorShapeUtils::IsMatrix(updates_shape),
+                errors::InvalidArgument("updates shape must be 2D, but got: ",
+                                        updates_shape.DebugString()));
     if (is_update_add_) {
       const TensorShape scale_shape = ctx->InputShape(3);
       OP_REQUIRES(ctx, TensorShapeUtils::IsScalar(scale_shape),
@@ -75,6 +93,10 @@ class PopopsMultiUpdateOp : public XlaOpKernel, IpuOpKernel {
     }
 
     xla::XlaBuilder& b = *ctx->builder();
+
+    xla::PrimitiveType input_type;
+    OP_REQUIRES_OK(ctx,
+                   DataTypeToPrimitiveType(ctx->input_type(0), &input_type));
     xla::Shape xla_output_shape =
         TensorShapeToXLAShape(input_type, input_shape);
     const auto num_inputs = ctx->num_inputs();
