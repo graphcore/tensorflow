@@ -204,8 +204,8 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
   def testGradient(self):
     with self.session() as sess:
       with ops.device('cpu'):
-        x1 = array_ops.placeholder(np.int32, shape=[3, 4, 2])
-        grads = array_ops.placeholder(np.float32, shape=[3, 4, 2, 16])
+        x1 = array_ops.placeholder(np.int32, shape=[24])
+        grads = array_ops.placeholder(np.float32, shape=[24, 16])
         lr = array_ops.placeholder(np.float32, shape=[])
 
       def network(x1, grads, lr):
@@ -231,9 +231,10 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       sess.run(variables.global_variables_initializer())
       out, indices, gradient = sess.run(
           r, {
-              x1: [[[10, 11], [12, 13], [14, 15], [16, 17]],
-                   [[20, 21], [22, 23], [24, 25], [26, 27]],
-                   [[30, 31], [32, 33], [34, 35], [36, 37]]],
+              x1: [
+                  10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 25, 26,
+                  27, 30, 31, 32, 33, 34, 35, 36, 37
+              ],
               grads:
               np.random.rand(*grads.shape),
               lr:

@@ -76,7 +76,7 @@ class TestAllGather(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testSerializedMultiUpdateAdd(self):
     with ops.device('cpu'):
-      idx = array_ops.placeholder(np.int32, shape=[16, 1])
+      idx = array_ops.placeholder(np.int32, shape=[16])
       updates = array_ops.placeholder(np.float32, shape=[16, 128])
       scale = array_ops.placeholder(np.float32, shape=[])
 
@@ -107,12 +107,10 @@ class TestAllGather(test_util.TensorFlowTestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(
           out, {
-              idx: [[1], [2], [3], [4], [1], [2], [3], [4], [10], [20], [30],
-                    [40], [100], [200], [300], [400]],
-              updates:
-              np.ones(updates.shape),
-              scale:
-              2,
+              idx:
+              [1, 2, 3, 4, 1, 2, 3, 4, 10, 20, 30, 40, 100, 200, 300, 400],
+              updates: np.ones(updates.shape),
+              scale: 2,
           })
       result = sess.run(outfeed)
 
