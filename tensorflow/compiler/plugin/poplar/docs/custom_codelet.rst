@@ -200,6 +200,7 @@ This function has the following signature:
   extern "C"
   void Build_metadata(
       std::vector<std::int64_t>& allocating_indices,
+      std::vector<std::int64_t>& replica_identical_output_indices,
       std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
       bool& is_elementwise,
       bool& is_stateless,
@@ -211,6 +212,13 @@ The parameters are used to return the following information about the operation:
 * ``allocating_indices``: Use this to specify which input tensors will
   be allocated using the tensor-allocation function described in
   :ref:`tensor_allocation`.
+
+* ``replica_identical_output_indices``: Experimental. Use this to specify which
+  output tensors are identical across replicas. The compiler uses this to help
+  provide deterministic behaviour when running with replication and performing
+  stochastic rounding.
+
+  An empty vector means that no tensors are identical across replicas.
 
 .. _input_to_output_tensor_aliasing:
 
@@ -328,6 +336,8 @@ level.
   * - 4
     - ``is_hashable`` was added to the metadata builder function.
 
+  * - 5
+    - ``replica_identical_output_indices`` was added to the metadata builder function.
 
 PopLibs library code
 ....................

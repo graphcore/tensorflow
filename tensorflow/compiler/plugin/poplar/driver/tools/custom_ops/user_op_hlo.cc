@@ -53,29 +53,29 @@ HloUserOpInstruction::HloUserOpInstruction(
   bool stateless = false;
 
   if (metadata_function_ptr_ != nullptr) {
-    void (*metadataSignature)(
-        std::vector<std::int64_t> & allocating_indices,
-        std::map<std::int64_t, std::int64_t> & input_to_output_tensor_aliasing,
-        bool& is_elementwise, bool& is_stateless, bool& is_hashable,
-        std::uint32_t num_inputs);
+    auto metadata = reinterpret_cast<MetadataFn>(metadata_function_ptr_);
 
-    metadataSignature =
-        reinterpret_cast<decltype(metadataSignature)>(metadata_function_ptr_);
-
-    metadataSignature(metadata_.allocating_indices_,
-                      metadata_.input_to_output_tensor_aliasing_,
-                      metadata_.is_elementwise_, stateless,
-                      metadata_.is_hashable_, num_inputs_);
+    metadata(metadata_.allocating_indices_,
+             metadata_.replica_identical_output_indices_,
+             metadata_.input_to_output_tensor_aliasing_,
+             metadata_.is_elementwise_, stateless, metadata_.is_hashable_,
+             num_inputs_);
   }
   set_custom_call_has_side_effect(!stateless);
 }
 
 absl::flat_hash_set<int64> HloUserOpInstruction::AllocatingIndices() const {
-  absl::flat_hash_set<int64> set;
-  for (std::int64_t i : metadata_.allocating_indices_) {
-    set.insert({i});
-  }
-  return set;
+  absl::flat_hash_set<int64> indices(metadata_.allocating_indices_.begin(),
+                                     metadata_.allocating_indices_.end());
+  return indices;
+}
+
+absl::flat_hash_set<int64> HloUserOpInstruction::ReplicaIdenticalOutputIndices()
+    const {
+  absl::flat_hash_set<int64> indices(
+      metadata_.replica_identical_output_indices_.begin(),
+      metadata_.replica_identical_output_indices_.end());
+  return indices;
 }
 
 bool HloUserOpInstruction::AllocatingOutput() const { return IsReadWrite(); }

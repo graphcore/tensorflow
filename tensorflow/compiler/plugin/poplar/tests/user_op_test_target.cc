@@ -21,7 +21,7 @@ limitations under the License.
 #include <unordered_set>
 
 extern "C" {
-int32_t custom_op_api_level = 4;
+int32_t custom_op_api_level = 5;
 }
 
 namespace pe = popops::expr;
@@ -37,6 +37,7 @@ extern "C" poplar::program::Program Build(
 
 extern "C" void Build_metadata(
     std::vector<std::int64_t>& allocating_indices,
+    std::vector<std::int64_t>& replica_identical_output_indices,
     std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
     bool& is_elementwise, bool& is_stateless, bool& is_hashable,
     std::uint32_t num_inputs) {
@@ -47,6 +48,10 @@ extern "C" void Build_metadata(
   allocating_indices.push_back(1);
   allocating_indices.push_back(2);
   allocating_indices.push_back(3);
+
+  replica_identical_output_indices.push_back(0);
+  replica_identical_output_indices.push_back(1);
+  replica_identical_output_indices.push_back(2);
 }
 
 extern "C" poplar::Tensor Build_allocator(std::uint32_t operand) {
