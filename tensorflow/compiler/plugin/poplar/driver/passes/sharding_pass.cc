@@ -762,8 +762,7 @@ static StatusOr<absl::flat_hash_set<const HloComputation*>>
 FindInstructionsCompletedInPipeline(HloModule* module,
                                     const CallGraph* call_graph) {
   // We first fix sharding for pipelining as it is well defined.
-  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
-                      GetPipelines(module));
+  TF_ASSIGN_OR_RETURN(auto pipeline_ops, GetPipelines(module));
   if (pipeline_ops.size()) {
     CHECK_EQ(pipeline_ops.size(), 1);
     return ProcessPipeline(pipeline_ops[0], call_graph,
