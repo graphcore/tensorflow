@@ -302,7 +302,9 @@ message IpuOptions {
   int64 max_reduce_many_buffer_size = 45;
 
   message IpuAlgebraicSimplifierConfig {
-    bool enable_dot_strength = 1;
+    bool enable_fast_math = 1;
+
+    bool enable_dot_strength = 2;
   }
 
   IpuAlgebraicSimplifierConfig algebraic_simplifier_config = 46;

@@ -583,7 +583,10 @@ class IPUPipelineTest(test.TestCase):
     m.compile("sgd", loss='mse', steps_per_execution=32)
     cpu_result = m.evaluate(test_dataset(length=96))
 
-    self.assertAllClose(result, cpu_result)
+    # A difference in precision can be found between running this
+    # test using `ipu_model` and using actual hardware. For this
+    # reason we set the relative tolerance to 1e-5.
+    self.assertAllClose(result, cpu_result, rtol=1e-5)
 
   @test_util.run_v2_only
   def testPredict_CpuMatch(self):

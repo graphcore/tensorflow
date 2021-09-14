@@ -890,7 +890,7 @@ Status AlgebraicSimplifierVisitor::HandleDivide(HloInstruction* divide) {
   }
 
   // A / Broadcast(B) => A * Broadcast((1 / B))
-  if (enable_fast_math_ &&
+  if (config_.enable_fast_math() &&
       Match(divide, m::Divide(m::NonConstant(&a), m::Op(&b))) &&
       Match(b, m::Broadcast(m::Op(&c)))) {
     const Shape& divisor_shape = c->shape();
@@ -1060,7 +1060,7 @@ Status AlgebraicSimplifierVisitor::HandleDot(HloInstruction* dot) {
 
   // If either lhs or rhs is a zero tensor (all elements 0, rather than rank 0)
   // then just substitute the computation with a zero tensor.
-  if (enable_fast_math_ &&
+  if (config_.enable_fast_math() &&
       (pp::algebraic_simplifier::util::IsAllFloat(lhs, 0) ||
        pp::algebraic_simplifier::util::IsAllFloat(rhs, 0))) {
     auto zero = computation_->AddInstruction(
@@ -1358,14 +1358,14 @@ Status AlgebraicSimplifierVisitor::HandleMultiply(HloInstruction* multiply) {
   // fast math is enabled.
   if (pp::algebraic_simplifier::util::IsAll(lhs, 0) &&
       (primitive_util::IsIntegralType(multiply->shape().element_type()) ||
-       enable_fast_math_) &&
+       config_.enable_fast_math()) &&
       ReplaceInstructionIfSameShape(multiply, lhs)) {
     return Status::OK();
   }
   // A*0 => 0
   if (pp::algebraic_simplifier::util::IsAll(rhs, 0) &&
       (primitive_util::IsIntegralType(multiply->shape().element_type()) ||
-       enable_fast_math_) &&
+       config_.enable_fast_math()) &&
       ReplaceInstructionIfSameShape(multiply, rhs)) {
     return Status::OK();
   }
@@ -1988,7 +1988,7 @@ Status AlgebraicSimplifierVisitor::HandlePower(HloInstruction* power) {
                                             broadcast_one, lhs));
   }
 
-  if (enable_fast_math_) {
+  if (config_.enable_fast_math()) {
     VLOG(10) << "trying transform [pow(A, 0.5) => sqrt(A)]: "
              << power->ToString();
     if (pp::algebraic_simplifier::util::IsAllFloat(rhs, 0.5)) {
@@ -3643,15 +3643,14 @@ Status AlgebraicSimplifierVisitor::HandleCustomCall(
 }
 
 PoplarAlgebraicSimplifier::PoplarAlgebraicSimplifier(
-    poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig config,
-    bool enable_fast_math)
-    : config_(std::move(config)), enable_fast_math_(enable_fast_math) {}
+    poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig config)
+    : config_(std::move(config)) {}
 
 StatusOr<bool> PoplarAlgebraicSimplifier::Run(HloModule* module) {
   XLA_VLOG_LINES(
       2, "PoplarAlgebraicSimplifier::Run(), before:\n" + module->ToString());
   bool changed = false;
-  AlgebraicSimplifierVisitor visitor(this, config_, enable_fast_math_);
+  AlgebraicSimplifierVisitor visitor(this, config_);
   for (HloComputation* comp : module->MakeComputationPostOrder()) {
     if (pp::IsPopOpsFusion(comp)) {
       continue;

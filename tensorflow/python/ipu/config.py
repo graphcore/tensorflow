@@ -1304,16 +1304,27 @@ class _IPUModelConfig(_ConfigBase):
 class _IpuAlgebraicSimplifierConfig(_ConfigBase):
   def __init__(self):
     """
+    Enables optimizations which allow arbitrary reassociations and
+    transformations of mathematical operations with no accuracy guarantees.
+    Enabling this option can result in incorrect output for programs that depend
+    on an exact implementation of IEEE floating point for maths functions. It
+    may, however, yield faster code for programs that do not require the
+    guarantees of these specifications.
+    """
+    self.fast = False
+    """
     Enable dot strength optimization. When set to True, the graph optimizer
     will convert a dot product where either the LHS or the RHS contains only
     batch and/or contracting dimensions to an elementwise matrix
     multiplication.
     """
-    self.enable_dot_strength = True
+    self.dot_strength = True
 
   def _to_protobuf(self, pb):
+    pb.algebraic_simplifier_config.enable_fast_math\
+      = self.fast
     pb.algebraic_simplifier_config.enable_dot_strength\
-      = self.enable_dot_strength
+      = self.dot_strength
 
 
 class _MatmulConfig(_ConfigBase):
@@ -1452,13 +1463,17 @@ class _NormConfig(_ConfigBase):
     super()._to_protobuf(pb)  # pylint: disable=protected-access
 
 
+@deprecate_config_attribute(
+    "enable_fast_math",
+    "'enable_fast_math' has been moved to 'optimizations.math.fast'."
+    "It will be removed from this location in a future release.")
 class _OptimizationConfig(_ConfigBase):
   def __init__(self):
     """
-    Sub-category containing configuration options related to the XLA Algebraic
-    Simplifier.
+    Sub-category containing configuration options related to simplifying
+    algebraic mathematical expressions..
     """
-    self.algebraic_simplifier = _IpuAlgebraicSimplifierConfig()
+    self.math = _IpuAlgebraicSimplifierConfig()
     """
     If True (default), prefetching of data for data streams on the host will be
     overlapped with execution on the IPU.
@@ -1573,6 +1588,8 @@ class _OptimizationConfig(_ConfigBase):
     self.enable_fast_math = False
 
   def _to_protobuf(self, pb):
+    super()._to_protobuf(pb)  # pylint: disable=protected-access
+
     pb.prefetch_data_streams = self.prefetch_data_streams
     pb.enable_multi_slice_combiner = self.combine_embedding_lookups
     pb.enable_matmul_combiner = self.combine_matmuls

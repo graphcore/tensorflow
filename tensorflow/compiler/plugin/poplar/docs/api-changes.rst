@@ -45,6 +45,12 @@ The following classes from `tensorflow.python.ipu.config` have been removed:
   - `KeyId`
   - `VerificationOptions`
 
+
+Non-breaking changes
+____________________
+
+  - 'IPUConfig.optimizations.enable_fast_math' has been moved to 'IPUConfig.optimizations.math.fast'
+
 Release 2.2
 ~~~~~~~~~~~
 
