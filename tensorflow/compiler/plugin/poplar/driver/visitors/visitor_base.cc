@@ -70,13 +70,14 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
     case THREESTATE_ON:
       new_stochastic_rounding_enabled = true;
       break;
+    // The stochastic_rounding mode should be unambiguously set by
+    // the AddStochasticRoundingOptions pass.
     case THREESTATE_UNDEFINED:
-      new_stochastic_rounding_enabled =
-          resources_.global_floating_point_behaviour.esr();
-      break;
     default:
-      return InvalidArgument(
-          "Invalid value for PoplarBackendConfig.stochastic_rounding()");
+      return InvalidArgumentStrCat(
+          "Invalid value for PoplarBackendConfig.stochastic_rounding() in "
+          "instruction '",
+          inst->name(), "'");
   }
   if (new_stochastic_rounding_enabled != stochastic_rounding_enabled_) {
     poplar::program::Sequence seq({}, debug_name_and_id);
@@ -86,6 +87,7 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
     AddSequenceForInstruction(inst, seq);
     stochastic_rounding_enabled_ = new_stochastic_rounding_enabled;
   }
+
   return Status::OK();
 }
 

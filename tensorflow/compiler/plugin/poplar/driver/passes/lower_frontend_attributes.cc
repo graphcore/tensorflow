@@ -122,14 +122,11 @@ StatusOr<bool> LowerFrontendAttributes::Run(HloModule* module) {
   }
 
   // Note: we expect all the instructions to have a value for these attributes
-  // (For example in scopes.py instructions added after the end of a
-  // stochastic_rounding scope will explicitely be tagged as
-  // THREESTATE_UNDEFINED). However in some cases optimizers introduce new nodes
-  // without preserving the frontend attributes of the node they replace which
-  // is why the variables used to lower the frontend attributes in this method
-  // are declared outside of the loop. This way we use the last successfully
-  // parsed values to approximate the missing values.
-  ThreeState stochastic_rounding = THREESTATE_UNDEFINED;
+  // However in some cases optimizers introduce new nodes without preserving
+  // the frontend attributes of the node they replace which is why the variables
+  // used to lower the frontend attributes in this method are declared outside
+  // of the loop. This way we use the last successfully parsed values to
+  // approximate the missing values.
   PrimitiveType partials_type = PRIMITIVE_TYPE_INVALID;
 
   for (auto* comp : module->computations()) {
@@ -137,16 +134,6 @@ StatusOr<bool> LowerFrontendAttributes::Run(HloModule* module) {
       auto attributes = instr->frontend_attributes();
       TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
                           instr->backend_config<PoplarBackendConfig>());
-      auto stochastic_rounding_attribute =
-          attributes.map().find(FrontendAttributeId_Name(STOCHASTIC_ROUNDING));
-      if (stochastic_rounding_attribute != attributes.map().end()) {
-        if (!ThreeState_Parse(stochastic_rounding_attribute->second,
-                              &stochastic_rounding)) {
-          return xla::FailedPrecondition(
-              "Could not parse the stochastic rounding value");
-        }
-        changed = true;
-      }
       auto partials_type_attribute =
           attributes.map().find(FrontendAttributeId_Name(PARTIALS_TYPE));
       if (partials_type_attribute != attributes.map().end()) {
@@ -166,8 +153,10 @@ StatusOr<bool> LowerFrontendAttributes::Run(HloModule* module) {
         }
         changed = true;
       }
+      // Change default stochastic rounding mode to be undefined, so we can
+      // easily catch cases where the option hasn't been set.
+      poplar_backend_config.set_stochastic_rounding(THREESTATE_UNDEFINED);
       poplar_backend_config.set_partials_type(partials_type);
-      poplar_backend_config.set_stochastic_rounding(stochastic_rounding);
       TF_RETURN_IF_ERROR(instr->set_backend_config(poplar_backend_config));
     }
   }

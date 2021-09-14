@@ -30,10 +30,6 @@ StatusOr<bool> AddStochasticRoundingOptions::Run(HloModule* module) {
   bool modified = false;
 
   for (auto* comp : module->computations()) {
-    if (IsPopOpsFusion(comp)) {
-      continue;
-    }
-
     for (auto* instr : comp->instructions()) {
       TF_ASSIGN_OR_RETURN(bool added_option,
                           ConfigureStochasticRoundingOption(instr));
