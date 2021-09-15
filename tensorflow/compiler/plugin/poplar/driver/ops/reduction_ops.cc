@@ -982,6 +982,9 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
 
   // Only do the all reduce when there are multiple replicas.
   if (res.replication_factor > 1) {
+    // Create a concatenated and flattened tensor of the inputs.
+    auto flat_tensor = FlattenAndConcatenateTensors(flat_tensors);
+
     TF_ASSIGN_OR_RETURN(
         const auto replica_groups,
         PoplarReplicaGroups::FromXlaReplicaGroups(inst->replica_groups()));
@@ -989,9 +992,8 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     TF_ASSIGN_OR_RETURN(const auto gcl_comm_group,
                         ToGclCommGroup(replica_groups, res));
 
-    // Use multi-tensor allReduce to reduce them all at the same time even if
-    // they have different types.
-    gcl::allReduceInPlaceCrossReplica(GetMasterGraph(res), flat_tensors,
+    // Replicated sum the concatenated tensor.
+    gcl::allReduceInPlaceCrossReplica(GetMasterGraph(res), flat_tensor,
                                       popops::CollectiveOperator::ADD, seq,
                                       gcl_comm_group, {debug_name_and_id},
                                       GetReplicatedCollectiveOptions(res));
