@@ -1051,6 +1051,64 @@ ENTRY top {
   EXPECT_EQ(merged[1].buffer_offset, 1);
 }
 
+TEST_F(RemoteBufferMergerTest,
+       TestMergeRemoteParameterWithGradientAccumulator) {
+  const auto hlo_string = R"(
+HloModule top
+
+load_func {
+  buffer = f32[5,2] parameter(0), sharding={maximal device=0}
+  ROOT load = f32[5,2] custom-call(buffer), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+}
+
+
+ENTRY top {
+  buffer = f32[5,2] parameter(0), sharding={maximal device=0}
+  accumulator = f32[5,2] custom-call(), custom_call_target="GradientAccumulatorCreate", backend_config="{\"is_remote\":1}\n", sharding={maximal device=0}
+  loaded1 = f32[5,2] call(buffer), to_apply=load_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}", sharding={maximal device=0}
+  loaded2 = f32[5,2] call(accumulator), to_apply=load_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}", sharding={maximal device=0}
+  ROOT ret = (f32[5,2], f32[5,2]) tuple(loaded1, loaded2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
+  EXPECT_TRUE(FlattenCallGraph().Run(module).ValueOrDie());
+
+  CompilerAnnotations annotations(module);
+  annotations.remote_parameter_infos.emplace(0);
+
+  EXPECT_TRUE(RemoteBufferMerger(annotations, THREESTATE_UNDEFINED)
+                  .Run(module)
+                  .ValueOrDie());
+
+  std::vector<RemoteParameterInfo> merged(
+      annotations.remote_parameter_infos.begin(),
+      annotations.remote_parameter_infos.end());
+  EXPECT_EQ(merged.size(), 1);
+  const auto parameter_info = merged[0];
+
+  const auto* root = module->entry_computation()->root_instruction();
+  const auto* loaded2 = root->operand(1);
+  const auto* accumulator =
+      Cast<HloGradientAccumulatorCreate>(loaded2->operand(0));
+  const auto accumulator_info = accumulator->RemoteBufferInfo();
+  EXPECT_TRUE(accumulator_info.has_value());
+
+  EXPECT_EQ(parameter_info.buffer_name, accumulator_info->name);
+  EXPECT_EQ(parameter_info.num_merged, 2);
+  EXPECT_EQ(parameter_info.buffer_offset, 0);
+  EXPECT_EQ(accumulator_info->num_merged, 2);
+  EXPECT_EQ(accumulator_info->merge_offset, 1);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
