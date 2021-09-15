@@ -520,7 +520,11 @@ StatusOr<GroupedInstructions> ChooseCreatorsToMerge(
             // cluster rearranged with CBR. Number of the elements in the buffer
             // will not be available until CBR instance created. If remote
             // buffer merge candidate is rearranged, allow only buffers from the
-            // same clusters, so they will have the same number of the elements.
+            // identical clusters, so they will have the same number of the
+            // elements. Provide partitioned cluster visitor with indicies of
+            // the merged parameters, so it can adjust number of the elements
+            // and host_rearrangement_id for all RemoteParameterInfo structures
+            // affected.
             TF_ASSIGN_OR_RETURN(bool is_rearranged,
                                 IsInsideElementwiseCluster(user, call_graph));
             if (is_rearranged) {
@@ -571,8 +575,7 @@ Status AddMergedInfo(const GroupedInstructions& creators_to_merge,
             << buffer_name << "'";
 
     std::vector<int64> merged_params;
-    for (std::size_t i = 0; i < creators.size(); ++i) {
-      auto* inst = creators[i];
+    for (const HloInstruction* inst : creators) {
       if (IsRemoteParameter(inst, annotations)) {
         merged_params.push_back(inst->parameter_number());
       }
