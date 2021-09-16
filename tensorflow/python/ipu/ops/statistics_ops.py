@@ -39,6 +39,18 @@ def fixed_width_bins(inputs, n_bins):
   return math_ops.linspace(min_level, max_level, n_bins)
 
 
+def histogram_normalize(hist):
+  """This op normalizes a histogram.
+
+  Args:
+    hist: The histogram to be normalized.
+
+  Returns:
+    The normalized histogram.
+  """
+  return hist / math_ops.reduce_sum(hist, axis=0)
+
+
 def histogram(inputs, levels, absolute_of_input=False):
   """This op generates a histogram of `inputs` over the fixed width bins
   defined by `levels`.

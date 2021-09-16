@@ -19,6 +19,7 @@ Keras Optimizer wrappers for the Graphcore IPU
 from tensorflow.python.ipu.keras.optimizers.ipu_wrappers import IpuOptimizer
 from tensorflow.python.ipu.keras.optimizers.ipu_wrappers import _TensorflowOptimizerWrapper
 from tensorflow.python.ipu.keras.optimizers.ipu_wrappers import _KerasOptimizerWrapper
+from tensorflow.python.ipu.keras.optimizers.automatic_loss_scaling_optimizer import AutomaticLossScalingOptimizer
 from tensorflow.python.ipu.keras.optimizers.cross_replica_optimizer import CrossReplicaOptimizer
 from tensorflow.python.ipu.keras.optimizers.map_gradient_optimizer import MapGradientOptimizer
 from tensorflow.python.ipu.keras.optimizers.map_gradient_optimizer import MapGradientOptimizerInvertedChaining
