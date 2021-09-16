@@ -141,6 +141,8 @@ class HloPoplarDataflowAnalysis {
 
   // The Id to use for the next HloPoplarBuffer.
   HloPoplarBuffer::Id next_buffer_id_ = 0;
+
+  absl::flat_hash_set<const HloComputation*> visited_computations_;
 };
 }  // namespace poplarplugin
 }  // namespace xla
