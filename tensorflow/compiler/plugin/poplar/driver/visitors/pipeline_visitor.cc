@@ -589,19 +589,25 @@ PipelineVisitor::~PipelineVisitor() = default;
 
 static Status VerifyPipelineArgumentsFixed(int64 iterations,
                                            int64 overlap_length) {
+  const char* context_message =
+      "This number might be called `gradient_accumulation_count`, "
+      "`gradient_accumulation_steps_per_replica` or `steps_per_execution` "
+      "depending on the API used.";
+
   if (iterations % overlap_length) {
     // TODO(T11404)
     return FailedPrecondition(
-        "The pipeline depth of the pipeline must be a multiple of %d, but it "
-        "is %d.",
-        overlap_length, iterations);
+        "The number of iterations of the pipeline must be a multiple of "
+        "%d, but it is %d. %s",
+        overlap_length, iterations, context_message);
   }
   // To account for ramp up and ramp down we need at least overlap_length
   // iterations.
   if (iterations < overlap_length) {
     return FailedPrecondition(
-        "The pipeline depth of the pipeline must be at least %d, but it is %d.",
-        overlap_length, iterations);
+        "The number of iterations of the pipeline must be at least %d, "
+        "but it is %d. %s",
+        overlap_length, iterations, context_message);
   }
   return Status::OK();
 }

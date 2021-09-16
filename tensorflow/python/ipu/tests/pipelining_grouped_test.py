@@ -160,7 +160,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       sess.run(infeed_queue.initializer)
       with self.assertRaisesRegex(
           errors.FailedPreconditionError,
-          'The pipeline depth of the pipeline must be a multiple of 3'):
+          'The number of iterations of the pipeline must be a multiple of 3'):
         sess.run(r, {c: 10.01})
 
   @test_util.deprecated_graph_mode_only
