@@ -70,7 +70,11 @@ static Status VerifyPipelineArgumentsFixed(int64 iterations,
                                            int64 overlap_length) {
   if (iterations < (overlap_length + 2)) {
     return FailedPrecondition(
-        "The pipeline depth of the pipeline must be at least %d, but it is %d.",
+        "The number of iterations of the pipeline must be at least %d, "
+        "but it is %d. This number might be called "
+        "`gradient_accumulation_count`, "
+        "`gradient_accumulation_steps_per_replica` or `steps_per_execution` "
+        "depending on the API used.",
         overlap_length + 2, iterations);
   }
 
