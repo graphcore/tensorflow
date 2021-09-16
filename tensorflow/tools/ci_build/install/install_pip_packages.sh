@@ -17,8 +17,10 @@
 set -e
 
 # Get the latest version of pip so it recognize manylinux2010
-easy_install3 -U pip
-easy_install -U pip
+wget https://bootstrap.pypa.io/get-pip.py
+python3 get-pip.py
+python get-pip.py
+rm -f get-pip.py
 
 # Install pip packages from whl files to avoid the time-consuming process of
 # building from source.
