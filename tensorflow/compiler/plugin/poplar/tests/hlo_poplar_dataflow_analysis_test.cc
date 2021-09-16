@@ -17,11 +17,19 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/function_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fusion_inliner.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/outline_remote_buffers.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/remote_buffer_merger.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/replicated_resource_update_elementwise_clustering.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/variables_offload_and_partition.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_graph_dumper.h"
 #include "tensorflow/compiler/xla/service/hlo_matchers.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
@@ -38,6 +46,100 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
+
+using tu = HloPoplarTestUtil;
+
+struct HloPoplarDataflowAnalysisLoopTestSpec {
+  std::string hlo;
+  std::string short_name;
+};
+
+std::ostream& operator<<(std::ostream& os,
+                         const HloPoplarDataflowAnalysisLoopTestSpec& spec) {
+  return os << "{ name: " << spec.short_name << "}";
+}
+
+class HloPoplarDataflowAnalysisLoopTest
+    : public HloTestBase,
+      public ::testing::WithParamInterface<
+          HloPoplarDataflowAnalysisLoopTestSpec> {};
+
+INSTANTIATE_TEST_SUITE_P(
+    HloPoplarDataflowAnalysisLoopTestCases, HloPoplarDataflowAnalysisLoopTest,
+    ::testing::ValuesIn(std::vector<HloPoplarDataflowAnalysisLoopTestSpec>{
+        {tu::GetSimpleHloString(20, 100), "simple"},
+        {tu::GetTwoClustersShareInputHloString(20, 100), "2-clusters"},
+        {tu::GetAdamLikeHloString(20, 100), "adam"},
+        {tu::GetLambLikeHloString(20, 100), "lamb"},
+        {tu::GetMomentumLikeHloString(20, 100), "momentum"},
+        {tu::GetSGDHloString(20, 100), "sgd"},
+        {tu::GetTwoClustersShareInputHloString(20, 100), "shared-inputs"},
+    }));
+
+TEST_P(HloPoplarDataflowAnalysisLoopTest, DoTest) {
+  auto param = GetParam();
+  auto config = GetModuleConfigForTest();
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
+  config.set_resource_update_to_input_index({0, 1, 2, 3});
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(param.hlo, config));
+
+  CompilerAnnotations annotations(module.get());
+  const int64 replication_factor = 2;
+  bool changed;
+  TF_ASSERT_OK_AND_ASSIGN(changed, CustomOpReplacer().Run(module.get()));
+  TF_ASSERT_OK_AND_ASSIGN(
+      changed, VariablesOffloadAndPartition(
+                   annotations, /*remote_memory_supported=*/true,
+                   /*minimum_remote_tensor_size=*/0, replication_factor)
+                   .Run(module.get()));
+  EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(
+      changed, ReplicatedResourceUpdateElementwiseClustering(annotations,
+                                                             replication_factor)
+                   .Run(module.get()));
+  EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed,
+                          FusionInliner([](const HloInstruction* inst) {
+                            return IsReplicatedParameterLoadFusion(inst) ||
+                                   IsReplicatedParameterStoreFusion(inst);
+                          })
+                              .Run(module.get()));
+  TF_ASSERT_OK_AND_ASSIGN(changed, HloDCE().Run(module.get()));
+  TF_ASSERT_OK_AND_ASSIGN(changed, OutlineRemoteBuffers().Run(module.get()));
+  EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(
+      changed,
+      RemoteBufferMerger(annotations, THREESTATE_ON).Run(module.get()));
+
+  TF_ASSERT_OK_AND_ASSIGN(changed, FunctionCombiner().Run(module.get()));
+
+  VLOG(1) << "Test source:";
+  XLA_LOG_LINES(1, param.hlo);
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto analysis, HloPoplarDataflowAnalysis::Run(module.get(), annotations));
+
+  VLOG(1) << "Analysis result:";
+  XLA_LOG_LINES(1, analysis->ToString());
+
+  auto* root = module->entry_computation()->root_instruction();
+  auto params = module->entry_computation()->parameter_instructions();
+  CHECK_EQ(root->opcode(), HloOpcode::kTuple);
+  CHECK_EQ(root->operand_count(), params.size());
+
+  for (std::size_t i = 0; i < params.size(); ++i) {
+    auto* param = params[i];
+    auto* result = root->operand(i);
+    auto param_buffer = analysis->GetUniqueBufferAt(param);
+    auto result_buffer = analysis->GetUniqueBufferAt(result);
+    CHECK_EQ(param_buffer, result_buffer);
+    auto locality = param_buffer.locality();
+    CHECK(locality == (i >= 2 ? BufferLocality::kRemoteMemory
+                              : BufferLocality::kDeviceMemory));
+  }
+}
 
 using HloPoplarDataflowAnalysisTest = HloTestBase;
 
@@ -405,6 +507,73 @@ ENTRY main {
   EXPECT_TRUE(analysis->BufferIsDefinedAt(result, ShapeIndex{0}));
 }
 
+TEST_F(HloPoplarDataflowAnalysisTest, TestWhile) {
+  std::string hlo = R"(
+ HloModule top
+cond {
+  c_p0 = (s32[], f32[10], f32[10]) parameter(0)
+  c_e0 = s32[] get-tuple-element(c_p0), index=0
+  c_c0 = s32[] constant(4)
+  ROOT c_eq = pred[] compare(c_e0, c_c0), direction=EQ
+}
+
+body {
+  b_p0 = (s32[], f32[10], f32[10]) parameter(0)
+  b_e0 = s32[] get-tuple-element(b_p0), index=0
+  b_e1 = f32[10] get-tuple-element(b_p0), index=1
+  b_e2 = f32[10] get-tuple-element(b_p0), index=2
+  b_a0 = f32[10] add(b_e1, b_e2)
+  ROOT b_t0 = (s32[], f32[10], f32[10]) tuple(b_e0, b_e1, b_a0)
+}
+
+ENTRY main {
+  arg0 = (s32[], f32[10], f32[10]) parameter(0)
+  ROOT w = (s32[], f32[10], f32[10]) while(arg0), condition=cond, body=body
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  EXPECT_THAT(analysis->buffer_count(), 8);
+
+  HloInstruction* c_p0 = FindInstruction(m.get(), "c_p0");
+
+  HloInstruction* b_p0 = FindInstruction(m.get(), "b_p0");
+  HloInstruction* b_t0 = FindInstruction(m.get(), "b_t0");
+
+  HloInstruction* arg0 = FindInstruction(m.get(), "arg0");
+  HloInstruction* w = FindInstruction(m.get(), "w");
+
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(arg0, ShapeIndex{0}));
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(arg0, ShapeIndex{1}));
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(arg0, ShapeIndex{2}));
+
+  EXPECT_EQ(analysis->GetInstructionBufferSet(arg0),
+            analysis->GetInstructionBufferSet(w));
+
+  EXPECT_FALSE(analysis->BufferIsDefinedAt(b_p0, ShapeIndex{0}));
+  EXPECT_FALSE(analysis->BufferIsDefinedAt(b_p0, ShapeIndex{1}));
+  EXPECT_FALSE(analysis->BufferIsDefinedAt(b_p0, ShapeIndex{2}));
+
+  EXPECT_EQ(analysis->GetBufferSet(b_p0, ShapeIndex{0}),
+            analysis->GetBufferSet(b_t0, ShapeIndex{0}));
+  EXPECT_EQ(analysis->GetBufferSet(b_p0, ShapeIndex{1}),
+            analysis->GetBufferSet(b_t0, ShapeIndex{1}));
+  EXPECT_EQ(analysis->GetBufferSet(b_p0, ShapeIndex{1}),
+            analysis->GetBufferSet(b_t0, ShapeIndex{2}));
+
+  EXPECT_NE(analysis->GetInstructionBufferSet(c_p0),
+            analysis->GetInstructionBufferSet(arg0));
+
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(c_p0, ShapeIndex{0}));
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(c_p0, ShapeIndex{1}));
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(c_p0, ShapeIndex{2}));
+}
+
 TEST_F(HloPoplarDataflowAnalysisTest, TestPopopsFusionNoAlias) {
   std::string hlo = R"(
  HloModule top
@@ -550,6 +719,122 @@ ENTRY main {
   EXPECT_EQ(arg0_load_buffer.locality(), BufferLocality::kDeviceMemory);
 
   EXPECT_EQ(arg0_buffer, analysis->GetUniqueBufferAt(arg0_store));
+}
+
+TEST_F(HloPoplarDataflowAnalysisTest, TestRepeatLoop1) {
+  std::string hlo = R"(
+HloModule top
+
+Sum-reduction.7 {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT add = f32[] add(x, y)
+}
+
+_body  {
+  body_arg_tuple = (f32[], f32[1,1,2,2]) parameter(0)
+  body_arg_tuple_1 = f32[1,1,2,2] get-tuple-element(body_arg_tuple), index=1
+  body_c0 = f32[] constant(0)
+  body_after_all = token[] after-all()
+  body_infeed = ((f32[2,4,4,2]), token[]) infeed(body_after_all), infeed_config="140121807314576"
+  body_infeed_0 = (f32[2,4,4,2]) get-tuple-element(body_infeed), index=0
+  body_infeed_0_0 = f32[2,4,4,2] get-tuple-element(body_infeed_0), index=0
+  body_convolution = f32[2,4,4,2] convolution(body_infeed_0_0, body_arg_tuple_1), window={size=1x1}, dim_labels=b01f_01io->b01f
+  body_reduce = f32[] reduce(body_convolution, body_c0), dimensions={0,1,2,3}, to_apply=Sum-reduction.7
+  ROOT body_root_tuple = (f32[], f32[1,1,2,2]) tuple(body_reduce, body_arg_tuple_1)
+}
+
+ENTRY top {
+  c0 = f32[] constant(0)
+  arg0 = f32[1,1,2,2] parameter(0)
+  arg_tuple = (f32[], f32[1,1,2,2]) tuple(c0, arg0)
+  ROOT loop = (f32[], f32[1,1,2,2]) call(arg_tuple), to_apply=_body, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+}
+
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  EXPECT_THAT(analysis->buffer_count(), 8);
+
+  HloInstruction* arg0 = FindInstruction(m.get(), "arg0");
+  HloInstruction* c0 = FindInstruction(m.get(), "c0");
+  HloInstruction* arg_tuple = FindInstruction(m.get(), "arg_tuple");
+  HloInstruction* body_arg_tuple = FindInstruction(m.get(), "body_arg_tuple");
+  HloInstruction* loop = FindInstruction(m.get(), "loop");
+
+  auto arg0_buffer_set = analysis->GetBufferSet(arg0);
+  auto c0_buffer_set = analysis->GetBufferSet(c0);
+
+  InstructionPoplarBufferSet instruction_set(arg_tuple->shape());
+  instruction_set.SetOutputBufferSet(ShapeIndex{0}, c0_buffer_set);
+  instruction_set.SetOutputBufferSet(ShapeIndex{1}, arg0_buffer_set);
+
+  EXPECT_THAT(analysis->GetInstructionBufferSet(arg_tuple), instruction_set);
+  EXPECT_THAT(analysis->GetInstructionBufferSet(body_arg_tuple),
+              instruction_set);
+  EXPECT_THAT(analysis->GetInstructionBufferSet(loop), instruction_set);
+}
+
+TEST_F(HloPoplarDataflowAnalysisTest, TestRepeatLoop2) {
+  std::string hlo = R"(
+HloModule top
+
+Sum-reduction.7 {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT add = f32[] add(x, y)
+}
+
+_body  {
+  body_arg0 = f32[] parameter(0)
+  body_arg1 = f32[1,1,2,2] parameter(1)
+  body_c0 = f32[] constant(0)
+  body_after_all = token[] after-all()
+  body_infeed = ((f32[2,4,4,2]), token[]) infeed(body_after_all), infeed_config="140121807314576"
+  body_infeed_0 = (f32[2,4,4,2]) get-tuple-element(body_infeed), index=0
+  body_infeed_0_0 = f32[2,4,4,2] get-tuple-element(body_infeed_0), index=0
+  body_convolution = f32[2,4,4,2] convolution(body_infeed_0_0, body_arg1), window={size=1x1}, dim_labels=b01f_01io->b01f
+  body_reduce = f32[] reduce(body_convolution, body_c0), dimensions={0,1,2,3}, to_apply=Sum-reduction.7
+  ROOT body_root_tuple = (f32[], f32[1,1,2,2]) tuple(body_reduce, body_arg1)
+}
+
+ENTRY top {
+  c0 = f32[] constant(0)
+  arg0 = f32[1,1,2,2] parameter(0)
+  ROOT loop = (f32[], f32[1,1,2,2]) call(c0, arg0), to_apply=_body, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+}
+
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  EXPECT_THAT(analysis->buffer_count(), 8);
+
+  HloInstruction* arg0 = FindInstruction(m.get(), "arg0");
+  HloInstruction* c0 = FindInstruction(m.get(), "c0");
+  HloInstruction* body_arg0 = FindInstruction(m.get(), "body_arg0");
+  HloInstruction* body_arg1 = FindInstruction(m.get(), "body_arg1");
+  HloInstruction* loop = FindInstruction(m.get(), "loop");
+
+  auto arg0_buffer_set = analysis->GetBufferSet(arg0);
+  auto c0_buffer_set = analysis->GetBufferSet(c0);
+
+  EXPECT_THAT(analysis->GetBufferSet(body_arg0), c0_buffer_set);
+  EXPECT_THAT(analysis->GetBufferSet(body_arg1), arg0_buffer_set);
+
+  InstructionPoplarBufferSet instruction_set(loop->shape());
+  instruction_set.SetOutputBufferSet(ShapeIndex{0}, c0_buffer_set);
+  instruction_set.SetOutputBufferSet(ShapeIndex{1}, arg0_buffer_set);
+  EXPECT_THAT(analysis->GetInstructionBufferSet(loop), instruction_set);
 }
 
 }  // namespace
