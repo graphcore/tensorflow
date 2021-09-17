@@ -243,8 +243,8 @@ std::ostream& operator<<(std::ostream& out, const HloPoplarBuffer& buffer) {
 }
 
 HloPoplarBufferSet::HloPoplarBufferSet(
-    absl::Span<const HloPoplarBuffer* const> buffers)
-    : buffers_(buffers.begin(), buffers.end()) {
+    absl::Span<const HloPoplarBuffer* const> buffers, BufferUseKind use_kind)
+    : buffers_(buffers.begin(), buffers.end()), use_kind_(use_kind) {
   SortAndUniquifyBuffers();
 }
 
@@ -265,9 +265,17 @@ bool HloPoplarBufferSet::AddBuffer(const HloPoplarBuffer* buffer) {
 }
 
 bool HloPoplarBufferSet::AssignUnionOf(
-    absl::Span<const HloPoplarBufferSet* const> buffer_sets) {
-  HloPoplarBufferSet union_set;
+    absl::Span<const HloPoplarBufferSet* const> buffer_sets,
+    BufferUseKind use_kind) {
+  HloPoplarBufferSet union_set(use_kind);
   for (const HloPoplarBufferSet* buffer_set : buffer_sets) {
+    BufferUseKind buffer_set_use_kind = buffer_set->GetUseKind();
+    // Out of all buffer uses, pick up the highest usage kind.
+    // For instance, readonly op can't change the fact that buffer was
+    // modified before.
+    if (buffer_set_use_kind > union_set.use_kind_) {
+      union_set.use_kind_ = buffer_set_use_kind;
+    }
     for (const HloPoplarBuffer* buffer : buffer_set->buffers()) {
       union_set.buffers_.push_back(buffer);
     }
@@ -281,7 +289,8 @@ bool HloPoplarBufferSet::AssignUnionOf(
 }
 
 bool HloPoplarBufferSet::operator==(const HloPoplarBufferSet& other) const {
-  if (buffers_.size() != other.buffers_.size()) {
+  if (use_kind_ != other.use_kind_ ||
+      buffers_.size() != other.buffers_.size()) {
     return false;
   }
 
@@ -306,7 +315,7 @@ void HloPoplarBufferSet::SortAndUniquifyBuffers() {
 
 std::string HloPoplarBufferSet::ToString() const {
   return absl::StrCat(
-      "HloPoplarBufferSet: ",
+      "HloPoplarBufferSet: ", BufferUseKind_Name(use_kind_), ", ",
       absl::StrJoin(buffers_, ", ",
                     [](std::string* result, const HloPoplarBuffer* buffer) {
                       result->append(buffer->ToString());
@@ -330,11 +339,13 @@ void InstructionPoplarBufferSet::SetOutputBufferSet(
 }
 
 void InstructionPoplarBufferSet::SetOutputToBufferSetUnion(
-    const ShapeIndex& output_index, const HloPoplarBufferSet& buffer_set) {
+    const ShapeIndex& output_index, const HloPoplarBufferSet& buffer_set,
+    BufferUseKind use_kind) {
   ShapeIndexView index_view(output_index);
   CHECK(buffer_sets_.IsLeaf(index_view));
   HloPoplarBufferSet union_set;
-  union_set.AssignUnionOf({&buffer_sets_.element(index_view), &buffer_set});
+  union_set.AssignUnionOf({&buffer_sets_.element(index_view), &buffer_set},
+                          use_kind);
   *buffer_sets_.mutable_element(index_view) = union_set;
 }
 

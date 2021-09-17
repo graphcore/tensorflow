@@ -52,6 +52,10 @@ class HloPoplarDataflowAnalysis {
   // Run dataflow analysis on the given module. Requires the module to be
   // flattened.
   static StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>> Run(
+      const HloModule* module, const CompilerAnnotations& annotations,
+      const CallGraph& call_graph);
+
+  static StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>> Run(
       const HloModule* module, const CompilerAnnotations& annotations);
 
   // Returns a new HloPoplarBuffer defined at the given instruction and shape
