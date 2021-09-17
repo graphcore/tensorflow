@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 
 namespace xla {
@@ -37,12 +38,15 @@ class AddStochasticRoundingOptions : public HloModulePass {
   StatusOr<bool> Run(HloModule* module) override;
 
  private:
-  StatusOr<bool> ConfigureStochasticRoundingOption(HloInstruction* instr) const;
+  StatusOr<bool> ConfigureStochasticRoundingOption(HloInstruction* inst) const;
   StatusOr<ThreeState> ParseFrontendStochasticRoundingAttr(
-      const HloInstruction* instr) const;
+      const HloInstruction* inst) const;
+
+  StatusOr<StochasticRoundingMethod> GetStochasticRoundingMethod(
+      const HloInstruction* inst) const;
 
   StatusOr<bool> ConfigureDeterministicWorkersOption(
-      HloInstruction* instr) const;
+      HloInstruction* inst) const;
 
   StochasticRoundingBehaviour default_stochastic_rounding_behaviour_;
 };

@@ -102,8 +102,14 @@ enum Tileset {
   TILESET_IO_TILES = 1;
 };
 
+enum StochasticRoundingMethod {
+  StochasticRoundingMethod_Undefined = 0;
+  StochasticRoundingMethod_DifferingSeeds = 1;
+  StochasticRoundingMethod_IdenticalSeeds = 2;
+  StochasticRoundingMethod_Any = 3;
+}
+
 // Backend specific HloInstruction config
-// NEXT ID = 11
 message PoplarBackendConfig {
   // Instruction config for a fusion instruction
   message FusionConfig {
@@ -227,4 +233,7 @@ message PoplarBackendConfig {
   // TF config option for setting the Poplar `deterministicWorkers`
   // option.
   ThreeState deterministic_workers = 13;
+
+  // Tag for controlling how we perform SR.
+  StochasticRoundingMethod stochastic_rounding_method = 14;
 };

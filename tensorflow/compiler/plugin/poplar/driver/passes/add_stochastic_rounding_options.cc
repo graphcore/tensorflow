@@ -17,9 +17,148 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
+
+#include "tensorflow/compiler/xla/shape_util.h"
 
 namespace xla {
 namespace poplarplugin {
+namespace {
+
+StatusOr<bool> NeedsSpecificSeedType(const HloInstruction* inst) {
+  // Instruction types that dont require a specific seed.
+  switch (inst->opcode()) {
+    // We don't need to worry about seeds for these instruction types since
+    // they're mostly reading/restructuring data and so won't perform stochastic
+    // rounding. More generally we only need to care about seeding for leaf
+    // instructions, since higher level calls/control flow instructions will be
+    // returning the results of those.
+    case HloOpcode::kAddDependency:
+    case HloOpcode::kAfterAll:
+    case HloOpcode::kAnd:
+    case HloOpcode::kBroadcast:
+    case HloOpcode::kCall:
+    case HloOpcode::kCompare:
+    case HloOpcode::kConditional:
+    case HloOpcode::kConstant:
+    case HloOpcode::kCopy:
+    case HloOpcode::kCopyDone:
+    case HloOpcode::kCopyStart:
+    case HloOpcode::kDynamicSlice:
+    case HloOpcode::kDynamicUpdateSlice:
+    case HloOpcode::kGetDimensionSize:
+    case HloOpcode::kGetTupleElement:
+    case HloOpcode::kInfeed:
+    case HloOpcode::kMap:
+    case HloOpcode::kNot:
+    case HloOpcode::kOr:
+    case HloOpcode::kOutfeed:
+    case HloOpcode::kParameter:
+    case HloOpcode::kPad:
+    case HloOpcode::kPartitionId:
+    case HloOpcode::kRecv:
+    case HloOpcode::kRecvDone:
+    case HloOpcode::kReplicaId:
+    case HloOpcode::kReshape:
+    case HloOpcode::kSelect:
+    case HloOpcode::kSend:
+    case HloOpcode::kSendDone:
+    case HloOpcode::kSlice:
+    case HloOpcode::kTranspose:
+    case HloOpcode::kTuple:
+    case HloOpcode::kTupleSelect:
+    case HloOpcode::kWhile:
+    case HloOpcode::kXor:
+      return false;
+    default:
+      break;
+  }
+
+  const bool uses_stochastic_rounding =
+      ShapeUtil::HasPrimitiveType(inst->shape(), F16);
+  if (!uses_stochastic_rounding) {
+    // If we're not using SR then it doesn't matter what
+    // seed we use.
+    return false;
+  } else {
+    // Instruction types that require a specific seed.
+    switch (inst->opcode()) {
+      case HloOpcode::kAbs:
+      case HloOpcode::kAdd:
+      case HloOpcode::kAllReduce:
+      case HloOpcode::kAllToAll:
+      case HloOpcode::kAtan2:
+      case HloOpcode::kBatchNormGrad:
+      case HloOpcode::kBatchNormInference:
+      case HloOpcode::kBatchNormTraining:
+      case HloOpcode::kBitcast:
+      case HloOpcode::kBitcastConvert:
+      case HloOpcode::kCeil:
+      case HloOpcode::kCholesky:
+      case HloOpcode::kClamp:
+      case HloOpcode::kClz:
+      case HloOpcode::kCollectivePermute:
+      case HloOpcode::kComplex:
+      case HloOpcode::kConcatenate:
+      case HloOpcode::kConvert:
+      case HloOpcode::kConvolution:
+      case HloOpcode::kCos:
+      case HloOpcode::kCustomCall:
+      case HloOpcode::kDivide:
+      case HloOpcode::kDomain:
+      case HloOpcode::kDot:
+      case HloOpcode::kExp:
+      case HloOpcode::kExpm1:
+      case HloOpcode::kFft:
+      case HloOpcode::kFloor:
+      case HloOpcode::kFusion:
+      case HloOpcode::kGather:
+      case HloOpcode::kImag:
+      case HloOpcode::kIota:
+      case HloOpcode::kIsFinite:
+      case HloOpcode::kLog:
+      case HloOpcode::kLog1p:
+      case HloOpcode::kMaximum:
+      case HloOpcode::kMinimum:
+      case HloOpcode::kMultiply:
+      case HloOpcode::kNegate:
+      case HloOpcode::kPopulationCount:
+      case HloOpcode::kPower:
+      case HloOpcode::kReal:
+      case HloOpcode::kReduce:
+      case HloOpcode::kReducePrecision:
+      case HloOpcode::kReduceWindow:
+      case HloOpcode::kRemainder:
+      case HloOpcode::kReverse:
+      case HloOpcode::kRng:
+      case HloOpcode::kRngGetAndUpdateState:
+      case HloOpcode::kRoundNearestAfz:
+      case HloOpcode::kRsqrt:
+      case HloOpcode::kScatter:
+      case HloOpcode::kSelectAndScatter:
+      case HloOpcode::kShiftLeft:
+      case HloOpcode::kShiftRightArithmetic:
+      case HloOpcode::kShiftRightLogical:
+      case HloOpcode::kSign:
+      case HloOpcode::kSin:
+      case HloOpcode::kSort:
+      case HloOpcode::kSqrt:
+      case HloOpcode::kSubtract:
+      case HloOpcode::kTanh:
+      case HloOpcode::kTrace:
+      case HloOpcode::kTriangularSolve:
+        return true;
+      default:
+        break;
+    }
+  }
+
+  return tensorflow::errors::FailedPrecondition(
+      "Missing stochastic rounding seed usage support for instruction type '",
+      inst->opcode(), "'");
+}
+
+}  // namespace
 
 AddStochasticRoundingOptions::AddStochasticRoundingOptions(
     const StochasticRoundingBehaviour& default_stochastic_rounding_behaviour)
@@ -30,13 +169,13 @@ StatusOr<bool> AddStochasticRoundingOptions::Run(HloModule* module) {
   bool modified = false;
 
   for (auto* comp : module->computations()) {
-    for (auto* instr : comp->instructions()) {
+    for (auto* inst : comp->instructions()) {
       TF_ASSIGN_OR_RETURN(bool added_option,
-                          ConfigureStochasticRoundingOption(instr));
+                          ConfigureStochasticRoundingOption(inst));
       modified |= added_option;
 
       TF_ASSIGN_OR_RETURN(added_option,
-                          ConfigureDeterministicWorkersOption(instr));
+                          ConfigureDeterministicWorkersOption(inst));
       modified |= added_option;
     }
   }
@@ -45,9 +184,9 @@ StatusOr<bool> AddStochasticRoundingOptions::Run(HloModule* module) {
 }
 
 StatusOr<bool> AddStochasticRoundingOptions::ConfigureStochasticRoundingOption(
-    HloInstruction* instr) const {
+    HloInstruction* inst) const {
   TF_ASSIGN_OR_RETURN(ThreeState stochastic_rounding,
-                      ParseFrontendStochasticRoundingAttr(instr));
+                      ParseFrontendStochasticRoundingAttr(inst));
 
   // We only want to apply the default stochastic rounding option
   // if the instruction did not have one specified via its frontend
@@ -59,7 +198,7 @@ StatusOr<bool> AddStochasticRoundingOptions::ConfigureStochasticRoundingOption(
     if (default_stochastic_rounding_behaviour_ ==
         StochasticRounding_ReplicaIdenticalOnly) {
       stochastic_rounding =
-          IsInstructionReplicaIdentical(instr) ? THREESTATE_ON : THREESTATE_OFF;
+          IsInstructionReplicaIdentical(inst) ? THREESTATE_ON : THREESTATE_OFF;
     } else {
       stochastic_rounding =
           default_stochastic_rounding_behaviour_ == StochasticRounding_On
@@ -69,21 +208,28 @@ StatusOr<bool> AddStochasticRoundingOptions::ConfigureStochasticRoundingOption(
   }
 
   TF_ASSIGN_OR_RETURN(auto backend_config,
-                      instr->backend_config<PoplarBackendConfig>());
+                      inst->backend_config<PoplarBackendConfig>());
+
   backend_config.set_stochastic_rounding(stochastic_rounding);
-  TF_RETURN_IF_ERROR(instr->set_backend_config(backend_config));
+  if (stochastic_rounding != StochasticRounding_Off) {
+    TF_ASSIGN_OR_RETURN(StochasticRoundingMethod stochastic_rounding_method,
+                        GetStochasticRoundingMethod(inst));
+    backend_config.set_stochastic_rounding_method(stochastic_rounding_method);
+  }
+
+  TF_RETURN_IF_ERROR(inst->set_backend_config(backend_config));
 
   return true;
 }
 
 StatusOr<ThreeState>
 AddStochasticRoundingOptions::ParseFrontendStochasticRoundingAttr(
-    const HloInstruction* instr) const {
+    const HloInstruction* inst) const {
   ThreeState stochastic_rounding = THREESTATE_UNDEFINED;
 
-  auto attributes = instr->frontend_attributes();
+  auto attributes = inst->frontend_attributes();
   TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
-                      instr->backend_config<PoplarBackendConfig>());
+                      inst->backend_config<PoplarBackendConfig>());
 
   auto stochastic_rounding_attribute =
       attributes.map().find(FrontendAttributeId_Name(STOCHASTIC_ROUNDING));
@@ -98,17 +244,32 @@ AddStochasticRoundingOptions::ParseFrontendStochasticRoundingAttr(
   return stochastic_rounding;
 }
 
+StatusOr<StochasticRoundingMethod>
+AddStochasticRoundingOptions::GetStochasticRoundingMethod(
+    const HloInstruction* inst) const {
+  // Switching seeds is not free, we can save some time by not switching seeds
+  // for instructions which won't be effected by it.
+  TF_ASSIGN_OR_RETURN(bool needs_sepecific_seed, NeedsSpecificSeedType(inst));
+  if (needs_sepecific_seed) {
+    return IsInstructionReplicaIdentical(inst)
+               ? StochasticRoundingMethod_IdenticalSeeds
+               : StochasticRoundingMethod_DifferingSeeds;
+  }
+
+  return StochasticRoundingMethod_Any;
+}
+
 StatusOr<bool>
 AddStochasticRoundingOptions::ConfigureDeterministicWorkersOption(
-    HloInstruction* instr) const {
-  const ThreeState deterministic_workers = IsInstructionReplicaIdentical(instr)
+    HloInstruction* inst) const {
+  const ThreeState deterministic_workers = IsInstructionReplicaIdentical(inst)
                                                ? THREESTATE_ON
                                                : THREESTATE_UNDEFINED;
 
   TF_ASSIGN_OR_RETURN(auto backend_config,
-                      instr->backend_config<PoplarBackendConfig>());
+                      inst->backend_config<PoplarBackendConfig>());
   backend_config.set_deterministic_workers(deterministic_workers);
-  TF_RETURN_IF_ERROR(instr->set_backend_config(backend_config));
+  TF_RETURN_IF_ERROR(inst->set_backend_config(backend_config));
 
   return true;
 }
