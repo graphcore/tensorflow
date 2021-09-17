@@ -163,12 +163,14 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
           inst->operand(inplace_description.operand_number());
       const auto& operand_buffer_set =
           analysis_->GetBufferSet(operand, inplace_description.operand_index());
+      const BufferUseKind kind = inplace_description.kind();
 
       VLOG(2) << "Forwarding buffer set " << operand_buffer_set << " from "
-              << operand->ToString() << " to " << inst->ToString();
+              << operand->ToString() << " (" << BufferUseKind_Name(kind)
+              << ") to " << inst->ToString();
 
       instruction_set.SetOutputToBufferSetUnion(
-          inplace_description.output_index(), operand_buffer_set);
+          inplace_description.output_index(), operand_buffer_set, kind);
     }
 
     // Generate buffers for all the outputs which don't have aliasing.
@@ -209,12 +211,14 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
           inst->operand(use_description.operand_number());
       const auto& operand_buffer_set =
           analysis_->GetBufferSet(operand, use_description.operand_index());
+      const BufferUseKind kind = use_description.kind();
 
       VLOG(2) << "Forwarding buffer set " << operand_buffer_set << " from "
-              << operand->ToString() << " to " << inst->ToString();
+              << operand->ToString() << " (" << BufferUseKind_Name(kind)
+              << ") to " << inst->ToString();
 
       instruction_set.SetOutputToBufferSetUnion(use_description.output_index(),
-                                                operand_buffer_set);
+                                                operand_buffer_set, kind);
     }
 
     // Then create the output buffers.
@@ -225,7 +229,8 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
                                         buffer_description.locality());
 
       instruction_set.SetOutputToBufferSetUnion(
-          buffer_description.output_index(), HloPoplarBufferSet({buffer}));
+          buffer_description.output_index(), HloPoplarBufferSet({buffer}),
+          BufferUseKind::USE_NO_ALIAS);
     }
     analysis_->SetInstructionBufferSet(inst, instruction_set);
 
@@ -381,11 +386,13 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
   }
 
   Status HandlePad(HloInstruction* inst) override {
-    return HandleForwardsUnionOfAllOperands(inst);
+    return HandleForwardsUnionOfAllOperands(
+        inst, /*kind=*/BufferUseKind::USE_ALIAS_READ_ONLY);
   }
 
   Status HandleConcatenate(HloInstruction* inst) override {
-    return HandleForwardsUnionOfAllOperands(inst);
+    return HandleForwardsUnionOfAllOperands(
+        inst, /*kind=*/BufferUseKind::USE_ALIAS_READ_ONLY);
   }
 
   Status HandleAllReduce(HloInstruction* inst) override {
@@ -537,7 +544,8 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
 
   // Inplace read-only which forward all the buffer sets from operands to an
   // array shaped output.
-  Status HandleForwardsUnionOfAllOperands(HloInstruction* inst) {
+  Status HandleForwardsUnionOfAllOperands(HloInstruction* inst,
+                                          BufferUseKind use_kind) {
     CHECK_GT(inst->operand_count(), 0);
     CHECK(inst->shape().IsArray());
 
@@ -547,7 +555,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
       buffer_sets.push_back(&analysis_->GetBufferSet(operand, {}));
     }
     HloPoplarBufferSet buffer_set;
-    buffer_set.AssignUnionOf(buffer_sets);
+    buffer_set.AssignUnionOf(buffer_sets, use_kind);
 
     VLOG(2) << "Setting a union of buffer sets " << buffer_set << " to "
             << inst->ToString();
@@ -803,18 +811,29 @@ Status HloPoplarDataflowAnalysis::InitializeAndPropagate(
                                         /*is_entry_computation=*/true);
   HloComputation* entry = module_->entry_computation();
   TF_RETURN_IF_ERROR(entry->Accept(&visitor));
+
+  // Create empty buffer set for each non-visited instruction in the module
+  for (HloComputation* comp : module_->computations()) {
+    if (visited_computations_.contains(comp)) {
+      continue;
+    }
+    for (HloInstruction* inst : comp->instructions()) {
+      InstructionPoplarBufferSet instruction_set(inst->shape());
+      SetInstructionBufferSet(inst, instruction_set);
+    }
+  }
   return Status::OK();
 }
 
 /* static */
 StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>>
 HloPoplarDataflowAnalysis::Run(const HloModule* module,
-                               const CompilerAnnotations& annotations) {
+                               const CompilerAnnotations& annotations,
+                               const CallGraph& call_graph) {
   VLOG(1) << "HloPoplarDataflowAnalysis::Run on module " << module->name();
   XLA_VLOG_LINES(3, module->ToString());
 
-  auto call_graph = CallGraph::Build(module);
-  if (!call_graph->IsFlattened()) {
+  if (!call_graph.IsFlattened()) {
     return FailedPrecondition(
         "Cannot perform HloPoplarDataflowAnalysis as the module is not flat.");
   }
@@ -827,6 +846,14 @@ HloPoplarDataflowAnalysis::Run(const HloModule* module,
   XLA_VLOG_LINES(3, dataflow_analysis->ToString());
 
   return std::move(dataflow_analysis);
+}
+
+/* static */
+StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>>
+HloPoplarDataflowAnalysis::Run(const HloModule* module,
+                               const CompilerAnnotations& annotations) {
+  auto call_graph = CallGraph::Build(module);
+  return Run(module, annotations, *call_graph);
 }
 }  // namespace poplarplugin
 }  // namespace xla

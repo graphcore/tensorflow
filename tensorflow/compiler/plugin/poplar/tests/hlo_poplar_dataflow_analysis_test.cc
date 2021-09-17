@@ -408,7 +408,8 @@ TEST_F(HloPoplarDataflowAnalysisTest, TestPad) {
   auto arg0_buffer = analysis->GetUniqueBufferAt(arg0);
   auto c0_buffer = analysis->GetUniqueBufferAt(c0);
   EXPECT_NE(arg0_buffer, c0_buffer);
-  HloPoplarBufferSet union_set({&arg0_buffer, &c0_buffer});
+  HloPoplarBufferSet union_set({&arg0_buffer, &c0_buffer},
+                               BufferUseKind::USE_ALIAS_READ_ONLY);
   EXPECT_THAT(analysis->GetBufferSet(pad), union_set);
 }
 
@@ -639,7 +640,8 @@ ENTRY reduce-window-identity {
   auto arg0_buffer = analysis->GetUniqueBufferAt(arg0);
   auto c0_buffer = analysis->GetUniqueBufferAt(c0);
   EXPECT_NE(arg0_buffer, c0_buffer);
-  HloPoplarBufferSet union_set({&arg0_buffer, &c0_buffer});
+  HloPoplarBufferSet union_set({&arg0_buffer, &c0_buffer},
+                               BufferUseKind::USE_ALIAS_READ_ONLY);
   EXPECT_THAT(analysis->GetBufferSet(root), union_set);
 }
 

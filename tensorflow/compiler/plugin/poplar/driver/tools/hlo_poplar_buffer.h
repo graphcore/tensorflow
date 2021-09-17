@@ -252,8 +252,11 @@ std::ostream& operator<<(std::ostream& out, const HloPoplarBuffer& buffer);
 // position in the XLA graph.
 class HloPoplarBufferSet {
  public:
-  HloPoplarBufferSet() = default;
-  explicit HloPoplarBufferSet(absl::Span<const HloPoplarBuffer* const> buffers);
+  explicit HloPoplarBufferSet(
+      BufferUseKind use_kind = BufferUseKind::USE_NO_ALIAS)
+      : use_kind_(use_kind) {}
+  HloPoplarBufferSet(absl::Span<const HloPoplarBuffer* const> buffers,
+                     BufferUseKind use_kind = BufferUseKind::USE_NO_ALIAS);
 
   // Return the vector of HloPoplarBuffer in the set. Buffers in the vector are
   // unique and stably sorted by buffer id.
@@ -266,12 +269,16 @@ class HloPoplarBufferSet {
   // Returns a unique buffer (if there is one).
   const HloPoplarBuffer& GetUniqueBuffer() const;
 
+  // Returns aggregated use kind
+  BufferUseKind GetUseKind() const { return use_kind_; }
+
   // Add a buffer to the current set - returns true iff a buffer was added.
   bool AddBuffer(const HloPoplarBuffer* buffer);
 
   // Sets this buffer set to the union of the given buffer sets. Returns whether
   // this value set changed.
-  bool AssignUnionOf(absl::Span<const HloPoplarBufferSet* const> buffer_sets);
+  bool AssignUnionOf(absl::Span<const HloPoplarBufferSet* const> buffer_sets,
+                     BufferUseKind use_kind);
 
   bool operator==(const HloPoplarBufferSet& other) const;
   bool operator!=(const HloPoplarBufferSet& other) const;
@@ -285,6 +292,8 @@ class HloPoplarBufferSet {
 
   // HloPoplarBuffers sorted by HloPoplarBuffer::Id.
   std::vector<const HloPoplarBuffer*> buffers_;
+
+  BufferUseKind use_kind_;
 };
 
 std::ostream& operator<<(std::ostream& out,
@@ -304,7 +313,8 @@ class InstructionPoplarBufferSet {
   // Gets the output buffer set at the output index, and reassigns it to the
   // union of the current set and the input set.
   void SetOutputToBufferSetUnion(const ShapeIndex& output_index,
-                                 const HloPoplarBufferSet& buffer_set);
+                                 const HloPoplarBufferSet& buffer_set,
+                                 BufferUseKind use_kind);
 
   // Get the buffer set for a particular output index.
   const HloPoplarBufferSet& GetOutputBufferSet(
