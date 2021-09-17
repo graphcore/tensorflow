@@ -65,7 +65,8 @@ static bool OpFilter(KernelDef* kdef) {
     AddDtypeToKernelDefConstraint("DstT", DT_UINT8, kdef);
   }
 
-  if (kdef->op() == "Identity") {
+  if (kdef->op() == "Identity" || kdef->op() == "ExpandDims" ||
+      kdef->op() == "Reshape" || kdef->op() == "BroadcastTo") {
     AddDtypeToKernelDefConstraint("T", DT_INT8, kdef);
     AddDtypeToKernelDefConstraint("T", DT_UINT8, kdef);
   }

@@ -1424,6 +1424,53 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertAllEqual([-4, -3, -2, -1, 0, 1, 2, 3, 4, 5], out[0])
       self.assertAllEqual([250, 251, 252, 253, 254, 255, 0, 1, 2, 3], out[1])
 
+  @test_util.deprecated_graph_mode_only
+  def test8bitOps(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    dataset = tu.create_single_increasing_dataset(1, dtype=np.int8, shape=[10])
+
+    dataset = dataset.map(lambda x: (x, math_ops.cast(x, np.uint8)))
+
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def body(x1, x2):
+      results = [
+          array_ops.identity(x1),
+          array_ops.identity(x2),
+          array_ops.reshape(x1, shape=[2, 5]),
+          array_ops.reshape(x2, shape=[2, 5]),
+          array_ops.expand_dims(x1, axis=0),
+          array_ops.expand_dims(x2, axis=0),
+          array_ops.broadcast_to(x1, shape=[10, 10]),
+          array_ops.broadcast_to(x2, shape=[10, 10]),
+      ]
+
+      return outfeed_queue.enqueue(results)
+
+    def my_net():
+      return ipu.loops.repeat(1, body, infeed_queue=infeed_queue)
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
+
+    dequeued = outfeed_queue.dequeue()
+    with session_lib.Session() as sess:
+      sess.run(infeed_queue.initializer)
+      sess.run(res)
+      out = sess.run(dequeued)
+      self.assertAllEqual(np.full([1, 10], 0), out[0])
+      self.assertAllEqual(np.full([1, 10], 0), out[1])
+      self.assertAllEqual(np.full([1, 2, 5], 0), out[2])
+      self.assertAllEqual(np.full([1, 2, 5], 0), out[3])
+      self.assertAllEqual(np.full([1, 1, 10], 0), out[4])
+      self.assertAllEqual(np.full([1, 1, 10], 0), out[5])
+      self.assertAllEqual(np.full([1, 10, 10], 0), out[6])
+      self.assertAllEqual(np.full([1, 10, 10], 0), out[7])
+
   @test_util.run_v2_only
   def testDeduceDevice(self):
     cfg = ipu.config.IPUConfig()
