@@ -27,14 +27,26 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
+bool GetBackendConfig(PoplarBackendConfig& backend_cfg,
+                      ::testing::MatchResultListener* listener,
+                      HloInstruction* inst) {
+  auto statusor_backend = inst->template backend_config<PoplarBackendConfig>();
+  if (!statusor_backend.ok()) {
+    *listener << "Failed to get PoplarBackendConfig for instruction '"
+              << inst->name() << "'";
+    return false;
+  }
+  backend_cfg = statusor_backend.ValueOrDie();
+  return true;
+}
 MATCHER_P(HasStochasticRounding, state, "") {
-  auto* instr = arg;
-  auto statusor_backend = instr->template backend_config<PoplarBackendConfig>();
-  if (statusor_backend.ok()) {
-    auto backend_cfg = statusor_backend.ValueOrDie();
+  auto* inst = arg;
+
+  PoplarBackendConfig backend_cfg;
+  if (GetBackendConfig(backend_cfg, result_listener, inst)) {
     auto stochastic_rounding = backend_cfg.stochastic_rounding();
 
-    *result_listener << "instruction '" << instr->name()
+    *result_listener << "instruction '" << inst->name()
                      << "' has stochastic rounding set to "
                      << ThreeState_Name(stochastic_rounding) << " expected "
                      << ThreeState_Name(state);
@@ -42,18 +54,34 @@ MATCHER_P(HasStochasticRounding, state, "") {
     return stochastic_rounding == state;
   }
 
-  *result_listener << "Failed to get PoplarBackendConfig for instruction '"
-                   << instr->name() << "'";
+  return false;
+}
+MATCHER_P(HasStochasticRoundingMethod, state, "") {
+  auto* inst = arg;
+
+  PoplarBackendConfig backend_cfg;
+  if (GetBackendConfig(backend_cfg, result_listener, inst)) {
+    auto stochastic_rounding_method = backend_cfg.stochastic_rounding_method();
+
+    *result_listener << "instruction '" << inst->name()
+                     << "' has stochastic rounding method set to "
+                     << StochasticRoundingMethod_Name(
+                            stochastic_rounding_method)
+                     << " expected " << StochasticRoundingMethod_Name(state);
+
+    return stochastic_rounding_method == state;
+  }
+
   return false;
 }
 MATCHER_P(HasDeterministicWorker, state, "") {
-  auto* instr = arg;
-  auto statusor_backend = instr->template backend_config<PoplarBackendConfig>();
-  if (statusor_backend.ok()) {
-    auto backend_cfg = statusor_backend.ValueOrDie();
+  auto* inst = arg;
+
+  PoplarBackendConfig backend_cfg;
+  if (GetBackendConfig(backend_cfg, result_listener, inst)) {
     auto deterministic_workers = backend_cfg.deterministic_workers();
 
-    *result_listener << "instruction '" << instr->name()
+    *result_listener << "instruction '" << inst->name()
                      << "' has deterministic workers set to "
                      << ThreeState_Name(deterministic_workers) << " expected "
                      << ThreeState_Name(state);
@@ -61,8 +89,6 @@ MATCHER_P(HasDeterministicWorker, state, "") {
     return deterministic_workers == state;
   }
 
-  *result_listener << "Failed to get PoplarBackendConfig for instruction '"
-                   << instr->name() << "'";
   return false;
 }
 
@@ -81,8 +107,6 @@ ENTRY test {
 }
 )";
 struct AddStochasticRoundingOptionsTest : HloTestFixture {
-  void SetUp() override { ASSERT_TRUE(SetUpHloModule(simple_hlo)); }
-
   absl::flat_hash_set<HloInstruction*> ReplicaIdenticalModuleInstructions() {
     absl::flat_hash_set<HloInstruction*> instructions;
 
@@ -162,6 +186,8 @@ TEST_F(AddStochasticRoundingOptionsTest,
        SettingStochasticRoundingForReplicaIdentical) {
   using ::testing::Each;
 
+  ASSERT_TRUE(SetUpHloModule(simple_hlo));
+
   AddStochasticRoundingOptions add_stochastic_rounding_options(
       StochasticRounding_ReplicaIdenticalOnly);
 
@@ -178,6 +204,8 @@ TEST_F(AddStochasticRoundingOptionsTest,
 TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingOn) {
   using ::testing::Each;
 
+  ASSERT_TRUE(SetUpHloModule(simple_hlo));
+
   AddStochasticRoundingOptions add_stochastic_rounding_options(
       StochasticRounding_On);
 
@@ -192,6 +220,8 @@ TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingOn) {
 TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingOff) {
   using ::testing::Each;
 
+  ASSERT_TRUE(SetUpHloModule(simple_hlo));
+
   AddStochasticRoundingOptions add_stochastic_rounding_options(
       StochasticRounding_Off);
 
@@ -205,6 +235,8 @@ TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingOff) {
 
 TEST_F(AddStochasticRoundingOptionsTest, SettingDeterministicWorkers) {
   using ::testing::Each;
+
+  ASSERT_TRUE(SetUpHloModule(simple_hlo));
 
   AddStochasticRoundingOptions add_stochastic_rounding_options(
       default_stochastic_rounding_);
@@ -258,6 +290,57 @@ TEST_F(AddStochasticRoundingOptionsTest, SettingOptionsForPoplarFusions) {
   ASSERT_THAT(AllModuleInstructions(),
               Each(HasDeterministicWorker(THREESTATE_UNDEFINED)));
 }
+
+using AnySeedTest =
+    ParameterizedHloTestFixture<AddStochasticRoundingOptionsTest>;
+// It doesn't matter what seed this uses since it doesn't do any compute.
+static const HloTestCase simple_no_compute = {"simple_no_compute", R"(
+HloModule test
+
+func {
+ param = f16[] parameter(0)
+ ROOT root = f16[1,2] broadcast(param), dimensions={}
+}
+
+ENTRY test {
+ param = f16[] parameter(0)
+ constant = f16[] constant(2)
+ tuple = (f16[], f16[]) tuple(param, constant)
+ value = f16[] get-tuple-element(tuple), index=1
+ ROOT root = f16[1,2] call(value), to_apply=func
+}
+)"};
+// It doesn't matter what seed this uses since it's not using f16 types.
+static const HloTestCase simple_compute_non_f16 = {"simple_compute_non_f16", R"(
+HloModule test
+
+ENTRY test {
+  constant = f32[] constant(2)
+  rand = f32[4] rng(constant, constant), distribution=rng_uniform
+  after-all = token[] after-all()
+  infeed = (f32[4], token[]) infeed(token[] after-all)
+  value = f32[4] get-tuple-element((f32[4], token[]) infeed), index=0
+  ROOT result = f32[4] add(rand, value)
+}
+)"};
+TEST_P(AnySeedTest, StochasticRoundingMethod) {
+  using ::testing::Each;
+
+  AddStochasticRoundingOptions add_stochastic_rounding_options(
+      StochasticRounding_On);
+
+  TF_ASSERT_OK_AND_ASSIGN(bool modified,
+                          add_stochastic_rounding_options.Run(hlo_module_));
+  ASSERT_TRUE(modified);
+
+  ASSERT_THAT(AllModuleInstructions(),
+              Each(HasStochasticRoundingMethod(StochasticRoundingMethod_Any)));
+}
+
+INSTANTIATE_TEST_SUITE_P(AddStochasticRoundingOptionsHLO, AnySeedTest,
+                         ::testing::Values(simple_no_compute,
+                                           simple_compute_non_f16),
+                         HloTestCaseName);
 
 }  // namespace
 }  // namespace poplarplugin
