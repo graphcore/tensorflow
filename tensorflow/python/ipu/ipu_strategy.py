@@ -17,6 +17,8 @@ Distribution strategy for a single system
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+import libpvti
+
 from collections import OrderedDict
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.distribute import device_util
@@ -38,6 +40,8 @@ from tensorflow.python.util import nest
 from tensorflow.python.ipu.keras.extensions import functional_extensions
 from tensorflow.python.ipu.keras.extensions import sequential_extensions
 from tensorflow.python.ipu import ipu_infeed_queue
+
+_pvti_trace_channel = libpvti.createTraceChannel("TensorFlow")
 
 
 class IPUStrategyV1(distribute_lib.StrategyV1):
@@ -104,6 +108,7 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
     self._register_keras_extension(functional.Functional,
                                    functional_extensions.FunctionalExtension)
 
+  @libpvti.instrument_fn(_pvti_trace_channel)
   def run(self, fn, args=(), kwargs=None, options=None):
     _validate_run_function(fn)
     return super().run(fn, args, kwargs, options)
@@ -193,6 +198,7 @@ def _validate_dtypes(tensors, name):
           name, t.dtype.name))
 
 
+@libpvti.instrument_fn(_pvti_trace_channel)
 def _validate_function_for_arguments(fn, args, kwargs):
   if isinstance(fn, def_function.Function):
     concrete_fn = fn.get_concrete_function(*args, **kwargs)
@@ -226,6 +232,7 @@ class IPUExtendedV1(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstr
   def value_container(self, value):
     return value
 
+  @libpvti.instrument_fn(_pvti_trace_channel)
   def _call_for_each_replica(self, fn, args, kwargs):
     with distribute_lib.ReplicaContext(self._container_strategy(),
                                        replica_id_in_sync_group=0), \

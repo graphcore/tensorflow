@@ -22,6 +22,7 @@ import sys
 import threading
 import time
 import six
+import libpvti
 from collections import OrderedDict
 from functools import partial
 
@@ -51,6 +52,7 @@ from tensorflow.python.util import nest
 from tensorflow.python.util.compat import collections_abc
 
 logged_steps_per_execution_warning = False
+_pvti_trace_channel = libpvti.createTraceChannel("Keras")
 
 
 class _NormalizedKerasOptimizerWrapper(  # pylint: disable=abstract-method
@@ -1138,7 +1140,8 @@ class ModelExtension(base_layer.KerasExtension):
           data_adapter.unpack_x_y_sample_weight(validation_data))
 
     with self.distribute_strategy.scope(), \
-         training_utils.RespectCompiledTrainableState(self):
+         training_utils.RespectCompiledTrainableState(self), \
+         libpvti.Tracepoint(_pvti_trace_channel, self.name + ".fit()"):
       # Creates a `tf.data.Dataset` and handles batch and epoch iteration.
       data_handler = ipu_data_adapter.IPUDataHandler(
           x=x,
@@ -1344,7 +1347,8 @@ class ModelExtension(base_layer.KerasExtension):
     self._check_mode()
     replication_factor = self._get_replication_factor()
 
-    with self.distribute_strategy.scope():
+    with self.distribute_strategy.scope(), \
+         libpvti.Tracepoint(_pvti_trace_channel, self.name + ".evaluate()"):
       # Use cached evaluation data only when it's called in `Model.fit`
       if (getattr(self, '_fit_frame', None) is not None
           and tf_inspect.currentframe().f_back is self._fit_frame
@@ -1496,7 +1500,8 @@ class ModelExtension(base_layer.KerasExtension):
     replication_factor = self._get_replication_factor()
 
     outputs = None
-    with self.distribute_strategy.scope():
+    with self.distribute_strategy.scope(), \
+         libpvti.Tracepoint(_pvti_trace_channel, self.name + ".predict()"):
       # Creates a `tf.data.Dataset` and handles batch and epoch iteration.
       data_handler = ipu_data_adapter.IPUDataHandler(
           x=x,
