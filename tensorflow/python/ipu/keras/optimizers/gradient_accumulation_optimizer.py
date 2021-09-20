@@ -66,11 +66,13 @@ class GradientAccumulationOptimizer(IpuOptimizer):
         When set to `None` the variables will be placed in either in-processor
         or remote memory automatically based on the current best placement
         strategy.
-      replicated_optimizer_state_sharding: If True, any any `tf.Variable` which
-        is offloaded will be partitioned across the replicas. A collective
-        all-gather will be inserted to restore the tensor on each replica.
-        If `None`, this value will match the value of
-        `offload_weight_update_variables`.
+      replicated_optimizer_state_sharding: If True, any `tf.Variable` which is
+        offloaded (for example the accumulator variable when using the
+        `tf.MomentumOptimizer`), will be partitioned across the replicas.
+        This can exploit the additional bandwidth of the IPU-Links to improve
+        overall throughput, however it might increase the code size and hence
+        the model might need adjusting (for example the PopLibs option
+        `availableMemoryProportion` might need to be changed).
       dtype: The data type used for the gradient accumulation buffer.
         One of:
           - `None`: Use an accumulator of the same type as the variable type.
