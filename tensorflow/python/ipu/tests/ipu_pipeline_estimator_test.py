@@ -36,6 +36,7 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import test
 from tensorflow.python.summary import summary_iterator
 from tensorflow.python.training import gradient_descent
+from tensorflow.python.training import session_run_hook
 from tensorflow.python.training import training_util
 
 
@@ -629,6 +630,70 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
 
     out = estimator.evaluate(input_fn=my_input_fn, steps=iterations_per_loop)
     self.assertEqual(2 * iterations_per_loop, out["global_step_observed"])
+
+  def testPassingHooksFromModelFunction(self):
+    class _SessionRunCounter(session_run_hook.SessionRunHook):
+      def __init__(self):
+        self.num_session_runs = 0
+
+      def after_run(self, run_context, run_values):
+        self.num_session_runs += 1
+
+    def my_input_fn():
+      features = np.array([[1.0]], dtype=np.float32)
+      labels = np.array([[2.0]], dtype=np.float32)
+      dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
+      return dataset.batch(1, drop_remainder=True).repeat()
+
+    training_hook = _SessionRunCounter()
+    evaluation_hook = _SessionRunCounter()
+    prediction_hook = _SessionRunCounter()
+
+    def my_model_fn(mode):
+      def stage1(features, labels):
+        w = variable_scope.get_variable(name="w", initializer=0.1)
+        return w * features, labels
+
+      def stage2(partial, labels):
+        loss = partial + labels
+        return loss
+
+      def optimizer_function(loss):
+        opt = gradient_descent.GradientDescentOptimizer(0.5)
+        return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+      def eval_metrics_fn(loss):
+        return {"loss": loss}
+
+      return IPUPipelineEstimatorSpec(mode,
+                                      computational_stages=[stage1, stage2],
+                                      optimizer_function=optimizer_function,
+                                      eval_metrics_fn=eval_metrics_fn,
+                                      gradient_accumulation_count=4,
+                                      training_hooks=[training_hook],
+                                      evaluation_hooks=[evaluation_hook],
+                                      prediction_hooks=[prediction_hook])
+
+    estimator = IPUPipelineEstimator(model_fn=my_model_fn,
+                                     config=_make_config(4))
+
+    # train
+    self.assertEqual(0, training_hook.num_session_runs)
+    estimator.train(input_fn=my_input_fn, steps=4)
+    self.assertEqual(1, training_hook.num_session_runs)
+
+    # predict: not evaluated before generator is consumed
+    self.assertEqual(0, prediction_hook.num_session_runs)
+    predictions = estimator.predict(input_fn=my_input_fn)
+    self.assertEqual(0, prediction_hook.num_session_runs)
+    next(predictions)
+    self.assertEqual(1, prediction_hook.num_session_runs)
+    del predictions  # Release generator resources
+
+    # evaluate
+    self.assertEqual(0, evaluation_hook.num_session_runs)
+    estimator.evaluate(my_input_fn, steps=4)
+    self.assertEqual(1, evaluation_hook.num_session_runs)
 
 
 if __name__ == "__main__":

@@ -40,6 +40,9 @@ class IPUPipelineEstimatorSpec(
         'optimizer_function',
         'device_mapping',
         'loss_accumulator_dtype',
+        'training_hooks',
+        'evaluation_hooks',
+        'prediction_hooks',
         'pipeline_op_kwargs',
     ])):
   """Ops and objects returned from a `model_fn` and passed to
@@ -52,6 +55,9 @@ class IPUPipelineEstimatorSpec(
               optimizer_function=None,
               device_mapping=None,
               loss_accumulator_dtype=None,
+              training_hooks=None,
+              evaluation_hooks=None,
+              prediction_hooks=None,
               **pipeline_op_kwargs):
     """Creates a validated `IPUPipelineEstimatorSpec` instance.
 
@@ -89,6 +95,12 @@ class IPUPipelineEstimatorSpec(
         pipeline execution onto a buffer. Use this to set the data type of the
         buffer to, for example, avoid overflow. By default (`None`), the buffer
         is the same data type as the loss.
+      training_hooks: List of instances of `tf.estimator.SessionRunHook` used
+        during training.
+      evaluation_hooks: List of instances of `tf.estimator.SessionRunHook` used
+        during evaluation.
+      prediction_hooks: List of instances of `tf.estimator.SessionRunHook` used
+        during prediction.
       pipeline_op_kwargs: All remaining keyword arguments are forwarded to
         :func:`~tensorflow.python.ipu.pipelining_ops.pipeline`.
 
@@ -126,6 +138,9 @@ class IPUPipelineEstimatorSpec(
         optimizer_function=optimizer_function,
         device_mapping=device_mapping,
         loss_accumulator_dtype=loss_accumulator_dtype,
+        training_hooks=training_hooks,
+        evaluation_hooks=evaluation_hooks,
+        prediction_hooks=prediction_hooks,
         pipeline_op_kwargs=pipeline_op_kwargs)
 
 
@@ -138,14 +153,20 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
     self._outfeed_queue = outfeed_queue
     self._captured_eval_metrics_fn = None
     self._captured_gradient_accumulation_count = None
+    self._captured_hooks = []
 
   @staticmethod
   def need_outfeed(mode):  # pylint: disable=unused-argument
     return True
 
+  def _capture_hooks(self, hooks):
+    if hooks:
+      assert not self._captured_hooks, "Can only capture hooks once"
+      self._captured_hooks = hooks
+
   @property
   def captured_hooks(self):
-    return []
+    return self._captured_hooks
 
   def _calc_repeat_count(self, spec):
     iterations_per_loop = self._config.ipu_run_config.iterations_per_loop
@@ -174,6 +195,8 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
       assert not self._captured_gradient_accumulation_count
       self._captured_gradient_accumulation_count = \
           spec.gradient_accumulation_count
+
+      self._capture_hooks(spec.training_hooks)
 
       return pipelining_ops.pipeline(
           infeed_queue=self._infeed_queue,
@@ -214,6 +237,8 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
       assert spec.eval_metrics_fn
       self._captured_eval_metrics_fn = spec.eval_metrics_fn
 
+      self._capture_hooks(spec.evaluation_hooks)
+
       return pipelining_ops.pipeline(
           infeed_queue=self._infeed_queue,
           outfeed_queue=self._outfeed_queue,
@@ -251,6 +276,9 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
   def create_prediction_loop(self):
     def prediction_pipeline():
       spec = self._call_model_fn(model_fn_lib.ModeKeys.PREDICT)
+
+      self._capture_hooks(spec.prediction_hooks)
+
       return pipelining_ops.pipeline(
           infeed_queue=self._infeed_queue,
           outfeed_queue=self._outfeed_queue,
