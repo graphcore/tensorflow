@@ -559,8 +559,10 @@ def pipeline(computational_stages,
       offloaded (for example the accumulator variable when using the
       `tf.MomentumOptimizer`), will be partitioned across the replicas.
       This can exploit the additional bandwidth of the IPU-Links to improve
-      overall throughput. Note that this option has no effect for
-      inference only pipelines.
+      overall throughput, however it might increase the code size and hence
+      the model might need adjusting (for example the PopLibs option
+      `availableMemoryProportion` might need to be changed).
+      Note that this option has no effect for inference only pipelines.
     offload_activations: When enabled, all the activations for the batches which
       are not being executed by the pipeline stages at the given time are stored
       in remote memory. Requires the machine to be configured with support for
