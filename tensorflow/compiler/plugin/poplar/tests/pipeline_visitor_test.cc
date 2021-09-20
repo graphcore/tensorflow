@@ -98,7 +98,7 @@ struct TestParams {
 
   TestParams ChangeToFixed() const {
     TestParams result(*this);
-    result.runtime_accumulation;
+    result.runtime_accumulation = false;
     return result;
   }
 };
@@ -1759,6 +1759,291 @@ TestParams TestPipelineVisitorRevisitIPUOrderSequential{
     4,
     PConfig::Sequential};
 
+const string& hlo_10 = R"(
+HloModule module
+
+_stage_0 {
+  param_0 = f32[] parameter(0), sharding={maximal device=0}
+  temp_0 = f32[] constant(0), sharding={maximal device=0}
+  const_1 = f32[] constant(1), sharding={maximal device=0}
+  add_0 = f32[] add(param_0, const_1), sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
+  add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
+  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=0}}
+}
+
+_stage_1 {
+  param_0 = f32[] parameter(0), sharding={maximal device=1}
+  const_1 = f32[] constant(1), sharding={maximal device=1}
+  add_0 = f32[] add(param_0, const_1), sharding={maximal device=1}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=1}
+  add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
+  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
+}
+
+_stage_1_bw {
+  param_0 = f32[] parameter(0), sharding={maximal device=1}
+  const_1 = f32[] constant(2), sharding={maximal device=1}
+  add_0 = f32[] add(param_0, const_1), sharding={maximal device=1}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=1}
+  add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
+  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
+}
+
+_stage_0_bw {
+  param_0 = f32[] parameter(0), sharding={maximal device=0}
+  const_1 = f32[] constant(1), sharding={maximal device=0}
+  add_0 = f32[] add(param_0, const_1), sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
+  result = f32[] constant(4), sharding={maximal device=0}
+  ROOT t = (f32[]) tuple(result), sharding={{maximal device=0}}
+}
+
+pipeline {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  grad_acc = s32[] parameter(1), sharding={maximal device=0}
+
+
+  a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
+  b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
+  c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  gte_c = f32[] get-tuple-element(c0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
+  ROOT d = (f32[]) call(gte_c), to_apply=_stage_0_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+}
+
+ENTRY main {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  const_2 = s32[] constant(4), sharding={maximal device=0}
+  ROOT p = (f32[]) call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Grouped\"}}}"
+}
+)";
+
+const std::vector<std::pair<std::string, int>> assignments_10 = {
+    {"arg", 0},
+    {"grad_acc", 0},
+
+    {"a0", 0},
+    {"gte_a", 0},
+    {"b0", 1},
+    {"gte_b", 1},
+    {"c0", 2},
+    {"gte_c", 2},
+    {"d", 3},
+    // Inter-IPU-copy between stage 0 and 1
+    {"ipu-inter-copy", 0},
+    // Inter-IPU-copy between stage 2 and 3
+    {"ipu-inter-copy.1", 2},
+};
+
+const string& expected_10 = R"(/print-tensor: 1
+/print-tensor.1: 2
+/print-tensor: 1
+/print-tensor.2: 4
+/print-tensor.1: 2
+/print-tensor: 1
+/print-tensor.3: 5
+/print-tensor.2: 4
+/print-tensor.1: 2
+/print-tensor: 1
+/print-tensor.3: 5
+/print-tensor.2: 4
+/print-tensor.1: 2
+/print-tensor: 1
+/print-tensor.3: 5
+/print-tensor.2: 4
+/print-tensor.1: 2
+/print-tensor: 1
+/print-tensor.3: 5
+/print-tensor.2: 4
+/print-tensor.1: 2
+/print-tensor: 1
+/print-tensor.3: 5
+/print-tensor.2: 4
+/print-tensor.1: 2
+/print-tensor: 1
+/print-tensor.3: 5
+/print-tensor.2: 4
+/print-tensor.1: 2
+/print-tensor.3: 5
+/print-tensor.2: 4
+/print-tensor.3: 5
+)";
+
+TestParams TestPipelineVisitorOrderGrouped{
+    hlo_10, assignments_10,  8, {}, expected_10, false, {}, {0, 1, 1, 0},
+    2,      PConfig::Grouped};
+
+const string& hlo_11 = R"(
+HloModule module
+
+_stage_0 {
+  param_0 = f32[] parameter(0), sharding={maximal device=0}
+  temp_0 = f32[] constant(0), sharding={maximal device=0}
+  const_1 = f32[] constant(1), sharding={maximal device=0}
+  add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
+  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=0}}
+}
+
+_stage_1 {
+  param_0 = f32[] parameter(0), sharding={maximal device=1}
+  const_1 = f32[] constant(1), sharding={maximal device=1}
+  add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
+  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
+}
+
+_stage_1_bw {
+  param_0 = f32[] parameter(0), sharding={maximal device=1}
+  const_1 = f32[] constant(1), sharding={maximal device=1}
+  add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
+  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
+}
+
+_stage_0_bw {
+  param_0 = f32[] parameter(0), sharding={maximal device=0}
+  const_1 = f32[] constant(1), sharding={maximal device=0}
+  add_0 = f32[] add(param_0, const_1), sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
+  ROOT t = () tuple(), sharding={{maximal device=0}}
+}
+
+pipeline {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  grad_acc = s32[] parameter(1), sharding={maximal device=0}
+
+  a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
+  b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
+  c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  gte_c = f32[] get-tuple-element(c0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
+  ROOT d = () call(gte_c), sharding={{maximal device=0}}, to_apply=_stage_0_bw, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+}
+
+ENTRY main {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  const_2 = s32[] constant(4), sharding={maximal device=0}
+  ROOT p = () call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Grouped\"}}}"
+}
+)";
+
+const std::vector<std::pair<std::string, int>> assignments_11 = {
+    {"arg", 0},
+    {"grad_acc", 0},
+    {"a0", 0},
+    {"gte_a", 0},
+    {"b0", 1},
+    {"gte_b", 1},
+    {"c0", 2},
+    {"gte_c", 2},
+    {"d", 3},
+    // Inter-IPU-copy between stage 0 and 1
+    {"ipu-inter-copy", 0},
+    // Inter-IPU-copy between stage 2 and 3
+    {"ipu-inter-copy.1", 2},
+};
+
+const string& expected_11 = R"(/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+)";
+
+TestParams TestPipelineVisitorValueGrouped{
+    hlo_11, assignments_11,  8, {}, expected_11, false, {}, {0, 1, 1, 0},
+    2,      PConfig::Grouped};
+
+const string& hlo_12 = R"(
+HloModule module
+
+_stage_0 {
+  param_0 = f32[] parameter(0), sharding={maximal device=0}
+  temp_0 = f32[] constant(0), sharding={maximal device=0}
+  const_1 = f32[] constant(1), sharding={maximal device=0}
+  add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
+  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=0}}
+}
+
+_stage_1 {
+  param_0 = f32[] parameter(0), sharding={maximal device=1}
+  const_1 = f32[] constant(1), sharding={maximal device=1}
+  add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
+  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
+}
+
+_stage_1_bw {
+  param_0 = f32[] parameter(0), sharding={maximal device=1}
+  const_1 = f32[] constant(1), sharding={maximal device=1}
+  add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
+  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
+}
+
+_stage_0_bw {
+  param_0 = f32[] parameter(0), sharding={maximal device=0}
+  param_1 = f32[] parameter(1), sharding={maximal device=0}
+  add_0 = f32[] add(param_0, param_1), sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
+  ROOT t = () tuple(), sharding={{maximal device=0}}
+}
+
+pipeline {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  grad_acc = s32[] parameter(1), sharding={maximal device=0}
+
+  a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
+  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"offload\":0,\"depth\":2}", sharding={maximal device=0}
+  b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
+  c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  gte_c = f32[] get-tuple-element(c0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
+  ROOT d = () call(gte_c, a1), to_apply=_stage_0_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+}
+
+ENTRY main {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  const_2 = s32[] constant(4), sharding={maximal device=0}
+  ROOT p = () call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Grouped\"}}}"
+}
+)";
+
+const string& expected_12 = R"(/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+)";
+
+const std::vector<std::pair<std::string, int>> assignments_12 = {
+    {"arg", 0},
+    {"grad_acc", 0},
+    {"a0", 0},
+    {"gte_a", 0},
+    {"b0", 1},
+    {"gte_b", 1},
+    {"c0", 2},
+    {"gte_c", 2},
+    {"d", 3},
+    // Inter-ipu-copy between stage 0 and 1
+    {"ipu-inter-copy", 0},
+    // Inter-ipu-copy between stage 2 and 3
+    {"ipu-inter-copy.1", 2},
+    // FIFO after stage 0
+    {"fifo", 0},
+};
+
+TestParams TestPipelineVisitorFIFOValueGrouped{
+    hlo_12, assignments_12,  8, {}, expected_12, false, {}, {0, 1, 1, 0},
+    2,      PConfig::Grouped};
+
 INSTANTIATE_TEST_CASE_P(
     PipelineVisitorTestParameter, PipelineVisitorTestParam,
     ::testing::Values(
@@ -1771,7 +2056,12 @@ INSTANTIATE_TEST_CASE_P(
         TestPipelineVisitorValueSequential,
         TestPipelineVisitorValueTuplesSequential,
         TestPipelineVisitorRevisitIPUOrderSequential,
-        TestPipelineVisitorRevisitIPUOrderSequential.ChangeToFixed()));
+        TestPipelineVisitorRevisitIPUOrderSequential.ChangeToFixed(),
+        TestPipelineVisitorOrderGrouped,
+        TestPipelineVisitorOrderGrouped.ChangeToFixed(),
+        TestPipelineVisitorValueGrouped,
+        TestPipelineVisitorValueGrouped.ChangeToFixed(),
+        TestPipelineVisitorFIFOValueGrouped));
 
 }  // namespace
 }  // namespace poplarplugin
