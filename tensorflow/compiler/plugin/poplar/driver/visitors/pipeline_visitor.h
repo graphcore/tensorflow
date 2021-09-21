@@ -19,6 +19,7 @@ limitations under the License.
 #include <memory>
 #include <string>
 
+#include <utility>
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
@@ -110,12 +111,25 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   virtual Status HandleGradientAccumulatorSink(HloInstruction* hlo);
   virtual Status HandleInterTilesetCopy(HloInstruction* hlo);
 
+  struct CountAndGraph {
+    poplar::Graph& graph;
+    const poplar::Tensor count;
+    CountAndGraph(poplar::Graph& graph, const poplar::Tensor count)
+        : graph(graph), count(std::move(count)) {}
+  };
+
+  using IterationsType = absl::variant<int64, CountAndGraph>;
+
+  virtual IterationsType RampDownAdditionalIterations(
+      IterationsType iterations, const size_t overlap_length,
+      poplar::program::Sequence& program) const;
+
   virtual StatusOr<poplar::program::Sequence> VerifyPipelineArguments(
       const HloInstruction* accumulation_count,
       poplar::Tensor accumulation_count_tensor, poplar::Graph& graph) const;
 
   StatusOr<poplar::program::Sequence> GetPipelineSequence(
-      int64 iterations) const;
+      IterationsType iterations) const;
 
  protected:
   Status AddSequenceForInstruction(
@@ -178,12 +192,12 @@ class PipelineVisitor : public InplaceDeferredVisitor {
 
   virtual RepeatBlock GetPipelineRampUpSequence(
       const poplar::DebugNameAndId& debug_name_and_id) const = 0;
-  virtual RepeatBlock GetPipelineRampDownSequence(
+  virtual poplar::program::Program GetPipelineRampDownSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
-      int additional_iterations = 0) const = 0;
-  virtual RepeatBlock GetPipelineRepeatBlockSequence(
+      const IterationsType& additional_iterations = 0) const = 0;
+  virtual poplar::program::Program GetPipelineRepeatBlockSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
-      int64 iterations) const = 0;
+      const IterationsType& iterations) const = 0;
 
   // Function which indicates whether stage outputs should be copied.
   virtual bool StageOutputsRequireCopies() const = 0;
@@ -216,12 +230,12 @@ class ParallelPipelineVisitor : public PipelineVisitor {
  protected:
   RepeatBlock GetPipelineRampUpSequence(
       const poplar::DebugNameAndId& debug_name_and_id) const override;
-  RepeatBlock GetPipelineRampDownSequence(
+  poplar::program::Program GetPipelineRampDownSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
-      int additional_iterations = 0) const override;
-  RepeatBlock GetPipelineRepeatBlockSequence(
+      const IterationsType& additional_iterations = 0) const override;
+  poplar::program::Program GetPipelineRepeatBlockSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
-      int64 iterations) const override;
+      const IterationsType& iterations) const override;
 
   bool StageOutputsRequireCopies() const override { return true; }
 };
@@ -241,12 +255,12 @@ class SequentialPipelineVisitor : public PipelineVisitor {
  protected:
   RepeatBlock GetPipelineRampUpSequence(
       const poplar::DebugNameAndId& debug_name_and_id) const override;
-  RepeatBlock GetPipelineRampDownSequence(
+  poplar::program::Program GetPipelineRampDownSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
-      int additional_iterations = 0) const override;
-  RepeatBlock GetPipelineRepeatBlockSequence(
+      const IterationsType& additional_iterations = 0) const override;
+  poplar::program::Program GetPipelineRepeatBlockSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
-      int64 iterations) const override;
+      const IterationsType& iterations) const override;
 
   bool StageOutputsRequireCopies() const override { return false; }
 };

@@ -38,6 +38,10 @@ class GroupedOverlapPipelineVisitor : public ParallelPipelineVisitor {
       poplar::Tensor accumulation_count_tensor,
       poplar::Graph& graph) const override;
 
+  PipelineVisitor::IterationsType RampDownAdditionalIterations(
+      IterationsType iterations, const size_t overlap_length,
+      poplar::program::Sequence& program) const override;
+
   static std::unique_ptr<PipelineVisitor> Create(
       const HloInstruction* pipeline, CompilerResources& res,
       const DeferredArgRBVectors& inputs,
@@ -47,12 +51,12 @@ class GroupedOverlapPipelineVisitor : public ParallelPipelineVisitor {
  protected:
   RepeatBlock GetPipelineRampUpSequence(
       const poplar::DebugNameAndId& debug_name_and_id) const override;
-  RepeatBlock GetPipelineRampDownSequence(
+  poplar::program::Program GetPipelineRampDownSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
-      int additional_iterations = 0) const override;
-  RepeatBlock GetPipelineRepeatBlockSequence(
+      const IterationsType& additional_iterations = 0) const override;
+  poplar::program::Program GetPipelineRepeatBlockSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
-      int64 iterations) const override;
+      const IterationsType& iterations) const override;
 };
 
 }  // namespace poplarplugin

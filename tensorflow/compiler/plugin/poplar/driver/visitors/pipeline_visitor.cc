@@ -33,6 +33,7 @@ limitations under the License.
 #include <poplar/Tensor.hpp>
 #include <poplar/exceptions.hpp>
 #include <popops/ElementWise.hpp>
+#include <popops/Loop.hpp>
 #include <poputil/Util.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
@@ -646,23 +647,30 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::VerifyPipelineArguments(
       graph, {dnai_, "VerifyPipelineConditions"});
 }
 
+PipelineVisitor::IterationsType PipelineVisitor::RampDownAdditionalIterations(
+    PipelineVisitor::IterationsType iterations, const size_t overlap_length,
+    poplar::program::Sequence& program) const {
+  // Pipelines that verify this is zero can just return 0
+  return 0;
+}
+
 StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
-    int64 iterations) const {
+    IterationsType iterations) const {
   const int64 overlap_length =
       pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_).size();
+  poplar::program::Sequence program({}, dnai_);
 
   auto ramp_up = GetPipelineRampUpSequence(dnai_);
   auto repeat_block = GetPipelineRepeatBlockSequence(dnai_, iterations);
-  auto ramp_down =
-      GetPipelineRampDownSequence(dnai_, iterations % overlap_length);
+  auto ramp_down = GetPipelineRampDownSequence(
+      dnai_, RampDownAdditionalIterations(iterations, overlap_length, program));
 
-  poplar::program::Sequence program({}, dnai_);
   program.add(pipeline_execution_counters_initialize_sequence_);
   program.add(pipeline_tensors_zeroing_sequence_);
   program.add(pipeline_write_undef_sequence_);
   program.add(ramp_up.program);
-  program.add(repeat_block.program);
-  program.add(ramp_down.program);
+  program.add(repeat_block);
+  program.add(ramp_down);
 
   // Add the resource update sequence.
   program.add(resource_update_);
@@ -1265,10 +1273,9 @@ PipelineVisitor::RepeatBlock ParallelPipelineVisitor::GetPipelineRampUpSequence(
 }
 
 // Collect the pipeline stage programs and call CreateRampSequences
-PipelineVisitor::RepeatBlock
-ParallelPipelineVisitor::GetPipelineRampDownSequence(
+poplar::program::Program ParallelPipelineVisitor::GetPipelineRampDownSequence(
     const poplar::DebugNameAndId& debug_name_and_id,
-    int additional_iterations) const {
+    const PipelineVisitor::IterationsType& additional_iterations) const {
   // Find the set of non-overlapping program offsets.
   std::vector<int> offsets =
       pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_);
@@ -1277,9 +1284,11 @@ ParallelPipelineVisitor::GetPipelineRampDownSequence(
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
   auto infeed_sequences = util::ConstructRampDownSchedule(
-      offsets, infeed_sequences_, {}, additional_iterations);
+      offsets, infeed_sequences_, {}, additional_iterations,
+      {debug_name_and_id});
   auto program_sequences = util::ConstructRampDownSchedule(
-      offsets, program_sequences_, {}, additional_iterations);
+      offsets, program_sequences_, {}, additional_iterations,
+      {debug_name_and_id});
   auto fifo_sequences =
       pipeline_scheduler_util_->ConstructSchedule(offsets, fifo_sequences_);
   auto recomputation_sequences = util::ConstructRecomputationRampDownSchedule(
@@ -1290,11 +1299,14 @@ ParallelPipelineVisitor::GetPipelineRampDownSequence(
   auto inter_ipu_copy_sequences = pipeline_scheduler_util_->ConstructSchedule(
       offsets, inter_ipu_copy_sequences_);
   auto inter_tileset_copy_in_sequences = util::ConstructRampDownSchedule(
-      offsets, inter_tileset_copy_in_sequences_, {}, additional_iterations);
+      offsets, inter_tileset_copy_in_sequences_, {}, additional_iterations,
+      {debug_name_and_id});
   auto inter_tileset_copy_out_sequences = util::ConstructRampDownSchedule(
-      offsets, inter_tileset_copy_out_sequences_, {}, additional_iterations);
+      offsets, inter_tileset_copy_out_sequences_, {}, additional_iterations,
+      {debug_name_and_id});
   auto outfeed_sequences = util::ConstructRampDownSchedule(
-      offsets, outfeed_sequences_, {}, additional_iterations);
+      offsets, outfeed_sequences_, {}, additional_iterations,
+      {debug_name_and_id});
 
   // Concatenate the programs in the correct order.
   // We always execute in following order - infeeds, fwd/bwd stages, fifos,
@@ -1319,23 +1331,18 @@ ParallelPipelineVisitor::GetPipelineRampDownSequence(
                           inter_ipu_copy_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
                           outfeed_sequences.end());
-  return {util::DefaultScheduler().CreateRepeatBlock(
-              infeed_sequences, debug_name_and_id, offsets.size()),
-          offsets.size() / 2};
+  return util::DefaultScheduler().CreateRepeatBlock(
+      infeed_sequences, debug_name_and_id, offsets.size());
 }
 
 // Collect the pipeline stage programs and build the repeat block
-PipelineVisitor::RepeatBlock
+poplar::program::Program
 ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
-    const poplar::DebugNameAndId& debug_name_and_id, int64 iterations) const {
+    const poplar::DebugNameAndId& debug_name_and_id,
+    const IterationsType& iterations) const {
   // Find the set of non-overlapping program offsets.
   std::vector<int> offsets =
       pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_);
-
-  const int64 num_repeats = ((iterations / offsets.size()) - 1);
-  if (num_repeats < 1) {
-    return {poplar::program::Sequence({}, debug_name_and_id), 0};
-  }
 
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
@@ -1388,9 +1395,29 @@ ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
   auto repeat_block = pipeline_scheduler_util_->CreateRepeatBlock(
       infeed_sequences, debug_name_and_id, offsets.size());
 
-  return {
-      poplar::program::Repeat(num_repeats, repeat_block, {debug_name_and_id}),
-      num_repeats * offsets.size()};
+  return absl::visit(
+      make_visitor<poplar::program::Program>(
+          [&](const int64 i) -> poplar::program::Program {
+            const int64 num_repeats = ((i / offsets.size()) - 1);
+            if (num_repeats < 1) {
+              return poplar::program::Sequence({}, debug_name_and_id);
+            }
+
+            return poplar::program::Repeat(num_repeats, repeat_block,
+                                           {debug_name_and_id});
+          },
+          [&](const PipelineVisitor::CountAndGraph i)
+              -> poplar::program::Program {
+            poplar::program::Sequence result({}, {debug_name_and_id});
+            auto repeat_counter =
+                popops::map(i.graph, (popops::expr::_1 / offsets.size()) - 1,
+                            {i.count}, result, {debug_name_and_id});
+            result.add(popops::countedForLoop(i.graph, 0, repeat_counter, 1,
+                                              repeat_block,
+                                              {debug_name_and_id}));
+            return result;
+          }),
+      iterations);
 }
 
 std::unique_ptr<PipelineVisitor> SequentialPipelineVisitor::Create(
@@ -1415,17 +1442,17 @@ SequentialPipelineVisitor::GetPipelineRampUpSequence(
 }
 
 // Collect the pipeline stage programs and call CreateRampSequences
-PipelineVisitor::RepeatBlock
-SequentialPipelineVisitor::GetPipelineRampDownSequence(
+poplar::program::Program SequentialPipelineVisitor::GetPipelineRampDownSequence(
     const poplar::DebugNameAndId& debug_name_and_id,
-    int additional_iterations) const {
-  return {poplar::program::Sequence({}, {debug_name_and_id, "RampDown"}), 0};
+    const IterationsType& additional_iterations) const {
+  return poplar::program::Sequence({}, {debug_name_and_id, "RampDown"});
 }
 
 // Collect the pipeline stage programs and build the repeat block
-PipelineVisitor::RepeatBlock
+poplar::program::Program
 SequentialPipelineVisitor::GetPipelineRepeatBlockSequence(
-    const poplar::DebugNameAndId& debug_name_and_id, int64 iterations) const {
+    const poplar::DebugNameAndId& debug_name_and_id,
+    const IterationsType& iterations) const {
   const int64 num_stages = stage_ipu_mapping_.size();
   // Build a map to execute the recomputation sequence before the backward
   // stage. The recomputation sequences have the same id as the forward stage.
@@ -1453,9 +1480,8 @@ SequentialPipelineVisitor::GetPipelineRepeatBlockSequence(
     repeat_block.add(outfeed_sequences_[stage_id]);
   }
 
-  return {
-      poplar::program::Repeat(iterations, repeat_block, {debug_name_and_id}),
-      iterations};
+  return util::ForProgram(iterations, std::move(repeat_block),
+                          {debug_name_and_id});
 }
 
 }  // namespace poplarplugin

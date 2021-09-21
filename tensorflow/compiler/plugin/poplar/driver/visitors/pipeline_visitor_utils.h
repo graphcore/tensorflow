@@ -33,6 +33,9 @@ limitations under the License.
 
 #include "absl/types/variant.h"
 
+#include <popops/ElementWise.hpp>
+#include <popops/Loop.hpp>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
@@ -535,6 +538,31 @@ std::vector<std::vector<ElementType>> ConstructRampUpScheduleOverlapIO(
   return ConcatSchedule(result, right_padding);
 }
 
+// Given the current stage at the current timestep, we do not need to
+// perform recomputation iff there is another stage in the future time
+// steps with the same stage_id executed before the corresponding bwd
+// stage.
+static bool ReplaceStageWithEmpty(
+    const std::vector<std::vector<int64>>& stage_schedule,
+    const std::vector<absl::flat_hash_set<int64>>& stage_schedule_lookup,
+    const int64 t1, const int64 stage_id, const int64 bwd_stage_id) {
+  bool replace_with_empty_element = false;
+  for (int64 t2 = t1 + 1; t2 != stage_schedule.size(); ++t2) {
+    if (stage_schedule_lookup[t2].contains(bwd_stage_id)) {
+      // Found a corresponding bwd stage before another forward stage with
+      // the same id, need to recompute.
+      break;
+    }
+    if (stage_schedule_lookup[t2].contains(stage_id)) {
+      // Found another forward stage with the same id before a corresponding
+      // bwd stage, don't need to recompute.
+      replace_with_empty_element = true;
+      break;
+    }
+  }
+  return replace_with_empty_element;
+}
+
 /**
  * Construct a "ramp-up" pipeline schedule for recomputation given an offset and
  * some schedulable components. Additionally, empty stages are inserted into the
@@ -630,28 +658,10 @@ std::vector<std::vector<ElementType>> ConstructRecomputationRampUpSchedule(
         result[t1][j] = empty_element;
         continue;
       }
-      // Given the current stage at the current timestep, we do not need to
-      // perform recomputation iff there is another stage in the future time
-      // steps with the same stage_id executed before the corresponding bwd
-      // stage.
+
       const int64 bwd_stage_id = num_backward_stages * 2 - 1 - stage_id;
-
-      bool replace_with_empty_element = false;
-      for (int64 t2 = t1 + 1; t2 != stage_schedule.size(); ++t2) {
-        if (stage_schedule_lookup[t2].contains(bwd_stage_id)) {
-          // Found a corresponding bwd stage before another forward stage with
-          // the same id, need to recompute.
-          break;
-        }
-        if (stage_schedule_lookup[t2].contains(stage_id)) {
-          // Found another forward stage with the same id before a corresponding
-          // bwd stage, don't need to recompute.
-          replace_with_empty_element = true;
-          break;
-        }
-      }
-
-      if (replace_with_empty_element) {
+      if (ReplaceStageWithEmpty(stage_schedule, stage_schedule_lookup, t1,
+                                stage_id, bwd_stage_id)) {
         result[t1][j] = empty_element;
       }
     }
@@ -698,6 +708,54 @@ ConstructRecomputationRampUpScheduleOverlapIO(
   return ConcatSchedule(result, right_padding);
 }
 
+template <typename ElementType>
+static std::vector<std::vector<ElementType>> MaskOutPastAdditional(
+    const std::vector<int>& offsets,
+    std::vector<std::vector<ElementType>> input, ElementType empty_element,
+    const int additional_iterations) {
+  for (size_t i = additional_iterations; i < offsets.size(); ++i) {
+    std::fill(std::next(input[i].begin(), offsets[i]), input[i].end(),
+              empty_element);
+  }
+  return input;
+}
+
+template <typename ElementType>
+static std::vector<std::vector<ElementType>> MaskOutPastAdditional(
+    const std::vector<int>& offsets,
+    std::vector<std::vector<ElementType>> input, ElementType empty_element,
+    const PipelineVisitor::CountAndGraph& additional_iterations,
+    const poplar::DebugContext& debug_context) {
+  LOG(FATAL)
+      << "Dynamic iterations makes no sense for non program type schedules";
+}
+
+template <>
+std::vector<std::vector<poplar::program::Sequence>>
+MaskOutPastAdditional<poplar::program::Sequence>(
+    const std::vector<int>& offsets,
+    std::vector<std::vector<poplar::program::Sequence>> input,
+    poplar::program::Sequence empty_element,
+    const PipelineVisitor::CountAndGraph& additional_iterations,
+    const poplar::DebugContext& debug_context) {
+  for (size_t i = 0; i < offsets.size(); ++i) {
+    auto start = std::next(input[i].begin(), offsets[i]);
+    std::transform(
+        start, input[i].end(), start,
+        [&](const poplar::program::Sequence& seq) {
+          poplar::program::Sequence result({}, debug_context);
+          auto predicate =
+              popops::map(additional_iterations.graph,
+                          popops::expr::Const(i) < popops::expr::_1,
+                          {additional_iterations.count}, result, debug_context);
+          result.add(poplar::program::If(std::move(predicate), seq,
+                                         empty_element, debug_context));
+          return result;
+        });
+  }
+  return input;
+}
+
 /**
  * Construct a "ramp-down" pipeline schedule given an offset and some
  * schedulable components. Additionally, empty stages are inserted into the
@@ -718,15 +776,23 @@ ConstructRecomputationRampUpScheduleOverlapIO(
 template <typename ElementType>
 std::vector<std::vector<ElementType>> ConstructRampDownSchedule(
     const std::vector<int>& offsets, const std::vector<ElementType>& input,
-    ElementType empty_element = {}, const int additional_iterations = 0) {
+    ElementType empty_element,
+    const PipelineVisitor::IterationsType& additional_iterations,
+    const poplar::DebugContext& debug_context) {
   auto result = ConstructScheduleInternal(offsets, input);
 
-  for (size_t i = additional_iterations; i < offsets.size(); ++i) {
-    std::fill(std::next(result[i].begin(), offsets[i]), result[i].end(),
-              empty_element);
-  }
-
-  return result;
+  return absl::visit(make_visitor<ElementType>(
+                         [&](const int64 i) {
+                           return MaskOutPastAdditional(
+                               offsets, std::move(result),
+                               std::move(empty_element), i);
+                         },
+                         [&](const PipelineVisitor::CountAndGraph& i) {
+                           return MaskOutPastAdditional<ElementType>(
+                               offsets, std::move(result),
+                               std::move(empty_element), i, debug_context);
+                         }),
+                     additional_iterations);
 }
 
 /**
@@ -748,9 +814,11 @@ std::vector<std::vector<ElementType>> ConstructRampDownSchedule(
 template <typename ElementType>
 std::vector<std::vector<ElementType>> ConstructRampDownScheduleOverlapIO(
     const std::vector<int>& offsets, const std::vector<ElementType>& input,
-    std::size_t offset, ElementType empty_element = {}) {
+    std::size_t offset, ElementType empty_element = {},
+    const poplar::DebugContext& debug_context = {}) {
   CHECK_LT(offset, 3);
-  auto result = ConstructRampDownSchedule(offsets, input, empty_element);
+  auto result = ConstructRampDownSchedule(offsets, input, empty_element, 0,
+                                          debug_context);
 
   for (std::size_t i = 0; i < (2 - offset); ++i) {
     result = RightPadSchedule(result, empty_element);
@@ -780,7 +848,8 @@ template <typename ElementType>
 std::vector<std::vector<ElementType>> ConstructRecomputationRampDownSchedule(
     const std::vector<int>& offsets, const std::vector<ElementType>& input,
     int64 num_backward_stages, ElementType empty_element = {},
-    const int additional_iterations = 0) {
+    const PipelineVisitor::IterationsType& additional_iterations = 0,
+    const poplar::DebugContext debug_context = {}) {
   // If there are no backward stages, there is no recomputation.
   if (num_backward_stages == 0) {
     return std::vector<std::vector<ElementType>>(
@@ -788,7 +857,6 @@ std::vector<std::vector<ElementType>> ConstructRecomputationRampDownSchedule(
   }
   CHECK_EQ(input.size() / num_backward_stages, 2);
   CHECK_EQ(input.size() % num_backward_stages, 0);
-
   // The pipelining implementation expects the recomputation for backward stage
   // X at timestep 't2' to be done along with forward stage X at timestep `t1`
   // such that `t1` < `t2`.
@@ -832,7 +900,9 @@ std::vector<std::vector<ElementType>> ConstructRecomputationRampDownSchedule(
   std::vector<int64> stages(input.size());
   absl::c_iota(stages, 0);
   std::vector<std::vector<int64>> ramp_down_schedule =
-      ConstructRampDownSchedule(offsets, stages, -1LL, additional_iterations);
+      ConstructRampDownSchedule(offsets, stages, -1LL, additional_iterations,
+                                debug_context);
+
   // Transpose so that each row represents a single timestep.
   ramp_down_schedule = TransposeSchedule(ramp_down_schedule);
   // Create a lookup for what stages are executed in each timestep.
@@ -857,7 +927,6 @@ std::vector<std::vector<ElementType>> ConstructRecomputationRampDownSchedule(
       ConstructScheduleInternal(offsets, input);
   // Transpose so that each row represents a single timestep.
   result = TransposeSchedule(result);
-
   // Go through all the elements in the ramp down schedule, and insert empty
   // elements as appropriate.
   for (int64 t1 = 0; t1 != stage_schedule.size(); ++t1) {
@@ -1091,6 +1160,23 @@ struct PipelineSchedulerUtil {
     return absl::visit(vis, type);
   }
 };
+
+inline poplar::program::Sequence ForProgram(
+    const absl::variant<int64, PipelineVisitor::CountAndGraph>& count,
+    const poplar::program::Program& body,
+    const poplar::DebugContext& debug_context) {
+  return absl::visit(make_visitor<poplar::program::Program>(
+                         [&](const int64 i) -> poplar::program::Program {
+                           return poplar::program::Repeat(i, body,
+                                                          debug_context);
+                         },
+                         [&](const PipelineVisitor::CountAndGraph i)
+                             -> poplar::program::Program {
+                           return popops::countedForLoop(i.graph, 0, i.count, 1,
+                                                         body, debug_context);
+                         }),
+                     count);
+}
 
 }  // namespace pipelinevisitorutils
 }  // namespace poplarplugin
