@@ -182,7 +182,7 @@ TEST_F(PipelineVisitorUtilTest, ConstructScheduleGroupedRampDown) {
   std::vector<int> offsets = {0, 1, 2, 3};
 
   auto schedule = util::FlattenSchedule(
-      util::ConstructRampDownSchedule(offsets, elements, '.'));
+      util::ConstructRampDownSchedule(offsets, elements, '.', 0, {}));
 
   std::string result(schedule.begin(), schedule.end());
   EXPECT_EQ(result, ".dcb..dc...d....");

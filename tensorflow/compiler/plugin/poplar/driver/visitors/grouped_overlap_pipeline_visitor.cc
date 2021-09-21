@@ -110,6 +110,25 @@ GroupedOverlapPipelineVisitor::VerifyPipelineArguments(
       graph, {dnai_, "VerifyPipelineConditions"});
 }
 
+PipelineVisitor::IterationsType
+GroupedOverlapPipelineVisitor::RampDownAdditionalIterations(
+    PipelineVisitor::IterationsType iterations, const size_t overlap_length,
+    poplar::program::Sequence& program) const {
+  return absl::visit(
+      make_visitor<PipelineVisitor::IterationsType>(
+          [&](int64& i) {
+            return PipelineVisitor::IterationsType(i % overlap_length);
+          },
+          [&](PipelineVisitor::CountAndGraph& i) {
+            return PipelineVisitor::IterationsType(
+                PipelineVisitor::CountAndGraph(
+                    i.graph,
+                    popops::map(i.graph, popops::expr::_1 % overlap_length,
+                                {i.count}, program)));
+          }),
+      iterations);
+}
+
 PipelineVisitor::RepeatBlock
 GroupedOverlapPipelineVisitor::GetPipelineRampUpSequence(
     const poplar::DebugNameAndId& debug_name_and_id) const {
@@ -173,10 +192,10 @@ GroupedOverlapPipelineVisitor::GetPipelineRampUpSequence(
   return {std::move(repeat_block), (offsets.size() / 2) + 1};
 }
 
-PipelineVisitor::RepeatBlock
+poplar::program::Program
 GroupedOverlapPipelineVisitor::GetPipelineRampDownSequence(
     const poplar::DebugNameAndId& debug_name_and_id,
-    int additional_iterations) const {
+    const IterationsType& additional_iterations) const {
   // Find the set of non-overlapping program offsets.
   std::vector<int> offsets =
       pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_);
@@ -235,20 +254,16 @@ GroupedOverlapPipelineVisitor::GetPipelineRampDownSequence(
   auto repeat_block = util::DefaultScheduler().CreateRepeatBlock(
       pipeline_sequences, debug_name_and_id, offsets.size());
 
-  return {std::move(repeat_block), offsets.size() / 2 + 1};
+  return repeat_block;
 }
 
-PipelineVisitor::RepeatBlock
+poplar::program::Program
 GroupedOverlapPipelineVisitor::GetPipelineRepeatBlockSequence(
-    const poplar::DebugNameAndId& debug_name_and_id, int64 iterations) const {
+    const poplar::DebugNameAndId& debug_name_and_id,
+    const IterationsType& iterations) const {
   // Find the set of non-overlapping program offsets.
   std::vector<int> offsets =
       pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_);
-
-  const int64 num_repeats = ((iterations / offsets.size()) - 1);
-  if (num_repeats < 1) {
-    return {poplar::program::Sequence({}, debug_name_and_id), 0};
-  }
 
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
@@ -311,9 +326,31 @@ GroupedOverlapPipelineVisitor::GetPipelineRepeatBlockSequence(
   auto repeat_block = util::DefaultScheduler().CreateRepeatBlock(
       pipeline_sequences, debug_name_and_id, offsets.size());
 
-  return {poplar::program::Repeat(num_repeats * offsets.size() - 2,
-                                  repeat_block, {debug_name_and_id}),
-          num_repeats * offsets.size() - 2};
+  return absl::visit(
+      make_visitor<poplar::program::Program>(
+          [&](const int64 i) {
+            const int64 num_repeats = ((i / offsets.size()) - 1);
+            if (num_repeats < 1) {
+              return poplar::program::Sequence({}, debug_name_and_id);
+            }
+
+            return poplar::program::Sequence(
+                poplar::program::Repeat(num_repeats * offsets.size() - 2,
+                                        repeat_block, {debug_name_and_id}));
+          },
+          [&](const PipelineVisitor::CountAndGraph i) {
+            poplar::program::Sequence result({}, {debug_name_and_id});
+            auto expr =
+                (((popops::expr::_1 / offsets.size()) - 1) * offsets.size()) -
+                1;
+            auto repeat_counter =
+                popops::map(i.graph, std::move(expr), {i.count}, result,
+                            {debug_name_and_id});
+            result.add(popops::countedForLoop(
+                i.graph, 0, i.count, 1, repeat_block, {debug_name_and_id}));
+            return result;
+          }),
+      iterations);
 }
 
 std::unique_ptr<PipelineVisitor> GroupedOverlapPipelineVisitor::Create(

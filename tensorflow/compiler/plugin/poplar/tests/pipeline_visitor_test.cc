@@ -74,6 +74,7 @@ struct TestParams {
   std::vector<int> ipu_assigments;
   int num_v_graphs;
   PConfig::Schedule config;
+  bool runtime_accumulation;
   TestParams(std::string hlo_string,
              std::vector<std::pair<std::string, int>> stage_assignments,
              int gradient_accumulation_count,
@@ -81,7 +82,8 @@ struct TestParams {
              bool check_aliases = false, poplar::OptionFlags opts = {},
              std::vector<int> ipu_assigments = {0, 1, 1, 0},
              int num_v_graphs = 2,
-             PConfig::Schedule config = PConfig::Interleaved)
+             PConfig::Schedule config = PConfig::Interleaved,
+             bool runtime_accumulation = true)
       : hlo_string(hlo_string),
         stage_assignments(stage_assignments),
         gradient_accumulation_count(gradient_accumulation_count),
@@ -91,7 +93,14 @@ struct TestParams {
         opts(opts),
         ipu_assigments(ipu_assigments),
         num_v_graphs(num_v_graphs),
-        config(config) {}
+        config(config),
+        runtime_accumulation(runtime_accumulation) {}
+
+  TestParams ChangeToFixed() const {
+    TestParams result(*this);
+    result.runtime_accumulation;
+    return result;
+  }
 };
 
 class PipelineVisitorTestParam
@@ -158,7 +167,6 @@ TEST_P(PipelineVisitorTestParam, TestPipelineVisitor) {
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
 
-  // TF_EXPECT_OK(entry_computation->Accept(&visitor));
   auto status = entry_computation->Accept(&visitor);
   TF_EXPECT_OK(status);
 
@@ -169,9 +177,17 @@ TEST_P(PipelineVisitorTestParam, TestPipelineVisitor) {
               pipeline_call_computation->GetInstructionWithName("const_2"),
               grad_acc_placeholder, *(resources->main_graph))
           .ValueOrDie();
+
+  auto sequence_accumulation_count = [&]() -> PipelineVisitor::IterationsType {
+    if (params.runtime_accumulation) {
+      return PipelineVisitor::CountAndGraph(*resources->main_graph,
+                                            grad_acc_placeholder);
+    }
+    return params.gradient_accumulation_count;
+  }();
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(params.gradient_accumulation_count)
-                     .ValueOrDie();
+  auto program =
+      visitor.GetPipelineSequence(sequence_accumulation_count).ValueOrDie();
 
   // Compile the graph
   poplar::Engine engine(*resources->main_graph,
@@ -294,7 +310,8 @@ const string& expected_0 = R"(/print-tensor: 1
 /print-tensor.3: 5
 )";
 
-TestParams TestPipelineVisitorOrder(hlo_0, assignments_0, 4, {}, expected_0);
+const TestParams TestPipelineVisitorOrder(hlo_0, assignments_0, 4, {},
+                                          expected_0);
 
 // This tests that the output value has the expected value, given a pipeline
 // poplar control program.
@@ -1744,15 +1761,17 @@ TestParams TestPipelineVisitorRevisitIPUOrderSequential{
 
 INSTANTIATE_TEST_CASE_P(
     PipelineVisitorTestParameter, PipelineVisitorTestParam,
-    ::testing::Values(TestPipelineVisitorOrder, TestPipelineVisitorValue,
-                      TestPipelineVisitorFifoValue,
-                      TestPipelineVisitorFifoValueTuples,
-                      TestPipelineVisitorFifoValueBroadcastTuples,
-                      TestPipelineVisitorRevisitIPUOrder,
-                      TestPipelineVisitorOrderSequential,
-                      TestPipelineVisitorValueSequential,
-                      TestPipelineVisitorValueTuplesSequential,
-                      TestPipelineVisitorRevisitIPUOrderSequential));
+    ::testing::Values(
+        TestPipelineVisitorOrder, TestPipelineVisitorOrder.ChangeToFixed(),
+        TestPipelineVisitorValue, TestPipelineVisitorValue.ChangeToFixed(),
+        TestPipelineVisitorFifoValue, TestPipelineVisitorFifoValueTuples,
+        TestPipelineVisitorFifoValueBroadcastTuples,
+        TestPipelineVisitorRevisitIPUOrder, TestPipelineVisitorOrderSequential,
+        TestPipelineVisitorOrderSequential.ChangeToFixed(),
+        TestPipelineVisitorValueSequential,
+        TestPipelineVisitorValueTuplesSequential,
+        TestPipelineVisitorRevisitIPUOrderSequential,
+        TestPipelineVisitorRevisitIPUOrderSequential.ChangeToFixed()));
 
 }  // namespace
 }  // namespace poplarplugin
