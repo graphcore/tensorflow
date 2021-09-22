@@ -74,8 +74,6 @@ bool IsNormInference(const xla::HloInstruction*);
 bool IsNormTraining(const xla::HloInstruction*);
 bool IsNormInferenceOrTraining(const xla::HloInstruction*);
 bool IsNormGradient(const xla::HloInstruction*);
-bool IsNonLinearityGradient(const xla::HloInstruction*);
-bool IsNonLinearity(const xla::HloInstruction*);
 bool IsSupportedAllReduce(const HloInstruction*);
 bool IsMultiSliceOrUpdate(const HloInstruction*);
 bool IsMultiUpdateScatter(const HloInstruction*);
