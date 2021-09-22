@@ -31,6 +31,7 @@ from tensorflow.python.ipu import loops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ipu.keras.optimizers import AutomaticLossScalingOptimizer
 from tensorflow.python.ipu.keras.optimizers import CrossReplicaOptimizer
 from tensorflow.python.ipu.keras.optimizers import MapGradientOptimizerInvertedChaining as MGOIC
 from tensorflow.python.ipu.keras.optimizers import IpuOptimizer
@@ -76,6 +77,10 @@ def mgoic_opt_fn(f):
   return MGOIC(sgd(), f)
 
 
+def als_opt_fn():
+  return AutomaticLossScalingOptimizer(sgd())
+
+
 def dense_layer_fn():
   return keras.layers.Dense(
       NUM_DENSE_UNITS,
@@ -99,6 +104,9 @@ TEST_CASES = [{
 }, {
     'testcase_name': 'MGOICAdd',
     'optimizer_fn': partial(mgoic_opt_fn, map_fn_add),
+}, {
+    'testcase_name': 'AutomaticLossScalingOptimizer',
+    'optimizer_fn': als_opt_fn,
 }]
 
 

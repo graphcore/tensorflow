@@ -90,5 +90,6 @@ Histogram
 The set of histogram ops provided for the IPU.
 
 See :py:func:`tensorflow.python.ipu.statistics_ops.histogram`,
-:py:func:`tensorflow.python.ipu.statistics_ops.histogram_update` and
-:py:func:`tensorflow.python.ipu.statistics_ops.fixed_width_bins`.
+:py:func:`tensorflow.python.ipu.statistics_ops.histogram_update`,
+:py:func:`tensorflow.python.ipu.statistics_ops.fixed_width_bins` and
+:py:func:`tensorflow.python.ipu.statistics_ops.histogram_normalize`.
