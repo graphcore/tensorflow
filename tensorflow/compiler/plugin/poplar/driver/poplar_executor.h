@@ -538,6 +538,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.enable_experimental_remote_buffer_embedding();
   }
 
+  bool EnableExperimentalPrngStability() const {
+    return current_config_.enable_experimental_prng_stability();
+  }
+
   int64 GetMaxAllReduceBufferSize() const {
     return current_config_.max_cross_replica_sum_buffer_size();
   }

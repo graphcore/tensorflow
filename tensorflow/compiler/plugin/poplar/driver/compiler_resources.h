@@ -157,6 +157,8 @@ struct CompilerResources {
 
   bool enable_experimental_remote_buffer_embedding;
 
+  bool enable_experimental_prng_stability;
+
   bool enable_fast_math;
 
   int64 num_io_tiles;
@@ -200,7 +202,8 @@ struct CompilerResources {
       int64 experimental_distributed_batch_norm_replica_group_size,
       bool remote_memory_supported, const poplar::OptionFlags& gcl_options,
       int64 triangular_solve_expander_block_size, int64 cholesky_block_size,
-      bool enable_experimental_remote_buffer_embedding, bool enable_fast_math,
+      bool enable_experimental_remote_buffer_embedding,
+      bool enable_experimental_prng_stability, bool enable_fast_math,
       int64 num_io_tiles, double io_tile_available_memory_proportion,
       bool enable_progress_bar)
       : annotations(module),
@@ -230,6 +233,7 @@ struct CompilerResources {
         cholesky_block_size(cholesky_block_size),
         enable_experimental_remote_buffer_embedding(
             enable_experimental_remote_buffer_embedding),
+        enable_experimental_prng_stability(enable_experimental_prng_stability),
         enable_fast_math(enable_fast_math),
         num_io_tiles(num_io_tiles),
         io_tile_available_memory_proportion(
@@ -265,6 +269,7 @@ struct CompilerResources {
         /*triangular_solve_expander_block_size=*/0,
         /*cholesky_block_size=*/0,
         /*enable_experimental_remote_buffer_embedding=*/false,
+        /*enable_experimental_prng_stability=*/false,
         /*enable_fast_math=*/false,
         /*num_io_tiles=*/0,
         /*io_tile_available_memory_proportion*/ 0.9,
