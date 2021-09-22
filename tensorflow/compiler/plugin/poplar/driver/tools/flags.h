@@ -109,6 +109,13 @@ class PoplarXlaFlags {
   // hour).
   int64 on_demand_device_timeout = 3600000;
 
+  // When specified and when using the Poplar IPUModel target, sets the number
+  // of tiles for the IPUModel device created. This flag has no effect if the
+  // ``--use_ipu_model`` flag is not used. This flag is ignored if the
+  // ``IPUConfig.ipu_model.tiles_per_ipu`` is set.
+
+  int64 ipu_model_tiles = -1;
+
   // Synchronise the starting point of each replica's main program.
   bool sync_replica_start = false;
 

@@ -181,9 +181,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*',
-        'Conv3DBackpropInputV2/conv-with-reverse/Conv_2x2x2/Convolve',
-        'Conv3DBackpropInputV2/conv-with-reverse/Conv_2x2x2/Reduce',
+        '__seed*', 'Conv3DBackpropInputV2/conv-with-reverse/Conv_2x2x2',
         'copy*/OnTileCopy-'
     ]
     self.assert_all_compute_sets_and_list(report, ok)

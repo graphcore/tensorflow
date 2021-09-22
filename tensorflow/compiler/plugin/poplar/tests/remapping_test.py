@@ -31,6 +31,7 @@ class MappingTest(xla_test.XLATestCase):
   def testRemap(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 1472
     cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
@@ -74,6 +75,7 @@ class MappingTest(xla_test.XLATestCase):
   def testRemapDeduce(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 1472
     cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 

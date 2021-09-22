@@ -360,6 +360,11 @@ some help for each option. The available options are described below:
     - When using 'ON_DEMAND' connection type, configure how long to wait (in
       milliseconds) for a device before timing out - defaults to 3600000ms
       (1 hour).
+  * - :samp:`--ipu_model_tiles={int}`
+    - When specified and when using the Poplar IPUModel target, sets the number
+      of tiles for the IPUModel device created. This flag has no effect if the
+      ``--use_ipu_model`` flag is not used. This flag is ignored if the
+      ``IPUConfig.ipu_model.tiles_per_ipu`` is set.
   * - :samp:`--sync_replica_start`
     - Add a global synchronisation point at the start of each replica's main
       Poplar program. This can be used to force each replica to not execute

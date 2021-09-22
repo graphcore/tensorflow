@@ -92,7 +92,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
 
     if not tu.has_ci_ipus():
       report = pva.openReport(report_helper.find_report())
-      self.assert_max_tile_memory(report, 772, tolerance=0.3)
+      self.assert_max_tile_memory(report, 46124, tolerance=0.3)
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
@@ -154,7 +154,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
 
     if not tu.has_ci_ipus():
       report = pva.openReport(report_helper.find_report())
-      self.assert_max_tile_memory(report, 5852, tolerance=0.3)
+      self.assert_max_tile_memory(report, 440684, tolerance=0.3)
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only

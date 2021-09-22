@@ -80,7 +80,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     # Would fail if there were two batch norms in the graph
     ok = [
         '__seed*', 'host-exchange-local-copy-', 'Copy_',
-        'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
+        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
@@ -303,7 +303,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     # Would fail if there were two batch norms in the graph
     ok = [
         '__seed*', 'host-exchange-local-copy-', 'Copy_',
-        'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
+        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/PopnnGroupNormInference/group-norm-inference*/'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
@@ -364,7 +364,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     # Would fail if there were two batch norms in the graph
     ok = [
         '__seed*', 'host-exchange-local-copy-', 'Copy_',
-        'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
+        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/PopnnGroupNormStatistics/group-norm-statistics*/',
         'vs/PopnnGroupNormInference/group-norm-inference*/'
     ]
@@ -418,7 +418,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     # Would fail if there were two batch norms in the graph
     ok = [
         '__seed*', 'host-exchange-local-copy-', 'Copy_',
-        'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
+        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/PopnnGroupNormInference/group-norm-inference*/',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
     ]
@@ -495,7 +495,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
         '__seed*',
         'host-exchange-local-copy-',
         'Copy_',
-        'vs/conv1/Conv2D/convolution*/Conv_1x1/Convolve',
+        'vs/conv1/Conv2D/convolution*/Conv_1x1',
         'vs/PopnnGroupNormTraining/group-norm-training*/Norm',
         'vs/PopnnGroupNormTraining/group-norm-training*/iStdDev',
         'vs/PopnnGroupNormTraining/group-norm-training*/Whiten',
@@ -555,8 +555,8 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       self.assertAllClose(r[0], np.full(r[0].shape, 2))
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 1621154, tolerance=0.2)
-    self.assert_max_tile_memory(report, 1483, tolerance=0.2)
+    self.assert_total_tile_memory(report, 1057266, tolerance=0.2)
+    self.assert_max_tile_memory(report, 132230, tolerance=0.2)
     # Would fail if there were two batch norms in the graph
     ok = [
         '__seed*',

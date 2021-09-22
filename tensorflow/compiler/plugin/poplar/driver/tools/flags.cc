@@ -122,6 +122,11 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
        "When using 'ON_DEMAND' connection type, configure how long to wait (in "
        "milliseconds) for a device before timing out - defaults to 3600000ms "
        "(1 hour)."},
+      {"ipu_model_tiles",
+       "When specified and when using the Poplar IPUModel target, sets the "
+       "number of tiles for the IPUModel device created. This flag has no "
+       "effect if the ``--use_ipu_model`` flag is not used. This flag is "
+       "ignored if the ``IPUConfig.ipu_model.tiles_per_ipu`` is set."},
       {"sync_replica_start",
        "Whether to synchronise the starting point of each replica's main "
        "program."},
@@ -170,6 +175,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(show_progress_bar)
     ADD_FLAG(on_demand_device_poll_time)
     ADD_FLAG(on_demand_device_timeout)
+    ADD_FLAG(ipu_model_tiles)
     ADD_FLAG(sync_replica_start)
     ADD_FLAG(enable_hlo_verifier)
 
@@ -244,11 +250,11 @@ PoplarXlaFlags::PoplarXlaFlags() {
   }
 
   // Hash all the flags which affect the graph generation and compilation only.
-  hlo_hash =
-      hash_util::hash(use_synthetic_data, raw_synthetic_data_categories,
-                      synthetic_data_initializer, use_ipu_model,
-                      while_loop_brute_force_max_trip_count, fallback_scheduler,
-                      allow_nans, log_cycle_count, sync_replica_start);
+  hlo_hash = hash_util::hash(use_synthetic_data, raw_synthetic_data_categories,
+                             synthetic_data_initializer, use_ipu_model,
+                             while_loop_brute_force_max_trip_count,
+                             fallback_scheduler, allow_nans, log_cycle_count,
+                             sync_replica_start, ipu_model_tiles);
 }
 
 const PoplarXlaFlags& PoplarXlaFlags::Get() {
