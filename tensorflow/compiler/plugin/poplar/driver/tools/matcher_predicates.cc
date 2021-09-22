@@ -343,16 +343,6 @@ bool IsNormGradient(const HloInstruction* inst) {
          IsPoplarInstruction(PoplarOp::GroupNormGrad)(inst);
 }
 
-bool IsNonLinearity(const HloInstruction* inst) {
-  return IsPoplarInstruction(PoplarOp::Relu)(inst) ||
-         IsPoplarInstruction(PoplarOp::Sigmoid)(inst);
-}
-
-bool IsNonLinearityGradient(const HloInstruction* inst) {
-  return IsPoplarInstruction(PoplarOp::ReluGrad)(inst) ||
-         IsPoplarInstruction(PoplarOp::SigmoidGrad)(inst);
-}
-
 bool IsCompareEqual(const HloInstruction* inst) {
   return inst->comparison_direction() == ComparisonDirection::kEq;
 }

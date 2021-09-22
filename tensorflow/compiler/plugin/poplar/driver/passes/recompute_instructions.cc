@@ -50,6 +50,16 @@ static bool IsTuple(HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kGetTupleElement;
 }
 
+bool IsNonLinearity(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::Relu)(inst) ||
+         IsPoplarInstruction(PoplarOp::Sigmoid)(inst);
+}
+
+bool IsNonLinearityGradient(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::ReluGrad)(inst) ||
+         IsPoplarInstruction(PoplarOp::SigmoidGrad)(inst);
+}
+
 // Look through a tuple to find the "real" use. The first use matching
 // |predicate_function| will be returned.
 template <typename Predicate>
