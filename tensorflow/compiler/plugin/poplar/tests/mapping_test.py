@@ -71,7 +71,9 @@ class MappingTest(xla_test.XLATestCase):
   def testMappingJson(self):
     cfg = ipu.utils.IPUConfig()
     cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
-    cfg.ipu_model.compile_ipu_code = False
+    cfg.auto_select_ipus = 1
+    cfg.ipu_model.tiles_per_ipu = 1472
+    cfg.ipu_model.compile_ipu_code = True
     cfg.configure_ipu_system()
 
     with self.session() as sess:

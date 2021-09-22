@@ -96,7 +96,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     self.assertAllClose(result[0][0] * 3, np.take(v, i_h, axis=0))
     self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
     report = pva.openReport(report_helper.find_report())
-    self.assert_max_tile_memory(report, 772, tolerance=0.3)
+    self.assert_max_tile_memory(report, 47468, tolerance=0.3)
 
   @test_util.deprecated_graph_mode_only
   def testAGIShape(self):
@@ -157,7 +157,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     self.assertAllClose(result[0][0] * 3, np.take(v, i_h, axis=0))
     self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
     report = pva.openReport(report_helper.find_report())
-    self.assert_max_tile_memory(report, 5852, tolerance=0.3)
+    self.assert_max_tile_memory(report, 453548, tolerance=0.3)
 
   @test_util.deprecated_graph_mode_only
   def testTrainNoExec(self):

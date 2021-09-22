@@ -120,9 +120,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     ok = [
         '__seed*',
         'host-exchange-local-copy-',
-        'Copy_*weightsRearranged',
         'Copy_',
-        'Copy_vs/*/OnTileCopy-0',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/Cast/convert.*/Cast',
         'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
@@ -164,7 +162,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Matches two convolutions
     ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Copy_',
+        '__seed*', 'host-exchange-local-copy-',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
     ]
@@ -491,11 +489,11 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       self.assertAllClose(cpu_result, ipu_result)
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 9951854, tolerance=0.2)
-    self.assert_max_tile_memory(report, 7446, tolerance=0.2)
+    self.assert_total_tile_memory(report, 2942155, tolerance=0.2)
+    self.assert_max_tile_memory(report, 401526, tolerance=0.2)
 
     # Would fail if there were two convolutions in the graph
-    ok = ['__seed*', 'a/convolution', 'Copy_']
+    ok = ['__seed*', 'a/convolution', '[cC]opy']
     self.assert_all_compute_sets_and_list(report, ok)
 
 

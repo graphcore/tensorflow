@@ -100,8 +100,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         '[cC]opy',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
-    self.assert_total_tile_memory(report, 743720, tolerance=0.1)
-    self.assert_max_tile_memory(report, 1306, tolerance=0.1)
+    self.assert_total_tile_memory(report, 204616, tolerance=0.1)
+    self.assert_max_tile_memory(report, 25647, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionTraining(self):
@@ -180,8 +180,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     ]
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
-    self.assert_total_tile_memory(report, 1133976, tolerance=0.1)
-    self.assert_max_tile_memory(report, 2976, tolerance=0.1)
+    self.assert_total_tile_memory(report, 322656, tolerance=0.1)
+    self.assert_max_tile_memory(report, 40691, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testNestedFunctionTraining(self):
@@ -276,8 +276,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     ]
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
-    self.assert_total_tile_memory(report, 1098660, tolerance=0.1)
-    self.assert_max_tile_memory(report, 2984, tolerance=0.1)
+    self.assert_total_tile_memory(report, 299632, tolerance=0.1)
+    self.assert_max_tile_memory(report, 38837, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionSerializedLookup(self):
@@ -369,8 +369,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         '[cC]opy',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
-    self.assert_total_tile_memory(report, 11688302, tolerance=0.1)
-    self.assert_max_tile_memory(report, 8480, tolerance=0.1)
+    self.assert_total_tile_memory(report, 6415442, tolerance=0.1)
+    self.assert_max_tile_memory(report, 802278, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionsNoMatch(self):
@@ -553,8 +553,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     ]
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
-    self.assert_total_tile_memory(report, 1200672, tolerance=0.1)
-    self.assert_max_tile_memory(report, 4950, tolerance=0.1)
+    self.assert_total_tile_memory(report, 290009, tolerance=0.1)
+    self.assert_max_tile_memory(report, 37483, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testNoGradient(self):
@@ -637,7 +637,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       self.assertEqual(len(report_json.tensor_map.computation_names()), 2)
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_max_tile_memory(report, 439, tolerance=0.1)
+    self.assert_max_tile_memory(report, 2110, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testResourceUpdateErrors(self):

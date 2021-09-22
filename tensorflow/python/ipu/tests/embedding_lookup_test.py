@@ -78,8 +78,8 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-    cfg = ipu.config.IPUConfig()
-    tu.add_hw_ci_connection_options(cfg)
+    cfg = IPUConfig()
+    cfg.ipu_model.tiles_per_ipu = 1472
     cfg.configure_ipu_system()
     with sl.Session() as sess:
       i_h = np.arange(0, 8)
@@ -356,6 +356,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.tiles_per_ipu = 1472
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
@@ -394,7 +395,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       # Large memory spikes are generated when the input for a MultiUpdateAdd
       # is not mapped in the scheme expected by poplibs.
       report = pva.openReport(report_helper.find_report())
-      self.assert_max_tile_memory(report, 2520, tolerance=0.1)
+      self.assert_max_tile_memory(report, 2096, tolerance=0.1)
 
   @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only

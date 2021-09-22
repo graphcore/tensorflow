@@ -118,12 +118,9 @@ class IpuXlaConvTest(xla_test.XLATestCase):
                             np.zeros(self._ip_shp([1, 14, 14, 128], fmt)))
 
       report = pva.openReport(report_helper.find_report())
-      ok = [
-          '__seed*', 'host-exchange-local-copy-',
-          'cnv3*/convolution.*/Conv_3x3', 'ba3*/fusion/Op/Add'
-      ]
+      ok = ['__seed*', 'cnv3*/convolution.*/Conv_3x3', 'ba3*/fusion/Op/Add']
 
-      self.assert_all_compute_sets_and_list(report, ok)
+      self.assert_compute_sets_contain_list(report, ok)
 
   def testConv8x8_WithBias(self):
     cfg = IPUConfig()
@@ -161,7 +158,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       report = pva.openReport(report_helper.find_report())
       ok = [
           '__seed*', 'host-exchange-local-copy-',
-          'Copy_{*/input,*/weights}_to_{*actsRearranged,*weightsRearranged}',
           'cnv4*/convolution.*/Conv_8x8_stride4x4', 'ba4*/fusion/Op/Add'
       ]
       self.assert_all_compute_sets_and_list(report, ok)
@@ -270,7 +266,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     ok = [
         '__seed*',
-        'Copy_',
+        '[cC]opy',
         'Conv2DBackpropFilter/convolution.*/Conv_8x8',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
@@ -334,7 +330,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Copy_',
+        '__seed*', 'host-exchange-local-copy-',
         'depthwise/convolution.*/Conv_1x1', 'add/fusion*/Add'
     ]
     # pylint: enable=line-too-long
@@ -398,13 +394,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     # pylint: disable=line-too-long
     ok = [
         '__seed*',
-        'Copy_',
         'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/*Transpose',
         'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/Conv_1x1',
     ]
     # pylint: enable=line-too-long
 
-    self.assert_all_compute_sets_and_list(report, ok)
+    self.assert_compute_sets_contain_list(report, ok)
 
   def testDataLayout(self):
     cfg = IPUConfig()

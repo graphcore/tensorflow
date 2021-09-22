@@ -68,6 +68,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 1472
     cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 
@@ -98,6 +99,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 1472
     cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 
@@ -131,6 +133,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 1472
     cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 
@@ -163,6 +166,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 1472
     cfg.configure_ipu_system()
 
     with self.session() as sess:

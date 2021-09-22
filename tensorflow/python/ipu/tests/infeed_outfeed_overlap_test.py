@@ -37,6 +37,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedRepeatNonTuple(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -68,6 +69,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedSingleRepeatNonTuple(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -99,6 +101,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedRepeatNonTupleFiniteDataset(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -132,6 +135,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedRepeatTuple(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -168,6 +172,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedRepeatTupleMerge(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.optimizations.merge_infeed_io_copies = True
     cfg.io_tiles.place_ops_on_io_tiles = True
@@ -205,6 +210,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedRepeatNamed(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -245,6 +251,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedMultipleRepeats(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -275,6 +282,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedWhileLoopNonTuple(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -310,6 +318,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedWhileLoopTuple(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -352,6 +361,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedMultipleRuns(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -391,6 +401,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testTwoInfeedsDifferentPrograms(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -430,6 +441,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testTrainingLoopWithInfeed(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -473,6 +485,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleOutfeedRepeatNonTuple(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -508,6 +521,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testMultipleOutfeedsInSameGraph(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -548,6 +562,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedOutfeedRepeatNonTuple(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -586,6 +601,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedOutfeedRepeatTuple(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -646,6 +662,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedOutfeedRepeatTupleLast(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -693,6 +710,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedOutfeedRepeatNamed(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -763,6 +781,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testSingleInfeedOutfeedRepeatNamedLast(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -810,6 +829,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testTwoOutfeedsDifferentPrograms(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -862,6 +882,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testOutfeedNonTensorOutputs(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
@@ -901,6 +922,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   def testTwoOutfeedsDifferentProgramsDelayedOutfeedRead(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()

@@ -47,6 +47,7 @@ class MultiIpuTest(xla_test.XLATestCase):
     report_helper.set_autoreport_options(cfg)
     cfg.auto_select_ipus = 2
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 1472
     cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
@@ -100,6 +101,7 @@ class MultiIpuTest(xla_test.XLATestCase):
     cfg = ipu.utils.IPUConfig()
     cfg.auto_select_ipus = 2
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 1472
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -127,6 +129,7 @@ class MultiIpuTest(xla_test.XLATestCase):
     cfg = ipu.utils.IPUConfig()
     cfg.auto_select_ipus = 2
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 1472
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -156,6 +159,7 @@ class MultiIpuTest(xla_test.XLATestCase):
     cfg = ipu.utils.IPUConfig()
     cfg.auto_select_ipus = 2
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 1472
     cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 

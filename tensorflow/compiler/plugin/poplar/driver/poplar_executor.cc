@@ -1878,6 +1878,8 @@ Status PoplarExecutor::CreatePoplarTarget() {
         current_config_.ipu_model_config().compile_ipu_code();
     if (current_config_.ipu_model_config().tiles_per_ipu() > 0) {
       model.tilesPerIPU = current_config_.ipu_model_config().tiles_per_ipu();
+    } else if (PoplarXlaFlags::Get().ipu_model_tiles > 0) {
+      model.tilesPerIPU = PoplarXlaFlags::Get().ipu_model_tiles;
     }
     ipu_.SetDeviceAndTarget(model.createDevice());
   }
@@ -1896,7 +1898,8 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
         "'tensorflow.python.ipu.config.configure_ipu_system'.");
   }
   if (ipu_.DeviceAttached()) {
-    if (DeviceConfigurationsEqual(current_config_, IpuOptions())) {
+    if (DeviceConfigurationsEqual(current_config_, IpuOptions()) ||
+        PoplarXlaFlags::Get().use_ipu_model) {
       // If there is no config associated to the open device then it is a CPU
       // device: dettach from it and initialize a Poplar device instead.
       DetachFromPoplarDevice();
