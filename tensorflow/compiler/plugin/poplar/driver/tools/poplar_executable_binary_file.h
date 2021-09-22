@@ -32,10 +32,12 @@ class PoplarExecutableBinaryFile {
  public:
   static Status Write(const std::string& file_name,
                       const ::tensorflow::protobuf::MessageLite& proto,
-                      std::function<void(std::ostream&)> serialize_executable);
+                      std::function<void(std::ostream&)> serialize_executable,
+                      const std::string& executable_hash = "");
 
   static StatusOr<poplar::Executable> Read(
-      const std::string& file_name, ::tensorflow::protobuf::MessageLite* proto);
+      const std::string& file_name, ::tensorflow::protobuf::MessageLite* proto,
+      const std::string& executable_hash = "");
 };
 
 }  // namespace poplarplugin

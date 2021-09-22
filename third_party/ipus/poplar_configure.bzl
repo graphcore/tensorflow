@@ -80,6 +80,8 @@ def _poplar_autoconf_impl(repository_ctx):
             if not repository_ctx.path(poplar_base + "/poplibs/include").exists:
                 fail("Cannot find poplibs/include path.")
 
+            repository_ctx.symlink(poplar_base + "/popef/include", "poplar/popef/include")
+            repository_ctx.symlink(poplar_base + "/popef/lib", "poplar/lib/popef")
             repository_ctx.symlink(poplar_base + "/poplar/include", "poplar/poplar/include")
             repository_ctx.symlink(poplar_base + "/poplibs/include", "poplar/poplibs/include")
             repository_ctx.symlink(poplar_base + "/poplar/bin", "poplar/poplar/bin")
@@ -122,6 +124,9 @@ def _poplar_autoconf_impl(repository_ctx):
                 repository_ctx.symlink(poplar_base + "/poplar/lib64", "poplar/poplar/lib64/poplar")
                 repository_ctx.symlink(poplar_base + "/poplibs/lib64", "poplar/poplar/lib64/poplibs")
                 repository_ctx.symlink(poplar_base + "/tbb/lib64", "poplar/lib64/tbb")
+
+            if repository_ctx.path(poplar_base + "/popef/lib64").exists:
+                repository_ctx.symlink(poplar_base + "/popef/lib64", "poplar/lib64/popef")
 
     repository_ctx.template(
         "poplar/BUILD",

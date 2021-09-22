@@ -17,7 +17,11 @@ Embedded application runtime
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 from tensorflow.compiler.plugin.poplar.ops import gen_application_runtime
+from tensorflow.compiler.plugin.poplar.ops import gen_dataset_exporters
+from tensorflow.python.client import session as session_lib
+from tensorflow.python.eager.context import executing_eagerly
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import ops
 from tensorflow.compiler.plugin.poplar.driver import poplar_executable_pb2
 from tensorflow.compiler.xla import xla_data_pb2
 
@@ -85,6 +89,21 @@ class RuntimeContext:
             self.signature().streamed_outputs))
 
 
+def _find_opaque_blob(filename):
+  opq_blobs = None
+
+  # Get the serialized output.
+  if executing_eagerly():
+    opq_blobs = gen_dataset_exporters.popef_unwrapper(filename).numpy()
+  else:
+    g = ops.Graph()
+    with g.as_default():
+      with ops.device("CPU"):
+        with session_lib.Session(graph=g) as s:
+          opq_blobs = s.run(gen_dataset_exporters.popef_unwrapper(filename))
+  return opq_blobs[0]
+
+
 def embedded_runtime_start(executable_file, inputs, name, timeout=None):
   """
   Create and start an application runtime from a TF poplar executable.
@@ -107,32 +126,15 @@ def embedded_runtime_start(executable_file, inputs, name, timeout=None):
   timeout = timeout or 5000
 
   # Open the executable file.
-  with open(executable_file, 'rb') as f:
-    # Read the file magic number
-    magic = f.read(8)
-    if magic != b'GCTF\xf0\x9f\x91\x8d':
-      raise Exception(
-          f"Executable file '{executable_file}' is not a TensorFlow Poplar "
-          "binary.")
+  opq_blob = _find_opaque_blob(executable_file)
 
-    # Read the length of the protobuf metadata.
-    size = f.read(8)
-    result = 0
-
-    # Convert this from big-endian.
-    for i in range(8):
-      result += size[i] << (i * 8)
-
-    # Assert that the expected protobuf size is less than 128MB.
-    # That is probably overkill, but it stops us trying to load HUGE files because we have nonsense data.
-    assert result < 128 * 1024 * 1024
-
-    # Read the ptobobuf bytes.
-    proto_bytes = f.read(result)
+  # Assert that the expected protobuf size is less than 128MB.
+  # That is probably overkill, but it stops us trying to load HUGE files because we have nonsense data.
+  assert len(opq_blob) < 128 * 1024 * 1024
 
   # Create the PoplarExecutableProto from the protobuf bytes.
   poplar_exec = poplar_executable_pb2.PoplarExecutableProto()
-  poplar_exec.ParseFromString(proto_bytes)
+  poplar_exec.ParseFromString(opq_blob)
 
   if isinstance(inputs, dict):
     # Extract all the expected input names.
