@@ -31,6 +31,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
+static const char* const kEnvVarName = "TF_POPLAR_FLAGS";
 
 SyntheticDataCategory SyntheticDataCategoryFromName(absl::string_view name) {
 #define RETURN_CATEGORY_FOR_NAME(NAME, CATEGORY) \
@@ -199,12 +200,13 @@ PoplarXlaFlags::PoplarXlaFlags() {
       "synthetic_data_categories", synthetic_data_category_hook,
       /*default*/ "", flag_usage["synthetic_data_categories"]));
 
-  xla::ParseFlagsFromEnvAndDieIfUnknown("TF_POPLAR_FLAGS", flag_list);
+  xla::ParseFlagsFromEnvAndDieIfUnknown(kEnvVarName, flag_list);
 
   // Store all the flags as a string.
   as_string = "";
-  if (const char* flag_buffer = std::getenv("TF_POPLAR_FLAGS")) {
+  if (const char* flag_buffer = std::getenv(kEnvVarName)) {
     as_string = flag_buffer;
+    VLOG(1) << kEnvVarName << " is set to '" << as_string << "'";
   }
 
   const auto invalid_synthetic_data_category =
