@@ -792,6 +792,14 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
     pb = cfg._create_protobuf()
     self.assertEqual(pb.enable_experimental_remote_buffer_embedding, True)
 
+  def testExperimentalEnablePrngStability(self):
+    cfg = ipu.config.IPUConfig()
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.enable_experimental_prng_stability, False)
+    cfg.experimental.enable_prng_stability = True
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.enable_experimental_prng_stability, True)
+
   @tu.test_uses_ipus(1, allow_ipu_model=False)
   def testExperimentalMultiReplicaDistributionProcessCount(self):
     cfg = ipu.config.IPUConfig()

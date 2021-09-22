@@ -308,4 +308,7 @@ message IpuOptions {
   }
 
   IpuAlgebraicSimplifierConfig algebraic_simplifier_config = 46;
+
+	// Option for controlling whether experimental prng work is enabled
+  bool enable_experimental_prng_stability = 47;
 };

@@ -1272,6 +1272,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       poplar_executor->GetTriangularSolveExpanderBlockSize(),
       poplar_executor->GetCholeskyBlockSize(),
       poplar_executor->EnableExperimentalRemoteBufferEmbedding(),
+      poplar_executor->EnableExperimentalPrngStability(),
       poplar_executor->EnableFastMath(), num_io_tiles,
       poplar_executor->GetIoTileAvailableMemoryProportion(),
       EnableProgressBar(module));

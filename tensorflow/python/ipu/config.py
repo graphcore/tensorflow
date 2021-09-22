@@ -1119,6 +1119,11 @@ class _ExperimentalConfig(_ConfigBase):
     """
     self.enable_remote_buffer_embedding = False
     """
+    Enable prng seed management. This aims to reduce divergence of weights
+    when running models across multiple replicas with stochastic rounding.
+    """
+    self.enable_prng_stability = False
+    """
     Sub-category containing configuration options controlling multi replica
     distribution. This will use the Poplar runtime replica subset feature to let
     multiple processes collaborate on executing the same Poplar program by
@@ -1135,6 +1140,8 @@ class _ExperimentalConfig(_ConfigBase):
         self.always_rearrange_copies_on_the_host
     pb.enable_experimental_remote_buffer_embedding = \
         self.enable_remote_buffer_embedding
+    pb.enable_experimental_prng_stability = \
+        self.enable_prng_stability
 
     # Go deeper into nested configs.
     super()._to_protobuf(pb)  # pylint: disable=protected-access
