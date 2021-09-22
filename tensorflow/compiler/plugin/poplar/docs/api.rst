@@ -178,8 +178,8 @@ Keras optimizers
 ^^^^^^^^^^^^^^^^
 
 .. automodule:: tensorflow.python.ipu.keras.optimizers
-  :members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer, MapGradientOptimizerInvertedChaining, GradientAccumulationOptimizer, AutomaticLossScalingOptimizer
-  :imported-members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer, MapGradientOptimizerInvertedChaining, GradientAccumulationOptimizer, AutomaticLossScalingOptimizer
+  :members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer, MapGradientOptimizerInvertedChaining, GradientAccumulationOptimizer,
+  :imported-members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer, MapGradientOptimizerInvertedChaining, GradientAccumulationOptimizer
 
 .. _operators-api:
 
@@ -304,10 +304,6 @@ In addition to the `tensorflow.python.ipu.optimizers` namespace, it is also poss
   +------------------------------------------------------------------------------------------------+------------------------------------------------------------------+
   |                  Optimizer                                                                     |                     Alternative namespaces                       |
   +================================================================================================+==================================================================+
-  | :class:`~tensorflow.python.ipu.optimizers.AutomaticLossScalingOptimizer`                       | tensorflow.python.ipu.automatic_loss_scaling_optimizer           |
-  |                                                                                                |                                                                  |
-  |                                                                                                | tensorflow.python.ipu.optimizers.automatic_loss_scaling_optimizer|
-  +------------------------------------------------------------------------------------------------+------------------------------------------------------------------+
   | :class:`~tensorflow.python.ipu.optimizers.CrossReplicaOptimizer`                               | tensorflow.python.ipu.cross_replica_optimizer                    |
   |                                                                                                |                                                                  |
   |                                                                                                | tensorflow.python.ipu.optimizers.cross_replica_optimizer         |
@@ -340,8 +336,8 @@ In addition to the `tensorflow.python.ipu.optimizers` namespace, it is also poss
 .. note:: The `ipu.optimizers` optimizer classes can only be used with subclasses of `tensorflow.compat.v1.train.Optimizer`.
 
 .. automodule:: tensorflow.python.ipu.optimizers
-  :members: AutomaticLossScalingOptimizer, CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
-  :imported-members: AutomaticLossScalingOptimizer, CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
+  :members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
+  :imported-members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
   :special-members: __init__
 
 .. _sharding-api:

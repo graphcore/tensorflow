@@ -138,7 +138,6 @@ py_library(
         "keras/losses/ctc.py",
         "keras/model.py",
         "keras/optimizers/__init__.py",
-        "keras/optimizers/automatic_loss_scaling_optimizer.py",
         "keras/optimizers/cross_replica_optimizer.py",
         "keras/optimizers/gradient_accumulation_optimizer.py",
         "keras/optimizers/ipu_wrappers.py",
@@ -166,7 +165,6 @@ py_library(
         "ops/statistics_ops.py",
         "ops/summary_ops.py",
         "optimizers/__init__.py",
-        "optimizers/automatic_loss_scaling_optimizer.py",
         "optimizers/cross_replica_optimizer.py",
         "optimizers/gradient_accumulation_optimizer.py",
         "optimizers/ipu_optimizer.py",
@@ -193,20 +191,6 @@ py_library(
         "//tensorflow/python/distribute:values",
         "//tensorflow/python/estimator:estimator_py",
     ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_lib"]),
-)
-
-tf_py_test(
-    name = "automatic_loss_scaling_optimizer_test",
-    size = "large",
-    srcs = ["tests/automatic_loss_scaling_optimizer_test.py"],
-    shard_count = 12,
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
 )
 
 tf_py_test(
@@ -387,20 +371,6 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras",
-    ],
-)
-
-tf_py_test(
-    name = "keras_automatic_loss_scaling_optimizer_test",
-    size = "large",
-    srcs = ["tests/keras/keras_automatic_loss_scaling_optimizer_test.py"],
-    shard_count = 12,
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -2004,7 +1974,6 @@ test_suite(
         "application_compile_test",
         "application_runtime_test",
         "assume_equal_test",
-        "automatic_loss_scaling_optimizer_test",
         "candidate_sampler_test",
         "config_test",
         "dataset_benchmark_test",
@@ -2038,7 +2007,6 @@ test_suite(
         "ipu_strategy_test",
         "iteration_counter_test",
         "keras_asynchronous_callbacks_test",
-        "keras_automatic_loss_scaling_optimizer_test",
         "keras_ctc_test",
         "keras_dropout_test",
         "keras_effective_transformer_test",
