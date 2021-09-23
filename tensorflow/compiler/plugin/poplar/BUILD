@@ -784,6 +784,7 @@ cc_library(
         "driver/poplar_platform.cc",
         "driver/poplar_platform_id.cc",
         "driver/poplar_transfer_manager.cc",
+        "driver/prng_seed_state.cc",
         "driver/tensor.cc",
         "driver/tools/conv_poplar_util.cc",
         "driver/tools/conversions.cc",
@@ -837,6 +838,7 @@ cc_library(
         "driver/poplar_platform.h",
         "driver/poplar_platform_id.h",
         "driver/poplar_transfer_manager.h",
+        "driver/prng_seed_state.h",
         "driver/tensor.h",
         "driver/tools/attributes_utils.h",
         "driver/tools/conv_poplar_util.h",
@@ -2375,6 +2377,21 @@ xla_test(
         ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "prng_seed_state_test",
+    srcs = ["tests/prng_seed_state_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    tags = ["hw_poplar_test"],
+    deps = [
+        ":optimizers",
+        ":poplar_test_base",
+        ":test_utils",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
     ],
 )
 
@@ -5597,6 +5614,7 @@ test_suite(
         "poprun_basic_test",
         "post_serialize_gradient_accumulation_test",
         "pre_compile_test",
+        "prng_seed_state_test",
         "random_ops",
         "recomputation_checkpoint_remover_test",
         "recomputation_input_remover_test",
