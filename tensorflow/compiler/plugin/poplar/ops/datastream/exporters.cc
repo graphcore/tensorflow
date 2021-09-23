@@ -53,4 +53,8 @@ REGISTER_OP("VariablesImporter")
     .SetIsStateful()
     .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute);
 
+REGISTER_OP("PopefUnwrapper")
+    .Attr("filename: string")
+    .Output("out: string")
+    .SetIsStateful();
 }  // namespace tensorflow

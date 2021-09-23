@@ -978,6 +978,7 @@ cc_library(
         "//third_party/ipus/tools:poplar_executable_data",
         "@com_google_absl//absl/strings",
         "@jsoncpp_git//:jsoncpp",
+        "@local_config_poplar//poplar:poplar_libs",
     ],
     alwayslink = True,
 )

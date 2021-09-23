@@ -364,9 +364,10 @@ PoplarExecutableCore::Deserialize(
   VLOG(1) << "Trying to deserialize cached file: "
           << filenames.CachedExecutableFilename();
 
-  TF_ASSIGN_OR_RETURN(poplar::Executable executable,
-                      PoplarExecutableBinaryFile::Read(
-                          filenames.CachedExecutableFilename(), &proto));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Executable executable,
+      PoplarExecutableBinaryFile::Read(filenames.CachedExecutableFilename(),
+                                       &proto, filenames.Name()));
 
   poplar::OptionFlags engine_options;
   PoplarExecutableInfo info = FromProto(proto, &engine_options);
@@ -407,7 +408,8 @@ PoplarExecutableCore::Deserialize(
 
   return PoplarExecutableBinaryFile::Write(
       filenames.CachedExecutableFilename(), proto,
-      [&executable](std::ostream& out) { executable.serialize(out); });
+      [&executable](std::ostream& out) { executable.serialize(out); },
+      filenames.Name());
 }
 
 namespace {
