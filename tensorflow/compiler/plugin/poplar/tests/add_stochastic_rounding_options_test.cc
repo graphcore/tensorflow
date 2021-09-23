@@ -188,8 +188,10 @@ TEST_F(AddStochasticRoundingOptionsTest,
 
   ASSERT_TRUE(SetUpHloModule(simple_hlo));
 
+  const bool enable_experimental_prng_stability = true;
   AddStochasticRoundingOptions add_stochastic_rounding_options(
-      StochasticRounding_ReplicaIdenticalOnly);
+      StochasticRounding_ReplicaIdenticalOnly,
+      enable_experimental_prng_stability);
 
   TF_ASSERT_OK_AND_ASSIGN(bool modified,
                           add_stochastic_rounding_options.Run(hlo_module_));
