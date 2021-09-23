@@ -169,9 +169,11 @@ StatusOr<bool> NeedsSpecificSeedType(const HloInstruction* inst) {
 }  // namespace
 
 AddStochasticRoundingOptions::AddStochasticRoundingOptions(
-    const StochasticRoundingBehaviour& default_stochastic_rounding_behaviour)
+    const StochasticRoundingBehaviour& default_stochastic_rounding_behaviour,
+    bool enable_experimental_prng_stability)
     : default_stochastic_rounding_behaviour_(
-          default_stochastic_rounding_behaviour) {}
+          default_stochastic_rounding_behaviour),
+      enable_experimental_prng_stability_(enable_experimental_prng_stability) {}
 
 StatusOr<bool> AddStochasticRoundingOptions::Run(HloModule* module) {
   bool modified = false;
@@ -203,8 +205,9 @@ StatusOr<bool> AddStochasticRoundingOptions::ConfigureStochasticRoundingOption(
   // that are replica identical.
   const bool use_default = stochastic_rounding == THREESTATE_UNDEFINED;
   if (use_default) {
-    if (default_stochastic_rounding_behaviour_ ==
-        StochasticRounding_ReplicaIdenticalOnly) {
+    if (enable_experimental_prng_stability_ &&
+        default_stochastic_rounding_behaviour_ ==
+            StochasticRounding_ReplicaIdenticalOnly) {
       stochastic_rounding =
           IsInstructionReplicaIdentical(inst) ? THREESTATE_ON : THREESTATE_OFF;
     } else {

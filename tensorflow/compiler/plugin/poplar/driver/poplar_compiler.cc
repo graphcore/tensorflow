@@ -1576,7 +1576,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<LowerFrontendAttributes>();
       pipeline.AddPass<MarkReplicaIdenticalInstructions>();
       pipeline.AddPass<AddStochasticRoundingOptions>(
-          resources.global_floating_point_behaviour.esr());
+          resources.global_floating_point_behaviour.esr(),
+          resources.enable_experimental_prng_stability);
       pipeline.AddPass<MultiUseFeedsFinder>();
     }
 

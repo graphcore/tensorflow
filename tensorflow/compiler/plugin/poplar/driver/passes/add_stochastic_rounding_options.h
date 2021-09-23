@@ -29,7 +29,8 @@ namespace poplarplugin {
 class AddStochasticRoundingOptions : public HloModulePass {
  public:
   explicit AddStochasticRoundingOptions(
-      const StochasticRoundingBehaviour& default_stochastic_rounding_behaviour);
+      const StochasticRoundingBehaviour& default_stochastic_rounding_behaviour,
+      bool enable_experimental_prng_stability = false);
 
   absl::string_view name() const override {
     return "add-stochastic-rounding-options";
@@ -49,6 +50,7 @@ class AddStochasticRoundingOptions : public HloModulePass {
       HloInstruction* inst) const;
 
   StochasticRoundingBehaviour default_stochastic_rounding_behaviour_;
+  bool enable_experimental_prng_stability_;
 };
 
 }  // namespace poplarplugin
