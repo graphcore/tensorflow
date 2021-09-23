@@ -1235,6 +1235,10 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           << ipu_link_domain_replication_factor
           << ", partition replication factor " << partition_replication_factor;
 
+  auto config = module->config();
+  config.set_replica_count(replication_factor);
+  module->set_config(config);
+
   const auto information =
       CompilerInformation()
           .set_max_all_reduce_buffer_size(

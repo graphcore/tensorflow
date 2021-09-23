@@ -124,7 +124,8 @@ ENTRY test {
   ROOT identical_root = f32[4] add(identical0, global_all_reduce)
 }
 )"};
-static const HloTestCase global_all_gather = {"global_all_gather", R"(
+static const HloTestCase implicit_global_all_gather = {
+    "implicit_global_all_gather", R"(
 HloModule test
 ENTRY test {
   identical0 = f32[4] parameter(0)
@@ -135,6 +136,20 @@ ENTRY test {
   ROOT identical_root = f32[4] add(identical0, global_all_gather)
 }
 )"};
+static const HloTestCase explicit_global_all_gather = {
+    "explicit_global_all_gather", R"(
+HloModule test
+ENTRY test {
+  identical0 = f32[4] parameter(0)
+  after-all = token[] after-all()
+  infeed = (f32[2], token[]) infeed(token[] after-all), infeed_config="\010\001\022\005feed1\"\002\001\001"
+  differing_value = f32[2] get-tuple-element((f32[2], token[]) infeed), index=0
+  global_all_gather = f32[4] custom-call(differing_value), custom_call_target="AllGather", backend_config="{\"replica_group_size\":2}"
+  ROOT identical_root = f32[4] add(identical0, global_all_gather)
+}
+)",
+    /*replication_factor*/ 2};
+
 static const HloTestCase repeat_with_identical_io = {"repeat_identical_io", R"(
 HloModule test
 repeat {
@@ -1683,7 +1698,8 @@ INSTANTIATE_TEST_SUITE_P(
     ReplicaIdenticalDataflowHLO, ReplicaIdenticalInstructionTest,
     ::testing::Values(
         simple_parameters, simple_constants, simple_wide_const,
-        global_all_reduce, global_all_gather, repeat_with_identical_io,
+        global_all_reduce, explicit_global_all_gather,
+        implicit_global_all_gather, repeat_with_identical_io,
         repeat_single_element_tuple, while_with_identical_body_and_condition,
         conditional_with_identical_branches_and_pred, simple_pipeline,
         simple_select, simple_tuple_select, compare_with_identical_operands,
