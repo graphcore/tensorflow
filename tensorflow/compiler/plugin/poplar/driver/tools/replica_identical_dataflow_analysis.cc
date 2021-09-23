@@ -396,11 +396,21 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleWhile(
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleAllGather(
     const HloInstruction* inst) {
+  const HloModule* module = inst->GetModule();
+  const int64 replica_count = module->config().replica_count();
+
   const auto* all_gather = Cast<HloPoplarAllGatherInstruction>(inst);
+  const PoplarReplicaGroups replica_group =
+      all_gather->GetPoplarReplicaGroups();
+
+  VLOG(3) << "HandleAllGather checking whether group " << replica_group
+          << " contains all " << replica_count << " replicas.";
   // A default constructed PoplarReplicaGroups refers to a single group
-  // containing all replicas
-  const auto gather_all_replicas =
-      all_gather->GetPoplarReplicaGroups() == PoplarReplicaGroups();
+  // containing all replicas. Similarly a consective PoplarReplicaGroups of
+  // size replica_count also represents a single group containing all replicas.
+  const bool gather_all_replicas =
+      replica_group == PoplarReplicaGroups() ||
+      replica_group == PoplarReplicaGroups::Consecutive(replica_count);
   return SetAllInstructionValuesToIdenticalOrDiffering(all_gather,
                                                        gather_all_replicas);
 }

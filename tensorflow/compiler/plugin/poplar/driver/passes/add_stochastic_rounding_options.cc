@@ -200,8 +200,13 @@ StatusOr<bool> AddStochasticRoundingOptions::ConfigureStochasticRoundingOption(
     if (enable_experimental_prng_stability_ &&
         default_stochastic_rounding_behaviour_ ==
             StochasticRounding_ReplicaIdenticalOnly) {
+      // We need to disable SR for allReduce since it has data dependencies
+      // that can cause the seed to diverge.
+      const bool is_all_reduce = inst->opcode() == HloOpcode::kAllReduce;
       stochastic_rounding =
-          IsInstructionReplicaIdentical(inst) ? THREESTATE_ON : THREESTATE_OFF;
+          IsInstructionReplicaIdentical(inst) && !is_all_reduce
+              ? THREESTATE_ON
+              : THREESTATE_OFF;
     } else {
       stochastic_rounding =
           default_stochastic_rounding_behaviour_ == StochasticRounding_On
@@ -214,10 +219,16 @@ StatusOr<bool> AddStochasticRoundingOptions::ConfigureStochasticRoundingOption(
                       inst->backend_config<PoplarBackendConfig>());
 
   backend_config.set_stochastic_rounding(stochastic_rounding);
+  VLOG(3) << "Setting SR to " << ThreeState_Name(stochastic_rounding)
+          << " for instruction '" << inst->name() << "'";
+
   if (stochastic_rounding != StochasticRounding_Off) {
     TF_ASSIGN_OR_RETURN(StochasticRoundingMethod stochastic_rounding_method,
                         GetStochasticRoundingMethod(inst));
     backend_config.set_stochastic_rounding_method(stochastic_rounding_method);
+    VLOG(3) << "Setting SR method to "
+            << StochasticRoundingMethod_Name(stochastic_rounding_method)
+            << " for instruction '" << inst->name() << "'";
   }
 
   TF_RETURN_IF_ERROR(inst->set_backend_config(backend_config));

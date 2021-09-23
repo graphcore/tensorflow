@@ -339,6 +339,48 @@ TEST_P(AnySeedTest, StochasticRoundingMethod) {
               Each(HasStochasticRoundingMethod(StochasticRoundingMethod_Any)));
 }
 
+const char* all_reduce_hlo = R"(
+HloModule test
+add {
+  x = f16[] parameter(0)
+  y = f16[] parameter(1)
+  add = f16[] add(x, y)
+}
+
+ENTRY test {
+  after-all = token[] after-all()
+  infeed = (f16[4], token[]) infeed(token[] after-all)
+  value = f16[4] get-tuple-element((f16[4], token[]) infeed), index=0
+  ROOT all_reduce = f16[4] all-reduce(value), to_apply=add, replica_groups={}, backend_config="{\"is_replica_identical\":\"1\"}"
+}
+)";
+TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingAllReduce) {
+  ASSERT_TRUE(SetUpHloModule(all_reduce_hlo));
+
+  auto* all_reduce = FindInstruction(hlo_module_, "all_reduce");
+  ASSERT_TRUE(all_reduce);
+
+  // Test that all-reduce instructions do not use stochastic rounding when using
+  // the ReplicaIdenticalOnly option.
+  AddStochasticRoundingOptions
+      add_stochastic_rounding_options_replica_identical(
+          StochasticRounding_ReplicaIdenticalOnly);
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool modified,
+      add_stochastic_rounding_options_replica_identical.Run(hlo_module_));
+  ASSERT_TRUE(modified);
+  ASSERT_THAT(all_reduce, HasStochasticRounding(THREESTATE_OFF));
+
+  // Now test that we can enable stochastic rounding for all-reduce
+  // when not using ReplicaIdenticalOnly
+  AddStochasticRoundingOptions add_stochastic_rounding_options(
+      StochasticRounding_On);
+  TF_ASSERT_OK_AND_ASSIGN(modified,
+                          add_stochastic_rounding_options.Run(hlo_module_));
+  ASSERT_TRUE(modified);
+  ASSERT_THAT(all_reduce, HasStochasticRounding(THREESTATE_ON));
+}
+
 INSTANTIATE_TEST_SUITE_P(AddStochasticRoundingOptionsHLO, AnySeedTest,
                          ::testing::Values(simple_no_compute,
                                            simple_compute_non_f16),
