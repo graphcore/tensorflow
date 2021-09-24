@@ -185,7 +185,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 41045760)
+    self.assert_total_tile_memory(report, 40144583)
 
   def testTrainingMomentum(self):
     cfg = ipu.utils.IPUConfig()
@@ -218,7 +218,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 43746370)
+    self.assert_total_tile_memory(report, 42421207)
 
   def testTrainingInLoop(self):
     cfg = ipu.utils.IPUConfig()
@@ -259,7 +259,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 41143083)
+    self.assert_total_tile_memory(report, 40593174)
 
   def testTrainingMomentumInLoop(self):
     cfg = ipu.utils.IPUConfig()
@@ -299,7 +299,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 42426150)
+    self.assert_total_tile_memory(report, 41459358)
 
   def testTrainingInLoopWithGradientAccumulation(self):
     cfg = ipu.utils.IPUConfig()
@@ -341,7 +341,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 45535722)
+    self.assert_total_tile_memory(report, 44877416)
 
   def testTrainingMomentumInLoopWithGradientAccumulation(self):
     cfg = ipu.utils.IPUConfig()
@@ -382,7 +382,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 45768340)
+    self.assert_total_tile_memory(report, 45078070)
 
 
 if __name__ == "__main__":

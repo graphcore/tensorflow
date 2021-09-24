@@ -15,12 +15,16 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/commutative_instruction_reorder_operands.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_into_poplar_ops.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
+#include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 
 namespace xla {
+namespace m = match;
 namespace poplarplugin {
 namespace {
 
@@ -320,6 +324,105 @@ HloModule top
     EXPECT_THAT(root_inst->operand(0), p1);
     EXPECT_THAT(root_inst->operand(1), b1);
   }
+}
+
+TEST_F(CommutativeInstructionReorderOperandsTest, ReorderLiveness) {
+  std::string hlo = R"(
+HloModule top
+
+entry  {
+  i1 = f16[2, 2] parameter(0)
+  i2 = f16[2, 2] parameter(1)
+  a1 = f16[2, 2] add(i1, i2)
+  ROOT a2 = f16[2, 2] add(i1, a1)
+}
+  )";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+
+  EXPECT_TRUE(
+      CommutativeInstructionReorderOperands().Run(m.get()).ValueOrDie());
+  EXPECT_TRUE(
+      Match(m->entry_computation()->root_instruction(),
+            m::Add(m::Parameter(0), m::Add(m::Parameter(1), m::Parameter(0)))));
+}
+
+TEST_F(CommutativeInstructionReorderOperandsTest, DontReorderBroadcast) {
+  std::string hlo = R"(
+HloModule top
+
+entry  {
+  i1 = f16[2, 2] parameter(0)
+  c1 = f16[] constant(0)
+  b1 = f16[2, 2] broadcast(c1), dimensions={}
+  a1 = f16[2, 2] add(i1, b1)
+  ROOT a2 = f16[2, 2] add(i1, a1)
+}
+  )";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+
+  EXPECT_FALSE(
+      CommutativeInstructionReorderOperands().Run(m.get()).ValueOrDie());
+}
+
+TEST_F(CommutativeInstructionReorderOperandsTest, ReorderScaledAddaXbY) {
+  std::string hlo = R"(
+HloModule top
+
+entry  {
+  i1 = f16[2, 2] parameter(0)
+  i2 = f16[2, 2] parameter(1)
+  c1 = f16[] constant(1)
+  c2 = f16[] constant(2)
+  b1 = f16[2, 2] broadcast(c1), dimensions={}
+  b2 = f16[2, 2] broadcast(c2), dimensions={}
+  m1 = f16[2, 2] multiply(i1, b1)
+  m2 = f16[2, 2] multiply(i2, b2)
+  a1 = f16[2, 2] add(m1, m2)
+  ROOT a2 = f16[2, 2] add(i1, a1)
+}
+  )";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+
+  CompilerAnnotations annotations(m.get());
+  EXPECT_TRUE(FuseOpsIntoPoplarOps(annotations).Run(m.get()).ValueOrDie());
+  EXPECT_TRUE(
+      CommutativeInstructionReorderOperands().Run(m.get()).ValueOrDie());
+  EXPECT_TRUE(
+      Match(m->entry_computation()->root_instruction(),
+            m::Add(m::Parameter(0),
+                   m::CustomCall(m::Parameter(1), m::Parameter(0),
+                                 m::ConstantScalar(2), m::ConstantScalar(1)))));
+}
+
+TEST_F(CommutativeInstructionReorderOperandsTest, ReorderScaledAddXbY) {
+  std::string hlo = R"(
+HloModule top
+
+entry  {
+  i1 = f16[2, 2] parameter(0)
+  i2 = f16[2, 2] parameter(1)
+  c1 = f16[] constant(10)
+  b1 = f16[2, 2] broadcast(c1), dimensions={}
+  m1 = f16[2, 2] multiply(i2, b1)
+  a1 = f16[2, 2] add(i1, m1)
+  ROOT a2 = f16[2, 2] add(i1, a1)
+}
+  )";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+
+  CompilerAnnotations annotations(m.get());
+  EXPECT_TRUE(FuseOpsIntoPoplarOps(annotations).Run(m.get()).ValueOrDie());
+  EXPECT_TRUE(
+      CommutativeInstructionReorderOperands().Run(m.get()).ValueOrDie());
+  EXPECT_TRUE(Match(
+      m->entry_computation()->root_instruction(),
+      m::Add(m::Parameter(0),
+             m::CustomCall(m::Parameter(1), m::Parameter(0),
+                           m::ConstantScalar(10), m::ConstantScalar(1)))));
 }
 
 }  // namespace

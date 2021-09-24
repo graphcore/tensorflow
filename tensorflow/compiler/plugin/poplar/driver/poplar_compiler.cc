@@ -1423,6 +1423,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<SliceOptimizer>(resources.annotations);
       pipeline.AddPass<FuseOpsLate>(resources.annotations);
       pipeline.AddPass<HloPassFix<FuseOpsIntoPoplarOps>>(resources.annotations);
+      pipeline.AddPass<CommutativeInstructionReorderOperands>();
       pipeline.AddPass<ExpressionOutliner>(/*maximum_num_elements=*/8);
       pipeline.AddPass<ElementwiseSimplifier>();
       pipeline.AddPass<ElementwiseBroadcastConverter>();
