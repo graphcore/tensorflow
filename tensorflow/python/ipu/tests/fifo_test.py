@@ -15,6 +15,7 @@
 
 import os
 import numpy as np
+import pva
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.platform import googletest
@@ -111,6 +112,41 @@ class FifoTest(test_util.TensorFlowTestCase):
 
       self.assertAllClose(result1[5:], [[x] for x in range(5)])
       self.assertAllClose(result2[1:], [[x] for x in range(9)])
+
+  @tu.skip_on_hw
+  @test_util.deprecated_graph_mode_only
+  def testFifoMultiDevice(self):
+    def my_net(x):
+      def body(z):
+        with ipu.scopes.ipu_shard(-1):
+          return ipu.internal_ops.fifo(z, 5)
+
+      return ipu.loops.repeat(3, body, [x])
+
+    with ipu.scopes.ipu_scope('/device:IPU:0'):
+      x = array_ops.placeholder(np.float32, shape=[1024])
+      run_loop = ipu.ipu_compiler.compile(my_net, inputs=[x])
+
+    config = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(config, output_execution_profile=True)
+    config._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+
+    config.auto_select_ipus = 2
+    config.ipu_model.tiles_per_ipu = 16
+    tu.add_hw_ci_connection_options(config)
+    config.configure_ipu_system()
+
+    with tu.ipu_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      report_helper.clear_reports()
+      res = sess.run(run_loop, {x: np.ones([1024])})
+      self.assertAllClose(res, np.zeros([1, 1024]))
+
+    report = pva.openReport(report_helper.find_report())
+
+    # There should be no exchange between the IPUs.
+    self.assert_global_exchange_percentage(report, 0)
 
 
 if __name__ == "__main__":
