@@ -393,6 +393,28 @@ class TestCaseExtensions(object):
     self.assertGreater(max(overlap / streamCopyTotal, overlap / computeTotal),
                        p)
 
+  def assert_global_exchange_percentage(self, report, p):
+    """Asserts a maximum percentage of global exchange in the execution report.
+    """
+    class IntervalVisitor(ProgramVisitor):
+      def __init__(self):
+        self.globalExchangeCycles = 0
+        super(IntervalVisitor, self).__init__()
+
+      def visitGlobalExchange(self, globalExchange):
+        self.globalExchangeCycles += (globalExchange.cyclesTo.max -
+                                      globalExchange.cyclesFrom.max)
+
+    v = IntervalVisitor()
+    totalCycles = 0
+    for step in report.execution.runs[0].steps:
+      ipu = step.ipus[0]
+      totalCycles += (ipu.activeCycles.cyclesTo.max -
+                      ipu.activeCycles.cyclesFrom.max)
+      step.program.accept(v)
+
+    self.assertGreaterEqual(p, v.globalExchangeCycles / totalCycles)
+
 
 # Attach everything from TestCaseExtensions onto TensorFlowTestCase.
 # Note that XLATestCase inherits from TensorFlowTestCase.

@@ -65,8 +65,8 @@ Status AddWriteUndefToFIFOBuffer(
   return Status::OK();
 }
 
-void IncreaseCounter(poplar::Graph& graph, poplar::Tensor& counter, int64 depth,
-                     poplar::program::Sequence& seq,
+void IncreaseCounter(poplar::Graph& graph, const poplar::Tensor& counter,
+                     int64 depth, poplar::program::Sequence& seq,
                      const poplar::DebugNameAndId& debug_name_and_id) {
   // A slightly faster path if the depth is a power of two
   // counter = (counter + 1) % depth
@@ -87,112 +87,86 @@ void IncreaseCounter(poplar::Graph& graph, poplar::Tensor& counter, int64 depth,
   }
 }
 
-std::map<std::size_t, poplar::Interval> GetInverseIntervalsMap(
-    const std::vector<poplar::Interval>& intervals) {
-  std::map<std::size_t, poplar::Interval> result;
-
-  std::size_t offset = 0;
-  for (size_t i = 0; i != intervals.size(); ++i) {
-    const poplar::Interval& interval = intervals[i];
-    result[interval.begin()] =
-        poplar::Interval(offset, offset + interval.size());
-    offset += interval.size();
+void IncreaseCounters(std::vector<poplar::Graph*>& graphs,
+                      const std::vector<poplar::Tensor>& counters, int64 depth,
+                      poplar::program::Sequence& seq,
+                      const poplar::DebugNameAndId& debug_name_and_id) {
+  for (int i = 0; i < graphs.size(); ++i) {
+    if (counters[i].numElements() > 0) {
+      IncreaseCounter(*graphs[i], counters[i], depth, seq, debug_name_and_id);
+    }
   }
-  return result;
 }
 
-// Helper struct for storing information about tensor aliasing when a tensor is
-// passed between instructions.
-struct TensorAliasingInformation {
-  // Indicates whether a tensor has aliasing, if not, other fields are not
-  // populated.
-  bool has_aliasing;
+poplar::Tensor DealiasTensor(poplar::Graph& graph, poplar::Tensor tensor) {
+  tensor = tensor.flatten();
+  graph.reorderToSimplify(&tensor, {});
+  auto intervals = graph.getSortedContiguousRegions(
+      tensor, {{0, tensor.numElements()}}, true);
+  auto slices = tensor.slices(intervals);
 
-  // The interval map will store the interval beginning to the interval it
-  // aliases.
-  std::map<std::size_t, poplar::Interval> interval_map;
-
-  // Inverse map for reconstructing a tensor with aliasing from intervals.
-  std::map<std::size_t, poplar::Interval> inverse_map;
-};
-
-std::pair<poplar::Tensor, TensorAliasingInformation>
-GetAliasingInformationAndDealiesedTensor(poplar::Graph& graph,
-                                         const poplar::Tensor& tensor) {
-  CHECK_EQ(tensor.rank(), 1);
-
-  TensorAliasingInformation info;
-
-  if (!tensor.containsAliases()) {
-    info.has_aliasing = false;
-    return std::make_pair(tensor, info);
+  if (slices.empty()) {
+    // Can't concat empty intervals, so return a zero element tensor.
+    const size_t size[1] = {0};
+    return graph.addVariable(tensor.elementType(), size);
+  } else {
+    return poplar::concat(slices);
   }
+}
 
-  // Get the aliasing information.
-  std::vector<std::size_t> interval_aliases;
-  std::vector<std::vector<poplar::Interval>> sorted_contiguous_intervals =
-      graph.getSortedContiguousRegions(tensor, {{0, tensor.numElements()}},
-                                       false, &interval_aliases);
+std::vector<poplar::Tensor> PartitionTensor(
+    const std::vector<poplar::Graph*>& graphs, poplar::Tensor tensor) {
+  std::vector<poplar::Tensor> result;
 
-  // Flatten the sorted contiguous intervals so that we can easily map it
-  // to the aliasing information.
-  std::vector<poplar::Interval> flat_intervals;
-  // The interval map will store the interval beginning to the interval it
-  // aliases.
-  std::map<std::size_t, poplar::Interval> interval_map;
-  for (auto& intervals : sorted_contiguous_intervals) {
-    flat_intervals.insert(flat_intervals.end(), intervals.begin(),
-                          intervals.end());
-    absl::c_transform(intervals,
-                      std::inserter(interval_map, std::begin(interval_map)),
-                      [](const poplar::Interval& interval) {
-                        return std::make_pair(interval.begin(), interval);
-                      });
-  }
-  CHECK_EQ(interval_aliases.size(), flat_intervals.size());
-
-  // Update the aliasing map and get all the intervals with no aliasing.
-  std::vector<poplar::Interval> flat_dealiased_intervals;
-  for (size_t i = 0; i != flat_intervals.size(); ++i) {
-    poplar::Interval& interval = flat_intervals[i];
-    if (interval.begin() == interval_aliases[i]) {
-      flat_dealiased_intervals.push_back(interval);
+  for (auto& graph : graphs) {
+    auto intervals =
+        graph->getTileMapping(tensor, true, /* allowExternal = */ true);
+    auto slices = tensor.flatten().slices(intervals);
+    if (slices.empty()) {
+      // Can't concat empty intervals, so push back a zero element tensor.
+      const size_t size[1] = {0};
+      result.push_back(graph->addVariable(tensor.elementType(), size));
     } else {
-      interval_map[interval.begin()] = interval_map.at(interval_aliases[i]);
+      result.push_back(poplar::concat(slices));
     }
   }
 
-  // Dealias the input given the intervals.
-  poplar::Tensor dealised_tensor =
-      poplar::concat(tensor.slices(flat_dealiased_intervals));
-
-  info.has_aliasing = true;
-  info.interval_map = interval_map;
-  info.inverse_map = GetInverseIntervalsMap(flat_dealiased_intervals);
-  return std::make_pair(dealised_tensor, info);
+  return result;
 }
 
-poplar::Tensor AddAliasing(const poplar::Tensor& tensor,
-                           const TensorAliasingInformation& info) {
-  if (!info.has_aliasing) {
-    return tensor;
+std::vector<poplar::Tensor> CreateCounters(
+    const std::vector<poplar::Graph*>& graphs, const HloInstruction* inst,
+    CompilerResources& res, const poplar::DebugContext& debug_context) {
+  PoplarOpDefDebugInfo debug_info(debug_context, "CreateCounters");
+  std::vector<poplar::Tensor> counters;
+
+  for (auto vgraph : graphs) {
+    auto counter =
+        vgraph->addVariable(poplar::UNSIGNED_INT, {}, {debug_info, "counter"});
+    vgraph->setTileMapping(counter, 0);
+    AddZeroTensorToPreamble(res, counter, {debug_info});
+
+    counters.emplace_back(std::move(counter));
   }
 
-  std::vector<poplar::Tensor> output_regions;
-  output_regions.reserve(info.interval_map.size());
+  return counters;
+}
 
-  // Since the std::map is sorted by the key which is the beginning of the
-  // interval, we can reconstruct the original tensor by iterating over it.
-  for (const auto& entry : info.interval_map) {
-    const poplar::Interval& aliased_interval = entry.second;
-    // Get the output interval for that unaliased interval.
-    const poplar::Interval& output_interval =
-        info.inverse_map.at(aliased_interval.begin());
-    output_regions.push_back(tensor.slice(output_interval));
+std::vector<poplar::Graph*> GetGraphs(poplar::Graph& graph,
+                                      const HloInstruction* inst,
+                                      CompilerResources& res) {
+  if (inst->has_sharding() &&
+      inst->sharding().GetUniqueDevice() == Devices::All) {
+    std::vector<poplar::Graph*> result;
+
+    for (auto& graph : res.shard_compute_graphs) {
+      result.push_back(&graph);
+    }
+
+    return result;
   }
 
-  // Concatenate the regions and reshape accordingly.
-  return poplar::concat(output_regions);
+  return {&graph};
 }
 
 class FifoOp : public PoplarOpDef {
@@ -232,6 +206,9 @@ class FifoOp : public PoplarOpDef {
       }
       return seq;
     }
+
+    auto graphs = GetGraphs(graph, inst, res);
+
     // If the FIFO can only store a single buffer then skip the counter creation
     // and use copies.
     if (fifo_depth == 1) {
@@ -242,115 +219,139 @@ class FifoOp : public PoplarOpDef {
             graph.clone(input, {debug_info, absl::StrCat("out/", tuple_idx)},
                         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
-        // Flatten inputs and outputs.
-        poplar::Tensor input_flat = input.flatten();
-        poplar::Tensor output_flat = output.flatten();
 
-        if (input_flat.containsAliases()) {
-          // Get the aliasing information.
-          std::vector<std::vector<poplar::Interval>> flat_dealiased_intervals =
-              graph.getSortedContiguousRegions(
-                  input_flat, {{0, input_flat.numElements()}}, true);
-          // Dealias inputs and outputs.
-          input_flat =
-              poplar::concat(input_flat.slices(flat_dealiased_intervals));
-          output_flat =
-              poplar::concat(output_flat.slices(flat_dealiased_intervals));
+        // Skip empty inputs.
+        if (input.numElements() == 0) {
+          continue;
         }
 
-        if (fifo_offload) {
-          poplar::RemoteBuffer buffer = graph.addRemoteBuffer(
-              absl::StrCat(debug_name, "/buffer/", tuple_idx),
-              input.elementType(), input_flat.numElements(), 1, true);
+        // Flatten inputs and outputs.
+        std::vector<poplar::Tensor> input_flat =
+            PartitionTensor(graphs, DealiasTensor(graph, input.flatten()));
+        std::vector<poplar::Tensor> output_flat =
+            PartitionTensor(graphs, DealiasTensor(graph, output.flatten()));
 
-          // Copy the content of the buffer to the output.
-          seq.add(poplar::program::Copy(buffer, output_flat, {debug_info}));
+        for (std::size_t partition_idx = 0; partition_idx < graphs.size();
+             ++partition_idx) {
+          // Skip empty partitions.
+          if (input_flat[partition_idx].numElements() == 0) {
+            continue;
+          }
 
-          // Copy the input into the buffer.
-          seq.add(poplar::program::Copy(input_flat, buffer, {debug_info}));
-        } else {
-          // Create a buffer for swapping the values.
-          poplar::Tensor buffer = graph.clone(
-              input_flat, {debug_info, absl::StrCat("buffer/", tuple_idx)},
-              poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-          TF_RETURN_IF_ERROR(
-              AddWriteUndefToFIFOBuffer(inst, buffer, res, {debug_info}));
+          if (fifo_offload) {
+            poplar::RemoteBuffer buffer =
+                graphs[partition_idx]->addRemoteBuffer(
+                    absl::StrCat(debug_name, "/buffer/", tuple_idx, "/",
+                                 partition_idx),
+                    input.elementType(),
+                    input_flat[partition_idx].numElements(), 1, true);
 
-          // Copy the content of the buffer to the output.
-          seq.add(
-              poplar::program::Copy(buffer, output_flat, false, {debug_info}));
+            // Copy the content of the buffer to the output.
+            seq.add(poplar::program::Copy(buffer, output_flat[partition_idx],
+                                          {debug_info}));
 
-          // Copy the input into the buffer.
-          seq.add(
-              poplar::program::Copy(input_flat, buffer, false, {debug_info}));
+            // Copy the input into the buffer.
+            seq.add(poplar::program::Copy(input_flat[partition_idx], buffer,
+                                          {debug_info}));
+          } else {
+            // Create a buffer for swapping the values.
+            poplar::Tensor buffer = graphs[partition_idx]->clone(
+                input_flat[partition_idx],
+                {debug_info,
+                 absl::StrCat("buffer/", tuple_idx, "/", partition_idx)},
+                poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+            TF_RETURN_IF_ERROR(
+                AddWriteUndefToFIFOBuffer(inst, buffer, res, {debug_info}));
+
+            // Copy the content of the buffer to the output.
+            seq.add(poplar::program::Copy(buffer, output_flat[partition_idx],
+                                          false, {debug_info}));
+
+            // Copy the input into the buffer.
+            seq.add(poplar::program::Copy(input_flat[partition_idx], buffer,
+                                          false, {debug_info}));
+          }
         }
       }
       return seq;
     }
 
     // Keep track of where in the buffer we are.
-    auto counter =
-        graph.addVariable(poplar::UNSIGNED_INT, {}, {debug_info, "counter"});
-    graph.setTileMapping(counter, 0);
-    AddZeroTensorToPreamble(res, counter, {debug_info});
+    auto counters = CreateCounters(graphs, inst, res, debug_context);
 
     for (size_t tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
-      poplar::Tensor input = inputs[tuple_idx];
-      // Flatten the input.
-      poplar::Tensor input_flat = input.flatten();
+      poplar::Tensor input_clone = graph.clone(
+          inputs[tuple_idx], {debug_info, absl::StrCat("out/", tuple_idx)},
+          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, input_clone));
 
-      // Remove any aliasing from the tensor to make sure the FIFO is as small
-      // as possible.
-      TensorAliasingInformation info;
-      std::tie(input_flat, info) =
-          GetAliasingInformationAndDealiesedTensor(graph, input_flat);
-
-      poplar::Tensor output_flat;
-      if (fifo_offload) {
-        // Keep the layout of the input for the output.
-        output_flat = graph.clone(
-            input_flat, {debug_info, absl::StrCat("out/", tuple_idx)});
-
-        // Create a remote buffer of the given depth.
-        poplar::RemoteBuffer buffer = graph.addRemoteBuffer(
-            absl::StrCat(debug_name, "/buffer/", tuple_idx),
-            input.elementType(), input_flat.numElements(), fifo_depth, true);
-
-        // Copy the content of the buffer to the output.
-        seq.add(poplar::program::Copy(buffer, output_flat, counter.reshape({1}),
-                                      {debug_info}));
-
-        // Copy the input into the buffer.
-        seq.add(poplar::program::Copy(input_flat, buffer, counter.reshape({1}),
-                                      {debug_info}));
-      } else {
-        // Create a buffer of the given depth and the same mapping as the input.
-        poplar::Tensor buffer = popops::createSliceableTensorFromSlice(
-            graph, input_flat.expand({0}), {0}, {fifo_depth},
-            {debug_info, absl::StrCat("buffer/", tuple_idx)});
-        TF_RETURN_IF_ERROR(
-            AddWriteUndefToFIFOBuffer(inst, buffer, res, {debug_info}));
-
-        // Create the output with the same mapping as the input.
-        output_flat = popops::dynamicSlice(
-                          graph, buffer, counter.reshape({1}), {0}, {1}, seq,
-                          {debug_info, absl::StrCat("pop/", tuple_idx)})
-                          .squeeze({0});
-
-        // Update the buffer with the new value.
-        popops::dynamicUpdate(graph, buffer, input_flat.expand({0}),
-                              counter.reshape({1}), {0}, {1}, seq,
-                              {debug_info, absl::StrCat("push/", tuple_idx)});
+      // Skip empty inputs.
+      if (input_clone.numElements() == 0) {
+        continue;
       }
 
-      // Add the aliasing information back in.
-      output_flat = AddAliasing(output_flat, info);
-      poplar::Tensor output = output_flat.reshape(input.shape());
+      std::vector<poplar::Tensor> input_partitions =
+          PartitionTensor(graphs, DealiasTensor(graph, inputs[tuple_idx]));
+      std::vector<poplar::Tensor> output_partitions =
+          PartitionTensor(graphs, DealiasTensor(graph, input_clone));
 
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
+      for (size_t partition_idx = 0u; partition_idx < input_partitions.size();
+           ++partition_idx) {
+        poplar::Tensor input = input_partitions[partition_idx];
+        poplar::Tensor output = output_partitions[partition_idx];
+        // Flatten the input.
+        poplar::Tensor input_flat = input.flatten();
+        poplar::Tensor output_flat = output.flatten();
+
+        // Skip empty partitions.
+        if (input_flat.numElements() == 0) {
+          continue;
+        }
+
+        if (fifo_offload) {
+          // Create a remote buffer of the given depth.
+          poplar::RemoteBuffer buffer = graphs[partition_idx]->addRemoteBuffer(
+              absl::StrCat(debug_name, "/buffer/", tuple_idx, "/",
+                           partition_idx),
+              input.elementType(), input_flat.numElements(), fifo_depth, true);
+
+          // Copy the content of the buffer to the output.
+          seq.add(poplar::program::Copy(buffer, output_flat,
+                                        counters[partition_idx].reshape({1}),
+                                        {debug_info}));
+
+          // Copy the input into the buffer.
+          seq.add(poplar::program::Copy(input_flat, buffer,
+                                        counters[partition_idx].reshape({1}),
+                                        {debug_info}));
+        } else {
+          // Create a buffer of the given depth and the same mapping as the
+          // input.
+          poplar::Tensor buffer = popops::createSliceableTensorFromSlice(
+              *graphs[partition_idx], input_flat.expand({0}), {0}, {fifo_depth},
+              {debug_info,
+               absl::StrCat("buffer/", tuple_idx, "/", partition_idx)});
+          TF_RETURN_IF_ERROR(
+              AddWriteUndefToFIFOBuffer(inst, buffer, res, {debug_info}));
+
+          // Slice the element into the output.
+          popops::dynamicSliceWithOutput(
+              *graphs[partition_idx], output_flat.expand({0}), buffer,
+              counters[partition_idx].reshape({1}), {0}, {1}, seq,
+              {debug_info,
+               absl::StrCat("pop/", tuple_idx, "/", partition_idx)});
+
+          // Update the buffer with the new value.
+          popops::dynamicUpdate(
+              *graphs[partition_idx], buffer, input_flat.expand({0}),
+              counters[partition_idx].reshape({1}), {0}, {1}, seq,
+              {debug_info,
+               absl::StrCat("push/", tuple_idx, "/", partition_idx)});
+        }
+      }
     }
 
-    IncreaseCounter(graph, counter, fifo_depth, seq, {debug_info});
+    IncreaseCounters(graphs, counters, fifo_depth, seq, {debug_info});
     return seq;
   }
 };
