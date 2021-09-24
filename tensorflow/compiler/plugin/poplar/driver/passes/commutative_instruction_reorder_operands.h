@@ -24,6 +24,13 @@ class HloModule;
 
 namespace poplarplugin {
 
+// A pass which tires to re-order operands for commutative binary instructions
+// which can be lowered to Poplar "inplace". Operands can be reorder in
+// following cases:
+// * Left hand side (lhs) might contain aliasing and right hand side (rhs)
+//   doesn't.
+// * Lhs buffer is live after the instruction is executed but the rhs buffer is
+//   not.
 class CommutativeInstructionReorderOperands : public HloModulePass {
  public:
   absl::string_view name() const override {
