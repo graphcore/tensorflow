@@ -54,7 +54,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
 
     self.assert_num_reports(report_helper, 0)
 
-  def tesInplaceAddCopyWithInplacePeer(self):
+  def testInplaceAddCopyWithInplacePeer(self):
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
@@ -82,12 +82,12 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     ok = [
         '__seed*', 'host-exchange-local-copy-',
-        'Copy_XLA_Args/arg0.*_to_transpose/transpose', 'add/add.*/AddTo',
+        'Copy_XLA_Args/*_to_transpose/transpose', 'add/add.*/Op/Add',
         'truediv/divide.*/Op/Divide'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
-  def tesInplaceAddCopyWithInplacePeer2(self):
+  def testInplaceAddCopyWithInplacePeer2(self):
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
@@ -119,10 +119,9 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*', 'Copy_XLA_Args/arg0.*_to_transpose/transpose'
-        'mul/multiply.*/Op/Multiply', 'add/add.*/AddTo',
-        'mul_1/multiply.*/Op/Multiply', 'add_1/add.*/AddTo',
-        'truediv/divide.*/Op/Divide'
+        '__seed', 'add_1/add.*/expression/Op/Add',
+        'add_1/add.*/expression/Op/Multiply', 'add/scaled-inplace-xb-y/AddTo',
+        'truediv/divide*/Op/Divide'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
