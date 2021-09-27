@@ -36,8 +36,8 @@ def _generate_sequences(seq_lens, max_len, dtype):
   return sequences
 
 
-def _generate_random_binary_mask(a, b):
-  mask = np.random.randint(2, size=(a, b))
+def _generate_ones_mask(a, b):
+  mask = np.ones(shape=(a, b))
   return mask.astype(np.bool)
 
 
@@ -83,7 +83,7 @@ TEST_CASES = [{
     'dtype': np.float32,
     'seq_per_iter': 2,
     'use_scale': True,
-    'q_mask': _generate_random_binary_mask(len(test_seq_lens), 4),
+    'q_mask': _generate_ones_mask(len(test_seq_lens), 4),
     'attention_heads': 4,
     'attention_head_size': 16
 }]
