@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -1057,6 +1058,134 @@ ENTRY e {
                                   m::Parameter(2)),
                            m::Constant()))));
 }
+
+TEST_F(PipelineFixerTest, TestFixingConstantGradients) {
+  std::string hlo = R"(
+HloModule top
+
+stage_0_fwd {
+  stage_0_fwd_p0 = f32[2] parameter(0)
+  ROOT stage_0_fwd_tuple = (f32[2]) tuple(stage_0_fwd_p0)
+}
+
+stage_1_fwd {
+  stage_1_fwd_p0 = f32[2] parameter(0)
+  ROOT stage_1_fwd_tuple = (f32[2]) tuple(stage_1_fwd_p0)
+}
+
+stage_2_fwd {
+  stage_2_fwd_p0 = f32[2] parameter(0)
+  ROOT stage_2_fwd_tuple = (f32[2]) tuple(stage_2_fwd_p0)
+}
+
+stage_2_bwd {
+  stage_2_bwd_p0 = f32[2] parameter(0)
+  l = f32[2] log(stage_2_bwd_p0)
+  ROOT stage_2_bwd_tuple = (f32[2], f32[2]) tuple(stage_2_bwd_p0, l)
+}
+
+stage_1_bwd {
+  stage_1_bwd_p0 = f32[2] parameter(0)
+  l = f32[2] log(stage_1_bwd_p0)
+  ROOT stage_1_bwd_tuple = (f32[2], f32[2]) tuple(stage_1_bwd_p0, l)
+}
+
+stage_0_bwd {
+  stage_0_bwd_p0 = f32[2] parameter(0)
+  ROOT stage_0_bwd_tuple = (f32[2]) tuple(stage_0_bwd_p0)
+}
+
+resource_update {
+  p0 = f32[2] parameter(0)
+  p1 = f32[2] parameter(1)
+  ROOT tuple = (f32[2]) tuple(p0)
+}
+
+pipeline_wrapper {
+  p0 = f32[2] parameter(0)
+  p1 = f32[2] parameter(1)
+  p2 = s32[] parameter(2)
+
+  fwd_stage_0 = (f32[2]) call(p0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  fwd_stage_0.0 = f32[2] get-tuple-element(fwd_stage_0), index=0
+  fwd_stage_1 = (f32[2]) call(fwd_stage_0.0), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
+  fwd_stage_1.0 = f32[2] get-tuple-element(fwd_stage_1), index=0
+  fwd_stage_2 = (f32[2]) call(fwd_stage_1.0), to_apply=stage_2_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}", sharding={maximal device=0}
+  fwd_stage_2.0 = f32[2] get-tuple-element(fwd_stage_2), index=0
+  bwd_stage_2 = (f32[2], f32[2]) call(fwd_stage_2.0), to_apply=stage_2_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
+  bwd_stage_2.0 = f32[2] get-tuple-element(bwd_stage_2), index=0
+  bwd_stage_2.1 = f32[2] get-tuple-element(bwd_stage_2), index=1
+  bwd_stage_1 = (f32[2], f32[2]) call(bwd_stage_2.0), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  bwd_stage_1.0 = f32[2] get-tuple-element(bwd_stage_1), index=0
+  bwd_stage_1.1 = f32[2] get-tuple-element(bwd_stage_1), index=1
+  bwd_stage_0 = (f32[2]) call(bwd_stage_1.0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  bwd_stage_0.0 = f32[2] get-tuple-element(bwd_stage_0), index=0
+
+  add_grads_partial = f32[2] add(bwd_stage_1.1, bwd_stage_0.0)
+  add_grads = f32[2] add(add_grads_partial, bwd_stage_2.1)
+  c = f32[2] constant({10, 2})
+  normalized_grads = f32[2] multiply(add_grads, c)
+
+  c2 = f32[2] constant({10, 2})
+  other_update = f32[2] add(p1, c2)
+
+  create = f32[2] custom-call(other_update), custom_call_target="GradientAccumulatorCreate", backend_config="{}"
+  add = f32[2] custom-call(create, p1), custom_call_target="GradientAccumulatorAdd", backend_config="{}"
+  sink = f32[2] custom-call(add), custom_call_target="GradientAccumulatorSink", backend_config="{}"
+
+
+  ru = (f32[2]) call(normalized_grads, sink), to_apply=resource_update, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  ru.0 = f32[2] get-tuple-element(ru), index=0
+
+  ROOT pipeline_tuple = (f32[2]) tuple(ru.0)
+}
+
+pipeline {
+  p0 = f32[2] parameter(0)
+  p1 = f32[2] parameter(1)
+  p2 = s32[] parameter(2)
+
+  call = (f32[2]) call(p0, p1, p2), to_apply=pipeline_wrapper
+  gte = f32[2] get-tuple-element(call), index=0
+  ROOT pipeline_tuple = (f32[2]) tuple(gte)
+}
+
+ENTRY e {
+  e.weights0 = f32[2] parameter(0), parameter_replication={false}
+  e.weights1 = f32[2] parameter(1), parameter_replication={false}
+  e.c0 = s32[] constant(3)
+  e.call = (f32[2]) call(e.weights0, e.weights1, e.c0), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":\"Grouped\",\"batch_serialization_iterations\":5,\"offload_gradient_accumulation_buffers\":\"1\", \"gradient_accumulation_index\":\"2\"}}}"
+  ROOT gte = f32[2] get-tuple-element(e.call), index=0
+}
+)";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  HloComputation* pipeline_computation =
+      FindComputation(module.get(), "pipeline_wrapper");
+
+  HloInstruction* pipeline_op =
+      module->entry_computation()->GetInstructionWithName("e.call");
+
+  TF_ASSERT_OK_AND_ASSIGN(bool custom_op_replaced,
+                          CustomOpReplacer().Run(module.get()));
+  ASSERT_TRUE(custom_op_replaced);
+  PipelineFixer fixer;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, fixer.TestFixConstantGradients(
+                                            pipeline_op, pipeline_computation));
+  ASSERT_TRUE(changed);
+
+  auto ru = pipeline_computation->GetInstructionWithName("ru");
+  ASSERT_EQ(ru->operand(1)->name(), "multiply.1");
+
+  auto scale_fac = ru->operand(1)->operand(0)->operand(0)->operand(0);
+  ASSERT_EQ(scale_fac->operand(0)->name(), "constant");
+  ASSERT_EQ(scale_fac->operand(1)->name(), "p2");
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
