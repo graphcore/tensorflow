@@ -46,6 +46,10 @@ class PipelineFixer : public HloModulePass {
 
   StatusOr<bool> Run(HloModule* module) override;
 
+  // for testing only
+  StatusOr<bool> TestFixConstantGradients(HloInstruction* pipeline_op,
+                                          HloComputation* pipeline_comp);
+
  private:
   // Fixes a pipeline.
   Status FixPipeline(HloInstruction* pipeline_op);
@@ -80,11 +84,12 @@ class PipelineFixer : public HloModulePass {
   // frontend will still generate the accumulation instructions. Simplify the
   // gradient by removing the accumulation and instead multiplying the input by
   // the number of mini-batches to accumulate.
-  StatusOr<bool> FixConstantGradients(int64 batch_serialization_iterations);
+  StatusOr<bool> FixConstantGradients(int64 batch_serialization_iterations,
+                                      const HloInstruction* pipeline_inst);
 
   // Lowers inputs to the pipeline resource update which are not associated to
   // any pipeline stage.
-  StatusOr<bool> LowerResourceUpdateInputs();
+  StatusOr<bool> LowerResourceUpdateInputs(HloInstruction* accumulation_count);
 
   // A PipelineStage is being replaced - update internal storage.
   Status UpdateStage(const StageID& stage_id, HloInstruction* new_stage);

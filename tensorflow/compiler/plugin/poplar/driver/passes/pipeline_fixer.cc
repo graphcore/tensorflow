@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
 
 #include <list>
+#include <memory>
 #include <queue>
 #include <set>
 #include <string>
@@ -601,12 +602,17 @@ Status PipelineFixer::RemovePipelineWrapper(HloComputation* pipeline_comp) {
 }
 
 StatusOr<bool> PipelineFixer::FixConstantGradients(
-    int64 batch_serialization_iterations) {
+    int64 batch_serialization_iterations, const HloInstruction* pipeline_inst) {
   if (!stages_.resource_update) {
     return false;
   }
   HloInstruction* resource_update = *stages_.resource_update;
   HloComputation* pipeline_comp = resource_update->parent();
+
+  HloInstruction* gradient_accumulation_inst =
+      pipeline_comp->parameter_instruction(
+          GetAccumulationCountOperandIndex(pipeline_inst));
+
   TF_ASSIGN_OR_RETURN(auto analysis,
                       PipelineDataflowAnalysis::GetAnalysis(stages_));
   bool changed = false;
@@ -637,12 +643,23 @@ StatusOr<bool> PipelineFixer::FixConstantGradients(
     VLOG(3) << "Replacing an accumulated constant gradient with a constant.";
 
     // Create the constant for the gradient accumulation.
-    Literal literal(ShapeUtil::MakeShape(S32, operand->shape().dimensions()));
-    literal.PopulateWithValue(static_cast<int32>(
-        batch_serialization_iterations *
-        (*GetResourceUpdateBatchesToAccumulate(resource_update))));
+    Literal literal(ShapeUtil::MakeShape(S32, {}));
+    literal.PopulateWithValue(static_cast<int>(batch_serialization_iterations));
     HloInstruction* const_multiplier = pipeline_comp->AddInstruction(
         HloInstruction::CreateConstant(std::move(literal)));
+
+    // Multiply by the number of batches accumulating over
+    HloInstruction* accum_const_multiplier =
+        pipeline_comp->AddInstruction(HloInstruction::CreateBinary(
+            ShapeUtil::MakeShape(S32, {}), HloOpcode::kMultiply,
+            const_multiplier, gradient_accumulation_inst));
+
+    const_multiplier =
+        pipeline_comp->AddInstruction(HloInstruction::CreateBroadcastSequence(
+            ShapeUtil::MakeShape(S32, operand->shape().dimensions()),
+            accum_const_multiplier, [&](std::unique_ptr<HloInstruction> x) {
+              return pipeline_comp->AddInstruction(std::move(x));
+            }));
 
     // Convert it to the right type.
     HloInstruction* cast_multiplier = pipeline_comp->AddInstruction(
@@ -661,7 +678,61 @@ StatusOr<bool> PipelineFixer::FixConstantGradients(
   return changed;
 }
 
-StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
+static StatusOr<std::vector<HloInstruction*>> CreateLoweringOrder(
+    HloInstruction* operand, PipelineDataflowAnalysis* analysis,
+    const HloInstruction* accumulation_count) {
+  // We currently only expect constant gradients to be stageless
+  // (because they do not depend on any input, we cannot associate them
+  // with a backward stage).
+  // Find the cluster of instructions from the operand instruction.
+  std::vector<HloInstruction*> ordered_lowering;
+  std::vector<const HloValueSet*> value_sets;
+  std::queue<HloInstruction*> to_visit;
+  absl::flat_hash_set<HloInstruction*> visited;
+
+  to_visit.push(operand);
+  while (!to_visit.empty()) {
+    HloInstruction* inst = to_visit.front();
+    to_visit.pop();
+
+    if (visited.contains(inst)) {
+      continue;
+    }
+
+    ordered_lowering.push_back(inst);
+    value_sets.push_back(&analysis->GetValueSet(inst));
+
+    // Add any operand which has to be lowered.
+    for (HloInstruction* operand : inst->operands()) {
+      if (!visited.contains(operand)) {
+        TF_ASSIGN_OR_RETURN(bool needs_lowering,
+                            analysis->HasToBeLowered(operand));
+        if (needs_lowering) {
+          to_visit.push(operand);
+        }
+      }
+    }
+  }
+
+  // We only expect constant gradients to be lowered, therefore we expect no
+  // producers in the cluster we are lowering.
+  HloValueSet value_set;
+  value_set.AssignUnionOf(value_sets);
+  if (value_set.values().size()) {
+    // If only buffer is gradient accumulation count this is also fine
+    if (!(value_set.values().size() == 1 &&
+          value_set.GetUniqueValue().defining_instruction()->Identical(
+              *accumulation_count))) {
+      return FailedPrecondition(
+          "Detected input to the ResourceUpdate which should have been "
+          "lowered into a Pipeline(Backward)Stage.");
+    }
+  }
+  return ordered_lowering;
+}
+
+StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs(
+    HloInstruction* accumulation_count) {
   if (!stages_.resource_update) {
     return false;
   }
@@ -679,53 +750,16 @@ StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
       continue;
     }
     VLOG(3) << "Lowering the operand " << op_idx << " for the ResourceUpdate.";
-    // We currently only expect constant gradients to be stageless
-    // (because they do not depend on any input, we cannot associate them
-    // with a backward stage).
-    // Find the cluster of instructions from the operand instruction.
-    std::vector<HloInstruction*> ordered_lowering;
-    std::vector<const HloValueSet*> value_sets;
-    std::queue<HloInstruction*> to_visit;
-    absl::flat_hash_set<HloInstruction*> visited;
-
-    to_visit.push(operand);
-    while (!to_visit.empty()) {
-      HloInstruction* inst = to_visit.front();
-      to_visit.pop();
-
-      if (visited.contains(inst)) {
-        continue;
-      }
-
-      ordered_lowering.push_back(inst);
-      value_sets.push_back(&analysis->GetValueSet(inst));
-
-      // Add any operand which has to be lowered.
-      for (HloInstruction* operand : inst->operands()) {
-        if (!visited.contains(operand)) {
-          TF_ASSIGN_OR_RETURN(bool needs_lowering,
-                              analysis->HasToBeLowered(operand));
-          if (needs_lowering) {
-            to_visit.push(operand);
-          }
-        }
-      }
-    }
-
-    // We only expect constant gradients to be lowered, therefore we expect no
-    // producers in the cluster we are lowering.
-    HloValueSet value_set;
-    value_set.AssignUnionOf(value_sets);
-    if (value_set.values().size()) {
-      return FailedPrecondition(
-          "Detected input to the ResourceUpdate which should have been "
-          "lowered into a Pipeline(Backward)Stage.");
-    }
+    TF_ASSIGN_OR_RETURN(
+        auto ordered_lowering,
+        CreateLoweringOrder(operand, analysis.get(), accumulation_count));
 
     // Do the lowering of instructions into the resource update.
     absl::c_reverse(ordered_lowering);
     absl::flat_hash_map<HloInstruction*, HloInstruction*>
         old_to_new_computation;
+    old_to_new_computation[accumulation_count] =
+        GetResourceUpdateNumMiniBatchesInstruction(resource_update);
     for (HloInstruction* old_inst : ordered_lowering) {
       std::vector<HloInstruction*> new_operands(old_inst->operand_count());
       absl::c_transform(old_inst->operands(), new_operands.begin(),
@@ -838,10 +872,14 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   TF_RETURN_IF_ERROR(LowerOpsIntoPipelineStages().status());
   // Run the fixing for constant gradients.
   TF_RETURN_IF_ERROR(
-      FixConstantGradients(GetPipelineBatchSerializationIterations(pipeline_op))
+      FixConstantGradients(GetPipelineBatchSerializationIterations(pipeline_op),
+                           pipeline_op)
           .status());
   // Run the lowering on the resource update.
-  TF_RETURN_IF_ERROR(LowerResourceUpdateInputs().status());
+  TF_RETURN_IF_ERROR(LowerResourceUpdateInputs(
+                         pipeline_comp->parameter_instruction(
+                             GetAccumulationCountOperandIndex(pipeline_op)))
+                         .status());
   // Tidy again.
   TF_RETURN_IF_ERROR(dce.Run(pipeline_op->GetModule()).status());
   // Verify the pipeline is now ok to be lowered.
@@ -865,6 +903,14 @@ StatusOr<bool> PipelineFixer::Run(HloModule* module) {
   VLOG(2) << "After fixing the Pipeline stages.";
   XLA_VLOG_LINES(2, module->ToString());
   return true;
+}
+
+StatusOr<bool> PipelineFixer::TestFixConstantGradients(
+    HloInstruction* pipeline_op, HloComputation* pipeline_comp) {
+  TF_ASSIGN_OR_RETURN(stages_, GetPipelineStages(pipeline_comp));
+  // Run the fixing for constant gradients.
+  return FixConstantGradients(
+      GetPipelineBatchSerializationIterations(pipeline_op), pipeline_op);
 }
 
 }  // namespace poplarplugin
