@@ -58,6 +58,8 @@ const FindConsumersExtensionResults HloSliceApplyBase::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloSliceApplyBase::AllowNonInplaceLowering() const { return false; }
+
 bool HloSliceApplyBase::IsPopOpsElementwise() const { return false; }
 
 int64 HloSliceApplyBase::GetApplyDimension() const { return apply_dimension_; }

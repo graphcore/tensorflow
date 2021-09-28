@@ -378,7 +378,8 @@ void RegisterInplaceOperand0Extension(HloOpcode opcode,
                                       HloInstructionType type) {
   RegisterHloInstructionExtension<InplaceExtension>(
       opcode, [type](const HloInstruction* inst) {
-        return HloPoplarInplaceDescription(type, /*inplace_operands=*/{0});
+        return HloPoplarInplaceDescription(type, /*inplace_operands=*/{0},
+                                           /*allow_non_inplace=*/false);
       });
 }
 
@@ -392,13 +393,15 @@ void RegisterInplaceROOperand0Extension(HloOpcode opcode) {
 }
 
 void RegisterInplaceAllOperandsExtension(HloOpcode opcode,
-                                         HloInstructionType type) {
+                                         HloInstructionType type,
+                                         bool allow_non_inplace = false) {
   RegisterHloInstructionExtension<InplaceExtension>(
-      opcode, [type](const HloInstruction* inst) {
+      opcode, [type, allow_non_inplace](const HloInstruction* inst) {
         HloPoplarInplaceDescription::OperandIndices indices(
             inst->operand_count());
         absl::c_iota(indices, 0);
-        return HloPoplarInplaceDescription(type, std::move(indices));
+        return HloPoplarInplaceDescription(type, std::move(indices),
+                                           allow_non_inplace);
       });
 }
 
@@ -420,7 +423,11 @@ REGISTER_HLO_INST_EXTENSIONS(kScatter, RegisterInplaceRWOperand0Extension);
 REGISTER_HLO_INST_EXTENSIONS(kAllReduce, RegisterInplaceRWAllOperandsExtension);
 REGISTER_HLO_INST_EXTENSIONS(kMap, RegisterInplaceRWAllOperandsExtension);
 REGISTER_HLO_INST_EXTENSIONS(kSort, RegisterInplaceRWAllOperandsExtension);
-REGISTER_HLO_INST_EXTENSIONS(kTuple, RegisterInplaceRWAllOperandsExtension);
+REGISTER_HLO_INST_EXTENSIONS(kTuple, [](HloOpcode opcode) {
+  return RegisterInplaceAllOperandsExtension(
+      opcode, HloInstructionType::kInplaceReadWrite,
+      /*allow_non_inplace=*/true);
+});
 
 // Inplace read-only ops.
 // These ops are implemented as inplace ops on operand 0.
@@ -442,7 +449,8 @@ REGISTER_HLO_INST_EXTENSIONS(kWhile, [](HloOpcode opcode) {
       opcode, [](const HloInstruction* inst) {
         CHECK_EQ(inst->operand_count(), 1);
         return HloPoplarInplaceDescription(
-            HloInstructionType::kInplaceReadWrite, /*inplace_operands=*/{0});
+            HloInstructionType::kInplaceReadWrite, /*inplace_operands=*/{0},
+            /*allow_non_inplace=*/true);
       });
 });
 
@@ -450,7 +458,8 @@ REGISTER_HLO_INST_EXTENSIONS(kSlice, [](HloOpcode opcode) {
   RegisterHloInstructionExtension<InplaceExtension>(
       opcode, [](const HloInstruction* inst) {
         return HloPoplarInplaceDescription(HloInstructionType::kInplaceReadOnly,
-                                           /*inplace_operands=*/{0});
+                                           /*inplace_operands=*/{0},
+                                           /*allow_non_inplace=*/true);
       });
 });
 
@@ -459,7 +468,8 @@ REGISTER_HLO_INST_EXTENSIONS(kPad, [](HloOpcode opcode) {
   RegisterHloInstructionExtension<InplaceExtension>(
       opcode, [](const HloInstruction* inst) {
         return HloPoplarInplaceDescription(HloInstructionType::kInplaceReadOnly,
-                                           {0, 1});
+                                           /*inplace_operands=*/{0, 1},
+                                           /*allow_non_inplace=*/false);
       });
 });
 
@@ -468,7 +478,7 @@ REGISTER_HLO_INST_EXTENSIONS(kGetTupleElement, [](HloOpcode opcode) {
       opcode, [](const HloInstruction* inst) {
         return HloPoplarInplaceDescription(
             HloInstructionType::kInplaceGetTupleElement,
-            /*inplace_operands=*/{0});
+            /*inplace_operands=*/{0}, /*allow_non_inplace=*/true);
       });
 });
 
@@ -490,7 +500,7 @@ REGISTER_HLO_INST_EXTENSIONS(kFusion, [](HloOpcode opcode) {
           if (inplace_operands.size()) {
             return HloPoplarInplaceDescription(
                 HloInstructionType::kInplaceReadWrite,
-                std::move(inplace_operands));
+                std::move(inplace_operands), /*allow_non_inplace=*/false);
           } else {
             return HloPoplarInplaceDescription();
           }
@@ -500,7 +510,8 @@ REGISTER_HLO_INST_EXTENSIONS(kFusion, [](HloOpcode opcode) {
               inst->operand_count());
           absl::c_iota(indices, 0);
           return HloPoplarInplaceDescription(
-              HloInstructionType::kInplaceReadWrite, std::move(indices));
+              HloInstructionType::kInplaceReadWrite, std::move(indices),
+              /*allow_non_inplace=*/false);
         }
       });
 });
@@ -551,7 +562,8 @@ REGISTER_HLO_INST_EXTENSIONS(kCall, [](HloOpcode opcode) {
           }
 
           return HloPoplarInplaceDescription(
-              HloInstructionType::kInplaceReadWrite, std::move(indices));
+              HloInstructionType::kInplaceReadWrite, std::move(indices),
+              /*allow_non_inplace=*/true);
         } else if (IsPipelineOp(inst) || IsResourceUpdate(inst)) {
           // Pipeline and ResourceUpdate operations are inplace on all
           // their inputs.
@@ -559,7 +571,8 @@ REGISTER_HLO_INST_EXTENSIONS(kCall, [](HloOpcode opcode) {
               inst->operand_count());
           absl::c_iota(indices, 0);
           return HloPoplarInplaceDescription(
-              HloInstructionType::kInplaceReadWrite, std::move(indices));
+              HloInstructionType::kInplaceReadWrite, std::move(indices),
+              /*allow_non_inplace=*/false);
         } else if (IsAnyPipelineStageOp(inst)) {
           // Pipeline stages are only inplace on operands which are not
           // parameters/execution counters.
@@ -585,7 +598,8 @@ REGISTER_HLO_INST_EXTENSIONS(kCall, [](HloOpcode opcode) {
             }
           }
           return HloPoplarInplaceDescription(
-              HloInstructionType::kInplaceReadWrite, std::move(indices));
+              HloInstructionType::kInplaceReadWrite, std::move(indices),
+              /*allow_non_inplace=*/false);
         } else if (IsFunction(inst)) {
           // Functions are inplace on remote buffer inputs.
           // Assume that the first "num_modified_remote_buffers" inputs are
@@ -603,7 +617,8 @@ REGISTER_HLO_INST_EXTENSIONS(kCall, [](HloOpcode opcode) {
                 num_modified_remote_buffers + num_unmodified_remote_buffers);
             absl::c_iota(indices, 0);
             return HloPoplarInplaceDescription(
-                HloInstructionType::kInplaceReadWrite, std::move(indices));
+                HloInstructionType::kInplaceReadWrite, std::move(indices),
+                /*allow_non_inplace=*/false);
           } else {
             return HloPoplarInplaceDescription();
           }
@@ -622,7 +637,8 @@ REGISTER_HLO_INST_EXTENSIONS(kCustomCall, [](HloOpcode opcode) {
             inst->operand_count());
         absl::c_iota(indices, 0);
         return HloPoplarInplaceDescription(
-            HloInstructionType::kInplaceReadWrite, std::move(indices));
+            HloInstructionType::kInplaceReadWrite, std::move(indices),
+            /*allow_non_inplace=*/false);
       });
 });
 

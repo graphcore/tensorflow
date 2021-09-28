@@ -50,6 +50,8 @@ const FindConsumersExtensionResults HloTopK::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloTopK::AllowNonInplaceLowering() const { return false; }
+
 bool HloTopK::IsPopOpsElementwise() const { return false; }
 
 // Creates an instance of a HloOneHotInstruction

@@ -70,7 +70,8 @@ void RegisterInplaceExtension(HloOpcode opcode) {
   RegisterHloInstructionExtension<InplaceExtension>(
       opcode, [](const HloInstruction*) {
         return HloPoplarInplaceDescription(
-            HloInstructionType::kInplaceReadWrite, /*inplace_operands=*/{0});
+            HloInstructionType::kInplaceReadWrite, /*inplace_operands=*/{0},
+            /*allow_non_inplace=*/true);
       });
 }
 
@@ -80,7 +81,8 @@ void RegisterInplaceOnOperand0IfTypesMatch(HloOpcode opcode) {
         if (inst->shape().element_type() ==
             inst->operand(0)->shape().element_type()) {
           return HloPoplarInplaceDescription(
-              HloInstructionType::kInplaceReadWrite, /*inplace_operands=*/{0});
+              HloInstructionType::kInplaceReadWrite, /*inplace_operands=*/{0},
+              /*allow_non_inplace=*/true);
         } else {
           return HloPoplarInplaceDescription();
         }

@@ -38,6 +38,7 @@ class HloMultiSliceInstruction : public HloPoplarInstruction {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
   // Whether or not the given indices are sorted.
@@ -73,6 +74,7 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
   // The dimension in indices which contains the starting indices. If it is

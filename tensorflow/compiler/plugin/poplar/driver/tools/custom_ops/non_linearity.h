@@ -53,6 +53,8 @@ class HloNonLinearity : public HloPoplarInstruction {
     return FindConsumersExtensionResults::DoNotFindConsumers();
   }
 
+  bool AllowNonInplaceLowering() const override { return true; }
+
   bool IsPopOpsElementwise() const override { return true; }
 
  protected:
@@ -114,6 +116,7 @@ class HloNonLinearityGrad : public HloPoplarInstruction {
     return FindConsumersExtensionResults::DoNotFindConsumers();
   }
 
+  bool AllowNonInplaceLowering() const override { return false; }
   bool IsPopOpsElementwise() const override { return true; }
 
  protected:

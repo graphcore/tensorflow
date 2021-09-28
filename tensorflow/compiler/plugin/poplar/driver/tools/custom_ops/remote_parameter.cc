@@ -136,6 +136,8 @@ const FindConsumersExtensionResults HloRemoteParameterLoad::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloRemoteParameterLoad::AllowNonInplaceLowering() const { return false; }
+
 bool HloRemoteParameterLoad::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction>
@@ -197,6 +199,8 @@ const FindConsumersExtensionResults HloRemoteParameterStore::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
+
+bool HloRemoteParameterStore::AllowNonInplaceLowering() const { return false; }
 
 bool HloRemoteParameterStore::IsPopOpsElementwise() const { return false; }
 
@@ -306,6 +310,8 @@ const FindConsumersExtensionResults HloCreateBuffer::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloCreateBuffer::AllowNonInplaceLowering() const { return false; }
+
 bool HloCreateBuffer::IsPopOpsElementwise() const { return false; }
 
 absl::optional<HloRemoteBufferInfo> HloCreateBuffer::RemoteBufferInfo() const {
@@ -398,6 +404,8 @@ const FindConsumersExtensionResults HloBufferLoadSlice::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
+
+bool HloBufferLoadSlice::AllowNonInplaceLowering() const { return false; }
 
 bool HloBufferLoadSlice::IsPopOpsElementwise() const { return false; }
 

@@ -95,6 +95,9 @@ const FindConsumersExtensionResults HloGfloatParamsInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloGfloatParamsInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
 bool HloGfloatParamsInstruction::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction>
@@ -230,6 +233,9 @@ HloCastNativeToGfloatInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloCastNativeToGfloatInstruction::AllowNonInplaceLowering() const {
+  return true;
+}
 bool HloCastNativeToGfloatInstruction::IsPopOpsElementwise() const {
   return false;
 }
@@ -324,6 +330,10 @@ const FindConsumersExtensionResults
 HloCastGfloatToNativeInstruction::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
+bool HloCastGfloatToNativeInstruction::AllowNonInplaceLowering() const {
+  return false;
 }
 
 bool HloCastGfloatToNativeInstruction::IsPopOpsElementwise() const {

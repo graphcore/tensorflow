@@ -46,7 +46,8 @@ class HloWeightsTransposeChansFlipXYInstruction : public HloPoplarInstruction {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
-  bool IsPopOpsElementwise() const;
+  bool AllowNonInplaceLowering() const override;
+  bool IsPopOpsElementwise() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(

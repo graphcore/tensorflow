@@ -48,6 +48,8 @@ const FindConsumersExtensionResults HloIpuInterCopy::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloIpuInterCopy::AllowNonInplaceLowering() const { return false; }
+
 bool HloIpuInterCopy::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction> HloIpuInterCopy::CloneWithNewOperandsImpl(

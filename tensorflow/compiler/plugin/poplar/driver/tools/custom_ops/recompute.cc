@@ -59,6 +59,10 @@ HloSuggestRecomputeInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloSuggestRecomputeInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloSuggestRecomputeInstruction::IsPopOpsElementwise() const {
   return true;
 }
@@ -118,6 +122,10 @@ const FindConsumersExtensionResults HloBlockRecomputeInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloBlockRecomputeInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloBlockRecomputeInstruction::IsPopOpsElementwise() const { return true; }
 
 std::unique_ptr<HloInstruction>
@@ -170,6 +178,10 @@ const FindConsumersExtensionResults
 HloRecomputationCheckpointInstruction::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
+bool HloRecomputationCheckpointInstruction::AllowNonInplaceLowering() const {
+  return false;
 }
 
 bool HloRecomputationCheckpointInstruction::IsPopOpsElementwise() const {
@@ -230,6 +242,10 @@ const FindConsumersExtensionResults
 HloRecomputationInputInstruction::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
+bool HloRecomputationInputInstruction::AllowNonInplaceLowering() const {
+  return false;
 }
 
 bool HloRecomputationInputInstruction::IsPopOpsElementwise() const {

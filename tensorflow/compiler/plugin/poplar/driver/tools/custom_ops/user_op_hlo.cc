@@ -128,6 +128,8 @@ const FindConsumersExtensionResults HloUserOpInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloUserOpInstruction::AllowNonInplaceLowering() const { return false; }
+
 bool HloUserOpInstruction::IsPopOpsElementwise() const {
   return metadata_.is_elementwise_;
 }

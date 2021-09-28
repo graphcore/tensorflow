@@ -55,6 +55,10 @@ HloReplicationFactorInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloReplicationFactorInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloReplicationFactorInstruction::IsPopOpsElementwise() const {
   return false;
 }
@@ -113,6 +117,10 @@ const FindConsumersExtensionResults
 HloReplicationNormaliseInstruction::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
+bool HloReplicationNormaliseInstruction::AllowNonInplaceLowering() const {
+  return false;
 }
 
 bool HloReplicationNormaliseInstruction::IsPopOpsElementwise() const {

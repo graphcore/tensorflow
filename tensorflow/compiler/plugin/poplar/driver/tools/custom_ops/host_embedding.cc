@@ -68,6 +68,10 @@ HloHostEmbeddingLookupInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloHostEmbeddingLookupInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloHostEmbeddingLookupInstruction::IsPopOpsElementwise() const {
   return false;
 }
@@ -144,6 +148,10 @@ HloHostEmbeddingUpdateInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloHostEmbeddingUpdateInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloHostEmbeddingUpdateInstruction::IsPopOpsElementwise() const {
   return false;
 }
@@ -215,6 +223,10 @@ const FindConsumersExtensionResults
 HloHostEmbeddingNotifyInstruction::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
+bool HloHostEmbeddingNotifyInstruction::AllowNonInplaceLowering() const {
+  return false;
 }
 
 bool HloHostEmbeddingNotifyInstruction::IsPopOpsElementwise() const {

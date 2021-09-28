@@ -60,6 +60,10 @@ HloSendRecvBarrierInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloSendRecvBarrierInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloSendRecvBarrierInstruction::IsPopOpsElementwise() const {
   return false;
 }

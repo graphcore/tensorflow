@@ -70,6 +70,7 @@ const FindConsumersExtensionResults HloDropout::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloDropout::AllowNonInplaceLowering() const { return false; }
 bool HloDropout::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloDropout::ExtraPoplarAttributesToStringImpl(

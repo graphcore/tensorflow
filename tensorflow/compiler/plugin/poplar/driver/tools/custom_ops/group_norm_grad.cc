@@ -80,6 +80,9 @@ const FindConsumersExtensionResults HloGroupNormGradInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloGroupNormGradInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
 bool HloGroupNormGradInstruction::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction>

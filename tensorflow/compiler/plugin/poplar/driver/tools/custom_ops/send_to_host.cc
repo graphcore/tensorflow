@@ -65,6 +65,8 @@ const FindConsumersExtensionResults HloSendToHostInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloSendToHostInstruction::AllowNonInplaceLowering() const { return false; }
+
 bool HloSendToHostInstruction::IsPopOpsElementwise() const { return false; }
 
 const std::vector<std::string>& HloSendToHostInstruction::RendezvousKeys()

@@ -54,6 +54,9 @@ const FindConsumersExtensionResults HloBatchNormStatsInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloBatchNormStatsInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
 bool HloBatchNormStatsInstruction::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction>

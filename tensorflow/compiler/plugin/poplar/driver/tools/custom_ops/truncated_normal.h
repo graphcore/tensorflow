@@ -33,6 +33,7 @@ class HloTruncatedNormalInstruction : public HloPoplarInstruction {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
  protected:

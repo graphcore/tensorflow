@@ -38,7 +38,8 @@ class HloBaseCollectiveReorderInstruction : public HloPoplarInstruction {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
+  bool AllowNonInplaceLowering() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(

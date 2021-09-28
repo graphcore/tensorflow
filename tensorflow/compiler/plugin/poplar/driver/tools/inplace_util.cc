@@ -380,14 +380,15 @@ HloPoplarInplaceDescription GetInplaceDescription(const HloInstruction* inst) {
 }
 
 HloPoplarInplaceDescription::HloPoplarInplaceDescription(
-    HloInstructionType type, OperandIndices&& inplace_operands)
+    HloInstructionType type, OperandIndices&& inplace_operands,
+    bool allow_non_inplace)
     : type_(type),
       inplace_operands_(std::move(inplace_operands)),
-      inplace_operands_set_(inplace_operands_.begin(),
-                            inplace_operands_.end()) {}
+      inplace_operands_set_(inplace_operands_.begin(), inplace_operands_.end()),
+      allow_non_inplace_(allow_non_inplace) {}
 
 HloPoplarInplaceDescription::HloPoplarInplaceDescription()
-    : HloPoplarInplaceDescription(HloInstructionType::kNotInplace, {}) {}
+    : HloPoplarInplaceDescription(HloInstructionType::kNotInplace, {}, false) {}
 
 const HloInstructionType& HloPoplarInplaceDescription::GetType() const {
   return type_;
@@ -413,6 +414,10 @@ bool HloPoplarInplaceDescription::IsInplaceType() const {
     default:
       return false;
   }
+}
+
+bool HloPoplarInplaceDescription::AllowNonInplaceLowering() const {
+  return !IsInplaceType() || allow_non_inplace_;
 }
 
 const std::string HloPoplarInplaceDescription::ToString() const {

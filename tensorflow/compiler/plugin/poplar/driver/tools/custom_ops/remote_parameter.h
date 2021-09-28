@@ -73,6 +73,7 @@ class HloRemoteParameterLoad : public HloAbstractRemoteLoadStore {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
  private:
@@ -105,6 +106,7 @@ class HloRemoteParameterStore : public HloAbstractRemoteLoadStore {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
   absl::Span<HloInstruction* const> RemoteBuffers() const override;
@@ -142,6 +144,7 @@ class HloCreateBuffer : public HloPoplarInstruction {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
   bool IsRemoteBuffer() const { return is_remote_; }
@@ -184,6 +187,7 @@ class HloBufferLoadSlice : public HloAbstractRemoteLoadStore {
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
   absl::Span<HloInstruction* const> RemoteBuffers() const override;
@@ -226,6 +230,7 @@ class HloBufferStoreSlice : public HloAbstractRemoteLoadStore {
     return FindConsumersExtensionResults::DoNotFindConsumers();
   }
 
+  bool AllowNonInplaceLowering() const override { return false; }
   bool IsPopOpsElementwise() const override { return false; }
 
   absl::Span<HloInstruction* const> RemoteBuffers() const override;

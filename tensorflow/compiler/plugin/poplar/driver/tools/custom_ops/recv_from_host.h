@@ -42,6 +42,7 @@ class HloRecvFromHostInstruction : public HloPoplarInstruction {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
   const std::vector<std::string>& RendezvousKeys() const;

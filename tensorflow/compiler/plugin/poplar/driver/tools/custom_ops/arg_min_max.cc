@@ -56,6 +56,8 @@ const FindConsumersExtensionResults HloArgMinMaxBase::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloArgMinMaxBase::AllowNonInplaceLowering() const { return false; }
+
 bool HloArgMinMaxBase::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloArgMinMaxBase::ExtraPoplarAttributesToStringImpl(

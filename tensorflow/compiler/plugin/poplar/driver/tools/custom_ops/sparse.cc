@@ -54,6 +54,10 @@ HloSelectScalarFromRowsInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloSelectScalarFromRowsInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloSelectScalarFromRowsInstruction::IsPopOpsElementwise() const {
   return false;
 }
@@ -109,6 +113,10 @@ const FindConsumersExtensionResults
 HloUpdateScalarInRowsInstruction::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
+bool HloUpdateScalarInRowsInstruction::AllowNonInplaceLowering() const {
+  return false;
 }
 
 bool HloUpdateScalarInRowsInstruction::IsPopOpsElementwise() const {

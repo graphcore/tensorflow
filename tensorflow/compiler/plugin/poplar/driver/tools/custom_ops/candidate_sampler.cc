@@ -48,6 +48,7 @@ const FindConsumersExtensionResults HloCandidateSampler::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloCandidateSampler::AllowNonInplaceLowering() const { return false; }
 bool HloCandidateSampler::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction> CreateHloCandidateSampler(

@@ -61,6 +61,10 @@ HloBaseCollectiveReorderInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloBaseCollectiveReorderInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloBaseCollectiveReorderInstruction::IsPopOpsElementwise() const {
   return false;
 }

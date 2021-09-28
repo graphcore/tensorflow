@@ -50,6 +50,8 @@ const FindConsumersExtensionResults HloExecutionCounter::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloExecutionCounter::AllowNonInplaceLowering() const { return false; }
+
 bool HloExecutionCounter::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloExecutionCounter::ExtraPoplarAttributesToStringImpl(

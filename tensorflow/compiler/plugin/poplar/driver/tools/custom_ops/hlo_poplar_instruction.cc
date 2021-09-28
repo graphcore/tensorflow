@@ -56,9 +56,11 @@ HloPoplarInplaceDescription HloPoplarInstruction::GetInplaceDescription()
     }
     absl::c_sort(inplace_operands);
     return HloPoplarInplaceDescription(HloInstructionType::kInplaceReadWrite,
-                                       std::move(inplace_operands));
+                                       std::move(inplace_operands),
+                                       AllowNonInplaceLowering());
   } else {
-    return HloPoplarInplaceDescription(HloInstructionType::kNotInplace, {});
+    return HloPoplarInplaceDescription(HloInstructionType::kNotInplace, {},
+                                       /*allow_non_inplace=*/false);
   }
 }
 

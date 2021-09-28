@@ -40,6 +40,7 @@ class HloHistogramInstruction : public HloPoplarInstruction {
   bool AllocatingOutput() const override;
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
   bool AbsoluteOfInput() const;
@@ -73,6 +74,7 @@ class HloHistogramUpdateInstruction : public HloPoplarInstruction {
   bool AllocatingOutput() const override;
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
   bool AbsoluteOfInput() const;

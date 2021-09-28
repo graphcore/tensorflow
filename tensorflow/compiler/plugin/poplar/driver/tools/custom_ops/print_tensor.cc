@@ -56,6 +56,8 @@ const FindConsumersExtensionResults HloPrintTensor::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloPrintTensor::AllowNonInplaceLowering() const { return false; }
+
 bool HloPrintTensor::IsPopOpsElementwise() const { return false; }
 
 const std::string& HloPrintTensor::TensorName() const { return tensor_name_; }

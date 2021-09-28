@@ -61,6 +61,10 @@ const FindConsumersExtensionResults HloReduceScatterInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloReduceScatterInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloReduceScatterInstruction::IsPopOpsElementwise() const { return false; }
 
 PoplarReplicaGroups HloReduceScatterInstruction::GetPoplarReplicaGroups()

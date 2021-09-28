@@ -55,7 +55,8 @@ class HloPoplarInplaceDescription {
 
   HloPoplarInplaceDescription();
   HloPoplarInplaceDescription(HloInstructionType type,
-                              OperandIndices&& inplace_operands);
+                              OperandIndices&& inplace_operands,
+                              bool allow_non_inplace);
 
   // Get the HloInstructionType.
   const HloInstructionType& GetType() const;
@@ -68,6 +69,9 @@ class HloPoplarInplaceDescription {
   // Checks if the type is kInplaceReadWrite or kInplaceReadOnly.
   bool IsInplaceType() const;
 
+  // Allows lowering inplace op as non-inplace
+  bool AllowNonInplaceLowering() const;
+
   static bool ConvertToInplace(HloInstruction* inst,
                                HloReachabilityMap* reachability_map,
                                InplaceWorkList& worklist);
@@ -78,6 +82,7 @@ class HloPoplarInplaceDescription {
   HloInstructionType type_;
   OperandIndices inplace_operands_;
   OperandSet inplace_operands_set_;
+  bool allow_non_inplace_;
 };
 
 // Given an instruction, get its inplace description.
