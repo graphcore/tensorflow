@@ -40,11 +40,13 @@ from tensorflow.python.util import nest
 from tensorflow.python.ipu.keras.extensions import functional_extensions
 from tensorflow.python.ipu.keras.extensions import sequential_extensions
 from tensorflow.python.ipu import ipu_infeed_queue
+from tensorflow.python.ipu import keras_extensions
 
 _pvti_trace_channel = libpvti.createTraceChannel("TensorFlow")
 
 
-class IPUStrategyV1(distribute_lib.StrategyV1):
+class IPUStrategyV1(distribute_lib.StrategyV1,
+                    keras_extensions.KerasExtensions):
   """This is a distribution strategy for targeting a system with one
   or more IPUs.
 
@@ -78,9 +80,6 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
 
 
   """
-
-  _enable_legacy_iterators = True
-
   def __init__(self,
                ipu_device="/device:IPU:0",
                cpu_device="/device:CPU:0",
@@ -98,15 +97,8 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
         to improve Keras performance when using IPUs.
     """
     super().__init__(IPUExtendedV1(self, ipu_device, cpu_device))
-    self._enable_iterators = enable_dataset_iterators
-    self._enable_keras_extensions = enable_keras_extensions
-    self._keras_extensions = OrderedDict()
-    # Insert Sequential before Functional as Sequential models inherit from
-    # Functional models.
-    self._register_keras_extension(sequential.Sequential,
-                                   sequential_extensions.SequentialExtension)
-    self._register_keras_extension(functional.Functional,
-                                   functional_extensions.FunctionalExtension)
+    keras_extensions.KerasExtensions.__init__(self, enable_dataset_iterators,
+                                              enable_keras_extensions)
 
   @libpvti.instrument_fn(_pvti_trace_channel)
   def run(self, fn, args=(), kwargs=None, options=None):
@@ -122,39 +114,6 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
     device_string = self.extended.non_slot_devices(None)
     current_device = tf_device.DeviceSpec.from_string(device_string)
     return current_device.device_index
-
-  def _enable_dataset_iterators(self):
-    return context.executing_eagerly() and self._enable_iterators
-
-  def _create_dataset_iterator(self, dataset):
-    assert self._enable_dataset_iterators()
-    return ipu_infeed_queue.IPUOwnedIterator(dataset=dataset)  # pylint: disable=protected-access
-
-  def _register_keras_extension(self, class_type, extension):
-    self._keras_extensions[class_type] = extension
-
-  def _delete_keras_extension(self, class_type):
-    self._keras_extensions.pop(class_type, None)
-
-  def _patch_keras_extension(self, instance):
-    if not self._enable_keras_extensions:
-      return
-
-    for class_type, extension in self._keras_extensions.items():
-      if isinstance(instance, class_type):
-        if isinstance(instance, base_layer.KerasExtension):
-          if not isinstance(instance, extension):
-            raise RuntimeError(
-                "KerasExtension patching failed - already patched with a "
-                "different extension.")
-          break
-
-        # Patch in the extension.
-        # Note that we keep the name as Keras sometimes does __name__ checks.
-        cls = instance.__class__
-        instance.__class__ = cls.__class__(cls.__name__, (cls, extension), {})
-        extension.__init__(instance)
-        break
 
   @property
   def supports_loss_scaling(self):

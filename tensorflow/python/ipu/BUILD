@@ -144,6 +144,7 @@ py_library(
         "keras/optimizers/ipu_wrappers.py",
         "keras/optimizers/map_gradient_optimizer.py",
         "keras/pipeline.py",
+        "keras_extensions.py",
         "loops.py",
         "ops/all_to_all_op.py",
         "ops/cross_replica_ops.py",

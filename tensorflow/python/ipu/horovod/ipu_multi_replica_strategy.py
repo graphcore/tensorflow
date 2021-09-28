@@ -17,11 +17,15 @@ from tensorflow.python.distribute import device_util
 from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import reduce_util
 from tensorflow.python.distribute import values
-from tensorflow.python.distribute.cluster_resolver import cluster_resolver as cluster_resolver_lib
+from tensorflow.python.distribute.cluster_resolver import \
+  cluster_resolver as cluster_resolver_lib
 from tensorflow.python.framework import device as tf_device
-from tensorflow.python.ipu import utils as ipu_utils
-from tensorflow.python.ipu.horovod import Sum, Average, size, rank, allreduce as hvd_allreduce, broadcast as hvd_broadcast
-from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerExtendedV1
+from tensorflow.python.ipu import keras_extensions
+from tensorflow.python.ipu.horovod import Sum, Average, size, rank, \
+  allreduce as hvd_allreduce, \
+  broadcast as hvd_broadcast
+from tensorflow.python.ipu.ipu_multi_worker_strategy import \
+  IPUMultiWorkerExtendedV1
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.training import server_lib
 
@@ -40,7 +44,8 @@ def _is_current_device_ipu():
   return current_device.device_type == "IPU"
 
 
-class IPUMultiReplicaStrategyV1(distribute_lib.StrategyV1):
+class IPUMultiReplicaStrategyV1(distribute_lib.StrategyV1,
+                                keras_extensions.KerasExtensions):
   """This is a distribution strategy for multi-replica distribution
   that uses compiled communications with GCL for reductions over IPU
   links and gateway links, while using Horovod for broadcasting of
@@ -55,7 +60,9 @@ class IPUMultiReplicaStrategyV1(distribute_lib.StrategyV1):
 
   def __init__(self,
                ipu_device="/device:IPU:0",
-               add_ipu_cross_replica_reductions=True):
+               add_ipu_cross_replica_reductions=True,
+               enable_dataset_iterators=True,
+               enable_keras_extensions=True):
     # We create an empty cluster here since we will not be using gRPC for communication.
     # All the communication is delegated to either GCL or Horovod (MPI) below.
     cluster_resolver = cluster_resolver_lib.SimpleClusterResolver(
@@ -64,6 +71,8 @@ class IPUMultiReplicaStrategyV1(distribute_lib.StrategyV1):
     super().__init__(
         IPUMultiReplicaExtendedV1(self, cluster_resolver, ipu_device,
                                   add_ipu_cross_replica_reductions))
+    keras_extensions.KerasExtensions.__init__(self, enable_dataset_iterators,
+                                              enable_keras_extensions)
 
   def update_ipu_config(self, config):
     """Update the given IPU configuration with the multi-replica
@@ -88,6 +97,10 @@ class IPUMultiReplicaExtendedV1(IPUMultiWorkerExtendedV1):
                      variables_on_host=False)
     self._num_workers = size()
     self._add_ipu_cross_replica_reductions = add_ipu_cross_replica_reductions
+
+  def non_slot_devices(self, var_list):
+    del var_list
+    return self._ipu_device
 
   def _reduce_to(self, reduce_op, value, destinations, options):
     del destinations

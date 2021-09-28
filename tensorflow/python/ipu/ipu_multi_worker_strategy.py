@@ -31,6 +31,7 @@ from tensorflow.python.ipu import scopes
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import collective_ops
 from tensorflow.python.ops import control_flow_util
+from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import tf_contextlib
 
@@ -432,10 +433,19 @@ class IPUMultiWorkerExtendedV1(
                                                options)
 
   def _call_for_each_replica(self, fn, args, kwargs):
-    with distribute_lib.ReplicaContext(
-        self._container_strategy(), replica_id_in_sync_group=0), \
-        ops.device(self._ipu_device):
-      return fn(*args, **kwargs)
+    with distribute_lib.ReplicaContext(self._container_strategy(),
+                                       replica_id_in_sync_group=0), ops.device(
+                                           self._ipu_device):
+      # Make sure it is compiled as a single engine when called in graph mode.
+      # This is similar to the mechanism used by xla.compile.
+      xla_context = control_flow_ops.XLAControlFlowContext()
+      try:
+        xla_context.Enter()
+        outputs = fn(*args, **kwargs)
+      finally:
+        xla_context.Exit()
+
+      return outputs
 
   def _validate_colocate_with_variable(self, colocate_with_variable):
     if colocate_with_variable.device != self._variable_device:
