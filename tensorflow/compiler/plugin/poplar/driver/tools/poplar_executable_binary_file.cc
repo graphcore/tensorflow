@@ -33,9 +33,104 @@ static Status PopEFExceptionToTensorflowStatus(const std::string& origin,
   return tensorflow::errors::Internal(prefix, e.what());
 }
 
+static void ToPopEFShape(const xla::Shape& shape,
+                         std::vector<int64_t>& popef_shape) {
+  for (size_t i = 0; i < shape.dimensions_size(); i++) {
+    popef_shape.push_back(shape.dimensions(i));
+  }
+}
+
+static StatusOr<popef::DataType> ToPopEFDataType(xla::PrimitiveType type) {
+  switch (type) {
+    case xla::F32:
+      return popef::DataType::F32;
+    case xla::F16:
+      return popef::DataType::F16;
+    case xla::S32:
+      return popef::DataType::S32;
+    case xla::U32:
+      return popef::DataType::U32;
+    case xla::S8:
+      return popef::DataType::S8;
+    case xla::U8:
+      return popef::DataType::U8;
+    case xla::S16:
+      return popef::DataType::S16;
+    case xla::U16:
+      return popef::DataType::U16;
+  }
+  return tensorflow::errors::Internal("[PopEF][ToMetadata]: ",
+                                      "Unsupported PrimitiveType");
+}
+
+template <class FeedInfos>
+static Status AddPopEFFeedAnchors(const FeedInfos& infos,
+                                  popef::TensorType type,
+                                  popef::Metadata& metadata) {
+  for (auto& info : infos) {
+    popef::Anchor anchor;
+    anchor.setName(info.name);
+    anchor.setHandle(info.handle);
+    std::vector<int64_t> shape;
+    ToPopEFShape(info.shape, shape);
+    anchor.tensorInfo().setShape(shape);
+    TF_ASSIGN_OR_RETURN(popef::DataType shape_type,
+                        ToPopEFDataType(info.shape.element_type()));
+    anchor.tensorInfo().setDataType(shape_type);
+    anchor.setType(type);
+    metadata.anchors().push_back(anchor);
+  }
+  return Status::OK();
+}
+
+static StatusOr<popef::Metadata> ToPopEFMetadata(
+    const std::string& executable_name, const PoplarExecutableInfo& info,
+    const poplar::OptionFlags& opts) {
+  if (info.target_type != "IPU") {
+    return tensorflow::errors::Internal("[PopEF][ToMetadata]: ",
+                                        "Target type must be IPU");
+  }
+  if (info.target_arch.find("ipu") != 0) {
+    return tensorflow::errors::Internal("[PopEF][ToMetadata]: ",
+                                        "Target arch must begin with ipu");
+  }
+  // Extract IPU version
+  auto ipu_postfix = info.target_arch.substr(3);
+  int ipu_version;
+  try {
+    ipu_version = std::stoi(ipu_postfix);
+  } catch (const std::exception& e) {
+    return tensorflow::errors::Internal(
+        "[PopEF][ToMetadata]: ",
+        "Target arch must be of form ipux, where x is an integer");
+  }
+  popef::Metadata metadata;
+  metadata.setReplicationFactor(info.replication_factor);
+  metadata.setNumIpus(info.num_IPUs);
+  metadata.setSeedHandle(GetRandomNumberSeedStream());
+  metadata.setExecutable(executable_name);
+  metadata.setNumProcesses(1);
+  metadata.setIpuVersion(ipu_version);
+  // Transfer engine options
+  for (auto& opt : opts) {
+    metadata.engineOptions().emplace_back(opt.first, opt.second);
+  }
+  auto& flow = metadata.programFlow();
+  flow.load().emplace_back(0);
+  flow.main().emplace_back(1);
+  flow.save().emplace_back(2);
+
+  TF_RETURN_IF_ERROR(AddPopEFFeedAnchors(info.feed_input_infos,
+                                         popef::TensorType::INPUT, metadata));
+  TF_RETURN_IF_ERROR(AddPopEFFeedAnchors(info.feed_output_infos,
+                                         popef::TensorType::OUTPUT, metadata));
+  return metadata;
+}
+
 Status PoplarExecutableBinaryFile::Write(
     const std::string& file_name,
     const ::tensorflow::protobuf::MessageLite& proto,
+    const PoplarExecutableInfo& info, const poplar::OptionFlags& opts,
     std::function<void(std::ostream&)> serialize_executable,
     const std::string& executable_hash) {
   auto file = std::ofstream(file_name, std::ios::binary);
@@ -74,6 +169,13 @@ Status PoplarExecutableBinaryFile::Write(
     return PoplarExceptionToTensorflowStatus("[Serialize]", e);
   }
 
+  TF_ASSIGN_OR_RETURN(popef::Metadata metadata,
+                      ToPopEFMetadata(exec_hash, info, opts));
+  try {
+    popef_writer->write(metadata);
+  } catch (const std::exception& e) {
+    return PopEFExceptionToTensorflowStatus("[WriteMetadata]", e);
+  }
   return Status::OK();
 }
 
