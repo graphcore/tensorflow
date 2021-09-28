@@ -407,7 +407,7 @@ PoplarExecutableCore::Deserialize(
   const PoplarExecutableProto proto = ToProto(info, opts);
 
   return PoplarExecutableBinaryFile::Write(
-      filenames.CachedExecutableFilename(), proto,
+      filenames.CachedExecutableFilename(), proto, info, opts,
       [&executable](std::ostream& out) { executable.serialize(out); },
       filenames.Name());
 }
@@ -491,7 +491,7 @@ Status PoplarExecutableCore::Serialize(const std::string& filepath) const {
   }
 
   return PoplarExecutableBinaryFile::Write(
-      filepath, ToProto(info_),
+      filepath, ToProto(info_), info_, {},
       [this](std::ostream& out) { poplar_engine_->serializeExecutable(out); });
 }
 
