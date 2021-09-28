@@ -51,6 +51,8 @@ const FindConsumersExtensionResults HloStatelessRandom::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloStatelessRandom::AllowNonInplaceLowering() const { return false; }
+
 bool HloStatelessRandom::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloStatelessRandom::ExtraPoplarAttributesToStringImpl(

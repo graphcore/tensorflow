@@ -42,6 +42,7 @@ class HloNormaliseImage : public HloPoplarInstruction {
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
   float Scale() const { return scale_; }

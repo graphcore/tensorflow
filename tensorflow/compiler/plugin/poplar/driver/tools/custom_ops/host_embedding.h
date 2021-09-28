@@ -52,6 +52,7 @@ class HloHostEmbeddingLookupInstruction : public HloPoplarInstruction {
     return splitting_strategy_;
   }
 
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
  protected:
@@ -98,6 +99,7 @@ class HloHostEmbeddingUpdateInstruction : public HloPoplarInstruction {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
  protected:
@@ -137,6 +139,7 @@ class HloHostEmbeddingNotifyInstruction : public HloPoplarInstruction {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
  protected:

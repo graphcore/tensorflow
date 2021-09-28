@@ -50,6 +50,8 @@ const FindConsumersExtensionResults HloStatefulNoop::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloStatefulNoop::AllowNonInplaceLowering() const { return false; }
+
 bool HloStatefulNoop::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloStatefulNoop::ExtraPoplarAttributesToStringImpl(

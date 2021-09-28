@@ -40,6 +40,7 @@ class HloSuggestRecomputeInstruction : public HloPoplarInstruction {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
  protected:
@@ -69,6 +70,7 @@ class HloBlockRecomputeInstruction : public HloPoplarInstruction {
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
  protected:
@@ -98,6 +100,7 @@ class HloRecomputationCheckpointInstruction : public HloPoplarInstruction {
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
  protected:
@@ -130,6 +133,7 @@ class HloRecomputationInputInstruction : public HloPoplarInstruction {
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
  protected:

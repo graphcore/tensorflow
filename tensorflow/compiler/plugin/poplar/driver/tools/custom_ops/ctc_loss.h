@@ -40,6 +40,7 @@ class HloCTCInferenceAndLossBase : public HloPoplarInstruction {
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
   PrimitiveType in_dtype() const;

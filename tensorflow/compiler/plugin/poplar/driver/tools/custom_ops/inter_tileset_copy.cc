@@ -59,6 +59,8 @@ const FindConsumersExtensionResults HloInterTilesetCopy::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloInterTilesetCopy::AllowNonInplaceLowering() const { return false; }
+
 bool HloInterTilesetCopy::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction> HloInterTilesetCopy::CloneWithNewOperandsImpl(

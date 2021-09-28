@@ -62,6 +62,10 @@ HloPoplarAllGatherInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloPoplarAllGatherInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloPoplarAllGatherInstruction::IsPopOpsElementwise() const {
   return false;
 }

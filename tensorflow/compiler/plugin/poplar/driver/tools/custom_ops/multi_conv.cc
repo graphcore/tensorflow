@@ -77,6 +77,8 @@ const FindConsumersExtensionResults HloMultiConvInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloMultiConvInstruction::AllowNonInplaceLowering() const { return false; }
+
 bool HloMultiConvInstruction::IsPopOpsElementwise() const { return false; }
 
 bool HloMultiConvInstruction::IsWeightUpdate() const {

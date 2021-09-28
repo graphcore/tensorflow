@@ -68,6 +68,7 @@ const FindConsumersExtensionResults HloConvWithReverse::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloConvWithReverse::AllowNonInplaceLowering() const { return false; }
 bool HloConvWithReverse::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloConvWithReverse::ExtraPoplarAttributesToStringImpl(

@@ -109,6 +109,7 @@ class HloRNNFwdInstruction : public HloRNNInstruction {
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
  private:
@@ -139,6 +140,7 @@ class HloRNNBwdInstruction : public HloRNNInstruction {
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
  private:

@@ -75,6 +75,10 @@ HloStatefulGradientAccumulate::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloStatefulGradientAccumulate::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloStatefulGradientAccumulate::IsPopOpsElementwise() const {
   return false;
 }
@@ -270,6 +274,10 @@ const FindConsumersExtensionResults HloGradientAccumulatorCreate::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloGradientAccumulatorCreate::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloGradientAccumulatorCreate::IsPopOpsElementwise() const { return false; }
 
 absl::optional<HloRemoteBufferInfo>
@@ -355,6 +363,10 @@ const FindConsumersExtensionResults HloGradientAccumulatorAdd::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloGradientAccumulatorAdd::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloGradientAccumulatorAdd::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction>
@@ -414,6 +426,10 @@ const FindConsumersExtensionResults HloGradientAccumulatorSink::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloGradientAccumulatorSink::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloGradientAccumulatorSink::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction>
@@ -466,6 +482,10 @@ HloPoplarUseDescriptions HloGradientAccumulationCount::GetUseDescriptions()
 const FindConsumersExtensionResults HloGradientAccumulationCount::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
+bool HloGradientAccumulationCount::AllowNonInplaceLowering() const {
+  return false;
 }
 
 bool HloGradientAccumulationCount::IsPopOpsElementwise() const { return false; }

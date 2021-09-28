@@ -58,6 +58,7 @@ const FindConsumersExtensionResults HloReduceManyInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloReduceManyInstruction::AllowNonInplaceLowering() const { return false; }
 bool HloReduceManyInstruction::IsPopOpsElementwise() const { return false; }
 
 const std::vector<ReductionInfo>& HloReduceManyInstruction::ReductionsInfo()

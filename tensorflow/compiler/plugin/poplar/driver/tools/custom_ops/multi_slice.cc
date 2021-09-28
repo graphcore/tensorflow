@@ -59,6 +59,8 @@ const FindConsumersExtensionResults HloMultiSliceInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloMultiSliceInstruction::AllowNonInplaceLowering() const { return false; }
+
 bool HloMultiSliceInstruction::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction>
@@ -138,6 +140,10 @@ const FindConsumersExtensionResults HloMultiUpdateInstruction::FindConsumers(
     }
   }
   return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
+bool HloMultiUpdateInstruction::AllowNonInplaceLowering() const {
+  return false;
 }
 
 bool HloMultiUpdateInstruction::IsPopOpsElementwise() const { return false; }

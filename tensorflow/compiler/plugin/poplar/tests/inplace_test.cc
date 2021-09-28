@@ -35,6 +35,14 @@ namespace {
 
 using HloInplaceDependencyTest = HloTestBase;
 
+void CheckInstructionCanBeLoweredNonInplace(const HloInstruction* inst,
+                                            bool inplace,
+                                            bool allow_non_inplace) {
+  auto desc = GetInplaceDescription(inst);
+  EXPECT_EQ(desc.IsInplaceType(), inplace);
+  EXPECT_EQ(desc.AllowNonInplaceLowering(), allow_non_inplace);
+}
+
 TEST_F(HloInplaceDependencyTest, ResourceUpdate) {
   std::string hlo = R"(
 HloModule top
@@ -1105,6 +1113,70 @@ ENTRY entry {
   EXPECT_THAT(GetInplaceDescription(entry->root_instruction())
                   .GetInplaceOperandIndices(),
               ::testing::ElementsAre(2, 3));
+}
+
+TEST_F(HloInplaceDependencyTest, InplaceNoInplace) {
+  const char* const hlo = R"(
+HloModule top
+
+body {
+  p_b = (s32[], s32[20], s32[20]) parameter(0)
+  p0_b = s32[] get-tuple-element(p_b), index=0
+  p1_b = s32[20] get-tuple-element(p_b), index=1
+  p2_b = s32[20] get-tuple-element(p_b), index=2
+  i_b = s32[1] reshape(p0_b)
+  a_b = s32[1] dynamic-slice(p1_b, i_b), dynamic_slice_sizes={1}
+  t1_b = s32[1] dynamic-slice(p2_b, a_b), dynamic_slice_sizes={1}
+  t2_b = s32[1] dynamic-slice(p2_b, i_b), dynamic_slice_sizes={1}
+  u0_b = s32[20] dynamic-update-slice(p2_b, t2_b, a_b)
+  u1_b = s32[20] dynamic-update-slice(u0_b, t1_b, i_b)
+  concat = f32[40] concatenate(u0_b, u1_b), dimensions={0}
+  slice = f32[20] slice(concat), slice={[10:30]}
+  add = f32[20] add(u1_b, slice)
+  ROOT root_b = (s32[], s32[20], s32[20]) tuple(p0_b, p1_b, add)
+}
+
+cond {
+  p_c = (s32[], s32[20], s32[20]) parameter(0)
+  p0_c = s32[] get-tuple-element(p_c), index=0
+  z_c = s32[] constant(0)
+  ROOT eq_c = pred[] compare(p0_c, z_c), direction=EQ
+}
+
+ENTRY c1 {
+  p0 = s32[] parameter(0)
+  p1 = s32[20] parameter(1)
+  p2 = s32[20] parameter(2)
+  t = (s32[], s32[20], s32[20]) tuple(p0, p1, p2)
+  ROOT while = (s32[], s32[20], s32[20]) while(t), condition=cond, body=body
+  }
+)";
+
+  auto module =
+      HloRunner::CreateModuleFromString(hlo, GetDebugOptionsForTest());
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "while"),
+                                         true, true);
+  CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "add"), true,
+                                         true);
+  CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "slice"),
+                                         true, true);
+  CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "concat"),
+                                         true, false);
+  CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "u1_b"), true,
+                                         false);
+  CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "t1_b"),
+                                         false, true);
+  CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "i_b"), true,
+                                         false);
+  CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "root_b"),
+                                         true, true);
+  CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "p0"), false,
+                                         true);
+  CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "eq_c"),
+                                         false, true);
 }
 
 }  // namespace

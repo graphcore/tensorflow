@@ -57,6 +57,8 @@ const FindConsumersExtensionResults HloOneHotInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloOneHotInstruction::AllowNonInplaceLowering() const { return false; }
+
 bool HloOneHotInstruction::IsPopOpsElementwise() const { return false; }
 
 // Creates an instance of a HloOneHotInstruction

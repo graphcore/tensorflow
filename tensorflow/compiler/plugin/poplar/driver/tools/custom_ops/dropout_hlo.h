@@ -40,6 +40,7 @@ class HloDropout : public HloPoplarInstruction {
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
+  bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
   // Probability of a given element being set to zero.

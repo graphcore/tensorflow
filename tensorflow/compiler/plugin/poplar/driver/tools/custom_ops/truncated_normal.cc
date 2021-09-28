@@ -54,6 +54,10 @@ HloTruncatedNormalInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloTruncatedNormalInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloTruncatedNormalInstruction::IsPopOpsElementwise() const {
   return false;
 }

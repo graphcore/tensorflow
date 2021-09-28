@@ -51,6 +51,7 @@ const FindConsumersExtensionResults HloCopyInto::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloCopyInto::AllowNonInplaceLowering() const { return false; }
 bool HloCopyInto::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction> HloCopyInto::CloneWithNewOperandsImpl(

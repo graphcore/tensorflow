@@ -43,6 +43,8 @@ const FindConsumersExtensionResults HloAssert::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloAssert::AllowNonInplaceLowering() const { return false; }
+
 bool HloAssert::IsPopOpsElementwise() const { return false; }
 
 bool HloAssert::AllocatingOutput() const { return false; }

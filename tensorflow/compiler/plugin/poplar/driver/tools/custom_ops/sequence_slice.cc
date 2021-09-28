@@ -81,6 +81,10 @@ const FindConsumersExtensionResults HloSequenceSliceInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloSequenceSliceInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloSequenceSliceInstruction::IsPopOpsElementwise() const { return false; }
 
 bool HloSequenceSliceInstruction::ZeroUnused() const { return zero_unused; }

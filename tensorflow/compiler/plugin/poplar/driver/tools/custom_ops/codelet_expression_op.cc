@@ -62,6 +62,10 @@ HloCodeletExpressionOpInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloCodeletExpressionOpInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
 bool HloCodeletExpressionOpInstruction::IsPopOpsElementwise() const {
   return true;
 }

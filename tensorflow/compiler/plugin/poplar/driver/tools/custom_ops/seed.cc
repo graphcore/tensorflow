@@ -50,6 +50,8 @@ const FindConsumersExtensionResults HloSeed::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloSeed::AllowNonInplaceLowering() const { return false; }
+
 bool HloSeed::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloSeed::ExtraPoplarAttributesToStringImpl(

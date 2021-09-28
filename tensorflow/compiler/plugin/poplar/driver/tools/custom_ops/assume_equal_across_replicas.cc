@@ -46,6 +46,9 @@ const FindConsumersExtensionResults HloAssumeEqualAcrossReplicas::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloAssumeEqualAcrossReplicas::AllowNonInplaceLowering() const {
+  return false;
+}
 bool HloAssumeEqualAcrossReplicas::IsPopOpsElementwise() const { return false; }
 bool HloAssumeEqualAcrossReplicas::AllocatingOutput() const { return false; }
 

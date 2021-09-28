@@ -65,6 +65,8 @@ const FindConsumersExtensionResults HloScaledInplaceBase::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloScaledInplaceBase::AllowNonInplaceLowering() const { return false; }
+
 bool HloScaledInplaceBase::IsPopOpsElementwise() const { return true; }
 
 HloOpcode HloScaledInplaceBase::GetOperation() const { return operation_; }

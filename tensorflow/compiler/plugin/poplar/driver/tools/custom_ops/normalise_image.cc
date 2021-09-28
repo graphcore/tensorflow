@@ -48,6 +48,8 @@ const FindConsumersExtensionResults HloNormaliseImage::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloNormaliseImage::AllowNonInplaceLowering() const { return false; }
+
 bool HloNormaliseImage::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction> CreateHloNormaliseImage(

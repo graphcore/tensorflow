@@ -55,6 +55,8 @@ const FindConsumersExtensionResults HloPoolingInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloPoolingInstruction::AllowNonInplaceLowering() const { return false; }
+
 bool HloPoolingInstruction::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string>

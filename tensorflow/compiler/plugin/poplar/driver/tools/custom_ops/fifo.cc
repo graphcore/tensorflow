@@ -59,6 +59,7 @@ const FindConsumersExtensionResults HloFifoInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloFifoInstruction::AllowNonInplaceLowering() const { return false; }
 bool HloFifoInstruction::IsPopOpsElementwise() const { return true; }
 
 std::unique_ptr<HloInstruction> HloFifoInstruction::CloneWithNewOperandsImpl(

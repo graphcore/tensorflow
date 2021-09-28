@@ -59,6 +59,7 @@ const FindConsumersExtensionResults HloHistogramInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloHistogramInstruction::AllowNonInplaceLowering() const { return false; }
 bool HloHistogramInstruction::IsPopOpsElementwise() const { return false; }
 
 bool HloHistogramInstruction::AbsoluteOfInput() const {
@@ -134,6 +135,10 @@ const FindConsumersExtensionResults
 HloHistogramUpdateInstruction::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
+bool HloHistogramUpdateInstruction::AllowNonInplaceLowering() const {
+  return false;
 }
 
 bool HloHistogramUpdateInstruction::IsPopOpsElementwise() const {

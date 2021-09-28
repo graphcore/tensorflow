@@ -142,6 +142,8 @@ const FindConsumersExtensionResults HloRNNFwdInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloRNNFwdInstruction::AllowNonInplaceLowering() const { return false; }
+
 bool HloRNNFwdInstruction::IsPopOpsElementwise() const { return false; }
 
 absl::flat_hash_set<int64> HloRNNBwdInstruction::AllocatingIndices() const {
@@ -168,6 +170,8 @@ const FindConsumersExtensionResults HloRNNBwdInstruction::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
+
+bool HloRNNBwdInstruction::AllowNonInplaceLowering() const { return false; }
 
 bool HloRNNBwdInstruction::IsPopOpsElementwise() const { return false; }
 

@@ -85,6 +85,9 @@ class HloPoplarInstruction : public HloCustomCallInstruction {
   // Returns information about the inplace type and operands.
   HloPoplarInplaceDescription GetInplaceDescription() const;
 
+  // This ops could be inplaced and lowered as non-inplace op.
+  virtual bool AllowNonInplaceLowering() const = 0;
+
   // Returns whether this is an elementwise instruction.
   virtual bool IsPopOpsElementwise() const = 0;
 

@@ -121,6 +121,9 @@ const FindConsumersExtensionResults HloCTCInferenceAndLossBase::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloCTCInferenceAndLossBase::AllowNonInplaceLowering() const {
+  return false;
+}
 bool HloCTCInferenceAndLossBase::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string>

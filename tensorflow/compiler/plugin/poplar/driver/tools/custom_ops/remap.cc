@@ -50,6 +50,8 @@ const FindConsumersExtensionResults HloRemapInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloRemapInstruction::AllowNonInplaceLowering() const { return false; }
+
 bool HloRemapInstruction::IsPopOpsElementwise() const { return true; }
 
 std::unique_ptr<HloInstruction> HloRemapInstruction::CloneWithNewOperandsImpl(

@@ -96,6 +96,11 @@ HloWeightsTransposeChansFlipXYInstruction::FindConsumers(
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
+bool HloWeightsTransposeChansFlipXYInstruction::AllowNonInplaceLowering()
+    const {
+  return false;
+}
+
 bool HloWeightsTransposeChansFlipXYInstruction::IsPopOpsElementwise() const {
   return false;
 }
