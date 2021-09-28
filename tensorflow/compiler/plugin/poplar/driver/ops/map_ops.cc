@@ -795,6 +795,17 @@ static poplar::Tensor GetGradientAccumulationCountTensor(
   return input[0]->AsTensor();
 }
 
+static PipelineVisitor::IterationsType GetIterationsArgument(
+    const HloInstruction* inst, poplar::Graph& graph,
+    DeferredArgRBVectors& inputs) {
+  auto count = GetGradientAccumulationCount(inst);
+  if (count) {
+    return *count;
+  }
+  return PipelineVisitor::CountAndGraph(
+      graph, GetGradientAccumulationCountTensor(inst, inputs));
+}
+
 StatusOr<poplar::program::Program> CreatePipelineOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
@@ -807,7 +818,6 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
                       inst->backend_config<PoplarBackendConfig>());
 
   auto gradient_accumulation_count = GetGradientAccumulationCount(inst);
-  CHECK(static_cast<bool>(gradient_accumulation_count));
 
   int64 repeat_count = cfg.call_config().pipeline_config().repeat_count();
 
@@ -859,7 +869,7 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   // Get the pipeline sequence.
   TF_ASSIGN_OR_RETURN(
       poplar::program::Sequence pipeline_prog,
-      visitor->GetPipelineSequence(*gradient_accumulation_count));
+      visitor->GetPipelineSequence(GetIterationsArgument(inst, graph, inputs)));
   // Increase the counters at the end of each pipeline execution.
   pipeline_prog.add(execution_counters.IncrementLiveCounters());
 

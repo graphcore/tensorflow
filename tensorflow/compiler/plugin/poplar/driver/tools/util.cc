@@ -478,9 +478,6 @@ absl::optional<int64> GetGradientAccumulationCount(const HloInstruction* inst) {
   const auto gradient_accumulation_operand =
       GetGradientAccumulationCountInstruction(inst);
   auto result = GetAccumulationConstantsValue(gradient_accumulation_operand);
-  if (!result) {
-    LOG(FATAL) << "GradientAccumulationCount has to be a constant";
-  }
   return result;
 }
 
@@ -551,9 +548,6 @@ absl::optional<int64> GetResourceUpdateBatchesToAccumulate(
     const HloInstruction* inst) {
   auto result = GetAccumulationConstantsValue(
       GetResourceUpdateNumMiniBatchesInstruction(inst));
-  if (!result) {
-    LOG(FATAL) << "Resource update must have constant accumulation count";
-  }
   return result;
 }
 
