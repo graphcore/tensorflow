@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 
+from absl.testing import parameterized
 from functools import partial
 import numpy as np
 import pva
@@ -53,8 +54,16 @@ from tensorflow.compat.v1 import disable_v2_behavior
 
 disable_v2_behavior()
 
+DYNAMIC_ACCUMULATION_COUNT_CASES = [{
+    'testcase_name': 'Fixed',
+    'dynamic_in': False
+}, {
+    'testcase_name': 'Dynamic',
+    'dynamic_in': True
+}]
 
-class PipeliningTest(test_util.TensorFlowTestCase):
+
+class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
   @test_util.deprecated_graph_mode_only
   def testPipelineNoOutfeedInference(self):
     def stage1(x):
@@ -440,8 +449,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       report_json.assert_pipeline_stages_on_expected_ipu(
           device_mapping, cfg.ipu_model.tiles_per_ipu)
 
+  @parameterized.named_parameters(*DYNAMIC_ACCUMULATION_COUNT_CASES)
   @test_util.deprecated_graph_mode_only
-  def testPipelineWithInfeedsKwargs(self):
+  def testPipelineWithInfeedsKwargs(self, dynamic_in):
     dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
@@ -469,10 +479,10 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     def stage3(x):
       return x
 
-    def my_net(c):
+    def my_net(c, count):
       return pipelining_ops.pipeline(
           [stage1, stage2, stage3],
-          12,
+          count,
           inputs=[c],
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
@@ -480,11 +490,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
+      count_ = array_ops.placeholder(np.int32, shape=[])
+      count = count_ if dynamic_in else 12
 
     with tu.ipu_session() as sess:
 
       with ops.device("/device:IPU:0"):
-        r = ipu_compiler.compile(my_net, inputs=[c])
+        r = ipu_compiler.compile(my_net, inputs=[c, count])
 
       cfg = IPUConfig()
       cfg.auto_select_ipus = 4
@@ -501,7 +513,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
       report_json.parse_log()
-      sess.run(r, {c: 10.01})
+      sess.run(r, {c: 10.01, count_: 12})
       losses_pipeline = sess.run(outfeed_op)
       self.assertAllClose(losses_pipeline, [[
           410.01, 730.01, 650.01, 570.01, 890.01, 410.01, 730.01, 650.01,
@@ -610,8 +622,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         self.assertAllClose(output[0][i], np.ones(x.shape))
         self.assertAllClose(output[1][i], np.ones(y.shape))
 
+  @parameterized.named_parameters(*DYNAMIC_ACCUMULATION_COUNT_CASES)
   @test_util.deprecated_graph_mode_only
-  def testPipelineWithStagesWithConstants(self):
+  def testPipelineWithStagesWithConstants(self, dynamic_in):
     dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
@@ -658,10 +671,10 @@ class PipeliningTest(test_util.TensorFlowTestCase):
           gradient_descent.GradientDescentOptimizer(0.01), func)
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-    def my_net(c):
+    def my_net(c, count):
       return pipelining_ops.pipeline(
           [stage1, stage2, stage3, stage4],
-          12,
+          count,
           inputs=[c],
           optimizer_function=optimizer_function,
           infeed_queue=infeed_queue,
@@ -670,9 +683,11 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
+      count_ = array_ops.placeholder(np.int32, shape=[])
+      count = count_ if dynamic_in else 12
 
     with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[c])
+      r = ipu_compiler.compile(my_net, inputs=[c, count])
 
       cfg = IPUConfig()
       cfg.auto_select_ipus = 4
@@ -687,8 +702,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
       # Run the pipeline twice.
-      sess.run(r, {c: 10.01})
-      sess.run(r, {c: 10.01})
+      sess.run(r, {c: 10.01, count_: 12})
+      sess.run(r, {c: 10.01, count_: 12})
       losses_pipeline = sess.run(outfeed_op)
       # The values have been verified and compared against running the same
       # graph but sharded with gradient accumulation for 12 mini batches.

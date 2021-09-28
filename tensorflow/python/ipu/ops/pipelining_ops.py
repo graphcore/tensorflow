@@ -636,7 +636,7 @@ def pipeline(computational_stages,
 
   name = name if name else "pipeline"
 
-  if not gradient_accumulation_count:
+  if gradient_accumulation_count is None:
     raise ValueError("gradient_accumulation_count must be specified.")
 
   if isinstance(gradient_accumulation_count, int):

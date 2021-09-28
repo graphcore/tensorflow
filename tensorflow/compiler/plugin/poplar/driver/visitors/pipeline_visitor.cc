@@ -621,9 +621,11 @@ static StatusOr<poplar::program::Sequence> VerifyPipelineArgumentsRuntime(
   auto condition_1 =
       popops::expr::Cast(popops::expr::_1 % overlap_length, poplar::BOOL);
   auto condition_2 = popops::expr::_1 < overlap_length;
-  auto cond =
-      popops::map(graph, std::move(condition_1) || std::move(condition_2),
-                  {std::move(accumulation_count_tensor)}, prog, debug_context);
+  // Incase the counter comes from a different graph get the top graph
+  auto counter_graph = graph.getTopLevelGraph();
+  auto cond = popops::map(
+      counter_graph, std::move(condition_1) || std::move(condition_2),
+      {std::move(accumulation_count_tensor)}, prog, debug_context);
   // TODO(samuelh) when poplar provides the option to add an error message,
   // add error messages from Fixed version
   prog.add(poplar::program::AbortOnCondition(cond, debug_context));
@@ -1409,9 +1411,12 @@ ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
           [&](const PipelineVisitor::CountAndGraph i)
               -> poplar::program::Program {
             poplar::program::Sequence result({}, {debug_name_and_id});
-            auto repeat_counter =
-                popops::map(i.graph, (popops::expr::_1 / offsets.size()) - 1,
-                            {i.count}, result, {debug_name_and_id});
+            // Incase the accumulation counter is from a different graph,
+            // just take the top graph for now
+            auto counter_graph = i.graph.getTopLevelGraph();
+            auto repeat_counter = popops::map(
+                counter_graph, (popops::expr::_1 / offsets.size()) - 1,
+                {i.count}, result, {debug_name_and_id});
             result.add(popops::countedForLoop(i.graph, 0, repeat_counter, 1,
                                               repeat_block,
                                               {debug_name_and_id}));
