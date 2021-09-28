@@ -1436,8 +1436,7 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
   EXPECT_TRUE(offloaded);
 
   ReplicatedResourceUpdateElementwiseClustering pass(
-      annotations, partition_replication_factor, global_replication_factor,
-      global_replication_factor);
+      annotations, partition_replication_factor, global_replication_factor);
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
@@ -1496,96 +1495,6 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
   EXPECT_THAT(all_reduce_groups,
               PoplarReplicaGroups::Orthogonal(global_replication_factor /
                                               partition_replication_factor));
-}
-
-TEST_F(TestPartitionReplicationFactor, TestUnsupportedPartitioning) {
-  const std::string hlo = R"(
-  HloModule main
-
-  sum {
-    y = f16[] parameter(1)
-    x = f16[] parameter(0), control-predecessors={y}
-    ROOT add = f16[] add(x, y), backend_config="{\"isInplace\":true}"
-  }
-
-  resource_update {
-    arg0 = f16[128] parameter(0)
-    arg1 = f16[128] parameter(1)
-    arg2 = f16[128] parameter(2)
-
-    arg0_r = f16[128] all-reduce(arg0), to_apply=sum
-    arg2_new = f16[128] add(arg0_r, arg2)
-    arg1_new = f16[128] add(arg1, arg2_new)
-
-    ROOT t = (f16[128],f16[128]) tuple(arg1_new, arg2_new)
-    counter_0 = s32[] constant(4)
-    gac = () custom-call(s32[] counter_0), custom_call_target="GradientAccumulationCount"
-  }
-
-  loop {
-    after-all = token[] after-all()
-    infeed = (f16[128], token[]) infeed(after-all), infeed_config="140121807314576"
-    input = f16[128] get-tuple-element(infeed), index=0
-
-    arg0 = f16[128] parameter(0)
-    arg1 = f16[128] parameter(1)
-
-    add.1 = f16[128] add(input, arg0)
-    call = (f16[128],f16[128]) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
-    gte0 = f16[128] get-tuple-element(call), index=0
-    gte1 = f16[128] get-tuple-element(call), index=1
-    ROOT r = (f16[128],f16[128]) tuple(gte0, gte1)
-  }
-
-  ENTRY e {
-    e.in0 = f16[128] parameter(0)
-    e.in1 = f16[128] parameter(1)
-    loop_call = (f16[128],f16[128]) call(e.in0, e.in1), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
-    gte0 = f16[128] get-tuple-element(loop_call), index=0
-    gte1 = f16[128] get-tuple-element(loop_call), index=1
-    ROOT r = (f16[128],f16[128]) tuple(gte0, gte1)
-  }
-  )";
-
-  auto config = GetModuleConfigForTest();
-  config.set_argument_input_indices({});
-  config.set_resource_input_indices({0, 1});
-  config.set_resource_input_initialized({true, true});
-  config.set_resource_update_to_input_index({0, 1});
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo, config));
-
-  HloInstruction* loop =
-      CHECK_NOTNULL(FindInstruction(module.get(), "loop_call"));
-
-  const uint64 partition_replication_factor = 2;
-  const uint64 ipu_link_domain_replication_factor = 4;
-  const uint64 global_replication_factor = 8;
-
-  CompilerAnnotations annotations(module.get());
-  TF_ASSERT_OK_AND_ASSIGN(
-      bool offloaded,
-      VariablesOffloadAndPartition(
-          annotations, /*remote_memory_supported=*/true,
-          /*minimum_remote_tensor_size=*/4, partition_replication_factor)
-          .Run(module.get()));
-  EXPECT_TRUE(offloaded);
-
-  ReplicatedResourceUpdateElementwiseClustering pass(
-      annotations, partition_replication_factor, global_replication_factor,
-      ipu_link_domain_replication_factor);
-  auto elementwise_comps =
-      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
-  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
-                          pass.GetClustersIn(loop, elementwise_comps));
-  ASSERT_THAT(clusters.size(), 1);
-  auto& cluster = clusters.front();
-  const auto status = pass.OutlineCluster(cluster).status();
-  ASSERT_THAT(status.code(), tensorflow::error::UNIMPLEMENTED);
-  EXPECT_THAT(status.error_message(),
-              ::testing::StartsWith(
-                  "Replicated partitioning is not supported when there are "
-                  "multiple instances per IPU-link domain."));
 }
 
 TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
@@ -1660,8 +1569,7 @@ TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
   EXPECT_TRUE(offloaded);
 
   ReplicatedResourceUpdateElementwiseClustering pass(
-      annotations, partition_replication_factor, global_replication_factor,
-      global_replication_factor);
+      annotations, partition_replication_factor, global_replication_factor);
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
