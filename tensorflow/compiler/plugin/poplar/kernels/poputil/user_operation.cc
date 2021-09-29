@@ -37,22 +37,11 @@ limitations under the License.
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/util/stream_executor_util.h"
 
-#define TF_ASSIGN_OR_DEFAULT(lhs, rexpr, default_value)                        \
-  TF_ASSIGN_OR_DEFAULT_IMPL(                                                   \
-      TF_STATUS_MACROS_CONCAT_NAME(_status_or_value, __COUNTER__), lhs, rexpr, \
-      default_value)
-
-#define TF_ASSIGN_OR_DEFAULT_IMPL(statusor, lhs, rexpr, default_value) \
-  auto statusor = (rexpr);                                             \
-  lhs = (statusor.ok()) ? statusor.ValueOrDie() : (default_value)
-
 using namespace xla::poplarplugin;
 
 namespace tensorflow {
 
 namespace {
-
-static constexpr int32 kApiLevel = 5;
 
 // From kernels/datatsteam/feeds.cc
 void XlaShapesFromAttr(OpKernelConstruction* ctx,
@@ -68,25 +57,6 @@ void XlaShapesFromAttr(OpKernelConstruction* ctx,
     result.emplace_back(TensorShapeToXLAShape(xla_type, shapes[i]));
   }
 }
-
-xla::StatusOr<void*> GetSymbolAddress(void* handle,
-                                      const std::string& sym_name) {
-  void* ptr = nullptr;
-  TF_RETURN_IF_ERROR(
-      Env::Default()->GetSymbolFromLibrary(handle, sym_name.c_str(), &ptr));
-  return ptr;
-}
-
-xla::StatusOr<uint64> GetSymbolAddressAsInt64(void* handle,
-                                              const std::string& sym_name) {
-  // Extract the function from the library. We expect (and require) the user
-  // function to be an undecorated 'C' type symbol
-  // Convert the pointer to a uint64 (attribute map/json doesn't store
-  // pointers).
-  TF_ASSIGN_OR_RETURN(void* addr, GetSymbolAddress(handle, sym_name));
-  return reinterpret_cast<uint64>(addr);
-}
-
 }  // namespace
 
 class PoputilUserOpBase : public XlaOpKernel, public IpuOpKernel {
@@ -110,34 +80,9 @@ class PoputilUserOpBase : public XlaOpKernel, public IpuOpKernel {
 
   virtual void Compile(XlaOpKernelContext* context) override {}
 
-  Status LoadLibrary(void** handle, XlaOpKernelContext* context) {
-    TF_RETURN_IF_ERROR(
-        Env::Default()->LoadLibrary(library_path.c_str(), handle));
-
-    TF_ASSIGN_OR_DEFAULT(const void* api_level_ptr,
-                         GetSymbolAddress(*handle, "custom_op_api_level"),
-                         nullptr);
-
-    int32 api_level =
-        api_level_ptr ? *reinterpret_cast<const int32*>(api_level_ptr) : 0;
-
-    if (api_level != kApiLevel) {
-      return xla::InternalErrorStrCat("Api level of module ", library_path,
-                                      ", op name ", op_name, " is ", api_level,
-                                      ", expected ", kApiLevel,
-                                      ". See section `API Level Versioning` in "
-                                      "documentation for more details.");
-    }
-
-    // Initialize the symbols which are common to all types of user op.
-    TF_ASSIGN_OR_RETURN(int64 fn_ptr,
-                        GetSymbolAddressAsInt64(*handle, op_name));
-
-    attribute_map_.AddAttribute("operation_fn", fn_ptr);
-    return Status::OK();
-  }
-
   void CreateCustomCall(XlaOpKernelContext* context) {
+    attribute_map_.AddAttribute("op_name", op_name);
+    attribute_map_.AddAttribute("library_path", library_path);
     attribute_map_.AddAttribute("gradient_size", gradient_size);
     attribute_map_.AddAttribute("partial_derivative_index", pd_index);
     attribute_map_.AddAttribute("attributes", attributes);
@@ -197,32 +142,13 @@ class PoputilUserOp : public PoputilUserOpBase {
   }
 
   void Compile(XlaOpKernelContext* context) final {
-    OP_REQUIRES_OK(context, LoadSymbols(context));
+    attribute_map_.AddAttribute("gp_path", gp_path);
+    attribute_map_.AddAttribute("is_user_read_write", false);
     // Set up all the context information to actually create the custom call.
     CreateCustomCall(context);
   }
 
  private:
-  Status LoadSymbols(XlaOpKernelContext* context) {
-    void* handle;
-    TF_RETURN_IF_ERROR(LoadLibrary(&handle, context));
-
-    // Handle the metadata specific to this type of user op.
-    TF_ASSIGN_OR_DEFAULT(int64 metadata_fn_ptr,
-                         GetSymbolAddressAsInt64(handle, op_name + "_metadata"),
-                         0l);
-    TF_ASSIGN_OR_DEFAULT(
-        int64 allocator_fn_ptr,
-        GetSymbolAddressAsInt64(handle, op_name + "_allocator"), 0l);
-
-    attribute_map_.AddAttribute("metadata_function", metadata_fn_ptr);
-    attribute_map_.AddAttribute("allocator_function", allocator_fn_ptr);
-    attribute_map_.AddAttribute("gp_path", gp_path);
-    attribute_map_.AddAttribute("is_user_read_write", false);
-
-    return Status::OK();
-  }
-
   TF_DISALLOW_COPY_AND_ASSIGN(PoputilUserOp);
 
   std::string gp_path;
@@ -234,14 +160,9 @@ class PoputilUserReadWriteOp : public PoputilUserOpBase {
       : PoputilUserOpBase(context) {}
 
   void Compile(XlaOpKernelContext* context) final {
-    void* handle;
-    OP_REQUIRES_OK(context, LoadLibrary(&handle, context));
-
     attribute_map_.AddAttribute("metadata_function", static_cast<int64>(0));
     attribute_map_.AddAttribute("allocator_function", static_cast<int64>(0));
-
-    std::string null_string = "";
-    attribute_map_.AddAttribute("gp_path", null_string);
+    attribute_map_.AddAttribute("gp_path", std::string());
     attribute_map_.AddAttribute("is_user_read_write", true);
 
     // Set up all the context information to actually create the custom call.
@@ -250,8 +171,6 @@ class PoputilUserReadWriteOp : public PoputilUserOpBase {
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PoputilUserReadWriteOp);
-
-  std::string gp_path;
 };
 
 REGISTER_IPU_OP("IpuUserOp", PoputilUserOp);
