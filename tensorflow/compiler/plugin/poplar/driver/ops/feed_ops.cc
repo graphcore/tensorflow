@@ -98,8 +98,12 @@ Status CreatePoplarD2HFIFO(
     const std::string& handle, poplar::Graph& graph, poplar::Tensor& in,
     poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  auto fifo =
-      graph.addDeviceToHostFIFO(handle, in.elementType(), in.numElements());
+  poplar::OptionFlags fifo_options;
+  fifo_options.set("bufferingDepth",
+                   std::to_string(outfeed_config.prefetch_depth()));
+
+  auto fifo = graph.addDeviceToHostFIFO(handle, in.elementType(),
+                                        in.numElements(), fifo_options);
 
   seq.add(poplar::program::Copy(in, fifo, false, {debug_name_and_id}));
 
