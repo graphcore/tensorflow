@@ -94,7 +94,8 @@ class IPUOutfeedQueue:
       outfeed_mode=None,
       device_ordinal=0,
       replication_factor=None,  # pylint: disable=unused-argument
-      io_batch_size=1):
+      io_batch_size=1,  # pylint: disable=unused-argument
+      buffer_depth=1):
     """Creates an IPUOutfeedQueue object.
 
     Args:
@@ -107,6 +108,8 @@ class IPUOutfeedQueue:
         device_ordinal: ordinal of the IPU device on which this queue will be
           used. By default the queue will be used on "/device/IPU:0".
         io_batch_size: Deprecated.
+        buffer_depth: The maximum number of elements Poplar can buffer in
+          external memory before blocking the device.
 
     Raises:
       ValueError: if the types or values are incorrect
@@ -126,6 +129,9 @@ class IPUOutfeedQueue:
     if device_ordinal < 0:
       raise ValueError('Device ordinal must be >= 0')
 
+    if buffer_depth <= 0:
+      raise ValueError('Outfeed buffer depth cannot be less than 1')
+
     self._outfeed_all = self._outfeed_mode == IPUOutfeedMode.ALL
     self._device_ordinal = device_ordinal
     self._feed_name = _generate_unique_name()
@@ -133,6 +139,7 @@ class IPUOutfeedQueue:
     self._operations = []
     self._structure = None
     self._device_str = '/device:IPU:{}'.format(str(device_ordinal))
+    self._buffer_depth = buffer_depth
 
     # Helper to handle async dequeue
     self._enqueuing_thread = None
@@ -230,6 +237,7 @@ class IPUOutfeedQueue:
           flat_tensors,
           output_shapes=self._flat_shapes,
           outfeed_mode=self._outfeed_mode.value,
+          prefetch_depth=self._buffer_depth,
           feed_id=self._feed_name)
 
     self._operations.append(outfeed_op)
