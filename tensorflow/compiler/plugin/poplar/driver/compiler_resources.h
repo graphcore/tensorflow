@@ -36,6 +36,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/prng_seed_state.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/execution_counter_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
@@ -185,6 +186,8 @@ struct CompilerResources {
 
   // The implementation of the progress bar.
   std::unique_ptr<ProgressBarBase> progress_bar;
+
+  PrngSeedState prng_seed_state;
 
   CompilerResources(
       HloModule* module, const CompilerInformation& information,

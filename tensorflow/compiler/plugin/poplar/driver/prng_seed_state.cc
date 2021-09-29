@@ -45,6 +45,23 @@ std::unique_ptr<poputil::graphfn::TensorFunction> CreateChangeHwSeedsFn(
 }
 }  // namespace
 
+/*static*/ PrngSeedState PrngSeedState::SetupSeed(
+    poplar::Graph& graph, poplar::Tensor& seed,
+    poplar::program::Sequence& seq) {
+  const poplar::DebugContext& debug_context = {"__seed"};
+  PoplarOpDefDebugInfo debug_info(debug_context, "InitializeSeed");
+
+  poprand::setSeed(graph, seed, 0, seq, {debug_info, "set"});
+  auto differing_hw_seed = poplar::getHwSeeds(graph, seq, {debug_info, "get"});
+
+  // We want the behaviour to be consistent whether we're running
+  // with single or multiple seeds, so even when there's no replication
+  // we pretend that there's a separate identical seed and do everything
+  // else as normal.
+  return PrngSeedState(graph, StochasticRoundingMethod_DifferingSeeds,
+                       differing_hw_seed, differing_hw_seed);
+}
+
 /*static*/ PrngSeedState PrngSeedState::SetupSeeds(
     poplar::Graph& graph, poplar::Tensor& identical_seed,
     poplar::Tensor& differing_seed, poplar::program::Sequence& seq) {
@@ -57,7 +74,7 @@ std::unique_ptr<poputil::graphfn::TensorFunction> CreateChangeHwSeedsFn(
 
   poprand::setSeed(graph, differing_seed, 0, seq, {debug_info, "setDistinct"});
   auto differing_hw_seed =
-      poplar::getHwSeeds(graph, seq, {debug_info, "getIdenticalHw"});
+      poplar::getHwSeeds(graph, seq, {debug_info, "getDistinctHw"});
 
   // Speciifying DifferingSeeds since the last seed set was the differing one.
   return PrngSeedState(graph, StochasticRoundingMethod_DifferingSeeds,

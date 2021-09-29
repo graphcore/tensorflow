@@ -23,6 +23,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <fstream>
+#include <gcl/Collectives.hpp>
 #include <gcl/TileAllocation.hpp>
 #include <limits>
 #include <mutex>
@@ -30,10 +31,12 @@ limitations under the License.
 #include <poplar/CSRFunctions.hpp>
 #include <poplar/CodeletFileType.hpp>
 #include <poplar/CycleCount.hpp>
+#include <poplar/RandomSeed.hpp>
 #include <poplar/exceptions.hpp>
 #include <poplar/replication_factor.hpp>
 #include <poplin/codelets.hpp>
 #include <popnn/codelets.hpp>
+#include <popops/Cast.hpp>
 #include <popops/codelets.hpp>
 #include <poprand/RandomGen.hpp>
 #include <poprand/codelets.hpp>
@@ -536,7 +539,7 @@ HloPrintOptions GetPrintOptions() {
 }
 
 StatusOr<poplar::program::Program> InitializeSeed(
-    poplar::Graph& graph, int replication_factor,
+    poplar::Graph& graph, int replication_factor, CompilerResources& resources,
     const poplar::DebugContext& debug_context = {"__seed"}) {
   PoplarOpDefDebugInfo debug_info(debug_context, "InitializeSeed");
 
@@ -560,7 +563,29 @@ StatusOr<poplar::program::Program> InitializeSeed(
                         initializer.GetData(ShapeUtil::MakeShape(U32, {2})));
     TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, seed, literal));
   }
-  poprand::setSeed(graph, seed, 0, seq, {debug_info, "set"});
+
+  if (replication_factor > 1 && resources.enable_experimental_prng_stability) {
+    // When running a replicated graph we need an additional seed, which is
+    // identical for all IPUs. This gets used to ensure determinism when
+    // performing stochastic rounding.
+    poplar::Tensor identical_seed =
+        // Using MEAN to preserve the seed value incase it's been explicitly set
+        // to be the same for each replica.
+        popops::cast(graph,
+                     gcl::allReduceCrossReplica(
+                         graph, popops::cast(graph, seed, poplar::FLOAT, seq),
+                         popops::CollectiveOperator::MEAN, seq,
+                         {debug_info, "allReduceSeed"}),
+                     poplar::UNSIGNED_INT, seq);
+
+    resources.prng_seed_state =
+        PrngSeedState::SetupSeeds(graph, identical_seed, seed, seq);
+  } else {
+    resources.prng_seed_state = PrngSeedState::SetupSeed(graph, seed, seq);
+  }
+
+  resources.prng_seed_state.ChangeStochasticRoundingMethod(
+      StochasticRoundingMethod_DifferingSeeds, seq);
 
   return seq;
 }
@@ -1681,6 +1706,11 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     TF_RETURN_IF_ERROR(CreatePoplarGraphs(resources, module, poplar_executor));
     auto& main_graph = GetMasterGraph(resources);
 
+    // Set up the random seed.
+    TF_ASSIGN_OR_RETURN(
+        auto seed_setup,
+        InitializeSeed(main_graph, replication_factor, resources));
+
     EntryVisitor visitor(resources, entry);
     try {
       Tracepoint tracepoint("PoplarGraphConstruction");
@@ -1722,9 +1752,6 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       main_program.add(poplar::program::Sync(poplar::SyncType::GLOBAL));
     }
 
-    // Set up the random seed.
-    TF_ASSIGN_OR_RETURN(auto seed_setup,
-                        InitializeSeed(main_graph, replication_factor));
     main_program.add(seed_setup);
 
     // Set up the floating point control register if required
