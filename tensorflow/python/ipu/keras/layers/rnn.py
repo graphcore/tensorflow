@@ -68,6 +68,8 @@ class _PopnnRNN(ipu_layer.IPULayer):
                return_sequences=False,
                time_major=False,
                stateful=False,
+               available_memory_proportion_fwd=None,
+               available_memory_proportion_bwd=None,
                **kwargs):
     super(_PopnnRNN, self).__init__(**kwargs)
 
@@ -90,6 +92,10 @@ class _PopnnRNN(ipu_layer.IPULayer):
       raise ValueError("Only support float16, float32, provided %s" %
                        self._plain_dtype)
     # Layer self.dtype is type name, the original DType object is kept here.
+
+    if available_memory_proportion_bwd is None:
+      available_memory_proportion_bwd = available_memory_proportion_fwd
+
     self._activation = activation
     self._recurrent_activation = recurrent_activation
     self._partials_dtype = partials_dtype
@@ -101,6 +107,8 @@ class _PopnnRNN(ipu_layer.IPULayer):
     self._return_sequences = return_sequences
     self._time_major = time_major
     self._stateful = stateful
+    self._available_memory_proportion_fwd = available_memory_proportion_fwd
+    self._available_memory_proportion_bwd = available_memory_proportion_bwd
 
     # Create the initializers.
     if kernel_initializer is None:
@@ -338,6 +346,15 @@ class PopnnLSTM(_PopnnRNN):
       RNN calculation. However, most TensorFlow data is batch-major, so by
       default this function accepts input and emits output in batch-major
       form.
+    available_memory_proportion_fwd: Maximum fraction of IPU memory which can
+      be used as temporary scratch space during computation, for the forward
+      propagation layer. A value of -1. or None indicates that the default in
+      Popnn should be used. If available_memory_proportion_bwd is set to None,
+      then this value applies to both phases.
+    available_memory_proportion_bwd: Maximum fraction of IPU memory which can
+      be used as temporary scratch space during computation, for the backward
+      propagation layer. A value of -1. or None indicates that the default in
+      Popnn should be used.
   """
   # pylint:enable=line-too-long
   _rnn_mode = POPNN_LSTM
@@ -372,6 +389,8 @@ class PopnnLSTM(_PopnnRNN):
       partials_dtype=dtypes.float32,
       seed=None,
       time_major=False,
+      available_memory_proportion_fwd=None,
+      available_memory_proportion_bwd=None,
       **kwargs):
 
     if implementation == 2:
@@ -424,22 +443,24 @@ class PopnnLSTM(_PopnnRNN):
     if unroll:
       raise ValueError("IPU custom LSTM layer does not support unroll = True.")
 
-    super(PopnnLSTM,
-          self).__init__(num_units=units,
-                         activation=activation,
-                         recurrent_activation=recurrent_activation,
-                         partials_dtype=partials_dtype,
-                         seed=seed,
-                         kernel_initializer=kernel_initializer,
-                         recurrent_initializer=recurrent_initializer,
-                         bias_initializer=bias_initializer,
-                         dropout=dropout,
-                         dropout_seed=dropout_seed,
-                         return_state=return_state,
-                         return_sequences=return_sequences,
-                         time_major=time_major,
-                         stateful=stateful,
-                         **kwargs)
+    super(PopnnLSTM, self).__init__(
+        num_units=units,
+        activation=activation,
+        recurrent_activation=recurrent_activation,
+        partials_dtype=partials_dtype,
+        seed=seed,
+        kernel_initializer=kernel_initializer,
+        recurrent_initializer=recurrent_initializer,
+        bias_initializer=bias_initializer,
+        dropout=dropout,
+        dropout_seed=dropout_seed,
+        return_state=return_state,
+        return_sequences=return_sequences,
+        time_major=time_major,
+        stateful=stateful,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd,
+        **kwargs)
     self.unit_forget_bias = unit_forget_bias
 
   def build(self, input_shape):
@@ -541,6 +562,13 @@ class PopnnLSTM(_PopnnRNN):
     bias_tensor = array_ops.reshape(
         self.biases, [self._num_gates_per_layer, self._num_units])
 
+    available_memory_proportion_fwd = -1. \
+        if self._available_memory_proportion_fwd is None \
+        else self._available_memory_proportion_fwd
+    available_memory_proportion_bwd = -1. \
+        if self._available_memory_proportion_bwd is None \
+        else self._available_memory_proportion_bwd
+
     output, output_h, output_c, _ = gen_popnn_ops.popnn_lstm_layer(
         inputs=inputs,
         activation=self._activation,
@@ -552,7 +580,9 @@ class PopnnLSTM(_PopnnRNN):
         input_c_state=c,
         is_training=training,
         partials_dtype=self._partials_dtype,
-        name=self._name)
+        name=self._name,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd)
 
     if self._stateful:
       updates = []
@@ -719,6 +749,15 @@ class PopnnGRU(_PopnnRNN):
     reset_after:  GRU convention (whether to apply reset gate
       after or before matrix multiplication). False = "before",
       True = "after" (default).
+    available_memory_proportion_fwd: Maximum fraction of IPU memory which can
+      be used as temporary scratch space during computation, for the forward
+      propagation layer. A value of -1. or None indicates that the default in
+      Popnn should be used. If available_memory_proportion_bwd is set to None,
+      then this value applies to both phases.
+    available_memory_proportion_bwd: Maximum fraction of IPU memory which can
+      be used as temporary scratch space during computation, for the backward
+      propagation layer. A value of -1. or None indicates that the default in
+      Popnn should be used.
   """
   # pylint:enable=line-too-long
   _rnn_mode = POPNN_GRU
@@ -753,6 +792,8 @@ class PopnnGRU(_PopnnRNN):
       seed=None,
       partials_dtype=dtypes.float32,
       time_major=False,
+      available_memory_proportion_fwd=None,
+      available_memory_proportion_bwd=None,
       **kwargs):
 
     if implementation == 2:
@@ -806,21 +847,24 @@ class PopnnGRU(_PopnnRNN):
 
     self._reset_after = reset_after
 
-    super(PopnnGRU, self).__init__(num_units=units,
-                                   activation=activation,
-                                   recurrent_activation=recurrent_activation,
-                                   partials_dtype=partials_dtype,
-                                   seed=seed,
-                                   kernel_initializer=kernel_initializer,
-                                   recurrent_initializer=recurrent_initializer,
-                                   bias_initializer=bias_initializer,
-                                   dropout=dropout,
-                                   dropout_seed=dropout_seed,
-                                   return_state=return_state,
-                                   return_sequences=return_sequences,
-                                   time_major=time_major,
-                                   stateful=stateful,
-                                   **kwargs)
+    super(PopnnGRU, self).__init__(
+        num_units=units,
+        activation=activation,
+        recurrent_activation=recurrent_activation,
+        partials_dtype=partials_dtype,
+        seed=seed,
+        kernel_initializer=kernel_initializer,
+        recurrent_initializer=recurrent_initializer,
+        bias_initializer=bias_initializer,
+        dropout=dropout,
+        dropout_seed=dropout_seed,
+        return_state=return_state,
+        return_sequences=return_sequences,
+        time_major=time_major,
+        stateful=stateful,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd,
+        **kwargs)
 
   def _canonical_bias_shape(self, unused_layer):
     """Shapes of Popnn canonical bias tensors for given layer."""
@@ -913,6 +957,13 @@ class PopnnGRU(_PopnnRNN):
       bias_tensor = array_ops.reshape(
           self.biases, [self._num_gates_per_layer, self._num_units])
 
+    available_memory_proportion_fwd = -1. \
+        if self._available_memory_proportion_fwd is None \
+        else self._available_memory_proportion_fwd
+    available_memory_proportion_bwd = -1. \
+        if self._available_memory_proportion_bwd is None \
+        else self._available_memory_proportion_bwd
+
     output, output_state, _ = gen_popnn_ops.popnn_gru_layer(
         inputs=inputs,
         activation=self._activation,
@@ -924,7 +975,9 @@ class PopnnGRU(_PopnnRNN):
         is_training=training,
         partials_dtype=self._partials_dtype,
         name=self._name,
-        reset_after=self._reset_after)
+        reset_after=self._reset_after,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd)
 
     if self._stateful:
       updates = [state_ops.assign(self.states[0], output_state)]
