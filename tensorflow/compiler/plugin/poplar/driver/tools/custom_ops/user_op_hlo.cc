@@ -22,9 +22,30 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
+#include "tensorflow/core/platform/env.h"
 
 namespace xla {
 namespace poplarplugin {
+namespace {
+
+#define TF_ASSIGN_OR_DEFAULT(lhs, rexpr, default_value)                        \
+  TF_ASSIGN_OR_DEFAULT_IMPL(                                                   \
+      TF_STATUS_MACROS_CONCAT_NAME(_status_or_value, __COUNTER__), lhs, rexpr, \
+      default_value)
+
+#define TF_ASSIGN_OR_DEFAULT_IMPL(statusor, lhs, rexpr, default_value) \
+  auto statusor = (rexpr);                                             \
+  lhs = (statusor.ok()) ? statusor.ValueOrDie() : (default_value)
+
+static constexpr int32 kApiLevel = 5;
+
+StatusOr<void*> GetSymbolAddress(void* handle, const std::string& symbol_name) {
+  void* ptr = nullptr;
+  TF_RETURN_IF_ERROR(tensorflow::Env::Default()->GetSymbolFromLibrary(
+      handle, symbol_name.c_str(), &ptr));
+  return ptr;
+}
+}  // namespace
 
 HloUserOpInstruction::HloUserOpInstruction(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
@@ -53,6 +74,7 @@ HloUserOpInstruction::HloUserOpInstruction(
   bool stateless = false;
 
   if (metadata_function_ptr_ != nullptr) {
+    CHECK(!is_user_read_write_);
     auto metadata = reinterpret_cast<MetadataFn>(metadata_function_ptr_);
 
     metadata(metadata_.allocating_indices_,
@@ -184,20 +206,11 @@ static HloPoplarInstructionFactory user_op_factory(
         -> StatusOr<std::unique_ptr<xla::HloInstruction>> {
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
 
-      TF_ASSIGN_OR_RETURN(uint64 operation_fn,
-                          attribute_map.GetAttributeAsUInt64("operation_fn"));
-      void* operation_fn_ptr = reinterpret_cast<void*>(operation_fn);
+      TF_ASSIGN_OR_RETURN(std::string op_name,
+                          attribute_map.GetAttributeAsString("op_name"));
 
-      TF_ASSIGN_OR_RETURN(
-          uint64 metadata_function,
-          attribute_map.GetAttributeAsUInt64("metadata_function"));
-      void* metadata_function_ptr = reinterpret_cast<void*>(metadata_function);
-
-      TF_ASSIGN_OR_RETURN(
-          uint64 allocator_function,
-          attribute_map.GetAttributeAsUInt64("allocator_function"));
-      void* allocator_function_ptr =
-          reinterpret_cast<void*>(allocator_function);
+      TF_ASSIGN_OR_RETURN(std::string library_path,
+                          attribute_map.GetAttributeAsString("library_path"));
 
       TF_ASSIGN_OR_RETURN(std::string gp_path,
                           attribute_map.GetAttributeAsString("gp_path"));
@@ -216,11 +229,49 @@ static HloPoplarInstructionFactory user_op_factory(
       TF_ASSIGN_OR_RETURN(std::string attributes,
                           attribute_map.GetAttributeAsString("attributes"));
 
+      // Load the relevant symbols.
+      void* handle;
+      TF_RETURN_IF_ERROR(tensorflow::Env::Default()->LoadDynamicLibrary(
+          library_path.c_str(), &handle));
+
+      TF_ASSIGN_OR_DEFAULT(void* api_level_ptr,
+                           GetSymbolAddress(handle, "custom_op_api_level"),
+                           nullptr);
+
+      const int32 api_level =
+          api_level_ptr ? *reinterpret_cast<const int32*>(api_level_ptr) : 0;
+
+      if (api_level != kApiLevel) {
+        return InternalErrorStrCat("Api level of module ", library_path,
+                                   ", op name ", op_name, " is ", api_level,
+                                   ", expected ", kApiLevel,
+                                   ". See section `API Level Versioning` in "
+                                   "documentation for more details.");
+      }
+
+      TF_ASSIGN_OR_RETURN(void* operation_fn_ptr,
+                          GetSymbolAddress(handle, op_name));
+
+      void* metadata_function_ptr = nullptr;
+      void* allocator_function_ptr = nullptr;
+      if (!is_user_read_write) {
+        TF_ASSIGN_OR_DEFAULT(metadata_function_ptr,
+                             GetSymbolAddress(handle, op_name + "_metadata"),
+                             nullptr);
+
+        TF_ASSIGN_OR_DEFAULT(allocator_function_ptr,
+                             GetSymbolAddress(handle, op_name + "_allocator"),
+                             nullptr);
+      }
+
       return CreateUserOp(
           call->operands(), call->shape(), gp_path, operation_fn_ptr,
           metadata_function_ptr, allocator_function_ptr, gradient_size,
           partial_derivative_index, is_user_read_write, attributes);
     });
+
+#undef TF_ASSIGN_OR_DEFAULT
+#undef TF_ASSIGN_OR_DEFAULT_IMPL
 }  // namespace
 
 }  // namespace poplarplugin
