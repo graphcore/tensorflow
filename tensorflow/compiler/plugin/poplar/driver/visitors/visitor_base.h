@@ -207,6 +207,10 @@ class BaseVisitor : public DfsHloVisitor {
   // Scope execution counters.
   ExecutionCounters execution_counters_;
 
+  // Control whether changing seeds is allowed during instruction lowering,
+  // used to improve prng stability.
+  bool allow_seed_changes_ = false;
+
  private:
   Status CreateSequenceGroupedByInstruction(
       const HloInstruction* inst, const poplar::program::Sequence& seq);

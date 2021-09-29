@@ -88,6 +88,23 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
     stochastic_rounding_enabled_ = new_stochastic_rounding_enabled;
   }
 
+  if (allow_seed_changes_ && stochastic_rounding_enabled_) {
+    poplar::DebugNameAndId debug_name_and_id{"changeSRMethod"};
+    poplar::program::Sequence seq({}, debug_name_and_id);
+
+    const auto new_sr_method =
+        poplar_backend_config.stochastic_rounding_method();
+    if (resources_.prng_seed_state.ChangeStochasticRoundingMethod(
+            new_sr_method, seq, debug_name_and_id)) {
+      AddSequenceForInstruction(inst, seq);
+    }
+
+    VLOG(3) << "Using SR method "
+            << StochasticRoundingMethod_Name(
+                   resources_.prng_seed_state.GetStochasticRoundingMethod())
+            << " for instruction '" << inst->name() << "'";
+  }
+
   return Status::OK();
 }
 
@@ -95,7 +112,8 @@ BaseVisitor::BaseVisitor(CompilerResources& resources,
                          const poplar::DebugNameAndId& debug_name_and_id)
     : resources_(resources),
       dnai_(debug_name_and_id),
-      execution_counters_(resources, debug_name_and_id) {
+      execution_counters_(resources, debug_name_and_id),
+      allow_seed_changes_(resources.enable_experimental_prng_stability) {
   stochastic_rounding_enabled_ =
       resources_.global_floating_point_behaviour.esr();
 

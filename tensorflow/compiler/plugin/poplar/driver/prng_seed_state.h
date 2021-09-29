@@ -32,6 +32,10 @@ namespace poplarplugin {
 // flag.
 class PrngSeedState {
  public:
+  // Create a PrngSeedState from single or multiple seeds. This corresponds
+  // to whether we're running with replication (2 seeds) or not (1 seed).
+  static PrngSeedState SetupSeed(poplar::Graph& graph, poplar::Tensor& seed,
+                                 poplar::program::Sequence& seq);
   static PrngSeedState SetupSeeds(poplar::Graph& graph,
                                   poplar::Tensor& identical_seed,
                                   poplar::Tensor& differing_seed,

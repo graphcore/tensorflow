@@ -258,6 +258,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     # pylint: disable=line-too-long
     ok = [
         '__seed/set/setMasterSeed',
+        '__seed/get/getSeeds',
         'matmul/dot*/Conv_1',
         'add_0/fusion/Op/Add',
         'Sigmoid/sigmoid/Nonlinearity',

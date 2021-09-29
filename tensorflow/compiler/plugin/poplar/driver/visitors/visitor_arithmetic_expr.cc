@@ -46,7 +46,13 @@ ArithmeticExprVisitor::ArithmeticExprVisitor(
     const poplar::DebugNameAndId& debug_name_and_id)
     : BaseVisitor(res, debug_name_and_id),
       inputs_(std::move(inputs)),
-      caller_(caller) {}
+      caller_(caller) {
+  // We don need to change the seed as we visit instructions, since we will not
+  // be executing them individually but as fused unit via a single poplar call.
+  // Hence the seed we need to use will be set by the calling
+  // instruction/visitor.
+  allow_seed_changes_ = false;
+}
 
 StatusOr<std::unique_ptr<popops::expr::Expr>>
 ArithmeticExprVisitor::FindExpressionInput(const HloInstruction* inst) {
