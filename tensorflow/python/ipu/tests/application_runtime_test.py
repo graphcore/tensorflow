@@ -40,7 +40,7 @@ from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.ipu import ipu_compiler, scopes, loops, ipu_infeed_queue, ipu_outfeed_queue
 from tensorflow.python.ipu import dataset_benchmark
 from tensorflow.python.ipu import rand_ops
-from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu import config
 from tensorflow.python.ipu.ops import application_compile_op
 from tensorflow.compat.v1 import disable_v2_behavior
 from tensorflow.python.training import momentum
@@ -151,7 +151,7 @@ def run_and_export_model(tmp_dir,
     saver = train.Saver()
 
   # Setup and acquire an IPU device:
-  cfg = IPUConfig()
+  cfg = config.IPUConfig()
   cfg.auto_select_ipus = 2 if pipelined else 1
   tu.add_hw_ci_connection_options(cfg)
   cfg.configure_ipu_system()
@@ -211,6 +211,8 @@ def run_and_export_model(tmp_dir,
 
     print(f"  Compiling and exporting...")
     sess.run(compile_op)
+
+  config.reset_ipu_configuration()
 
   return model_ref
 
@@ -513,7 +515,6 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
       infeeds = (images,)
       result = embedded_runtime.embedded_runtime_call(infeeds, ctx)
 
-      session.run(variables.global_variables_initializer())
       for j in range(n_test):
         images_host = images_all[j, :, :]
 
@@ -681,7 +682,7 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
                                      outfeed_queue=outfeed_queue)
 
     with tu.ipu_session() as sess:
-      cfg = IPUConfig()
+      cfg = config.IPUConfig()
       cfg.auto_select_ipus = 2
       tu.add_hw_ci_connection_options(cfg)
       cfg.configure_ipu_system()
@@ -692,6 +693,7 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
         compile_op = application_compile_op.experimental_application_compile_op(
             my_net, output_path=poplar_exec_filepath)
         sess.run(compile_op)
+        config.reset_ipu_configuration()
 
         ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
                                                       "pipeline_flush")
@@ -724,7 +726,7 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
       return loops.repeat(10, body, [], infeed_queue)
 
     with tu.ipu_session() as sess:
-      cfg = IPUConfig()
+      cfg = config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.io_tiles.num_io_tiles = 32
       cfg.io_tiles.place_ops_on_io_tiles = True
@@ -737,6 +739,7 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
         compile_op = application_compile_op.experimental_application_compile_op(
             my_net, output_path=poplar_exec_filepath)
         sess.run(compile_op)
+        config.reset_ipu_configuration()
 
         ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
                                                       "io_overlap_flush")
@@ -775,7 +778,7 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
     c_ph = array_ops.placeholder(dtypes.float32, shape=(2), name='c')
 
     with tu.ipu_session() as sess, tempfile.TemporaryDirectory() as tmp_dir:
-      cfg = IPUConfig()
+      cfg = config.IPUConfig()
       cfg.auto_select_ipus = 1
       tu.add_hw_ci_connection_options(cfg)
       cfg.configure_ipu_system()
@@ -786,6 +789,7 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
       compile_op = application_compile_op.experimental_application_compile_op(
           model, output_path=poplar_exec_filepath)
       sess.run(compile_op)
+      config.reset_ipu_configuration()
 
       ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
                                                     "multiple_infeeds")
@@ -817,7 +821,7 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
       poplar_exec_filepath = os.path.join(tmp_dir.name,
                                           "application.poplar_exec")
 
-      cfg = IPUConfig()
+      cfg = config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.floating_point_behaviour.div0 = True
       tu.add_hw_ci_connection_options(cfg)
@@ -828,6 +832,7 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
           my_net, output_path=poplar_exec_filepath)
       with sl.Session() as sess:
         sess.run(compile_op)
+      config.reset_ipu_configuration()
 
       return poplar_exec_filepath
 
