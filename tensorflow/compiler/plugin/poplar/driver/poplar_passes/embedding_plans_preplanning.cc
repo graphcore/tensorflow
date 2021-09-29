@@ -118,18 +118,6 @@ StatusOr<SlicePlanMap> GetSlicePlans(const InputToSliceUsersMap& user_map,
   return result;
 }
 
-// TODO MultiUpdate instructions do not currently support plans.
-StatusOr<SlicePlanMap> GetEmptyPlans(const InputToSliceUsersMap& user_map,
-                                     CompilerResources& res) {
-  SlicePlanMap result;
-  for (auto& pair : user_map) {
-    const HloInstruction* operand = pair.first;
-    res.slice_plans.push_back(popops::SlicePlan());
-    result[operand] = {&res.slice_plans.back(), {}};
-  }
-  return result;
-}
-
 Status PopulateWithPlans(const InputToSliceUsersMap& user_map,
                          const SlicePlanMap& plans, CompilerResources& res) {
   for (auto& pair : user_map) {
@@ -205,9 +193,10 @@ StatusOr<bool> EmbeddingPlansPreplanning::Run(HloModule* module) {
       SlicePlanMap multi_update_add_plans,
       GetSlicePlans(multi_update_adds, resources_, multi_slice_plans));
 
-  // Create empty plans for multi updates.
-  TF_ASSIGN_OR_RETURN(SlicePlanMap multi_update_plans,
-                      GetEmptyPlans(multi_updates, resources_));
+  // Same as above, but for multi-update.
+  TF_ASSIGN_OR_RETURN(
+      SlicePlanMap multi_update_plans,
+      GetSlicePlans(multi_updates, resources_, multi_slice_plans));
 
   // Populate the slice plans in the CompilerResources.
   TF_RETURN_IF_ERROR(

@@ -146,7 +146,7 @@ ENTRY main {
   EXPECT_NE(plan1, plan2);
 }
 
-TEST_F(SlicePlanTest, ShareSliceAndUpdatePlan) {
+TEST_F(SlicePlanTest, ShareSliceAndUpdateAddPlan) {
   const string& hlo_string = R"(
 HloModule main
 
@@ -181,7 +181,7 @@ ENTRY main {
   EXPECT_EQ(plan1, plan2);
 }
 
-TEST_F(SlicePlanTest, ShareMultipleSliceAndUpdatePlan) {
+TEST_F(SlicePlanTest, ShareMultipleSliceAndUpdateAddPlan) {
   const string& hlo_string = R"(
 HloModule main
 
@@ -225,7 +225,7 @@ ENTRY main {
   EXPECT_EQ(plan1, plan3);
 }
 
-TEST_F(SlicePlanTest, DontShareSliceAndUpdatePlan) {
+TEST_F(SlicePlanTest, DontShareSliceAndUpdateAddPlan) {
   const string& hlo_string = R"(
 HloModule main
 
@@ -264,6 +264,120 @@ ENTRY main {
   EXPECT_EQ(plan1, plan2);
   EXPECT_NE(plan1, plan3);
 }
+
+TEST_F(SlicePlanTest, ShareSliceAndUpdatePlan) {
+  const string& hlo_string = R"(
+HloModule main
+
+ENTRY main {
+  input = f32[100,16] parameter(0)
+  offsets = s32[24,1] parameter(1)
+  slice = f32[24,16] custom-call(input, offsets), custom_call_target="MultiSlice"
+  one = f32[] constant(1)
+  big_one = f32[24,16] broadcast(one), dimensions={}
+  slice_modified = f32[24,16] add(slice, big_one)
+  update = f32[100,16] custom-call(input, offsets, slice_modified), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  ROOT t = (f32[24,16], f32[100,16]) tuple(slice, update)
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), false);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  TF_EXPECT_OK(
+      EmbeddingPlansPreplanning(*resources).Run(module.get()).status());
+  auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  auto root = entry_computation->root_instruction();
+  auto slice = root->operand(0);
+  auto update = root->operand(1);
+  TF_ASSERT_OK_AND_ASSIGN(auto plan1, GetSlicePlan(*resources, slice));
+  TF_ASSERT_OK_AND_ASSIGN(auto plan2, GetSlicePlan(*resources, update));
+  EXPECT_EQ(plan1, plan2);
+}
+
+TEST_F(SlicePlanTest, ShareMultipleSliceAndUpdatePlan) {
+  const string& hlo_string = R"(
+HloModule main
+
+ENTRY main {
+  input = f32[100,16] parameter(0)
+  offsets1 = s32[24,1] parameter(1)
+  offsets2 = s32[12,1] parameter(2)
+  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice"
+  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice"
+  one = f32[] constant(1)
+  big_one1 = f32[24,16] broadcast(one), dimensions={}
+  slice1_modified = f32[24,16] add(slice1, big_one1)
+  big_one2 = f32[12,16] broadcast(one), dimensions={}
+  slice2_modified = f32[12,16] add(slice2, big_one2)
+  concat_offsets = s32[36,1] concatenate(offsets1, offsets2), dimensions={0}
+  concat_updates = f32[36,16] concatenate(slice1_modified, slice2_modified), dimensions={0}
+  update = f32[100,16] custom-call(input, concat_offsets, concat_updates), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  ROOT t = (f32[24,16], f32[12,16], f32[100,16]) tuple(slice1, slice2, update)
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), false);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  TF_EXPECT_OK(
+      EmbeddingPlansPreplanning(*resources).Run(module.get()).status());
+  auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  auto root = entry_computation->root_instruction();
+  auto slice = root->operand(0);
+  auto update = root->operand(1);
+  TF_ASSERT_OK_AND_ASSIGN(auto plan1, GetSlicePlan(*resources, slice));
+  TF_ASSERT_OK_AND_ASSIGN(auto plan2, GetSlicePlan(*resources, update));
+  EXPECT_EQ(plan1, plan2);
+}
+
+TEST_F(SlicePlanTest, DontShareSliceAndUpdatePlan) {
+  const string& hlo_string = R"(
+HloModule main
+
+ENTRY main {
+  input = f32[100,16] parameter(0)
+  offsets1 = s32[24,1] parameter(1)
+  offsets2 = s32[12,1] parameter(2)
+  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice"
+  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice"
+  one = f32[] constant(1)
+  big_one1 = f32[24,16] broadcast(one), dimensions={}
+  slice1_modified = f32[24,16] add(slice1, big_one1)
+  update = f32[100,16] custom-call(input, offsets1, slice1_modified), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  ROOT t = (f32[24,16], f32[12,16], f32[100,16]) tuple(slice1, slice2, update)
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), false);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  TF_EXPECT_OK(
+      EmbeddingPlansPreplanning(*resources).Run(module.get()).status());
+  auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  auto root = entry_computation->root_instruction();
+  auto slice1 = root->operand(0);
+  auto slice2 = root->operand(1);
+  auto update = root->operand(2);
+  TF_ASSERT_OK_AND_ASSIGN(auto plan1, GetSlicePlan(*resources, slice1));
+  TF_ASSERT_OK_AND_ASSIGN(auto plan2, GetSlicePlan(*resources, slice2));
+  TF_ASSERT_OK_AND_ASSIGN(auto plan3, GetSlicePlan(*resources, update));
+  EXPECT_EQ(plan1, plan2);
+  EXPECT_NE(plan1, plan3);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
