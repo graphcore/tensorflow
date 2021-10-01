@@ -18,8 +18,10 @@ limitations under the License.
 
 #include "ipu/poplar_executable_data.h"
 #include "popef/Reader.hpp"
+#include "popef/Writer.hpp"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_allocator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_iterator.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/popef_util.h"
 #include "tensorflow/compiler/tf2xla/shape_util.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
 #include "tensorflow/compiler/xla/shape_util.h"
@@ -71,12 +73,20 @@ xla::StatusOr<ipu::TensorShape> ConvertShapeToIpuTensorInfo(
   return ipu::TensorShape{dimensions, data_type};
 }
 
-xla::StatusOr<ipu::TensorShape> ConvertTensorToIpuTensorInfo(
-    const Tensor& tensor) {
+xla::StatusOr<xla::Shape> ConvertTensorToXlaShape(const Tensor& tensor) {
   xla::PrimitiveType xla_type;
   TF_RETURN_IF_ERROR(DataTypeToPrimitiveType(tensor.dtype(), &xla_type));
-  xla::Shape xla_shape = TensorShapeToXLAShape(xla_type, tensor.shape());
-  return ConvertShapeToIpuTensorInfo(xla_shape);
+  return TensorShapeToXLAShape(xla_type, tensor.shape());
+}
+
+xla::StatusOr<popef::TensorInfo> ConvertXlaShapeToPopEFTensorInfo(
+    const xla::Shape& xla_shape) {
+  popef::TensorInfo info;
+  xla::poplarplugin::ToPopEFShape(xla_shape, info.shape());
+  TF_ASSIGN_OR_RETURN(auto popef_datatype, xla::poplarplugin::ToPopEFDataType(
+                                               xla_shape.element_type()));
+  info.setDataType(popef_datatype);
+  return info;
 }
 
 void CleanUpNames(std::vector<std::string>& names) {
@@ -118,6 +128,11 @@ void FindMissingTensors(const ipu::Metadata& metadata,
       missing_from_tf.push_back(tensor.Name());
     }
   }
+}
+
+bool TensorInfoMatches(const popef::TensorInfo& i1,
+                       const popef::TensorInfo& i2) {
+  return (i1.shape() == i2.shape() && i1.dataType() == i2.dataType());
 }
 
 const ipu::TensorInfo& InputInfoFromMetadata(const ipu::Metadata& metadata,
@@ -273,47 +288,51 @@ class VariablesExporter : public OpKernel {
   void Compute(OpKernelContext* ctx) override {
     OP_REQUIRES_OK(ctx, [&]() {
       try {
-        const ipu::TensorType tensor_type =
-            is_input_ ? ipu::TensorType::InputData : ipu::TensorType::Parameter;
-        std::shared_ptr<ipu::Metadata> meta;
+        popef::Metadata meta;
+        bool meta_valid = false;
         if (!metadata_.empty()) {
-          meta = LoadMetadata(metadata_);
-          std::vector<std::string> missing_metadata;
-          std::vector<std::string> missing_tensors;
-          FindMissingTensors(*meta, tensor_type, names_, missing_tensors,
-                             missing_metadata);
-          std::string error;
-          if (!missing_metadata.empty()) {
-            error += " The metadata doesn't contain the following tensors: " +
-                     absl::StrJoin(missing_metadata, ",");
-          }
-          if (!missing_tensors.empty()) {
-            error +=
-                " The following tensors are present in the metadata but not in "
-                "the graph: " +
-                absl::StrJoin(missing_tensors, ",");
-          }
-          if (!error.empty()) {
-            return tensorflow::errors::InvalidArgument(error);
+          popef::Reader reader;
+          reader.parseFile(metadata_);
+          if (!reader.metadata().empty()) {
+            meta_valid = true;
+            meta = reader.metadata()[0];
           }
         }
-        ipu::BinaryWriter writer{filename_};
+
+        std::ofstream f(filename_, std::fstream::binary);
+        popef::Writer writer(f);
         for (int i = 0; i < ctx->num_inputs(); i++) {
           Tensor input = ctx->input(i);
-          TF_ASSIGN_OR_RETURN(ipu::TensorShape shape,
-                              ConvertTensorToIpuTensorInfo(input));
-          ipu::TensorInfo info{names_[i], "", shape, tensor_type};
-          if (meta && !info.TypeAndShapeMatch(InputInfoFromMetadata(
-                          *meta, tensor_type, names_[i]))) {
-            return tensorflow::errors::InvalidArgument(
-                absl::StrCat("Mismatch in type/shape between the metadata and "
-                             "the graph tensor for ",
-                             names_[i]));
+          popef::TensorDataInfo info;
+          info.setName(names_[i]);
+          TF_ASSIGN_OR_RETURN(auto xla_shape, ConvertTensorToXlaShape(input));
+          TF_ASSIGN_OR_RETURN(auto popef_tensorinfo,
+                              ConvertXlaShapeToPopEFTensorInfo(xla_shape));
+          info.setTensorInfo(popef_tensorinfo);
+
+          if (meta_valid) {
+            bool found_anchor = false;
+            for (auto anchor : meta.anchors()) {
+              if (anchor.name() != names_[i]) continue;
+              if (TensorInfoMatches(anchor.tensorInfo(), popef_tensorinfo)) {
+                return tensorflow::errors::InvalidArgument(absl::StrCat(
+                    "Mismatch in type/shape between the metadata and the graph "
+                    "tensor for ",
+                    names_[i]));
+              }
+              found_anchor = true;
+              break;
+            }
+            if (!found_anchor) {
+              return tensorflow::errors::InvalidArgument(absl::StrCat(
+                  "Didn't find anchor in metadata for ", names_[i]));
+            }
           }
+          auto td = writer.createTensorData(info);
 
           TensorBuffer* tb = tensorflow::DMAHelper::buffer(&input);
-          ipu::Tensor out{info, tb->data()};
-          writer.WriteTensor(out);
+          td->stream.write(reinterpret_cast<const char*>(tb->data()),
+                           popef_tensorinfo.sizeInBytes());
         }
         return Status::OK();
       } catch (const std::runtime_error& err) {
