@@ -175,6 +175,8 @@ bool IsInPipeline(const HloInstruction* inst, CompilerResources& res);
 StatusOr<std::string> GetInstructionCompilationInfo(const HloModule* module,
                                                     CompilerResources& res);
 
+std::string UnmangleInputName(std::string name);
+
 // Add a copy between two tensors with compatbile aliasing Poplar Tensors.
 poplar::program::Sequence TensorCopyWithAliasing(
     poplar::Graph& graph, const poplar::Tensor& src, const poplar::Tensor& dst,

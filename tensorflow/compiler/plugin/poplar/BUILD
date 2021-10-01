@@ -705,6 +705,21 @@ cc_library(
 )
 
 cc_library(
+    name = "popef_util",
+    srcs = [
+        "driver/tools/popef_util.cc",
+    ],
+    hdrs = [
+        "driver/tools/popef_util.h",
+    ],
+    linkstatic = 1,
+    deps = [
+        "//tensorflow/compiler/xla:shape_util",
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
+)
+
+cc_library(
     name = "driver",
     srcs = [
         "driver/ops/cast_to_gfloat_ops.cc",
@@ -888,6 +903,7 @@ cc_library(
         ":optimizers",
         ":option_flag_cc_impl",
         ":pipeline_config_cc_impl",
+        ":popef_util",
         ":tf_graph_sources",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/xla:xla_headers_lib",
@@ -969,6 +985,7 @@ cc_library(
     deps = [
         ":infeed_utils",
         ":option_flag_cc_impl",
+        ":popef_util",
         ":xla_backend_protos",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/tf2xla:tf2xla_util",

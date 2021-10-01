@@ -21,55 +21,19 @@ limitations under the License.
 
 #include "popef/Reader.hpp"
 #include "popef/Writer.hpp"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/popef_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_executable_binary_file.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 
 namespace xla {
 namespace poplarplugin {
 
-static Status PopEFExceptionToTensorflowStatus(const std::string& origin,
-                                               const std::exception& e) {
-  const std::string prefix = "[PopEF]" + origin + ": ";
-  return tensorflow::errors::Internal(prefix, e.what());
-}
-
-static void ToPopEFShape(const xla::Shape& shape,
-                         std::vector<int64_t>& popef_shape) {
-  for (size_t i = 0; i < shape.dimensions_size(); i++) {
-    popef_shape.push_back(shape.dimensions(i));
-  }
-}
-
-static StatusOr<popef::DataType> ToPopEFDataType(xla::PrimitiveType type) {
-  switch (type) {
-    case xla::F32:
-      return popef::DataType::F32;
-    case xla::F16:
-      return popef::DataType::F16;
-    case xla::S32:
-      return popef::DataType::S32;
-    case xla::U32:
-      return popef::DataType::U32;
-    case xla::S8:
-      return popef::DataType::S8;
-    case xla::U8:
-      return popef::DataType::U8;
-    case xla::S16:
-      return popef::DataType::S16;
-    case xla::U16:
-      return popef::DataType::U16;
-  }
-  return tensorflow::errors::Internal("[PopEF][ToMetadata]: ",
-                                      "Unsupported PrimitiveType");
-}
-
 template <class FeedInfos>
-static Status AddPopEFFeedAnchors(const FeedInfos& infos,
-                                  popef::TensorType type,
-                                  popef::Metadata& metadata) {
+static Status AddPopEFAnchors(const FeedInfos& infos, popef::TensorType type,
+                              popef::Metadata& metadata) {
   for (auto& info : infos) {
     popef::Anchor anchor;
-    anchor.setName(info.name);
+    anchor.setName(UnmangleInputName(info.name));
     anchor.setHandle(info.handle);
     std::vector<int64_t> shape;
     ToPopEFShape(info.shape, shape);
@@ -120,10 +84,14 @@ static StatusOr<popef::Metadata> ToPopEFMetadata(
   flow.main().emplace_back(1);
   flow.save().emplace_back(2);
 
-  TF_RETURN_IF_ERROR(AddPopEFFeedAnchors(info.feed_input_infos,
-                                         popef::TensorType::INPUT, metadata));
-  TF_RETURN_IF_ERROR(AddPopEFFeedAnchors(info.feed_output_infos,
-                                         popef::TensorType::OUTPUT, metadata));
+  TF_RETURN_IF_ERROR(AddPopEFAnchors(info.feed_input_infos,
+                                     popef::TensorType::INPUT, metadata));
+  TF_RETURN_IF_ERROR(AddPopEFAnchors(info.feed_output_infos,
+                                     popef::TensorType::OUTPUT, metadata));
+  TF_RETURN_IF_ERROR(AddPopEFAnchors(info.entry_input_infos,
+                                     popef::TensorType::INPUT, metadata));
+  TF_RETURN_IF_ERROR(AddPopEFAnchors(info.entry_output_infos,
+                                     popef::TensorType::OUTPUT, metadata));
   return metadata;
 }
 

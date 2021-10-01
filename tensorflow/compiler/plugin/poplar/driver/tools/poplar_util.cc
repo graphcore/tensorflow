@@ -514,8 +514,6 @@ StatusOr<std::string> GetInstructionCompilationInfo(const HloModule* module,
   return Json::writeString(json_builder, root);
 }
 
-namespace {
-
 std::string UnmangleInputName(std::string name) {
   const std::string long_prefix = "XLA_Args/_arg_";
   const std::string short_prefix = "XLA_Args/";
@@ -537,6 +535,8 @@ std::string UnmangleInputName(std::string name) {
   }
   return name;
 }
+
+namespace {
 
 Status SetIpuShape(ipu::TensorInfo& info, const xla::Shape& xla_shape) {
   ipu::DataType type;
