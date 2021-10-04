@@ -88,6 +88,7 @@ class ValuesIdenticalAcrossReplicasVisitor
   }
 
   HandleAsReplicaDiffering(Infeed);
+  HandleAsReplicaDiffering(ReplicaId);
   HandleAsReplicaDiffering(Rng);
 
 #undef HandleAsReplicaDiffering
