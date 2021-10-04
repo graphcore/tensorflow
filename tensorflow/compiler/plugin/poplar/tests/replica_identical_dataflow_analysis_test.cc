@@ -758,6 +758,15 @@ ENTRY test {
   ROOT differing_root = f32[] multiply(truncated_normal, constant)
 }
 )"};
+static const HloTestCase replica_id = {"replica_id", R"(
+HloModule test
+
+ENTRY test {
+  constant = u32[] constant(2)
+  replica_id = u32[] replica-id()
+  ROOT differing_root = u32[] multiply(replica_id, constant)
+}
+)"};
 TEST_P(ReplicaDifferingInstructionTest, ValueCategory) {
   CustomOpReplacer custom_op_replacer;
   // We dont assert against the return value of this since it's not relevent
@@ -1719,7 +1728,7 @@ INSTANTIATE_TEST_SUITE_P(
         tuple_select_with_differing_values, compare_with_differing_operands,
         pipeline_with_differing_gradient_accumulation_count,
         switch_with_differing_index, switch_with_differing_branches,
-        dropout_with_seed_op, truncated_normal),
+        dropout_with_seed_op, truncated_normal, replica_id),
     HloTestCaseName);
 
 INSTANTIATE_TEST_SUITE_P(ReplicaIdenticalDataflowHLO,
