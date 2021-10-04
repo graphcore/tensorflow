@@ -30,7 +30,7 @@ class PipelineStageVisitor : public InplaceDeferredVisitor {
  public:
   PipelineStageVisitor(CompilerResources& res,
                        const DeferredArgRBVectors& inputs,
-                       const HloInstructionDescription& description,
+                       const HloPoplarInplaceDescription& description,
                        const poplar::DebugNameAndId& debug_name_and_id);
 
   bool TupleOutputsNeedToPreserveAliasing(const HloInstruction* inst) override;
@@ -52,7 +52,7 @@ class ReusablePipelineStageVisitor : public PipelineStageVisitor {
  public:
   ReusablePipelineStageVisitor(CompilerResources& res,
                                const DeferredArgRBVectors& inputs,
-                               const HloInstructionDescription& description,
+                               const HloPoplarInplaceDescription& description,
                                const poplar::DebugNameAndId& debug_name_and_id);
 
   // A function which propagates any tensors which were not allocated at call

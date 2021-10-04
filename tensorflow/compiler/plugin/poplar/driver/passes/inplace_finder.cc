@@ -161,7 +161,7 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
         inplace_candidates[HloInstructionType::kInplaceReadOnly];
 
     auto AddToQueue = [&](HloInstruction* inst, InplacePriority priority) {
-      auto inst_description = HloInstructionDescription(inst);
+      auto inst_description = GetInplaceDescription(inst);
       switch (inst_description.GetType()) {
         case HloInstructionType::kInplaceGetTupleElement: {
           inplace_gte_candidates[priority].push_back(inst);
@@ -233,7 +233,7 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
             inplace_priority_candidates_pair.second;
         for (auto* inst : inplace_instruction_candidates) {
           if (!converted.contains(inst) &&
-              HloInstructionDescription::ConvertToInplace(
+              HloPoplarInplaceDescription::ConvertToInplace(
                   inst, reachability_map.get(), worklist_)) {
             converted.insert(inst);
             changed = true;

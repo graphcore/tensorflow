@@ -182,7 +182,7 @@ ENTRY main {
         stage_count, {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
         DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
                              {TensorOrRemoteBuffer{grad_acc_placeholder}}},
-        HloInstructionDescription(entry_computation->root_instruction()),
+        GetInplaceDescription(entry_computation->root_instruction()),
         "visitor");
 
     TF_EXPECT_OK(entry_computation->Accept(&visitor));

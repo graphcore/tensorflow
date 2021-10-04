@@ -33,7 +33,7 @@ namespace poplarplugin {
 
 RepeatLoopVisitor::RepeatLoopVisitor(
     CompilerResources& res, const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
+    const HloPoplarInplaceDescription& description,
     const ReallocateInputsInfo& reallocate_inputs_info,
     const poplar::DebugNameAndId& debug_name_and_id)
     : InplaceDeferredVisitor(res, inputs, description, debug_name_and_id, {},

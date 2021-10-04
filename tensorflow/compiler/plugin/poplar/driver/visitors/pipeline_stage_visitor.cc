@@ -34,7 +34,7 @@ namespace poplarplugin {
 
 PipelineStageVisitor::PipelineStageVisitor(
     CompilerResources& res, const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
+    const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id)
     : InplaceDeferredVisitor(res, inputs, description, debug_name_and_id) {}
 
@@ -77,7 +77,7 @@ ShapeTree<bool> PipelineStageVisitor::GetOutputCopies(
 
 ReusablePipelineStageVisitor::ReusablePipelineStageVisitor(
     CompilerResources& res, const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
+    const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id)
     : PipelineStageVisitor(res, inputs, description, debug_name_and_id) {}
 

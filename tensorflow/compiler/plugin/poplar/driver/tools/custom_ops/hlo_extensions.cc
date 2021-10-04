@@ -16,8 +16,10 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 
+#include <utility>
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_instruction_extensions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_extensions.h"
@@ -371,6 +373,258 @@ void RegisterPadExtensions(HloOpcode opcode) {
                                                           do_find_consumers);
 }
 REGISTER_HLO_INST_EXTENSIONS(kPad, RegisterPadExtensions);
+
+void RegisterInplaceOperand0Extension(HloOpcode opcode,
+                                      HloInstructionType type) {
+  RegisterHloInstructionExtension<InplaceExtension>(
+      opcode, [type](const HloInstruction* inst) {
+        return HloPoplarInplaceDescription(type, /*inplace_operands=*/{0});
+      });
+}
+
+void RegisterInplaceRWOperand0Extension(HloOpcode opcode) {
+  RegisterInplaceOperand0Extension(opcode,
+                                   HloInstructionType::kInplaceReadWrite);
+}
+void RegisterInplaceROOperand0Extension(HloOpcode opcode) {
+  RegisterInplaceOperand0Extension(opcode,
+                                   HloInstructionType::kInplaceReadOnly);
+}
+
+void RegisterInplaceAllOperandsExtension(HloOpcode opcode,
+                                         HloInstructionType type) {
+  RegisterHloInstructionExtension<InplaceExtension>(
+      opcode, [type](const HloInstruction* inst) {
+        HloPoplarInplaceDescription::OperandIndices indices(
+            inst->operand_count());
+        absl::c_iota(indices, 0);
+        return HloPoplarInplaceDescription(type, std::move(indices));
+      });
+}
+
+void RegisterInplaceRWAllOperandsExtension(HloOpcode opcode) {
+  RegisterInplaceAllOperandsExtension(opcode,
+                                      HloInstructionType::kInplaceReadWrite);
+}
+void RegisterInplaceROAllOperandsExtension(HloOpcode opcode) {
+  RegisterInplaceAllOperandsExtension(opcode,
+                                      HloInstructionType::kInplaceReadOnly);
+}
+
+// Inplace on the first operand
+REGISTER_HLO_INST_EXTENSIONS(kDynamicUpdateSlice,
+                             RegisterInplaceRWOperand0Extension);
+REGISTER_HLO_INST_EXTENSIONS(kScatter, RegisterInplaceRWOperand0Extension);
+
+// Inplace on all operands.
+REGISTER_HLO_INST_EXTENSIONS(kAllReduce, RegisterInplaceRWAllOperandsExtension);
+REGISTER_HLO_INST_EXTENSIONS(kMap, RegisterInplaceRWAllOperandsExtension);
+REGISTER_HLO_INST_EXTENSIONS(kSort, RegisterInplaceRWAllOperandsExtension);
+REGISTER_HLO_INST_EXTENSIONS(kTuple, RegisterInplaceRWAllOperandsExtension);
+
+// Inplace read-only ops.
+// These ops are implemented as inplace ops on operand 0.
+REGISTER_HLO_INST_EXTENSIONS(kAddDependency,
+                             RegisterInplaceROOperand0Extension);
+REGISTER_HLO_INST_EXTENSIONS(kBitcastConvert,
+                             RegisterInplaceROOperand0Extension);
+REGISTER_HLO_INST_EXTENSIONS(kBroadcast, RegisterInplaceROOperand0Extension);
+REGISTER_HLO_INST_EXTENSIONS(kReshape, RegisterInplaceROOperand0Extension);
+REGISTER_HLO_INST_EXTENSIONS(kReverse, RegisterInplaceROOperand0Extension);
+REGISTER_HLO_INST_EXTENSIONS(kTranspose, RegisterInplaceROOperand0Extension);
+
+// Inplace on all operands.
+REGISTER_HLO_INST_EXTENSIONS(kConcatenate,
+                             RegisterInplaceROAllOperandsExtension);
+
+REGISTER_HLO_INST_EXTENSIONS(kWhile, [](HloOpcode opcode) {
+  RegisterHloInstructionExtension<InplaceExtension>(
+      opcode, [](const HloInstruction* inst) {
+        CHECK_EQ(inst->operand_count(), 1);
+        return HloPoplarInplaceDescription(
+            HloInstructionType::kInplaceReadWrite, /*inplace_operands=*/{0});
+      });
+});
+
+REGISTER_HLO_INST_EXTENSIONS(kSlice, [](HloOpcode opcode) {
+  RegisterHloInstructionExtension<InplaceExtension>(
+      opcode, [](const HloInstruction* inst) {
+        return HloPoplarInplaceDescription(HloInstructionType::kInplaceReadOnly,
+                                           /*inplace_operands=*/{0});
+      });
+});
+
+// Inplace on the first 2 ops.
+REGISTER_HLO_INST_EXTENSIONS(kPad, [](HloOpcode opcode) {
+  RegisterHloInstructionExtension<InplaceExtension>(
+      opcode, [](const HloInstruction* inst) {
+        return HloPoplarInplaceDescription(HloInstructionType::kInplaceReadOnly,
+                                           {0, 1});
+      });
+});
+
+REGISTER_HLO_INST_EXTENSIONS(kGetTupleElement, [](HloOpcode opcode) {
+  RegisterHloInstructionExtension<InplaceExtension>(
+      opcode, [](const HloInstruction* inst) {
+        return HloPoplarInplaceDescription(
+            HloInstructionType::kInplaceGetTupleElement,
+            /*inplace_operands=*/{0});
+      });
+});
+
+REGISTER_HLO_INST_EXTENSIONS(kFusion, [](HloOpcode opcode) {
+  RegisterHloInstructionExtension<InplaceExtension>(
+      opcode, [](const HloInstruction* inst) {
+        if (IsPopOpsFusion(inst)) {
+          HloPoplarInplaceDescription::OperandIndices inplace_operands;
+          auto fusion_config = inst->backend_config<PoplarBackendConfig>()
+                                   .ValueOrDie()
+                                   .fusion_config();
+          auto inplace_descriptions = fusion_config.inplace_descriptions();
+          for (const auto& inplace_description : inplace_descriptions) {
+            inplace_operands.push_back(
+                HloPoplarUseDescription::FromProto(inplace_description)
+                    .operand_number());
+          }
+          absl::c_sort(inplace_operands);
+          if (inplace_operands.size()) {
+            return HloPoplarInplaceDescription(
+                HloInstructionType::kInplaceReadWrite,
+                std::move(inplace_operands));
+          } else {
+            return HloPoplarInplaceDescription();
+          }
+        } else {
+          // A non poplibs fusion is inplace on all operands.
+          HloPoplarInplaceDescription::OperandIndices indices(
+              inst->operand_count());
+          absl::c_iota(indices, 0);
+          return HloPoplarInplaceDescription(
+              HloInstructionType::kInplaceReadWrite, std::move(indices));
+        }
+      });
+});
+
+REGISTER_HLO_INST_EXTENSIONS(kCall, [](HloOpcode opcode) {
+  RegisterHloInstructionExtension<InplaceExtension>(
+      opcode, [](const HloInstruction* inst) {
+        if (IsRepeatLoop(inst)) {
+          HloPoplarInplaceDescription::OperandIndices indices;
+          const int64 num_operands = inst->operand_count();
+          const HloComputation* comp = inst->to_apply();
+          const HloInstruction* root = comp->root_instruction();
+
+          // The loop is considered to be inplace on all operands unless all
+          // it's users are GTEs
+          const bool all_users_gtes = absl::c_all_of(
+              inst->users(), [](const HloInstruction* user) -> bool {
+                return user->opcode() == HloOpcode::kGetTupleElement;
+              });
+          // The root instruction needs to be an inplace tuple - this makes sure
+          // that an particular input is only used in a single place.
+          // The loop also must have been broken up into individual inputs.
+
+          // Check which inputs are actually modified.
+          if (GetRepeatLoopAllowFinerAliasAnalysis(inst) &&
+              IsLoweredInplace(root) && root->opcode() == HloOpcode::kTuple &&
+              num_operands == root->operand_count() && all_users_gtes) {
+            // Vector indiciating whether a given input/output index has a gte
+            // output.
+            std::vector<bool> has_gte(num_operands, false);
+            for (const HloInstruction* user : inst->users()) {
+              CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+              has_gte[user->tuple_index()] = true;
+            }
+
+            for (int64 idx = 0; idx != num_operands; ++idx) {
+              // An operand is not inplace if there is no gte for it and it's
+              // used directly in the root instruction at the same index.
+              if (has_gte[idx] ||
+                  root->operand(idx) != comp->parameter_instruction(idx)) {
+                indices.push_back(idx);
+              }
+            }
+          } else {
+            // Inplace on all its inputs.
+            indices.resize(num_operands);
+            absl::c_iota(indices, 0);
+          }
+
+          return HloPoplarInplaceDescription(
+              HloInstructionType::kInplaceReadWrite, std::move(indices));
+        } else if (IsPipelineOp(inst) || IsResourceUpdate(inst)) {
+          // Pipeline and ResourceUpdate operations are inplace on all
+          // their inputs.
+          HloPoplarInplaceDescription::OperandIndices indices(
+              inst->operand_count());
+          absl::c_iota(indices, 0);
+          return HloPoplarInplaceDescription(
+              HloInstructionType::kInplaceReadWrite, std::move(indices));
+        } else if (IsAnyPipelineStageOp(inst)) {
+          // Pipeline stages are only inplace on operands which are not
+          // parameters/execution counters.
+
+          HloPoplarInplaceDescription::OperandIndices indices;
+          // Backward pipeline stages don't mark gradient accumulators as
+          // inplace inputs.
+          const bool is_bwd = IsPipelineStageBackward(inst);
+
+          HloComputation* comp = inst->to_apply();
+          for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
+            const HloInstruction* operand = inst->operand(op_idx);
+            if (!IsPipelineStageReadOnlyInput(operand) &&
+                !(is_bwd &&
+                  IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
+                      operand))) {
+              // If the stage modifies the input inplace, add it as an inplace
+              // operand.
+              if (IsOutputModifiedInplace(
+                      comp->parameter_instruction(op_idx))) {
+                indices.push_back(op_idx);
+              }
+            }
+          }
+          return HloPoplarInplaceDescription(
+              HloInstructionType::kInplaceReadWrite, std::move(indices));
+        } else if (IsFunction(inst)) {
+          // Functions are inplace on remote buffer inputs.
+          // Assume that the first "num_modified_remote_buffers" inputs are
+          // remote buffers which are modified and they are also the first
+          // "num_modified_remote_buffers" outputs.
+          // Assume that the next "num_unmodified_remote_buffers" inputs are
+          // remote buffers which are only loaded.
+          const int64 num_modified_remote_buffers =
+              GetFunctionNumberModifiedRemoteBufferInputs(inst);
+          const int64 num_unmodified_remote_buffers =
+              GetFunctionNumberUnmodifiedRemoteBufferInputs(inst);
+          // TODO(T10387): consider unmodified remote buffers as read only.
+          if (num_modified_remote_buffers + num_unmodified_remote_buffers) {
+            HloPoplarInplaceDescription::OperandIndices indices(
+                num_modified_remote_buffers + num_unmodified_remote_buffers);
+            absl::c_iota(indices, 0);
+            return HloPoplarInplaceDescription(
+                HloInstructionType::kInplaceReadWrite, std::move(indices));
+          } else {
+            return HloPoplarInplaceDescription();
+          }
+        } else {
+          // Calls are not inplace.
+          return HloPoplarInplaceDescription();
+        }
+      });
+});
+
+REGISTER_HLO_INST_EXTENSIONS(kCustomCall, [](HloOpcode opcode) {
+  RegisterHloInstructionExtension<InplaceExtension>(
+      opcode, [](const HloInstruction* inst) {
+        CHECK(!IsPoplibsHloCustomOp(inst));
+        HloPoplarInplaceDescription::OperandIndices indices(
+            inst->operand_count());
+        absl::c_iota(indices, 0);
+        return HloPoplarInplaceDescription(
+            HloInstructionType::kInplaceReadWrite, std::move(indices));
+      });
+});
 
 }  // namespace
 }  // namespace poplarplugin

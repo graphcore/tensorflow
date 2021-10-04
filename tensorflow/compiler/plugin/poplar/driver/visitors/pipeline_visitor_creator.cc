@@ -67,7 +67,7 @@ namespace poplarplugin {
 StatusOr<std::unique_ptr<PipelineVisitor>> GetPipelineVisitor(
     const HloInstruction* pipeline, CompilerResources& res,
     const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
+    const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id) {
   TF_ASSIGN_OR_RETURN(auto schedule, GetPipelineSchedule(pipeline));
   switch (schedule) {

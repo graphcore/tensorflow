@@ -350,7 +350,7 @@ StatusOr<TensorVector> FindInstructionOutputTensors(const TensorMap& map,
  * extra tensor copy and use that tensor as the input/output tensor.
  *
  * The TensorVector contains only those inputs which are listed as inplace
- * inputs by HloInstructionDescription.
+ * inputs by HloPoplarInplaceDescription.
  */
 StatusOr<TensorVectors> FindInplaceOutputTensors(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,

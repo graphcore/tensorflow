@@ -1049,8 +1049,8 @@ ENTRY entry {
 
   auto inplace_instructions = GetInplaceInstructions(entry);
   EXPECT_THAT(inplace_instructions.size(), 1);
-  EXPECT_THAT(HloInstructionDescription(entry->root_instruction())
-                  .GetInplaceOperandIndexes(),
+  EXPECT_THAT(GetInplaceDescription(entry->root_instruction())
+                  .GetInplaceOperandIndices(),
               ::testing::ElementsAre(2));
 }
 
@@ -1102,8 +1102,8 @@ ENTRY entry {
 
   auto inplace_instructions = GetInplaceInstructions(entry);
   EXPECT_THAT(inplace_instructions.size(), 1);
-  EXPECT_THAT(HloInstructionDescription(entry->root_instruction())
-                  .GetInplaceOperandIndexes(),
+  EXPECT_THAT(GetInplaceDescription(entry->root_instruction())
+                  .GetInplaceOperandIndices(),
               ::testing::ElementsAre(2, 3));
 }
 

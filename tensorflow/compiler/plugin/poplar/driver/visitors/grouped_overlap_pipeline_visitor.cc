@@ -356,7 +356,7 @@ GroupedOverlapPipelineVisitor::GetPipelineRepeatBlockSequence(
 std::unique_ptr<PipelineVisitor> GroupedOverlapPipelineVisitor::Create(
     const HloInstruction* pipeline, CompilerResources& res,
     const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
+    const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id) {
   return absl::make_unique<GroupedOverlapPipelineVisitor>(
       pipeline, res, inputs, description, debug_name_and_id);
