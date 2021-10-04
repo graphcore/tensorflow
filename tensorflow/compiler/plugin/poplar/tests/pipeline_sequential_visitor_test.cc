@@ -128,8 +128,7 @@ ENTRY e {
       pipeline, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{p0}},
                            {TensorOrRemoteBuffer{p1}}},
-      HloInstructionDescription(entry_computation->root_instruction()),
-      "visitor");
+      GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(pipeline_comp->Accept(&visitor));
 
   // Get the pipeline program

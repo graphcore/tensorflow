@@ -512,7 +512,7 @@ StatusOr<TensorOrRemoteBufferVectors> GetInputs(
                       FindInplaceOutputs(tensor_map, res, inst, seq,
                                          debug_name_and_id, false, true));
   auto inplace_inputs_itr = inplace_inputs.begin();
-  auto inst_description = HloInstructionDescription(inst);
+  auto inst_description = GetInplaceDescription(inst);
   // Keep track of inputs which are not inplace (i.e. parameters for forward
   // stages).
   absl::flat_hash_set<int64> non_inplace_operand_indices;
@@ -521,13 +521,13 @@ StatusOr<TensorOrRemoteBufferVectors> GetInputs(
   }
 
   // Populate the inputs with the inplace inputs first.
-  for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
+  for (int64 inplace_idx : inst_description.GetInplaceOperandIndices()) {
     inputs[inplace_idx] = *inplace_inputs_itr;
     inplace_inputs_itr++;
     non_inplace_operand_indices.erase(inplace_idx);
   }
   // Get all the non inplace inputs.
-  if (inst_description.GetInplaceOperandIndexes().size() !=
+  if (inst_description.GetInplaceOperandIndices().size() !=
       static_cast<size_t>(inst->operand_count())) {
     CHECK(IsAnyPipelineStageOp(inst));
     for (int64 op_idx : non_inplace_operand_indices) {
@@ -546,7 +546,7 @@ PipelineVisitor::PipelineVisitor(
     const absl::flat_hash_set<int> stages_with_recomputation,
     int64 num_backward_stages, CompilerResources& res,
     const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
+    const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id)
     : InplaceDeferredVisitor(res, inputs, description, debug_name_and_id, {}),
       pipeline_scheduler_util_(
@@ -574,7 +574,7 @@ PipelineVisitor::PipelineVisitor(
 PipelineVisitor::PipelineVisitor(
     const HloInstruction* pipeline, CompilerResources& res,
     const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
+    const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id)
     : PipelineVisitor(GetPipelineSchedule(pipeline).ValueOrDie(),
                       GetPipelineStageCount(pipeline),
@@ -808,11 +808,11 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
       }
     }
     visitor = absl::make_unique<ReusablePipelineStageVisitor>(
-        resources_, visitor_inputs, HloInstructionDescription(inst),
+        resources_, visitor_inputs, GetInplaceDescription(inst),
         debug_name_and_id);
   } else {
     visitor = absl::make_unique<PipelineStageVisitor>(
-        resources_, inputs, HloInstructionDescription(inst), debug_name_and_id);
+        resources_, inputs, GetInplaceDescription(inst), debug_name_and_id);
   }
 
   HloComputation* stage_computation = inst->to_apply();
@@ -917,7 +917,7 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
   if (forward_stage_visitor->inputs().size() != inputs.size()) {
     PipelineStageVisitor visitor(
         resources_, ConvertInputsToDeferredInputs(inputs),
-        HloInstructionDescription(inst), debug_name_and_id);
+        GetInplaceDescription(inst), debug_name_and_id);
     HloComputation* stage_computation = inst->to_apply();
     auto order = stage_computation->parent()
                      ->schedule()
@@ -1212,7 +1212,7 @@ void PipelineVisitor::AddSequenceForAliasingCopy(
 std::unique_ptr<PipelineVisitor> ParallelPipelineVisitor::Create(
     const HloInstruction* pipeline, CompilerResources& res,
     const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
+    const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id) {
   return absl::make_unique<ParallelPipelineVisitor>(
       pipeline, res, inputs, description, debug_name_and_id);
@@ -1427,7 +1427,7 @@ ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
 std::unique_ptr<PipelineVisitor> SequentialPipelineVisitor::Create(
     const HloInstruction* pipeline, CompilerResources& res,
     const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
+    const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id) {
   return absl::make_unique<SequentialPipelineVisitor>(
       pipeline, res, inputs, description, debug_name_and_id);

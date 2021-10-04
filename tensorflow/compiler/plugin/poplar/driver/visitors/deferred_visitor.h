@@ -462,14 +462,14 @@ class InplaceDeferredVisitor : public DeferredVisitor {
  public:
   InplaceDeferredVisitor(
       CompilerResources& res, const DeferredArgRBVectors& inputs,
-      const HloInstructionDescription& description,
+      const HloPoplarInplaceDescription& description,
       const poplar::DebugNameAndId& debug_name_and_id,
       const std::vector<const DeferredVisitor*>& dependent_subcomputations = {},
       bool reallocate_inputs = false);
 
   InplaceDeferredVisitor(
       CompilerResources& res, const DeferredArgRBVectors& inputs,
-      const HloInstructionDescription& description,
+      const HloPoplarInplaceDescription& description,
       const poplar::DebugNameAndId& debug_name_and_id,
       const std::vector<const DeferredVisitor*>& dependent_subcomputations,
       const ReallocateInputsInfo& reallocate_inputs_info);
@@ -515,12 +515,12 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   std::pair<int64, int64> GetParameterNumberAndFlatIndex(
       int64 output_flat_index);
 
-  const HloInstructionDescription& GetCallsiteDescription() const {
+  const HloPoplarInplaceDescription& GetCallsiteDescription() const {
     return description_;
   }
 
  private:
-  const HloInstructionDescription description_;
+  const HloPoplarInplaceDescription description_;
 };
 
 }  // namespace poplarplugin

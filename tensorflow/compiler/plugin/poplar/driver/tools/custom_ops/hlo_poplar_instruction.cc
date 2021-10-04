@@ -16,6 +16,7 @@ limitations under the License.
 // All HloInstruction subclasses are put in this file.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include <utility>
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -43,6 +44,22 @@ std::vector<string> HloPoplarInstruction::ExtraAttributesToStringImpl(
   extras.insert(extras.end(), attributes.begin(), attributes.end());
 
   return extras;
+}
+
+HloPoplarInplaceDescription HloPoplarInstruction::GetInplaceDescription()
+    const {
+  auto use_descriptions = GetUseDescriptions();
+  if (use_descriptions.size()) {
+    HloPoplarInplaceDescription::OperandIndices inplace_operands;
+    for (const HloPoplarUseDescription& description : use_descriptions) {
+      inplace_operands.push_back(description.operand_number());
+    }
+    absl::c_sort(inplace_operands);
+    return HloPoplarInplaceDescription(HloInstructionType::kInplaceReadWrite,
+                                       std::move(inplace_operands));
+  } else {
+    return HloPoplarInplaceDescription(HloInstructionType::kNotInplace, {});
+  }
 }
 
 HloPoplarInstructionFactory::HloPoplarInstructionFactory(

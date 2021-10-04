@@ -116,9 +116,9 @@ StatusOr<bool> ResourceUpdateCopyInserter::InsertCopiesInCall(
         continue;
       }
       visited.insert(inst);
-      const HloInstructionDescription description{inst};
+      auto description = GetInplaceDescription(inst);
       if (description.IsInplaceType()) {
-        for (auto idx : description.GetInplaceOperandIndexes()) {
+        for (auto idx : description.GetInplaceOperandIndices()) {
           to_visit.push(inst->operand(idx));
         }
       }

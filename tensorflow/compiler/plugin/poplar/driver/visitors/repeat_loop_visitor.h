@@ -28,7 +28,7 @@ struct CompilerResources;
 class RepeatLoopVisitor : public InplaceDeferredVisitor {
  public:
   RepeatLoopVisitor(CompilerResources& res, const DeferredArgRBVectors& inputs,
-                    const HloInstructionDescription& description,
+                    const HloPoplarInplaceDescription& description,
                     const ReallocateInputsInfo& reallocate_inputs_info,
                     const poplar::DebugNameAndId& debug_name_and_id);
 

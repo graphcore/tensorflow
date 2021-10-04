@@ -150,14 +150,13 @@ StatusOr<bool> AddAllocationControlDependencies(HloModule* module) {
         }
         // Skip if the peer uses layout_input inplace - we prioritize inplace
         // instructions.
-        const HloInstructionDescription description =
-            HloInstructionDescription(peer);
-        const auto& inplace_indicies = description.GetInplaceOperandSet();
+        auto description = GetInplaceDescription(peer);
+        const auto& inplace_indices = description.GetInplaceOperandSet();
 
         const bool can_be_inplace =
             absl::c_any_of(peer->OperandIndices(layout_input),
-                           [&inplace_indicies](int64 operand_idx) {
-                             return inplace_indicies.contains(operand_idx);
+                           [&inplace_indices](int64 operand_idx) {
+                             return inplace_indices.contains(operand_idx);
                            });
 
         if (can_be_inplace) {

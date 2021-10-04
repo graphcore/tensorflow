@@ -21,6 +21,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hash.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -80,6 +81,9 @@ class HloPoplarInstruction : public HloCustomCallInstruction {
 
   // Returns information about the new buffers created by this instruction.
   virtual HloPoplarBufferDescriptions GetBufferDescriptions() const = 0;
+
+  // Returns information about the inplace type and operands.
+  HloPoplarInplaceDescription GetInplaceDescription() const;
 
   // Returns whether this is an elementwise instruction.
   virtual bool IsPopOpsElementwise() const = 0;

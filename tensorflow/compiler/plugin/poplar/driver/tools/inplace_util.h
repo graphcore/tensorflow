@@ -16,19 +16,19 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_INPLACE_UTIL_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_INPLACE_UTIL_H_
 
+#include <set>
+#include <string>
+#include <vector>
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_reachability.h"
 
-#include <set>
 namespace xla {
 namespace poplarplugin {
 struct CompilerAnnotations;
 
-using OperandIndexes = std::vector<int64>;
-using OperandSet = absl::flat_hash_set<int64>;
 using InplaceWorkList = absl::flat_hash_map<HloInstruction*, bool>;
 
 enum class HloInstructionType {
@@ -48,16 +48,20 @@ enum class HloInstructionType {
 };
 
 // Internal representations of the Types of instructions.
-class HloInstructionDescription {
+class HloPoplarInplaceDescription {
  public:
-  HloInstructionDescription(const HloInstruction* inst);
+  using OperandIndices = std::vector<int64>;
+  using OperandSet = absl::flat_hash_set<int64>;
+
+  HloPoplarInplaceDescription();
+  HloPoplarInplaceDescription(HloInstructionType type,
+                              OperandIndices&& inplace_operands);
 
   // Get the HloInstructionType.
   const HloInstructionType& GetType() const;
 
   // Get the inplace operands.
-  const OperandIndexes& GetInplaceOperandIndexes() const;
-
+  const OperandIndices& GetInplaceOperandIndices() const;
   // Get the inplace operands.
   const OperandSet& GetInplaceOperandSet() const;
 
@@ -71,14 +75,14 @@ class HloInstructionDescription {
   const std::string ToString() const;
 
  private:
-  HloInstructionDescription();
-
-  OperandIndexes inplace_operands_;
-
-  OperandSet inplace_operands_set_;
-
   HloInstructionType type_;
+  OperandIndices inplace_operands_;
+  OperandSet inplace_operands_set_;
 };
+
+// Given an instruction, get its inplace description.
+HloPoplarInplaceDescription GetInplaceDescription(const HloInstruction* inst);
+
 // Given an instruction, get an instruction which modifies it inplace (if there
 // is one).
 absl::optional<HloInstruction*> GetInplaceModifier(HloInstruction* inst);

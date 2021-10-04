@@ -77,12 +77,12 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
   }
 
   // Check whether this is inplace.
-  auto inplace_description = HloInstructionDescription(inst);
+  auto inplace_description = GetInplaceDescription(inst);
   bool is_inplace = false;
   if (inplace_description.GetType() == HloInstructionType::kInplaceReadWrite) {
     // To be inplace, all the inplace operands have to be non_broadcasting.
     is_inplace = true;
-    for (auto idx : inplace_description.GetInplaceOperandIndexes()) {
+    for (auto idx : inplace_description.GetInplaceOperandIndices()) {
       if (!non_broadcast_operands.contains(idx)) {
         is_inplace = false;
         break;
@@ -155,7 +155,7 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
   PoplarBackendConfig backend_config;
   auto* cfg = backend_config.mutable_fusion_config();
   if (is_inplace) {
-    auto inplace_operands = inplace_description.GetInplaceOperandIndexes();
+    auto inplace_operands = inplace_description.GetInplaceOperandIndices();
     CHECK_EQ(inplace_operands.size(), 1);
     // Adjust the inplace operand depending on the whether other operands have
     // been lowered in.

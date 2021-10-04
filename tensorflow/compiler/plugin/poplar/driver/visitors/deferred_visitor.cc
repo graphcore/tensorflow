@@ -688,9 +688,8 @@ DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst,
       GetAllowedDeferLocationsFromInputs(inst);
   const bool is_lowered_inplace = IsLoweredInplace(inst);
 
-  auto inplace_description = HloInstructionDescription(inst);
-  auto inplace_indexes = inplace_description.GetInplaceOperandIndexes();
-  auto inplace_indexes_set = inplace_description.GetInplaceOperandSet();
+  auto inplace_description = GetInplaceDescription(inst);
+  const auto& inplace_indices_set = inplace_description.GetInplaceOperandSet();
   // Go through all the operands and get the input tensors for any input that
   // cannot be deferred.
   DeferredArgRBVectors inputs(inst->operand_count());
@@ -725,7 +724,7 @@ DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst,
         if (outputs[0].IsTensor()) {
           poplar::Tensor tensor = outputs[0];
           // Make sure to process any inplace operands correctly.
-          if (inplace_indexes_set.contains(operand_idx)) {
+          if (inplace_indices_set.contains(operand_idx)) {
             const bool is_tensor_lowered_inplace =
                 is_lowered_inplace &&
                 allowed_deferred_allocation_locations[operand_idx][i];
@@ -1581,7 +1580,7 @@ poplar::program::Sequence DeferredVisitor::GetFunctionCall() {
 
 InplaceDeferredVisitor::InplaceDeferredVisitor(
     CompilerResources& res, const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
+    const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id,
     const std::vector<const DeferredVisitor*>& dependent_subcomputations,
     bool reallocate_inputs)
@@ -1592,7 +1591,7 @@ InplaceDeferredVisitor::InplaceDeferredVisitor(
 
 InplaceDeferredVisitor::InplaceDeferredVisitor(
     CompilerResources& res, const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
+    const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id,
     const std::vector<const DeferredVisitor*>& dependent_subcomputations,
     const ReallocateInputsInfo& reallocate_inputs_info)

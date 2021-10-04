@@ -42,9 +42,9 @@ StatusOr<ExpressionInput> GetTensorInput(
 
   // Check whether this is the inplace input to the elementwise operation.
   bool inplace_input = false;
-  HloInstructionDescription description(inst);
+  auto description = GetInplaceDescription(inst);
   if (description.IsInplaceType()) {
-    const auto inplace_operands = description.GetInplaceOperandIndexes();
+    const auto inplace_operands = description.GetInplaceOperandIndices();
     CHECK_EQ(inplace_operands.size(), 1);
     inplace_input = inplace_operands[0] == input_idx;
   }

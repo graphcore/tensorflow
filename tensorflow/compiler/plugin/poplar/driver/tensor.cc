@@ -1566,13 +1566,13 @@ bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
 
   // Check that the instruction description is for an inplace read/write
   // operation.
-  auto inplace_description = HloInstructionDescription(inst);
+  auto inplace_description = GetInplaceDescription(inst);
   if (inplace_description.GetType() != HloInstructionType::kInplaceReadWrite) {
     return false;
   }
 
   // Get all the input tensors for all the inplace operands
-  auto inplace_indexes = inplace_description.GetInplaceOperandIndexes();
+  auto inplace_indexes = inplace_description.GetInplaceOperandIndices();
 
   std::vector<TensorOrRemoteBufferVector> tensor_vectors(
       inplace_indexes.size());
@@ -1678,7 +1678,7 @@ StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
     const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing,
     bool always_preserve_aliases) {
   // Check that the instruction description is for an inplace operation.
-  auto inplace_description = HloInstructionDescription(inst);
+  auto inplace_description = GetInplaceDescription(inst);
   if (!inplace_description.IsInplaceType()) {
     LOG(FATAL) << "Trying to execute " << inst->name()
                << " as an inplace operation, but it is not.";
@@ -1689,7 +1689,7 @@ StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
   const bool is_still_inplace = IsLoweredInplace(inst);
 
   // Get all the input tensors for all the inplace operands
-  auto inplace_indexes = inplace_description.GetInplaceOperandIndexes();
+  auto inplace_indexes = inplace_description.GetInplaceOperandIndices();
 
   TensorOrRemoteBufferVectors tensors(inplace_indexes.size());
   if (inst->opcode() == HloOpcode::kGetTupleElement) {

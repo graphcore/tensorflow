@@ -175,7 +175,7 @@ StatusOr<poplar::program::Program> CreateFusionOp(
 
   DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
   InplaceDeferredVisitor inplace_visitor(
-      res, deferred_inputs, HloInstructionDescription(inst), debug_name_and_id);
+      res, deferred_inputs, GetInplaceDescription(inst), debug_name_and_id);
   TF_RETURN_IF_ERROR(comp->Accept(&inplace_visitor));
 
   seq.add(inplace_visitor.GetSequence());
@@ -254,7 +254,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(
 
   // Create an inplace visitor for the loop body.
   InplaceDeferredVisitor body_visitor(
-      res, inputs, HloInstructionDescription(inst), {debug_name_and_id, "Body"},
+      res, inputs, GetInplaceDescription(inst), {debug_name_and_id, "Body"},
       {&condition_visitor}, reallocate_input_info);
   const HloComputation* body_comp = inst->while_body();
   {
@@ -526,7 +526,7 @@ bool CouldHaveSmallGradientAccumulation(const HloInstruction* inst) {
 StatusOr<std::unique_ptr<RepeatLoopVisitor>> CreateLoopVisitor(
     CompilerResources& res, const HloInstruction* inst,
     const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
+    const HloPoplarInplaceDescription& description,
     const ReallocateInputsInfo& reallocate_inputs_info,
     const poplar::DebugNameAndId& debug_name_and_id) {
   // Check any opaque typed tensors are correctly connected to the root
@@ -580,7 +580,7 @@ StatusOr<poplar::program::Program> CreateRepeatOp(
 
   TF_ASSIGN_OR_RETURN(
       std::unique_ptr<RepeatLoopVisitor> visitor,
-      CreateLoopVisitor(res, inst, inputs, HloInstructionDescription(inst),
+      CreateLoopVisitor(res, inst, inputs, GetInplaceDescription(inst),
                         reallocate_input_info, debug_name_and_id));
 
   // Evaluate the loop body in a order.
@@ -830,7 +830,7 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   // Compile the pipeline.
   TF_ASSIGN_OR_RETURN(
       auto visitor,
-      GetPipelineVisitor(inst, res, inputs, HloInstructionDescription(inst),
+      GetPipelineVisitor(inst, res, inputs, GetInplaceDescription(inst),
                          debug_name_and_id));
 
   if (gradient_accumulation_count) {
@@ -1045,7 +1045,7 @@ StatusOr<poplar::program::Program> CreateResourceUpdateOp(
           << resource_update_comp->name() << " as a resource update.";
   poplar::program::Sequence seq({}, debug_name_and_id);
   // Create a visitor for the resource update.
-  InplaceDeferredVisitor visitor(res, inputs, HloInstructionDescription(inst),
+  InplaceDeferredVisitor visitor(res, inputs, GetInplaceDescription(inst),
                                  debug_name_and_id);
   auto order = resource_update_comp->parent()
                    ->schedule()

@@ -33,7 +33,7 @@ namespace {
 std::function<bool(const HloInstruction*)> IsInplaceHloElementwiseBinary() {
   return [](const HloInstruction* inst) -> bool {
     return inst->IsElementwiseBinary() &&
-           HloInstructionDescription(inst).GetType() ==
+           GetInplaceDescription(inst).GetType() ==
                HloInstructionType::kInplaceReadWrite;
   };
 }

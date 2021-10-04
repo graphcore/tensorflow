@@ -53,12 +53,15 @@ using LayoutDependenciesExtension =
     MAKE_EXTENSION(HloPoplarInstruction::LayoutDependencies);
 using FindConsumersExtension =
     MAKE_EXTENSION(HloPoplarInstruction::FindConsumers);
+using InplaceExtension =
+    MAKE_EXTENSION(HloPoplarInstruction::GetInplaceDescription);
 
 #undef MAKE_EXTENSION
 
 using HloInstructionExtensions =
     InstructionExtensions<AllocatingIndicesExtension, AllocatingOutputExtension,
-                          LayoutDependenciesExtension, FindConsumersExtension>;
+                          LayoutDependenciesExtension, FindConsumersExtension,
+                          InplaceExtension>;
 
 HloInstructionExtensions& GetHloInstructionExtensions();
 
@@ -84,8 +87,14 @@ inline bool RegistrationWrapper(
   registration_func(op_code);
   return true;
 }
-#define REGISTER_HLO_INST_EXTENSIONS(hlo_op_code, ext_cb) \
-  static bool registered_##hlo_op_code##_extensions =     \
+
+#define REGISTER_HLO_INST_EXTENSIONS_CONCAT_INNER(__x, __y) __x##__y
+#define REGISTER_HLO_INST_EXTENSIONS_CONCAT(__x, __y) \
+  REGISTER_HLO_INST_EXTENSIONS_CONCAT_INNER(__x, __y)
+
+#define REGISTER_HLO_INST_EXTENSIONS(hlo_op_code, ext_cb)      \
+  static bool REGISTER_HLO_INST_EXTENSIONS_CONCAT(             \
+      registered_##hlo_op_code##_##_extensions, __COUNTER__) = \
       RegistrationWrapper(HloOpcode::hlo_op_code, ext_cb);
 
 }  // namespace poplarplugin

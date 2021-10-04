@@ -176,8 +176,7 @@ ENTRY main {
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
                            {TensorOrRemoteBuffer{grad_acc_placeholder}}},
-      HloInstructionDescription(entry_computation->root_instruction()),
-      "visitor");
+      GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -320,8 +319,7 @@ ENTRY main {
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
                            {TensorOrRemoteBuffer{grad_acc_placeholder}}},
-      HloInstructionDescription(entry_computation->root_instruction()),
-      "visitor");
+      GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -533,8 +531,7 @@ ENTRY main {
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
                            {TensorOrRemoteBuffer{grad_acc_placeholder}}},
-      HloInstructionDescription(entry_computation->root_instruction()),
-      "visitor");
+      GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -740,8 +737,7 @@ ENTRY main {
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
                            {TensorOrRemoteBuffer{grad_acc_placeholder}}},
-      HloInstructionDescription(entry_computation->root_instruction()),
-      "visitor");
+      GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -951,8 +947,7 @@ ENTRY main {
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
                            {TensorOrRemoteBuffer{grad_acc_placeholder}}},
-      HloInstructionDescription(entry_computation->root_instruction()),
-      "visitor");
+      GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program

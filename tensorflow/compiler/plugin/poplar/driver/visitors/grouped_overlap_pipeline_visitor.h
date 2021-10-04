@@ -45,7 +45,7 @@ class GroupedOverlapPipelineVisitor : public ParallelPipelineVisitor {
   static std::unique_ptr<PipelineVisitor> Create(
       const HloInstruction* pipeline, CompilerResources& res,
       const DeferredArgRBVectors& inputs,
-      const HloInstructionDescription& description,
+      const HloPoplarInplaceDescription& description,
       const poplar::DebugNameAndId& debug_name_and_id);
 
  protected:

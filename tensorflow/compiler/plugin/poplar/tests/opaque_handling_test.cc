@@ -301,7 +301,7 @@ ENTRY pipeline {
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *res, inputs,
-      HloInstructionDescription(entry->root_instruction()), "visitor");
+      GetInplaceDescription(entry->root_instruction()), "visitor");
   TF_ASSERT_OK(entry->Accept(&visitor));
 
   auto outputs = visitor.outputs();

@@ -45,12 +45,12 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       const absl::flat_hash_set<int> stages_with_recomputation,
       int64 num_backward_stages, CompilerResources& res,
       const DeferredArgRBVectors& inputs,
-      const HloInstructionDescription& description,
+      const HloPoplarInplaceDescription& description,
       const poplar::DebugNameAndId& debug_name_and_id);
 
   PipelineVisitor(const HloInstruction* pipeline, CompilerResources& res,
                   const DeferredArgRBVectors& inputs,
-                  const HloInstructionDescription& description,
+                  const HloPoplarInplaceDescription& description,
                   const poplar::DebugNameAndId& debug_name_and_id);
 
   ~PipelineVisitor();
@@ -224,7 +224,7 @@ class ParallelPipelineVisitor : public PipelineVisitor {
   static std::unique_ptr<PipelineVisitor> Create(
       const HloInstruction* pipeline, CompilerResources& res,
       const DeferredArgRBVectors& inputs,
-      const HloInstructionDescription& description,
+      const HloPoplarInplaceDescription& description,
       const poplar::DebugNameAndId& debug_name_and_id);
 
  protected:
@@ -249,7 +249,7 @@ class SequentialPipelineVisitor : public PipelineVisitor {
   static std::unique_ptr<PipelineVisitor> Create(
       const HloInstruction* pipeline, CompilerResources& res,
       const DeferredArgRBVectors& inputs,
-      const HloInstructionDescription& description,
+      const HloPoplarInplaceDescription& description,
       const poplar::DebugNameAndId& debug_name_and_id);
 
  protected:

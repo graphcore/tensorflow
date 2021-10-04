@@ -17,13 +17,14 @@ limitations under the License.
 
 #include <queue>
 #include <stack>
+#include <utility>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_instruction_extensions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -57,13 +58,13 @@ void RemoveDependencies(std::vector<HloInstruction*> froms, HloInstruction* to,
 // operand index.
 bool IsUsedAsInplace(const HloInstruction* user, const HloInstruction* inst,
                      const HloInstructionType inplace_type) {
-  auto user_description = HloInstructionDescription(user);
+  auto user_description = GetInplaceDescription(user);
   if (user_description.GetType() != inplace_type) {
     return false;
   }
   auto use_indicies = user->OperandIndices(inst);
   std::vector<int64> inplace_indexes =
-      user_description.GetInplaceOperandIndexes();
+      user_description.GetInplaceOperandIndices();
   std::vector<int64> intersection;
 
   absl::c_sort(use_indicies);
@@ -102,7 +103,7 @@ bool ConvertToInplaceGetTupleElement(HloInstruction* inst) {
   // 1. It has an inplace GTE type, and
   // 2. All other users of operand 0 (peers) are GTEs and there is no other
   // GTE with the same GTE index.
-  auto inplace_desc = HloInstructionDescription(inst);
+  auto inplace_desc = GetInplaceDescription(inst);
 
   // Verify it is inplace read/write (cond 1).
   if (inplace_desc.GetType() != HloInstructionType::kInplaceGetTupleElement) {
@@ -133,7 +134,7 @@ bool ConvertToInplaceReadWrite(HloInstruction* inst,
   // 2. For each inplace operand instruction, instruction is not a dependency
   // of peer (users of the same operands) and
   // 3. It is not using the output of the the ROOT instruction.
-  auto inplace_desc = HloInstructionDescription(inst);
+  auto inplace_desc = GetInplaceDescription(inst);
 
   // Verify it is inplace read/write (cond 1).
   if (inplace_desc.GetType() != HloInstructionType::kInplaceReadWrite) {
@@ -145,7 +146,7 @@ bool ConvertToInplaceReadWrite(HloInstruction* inst,
 
   bool is_inplace = true;
   // Go through all the inplace operands.
-  for (auto op_idx : inplace_desc.GetInplaceOperandIndexes()) {
+  for (auto op_idx : inplace_desc.GetInplaceOperandIndices()) {
     HloInstruction* op = inst->mutable_operand(op_idx);
     // We expect all the inplace operands to be only used once as an operand.
     if (!IsUniqueOperand(inst, op)) {
@@ -246,7 +247,7 @@ bool ConvertToInplaceReadOnly(HloInstruction* inst,
   // e (which is inplace read/write).
   // In Cluster 2, we mark f and g as inplace read-only as there are no inplace
   // read/write users.
-  auto inplace_desc = HloInstructionDescription(inst);
+  auto inplace_desc = GetInplaceDescription(inst);
 
   if (inplace_desc.GetType() != HloInstructionType::kInplaceReadOnly) {
     return false;
@@ -279,14 +280,14 @@ bool ConvertToInplaceReadOnly(HloInstruction* inst,
       }
       visited.insert(node);
 
-      auto node_description = HloInstructionDescription(node);
+      auto node_description = GetInplaceDescription(node);
 
       // First extend the cluster by traversing from the current node to its
       // users. Note that at this point the node can be any HloInstructionType.
       // Go through all the users which use this node in a inplace operand
       // position.
       for (auto* user : node->users()) {
-        auto user_description = HloInstructionDescription(user);
+        auto user_description = GetInplaceDescription(user);
         if (IsUsedAsInplace(user, node, HloInstructionType::kInplaceReadOnly)) {
           // If a kInplaceReadOnly user is using the current node as an inplace
           // input, then we want to add it to the cluster.
@@ -315,7 +316,7 @@ bool ConvertToInplaceReadOnly(HloInstruction* inst,
       if (node_description.GetType() == HloInstructionType::kInplaceReadOnly &&
           !worklist.contains(node)) {
         // Go through all the inplace operands.
-        for (auto op_idx : node_description.GetInplaceOperandIndexes()) {
+        for (auto op_idx : node_description.GetInplaceOperandIndices()) {
           auto* operand = node->mutable_operand(op_idx);
           to_visit.push(operand);
         }
@@ -374,349 +375,35 @@ bool ConvertToInplaceReadOnly(HloInstruction* inst,
 
 }  // namespace
 
-HloInstructionDescription::HloInstructionDescription(
-    const HloInstruction* inst) {
-  switch (inst->opcode()) {
-    // Inplace read/write ops.
-    // Unary Elementwise ops - inplace on operand 0.
-    case HloOpcode::kAbs:
-    case HloOpcode::kCbrt:
-    case HloOpcode::kCeil:
-    case HloOpcode::kClz:
-    case HloOpcode::kCos:
-    case HloOpcode::kExp:
-    case HloOpcode::kExpm1:
-    case HloOpcode::kFloor:
-    case HloOpcode::kLogistic:
-    case HloOpcode::kLog1p:
-    case HloOpcode::kLog:
-    case HloOpcode::kNegate:
-    case HloOpcode::kNot:
-    case HloOpcode::kPopulationCount:
-    case HloOpcode::kReal:
-    case HloOpcode::kRoundNearestAfz:
-    case HloOpcode::kRsqrt:
-    case HloOpcode::kSign:
-    case HloOpcode::kSin:
-    case HloOpcode::kSqrt:
-    case HloOpcode::kTanh:
-    // Binary Elementwise ops - inplace on operand 0.
-    case HloOpcode::kAdd:
-    case HloOpcode::kAtan2:
-    case HloOpcode::kComplex:
-    case HloOpcode::kDivide:
-    case HloOpcode::kMaximum:
-    case HloOpcode::kMinimum:
-    case HloOpcode::kMultiply:
-    case HloOpcode::kPower:
-    case HloOpcode::kRemainder:
-    case HloOpcode::kSubtract:
-    case HloOpcode::kShiftLeft:
-    case HloOpcode::kShiftRightArithmetic:
-    case HloOpcode::kShiftRightLogical:
-    // These ops are implemented as inplace ops on operand 0 as well.
-    case HloOpcode::kDynamicUpdateSlice:
-    case HloOpcode::kScatter: {
-      // All of the above ops are inplace on operand 0.
-      type_ = HloInstructionType::kInplaceReadWrite;
-      inplace_operands_ = {0};
-      break;
-    }
-
-    // Inplace on all operands.
-    case HloOpcode::kAllReduce:
-    case HloOpcode::kMap:
-    case HloOpcode::kSort:
-    case HloOpcode::kTuple: {
-      OperandIndexes indexes(inst->operand_count());
-      absl::c_iota(indexes, 0);
-      type_ = HloInstructionType::kInplaceReadWrite;
-      inplace_operands_ = indexes;
-      break;
-    }
-
-    case HloOpcode::kFusion: {
-      if (IsPopOpsFusion(inst)) {
-        auto fusion_config = inst->backend_config<PoplarBackendConfig>()
-                                 .ValueOrDie()
-                                 .fusion_config();
-        auto inplace_descriptions = fusion_config.inplace_descriptions();
-        for (const auto& inplace_description : inplace_descriptions) {
-          inplace_operands_.push_back(
-              HloPoplarUseDescription::FromProto(inplace_description)
-                  .operand_number());
-        }
-        absl::c_sort(inplace_operands_);
-        if (inplace_operands_.size()) {
-          type_ = HloInstructionType::kInplaceReadWrite;
-        } else {
-          type_ = HloInstructionType::kNotInplace;
-        }
-      } else {
-        // A non poplibs fusion is inplace on all operands.
-        OperandIndexes indexes(inst->operand_count());
-        absl::c_iota(indexes, 0);
-        type_ = HloInstructionType::kInplaceReadWrite;
-        inplace_operands_ = indexes;
-      }
-      break;
-    }
-
-    case HloOpcode::kCall: {
-      if (IsRepeatLoop(inst)) {
-        OperandIndexes indexes;
-        const int64 num_operands = inst->operand_count();
-        const HloComputation* comp = inst->to_apply();
-        const HloInstruction* root = comp->root_instruction();
-
-        // The loop is considered to be inplace on all operands unless all it's
-        // users are GTEs
-        const bool all_users_gtes = absl::c_all_of(
-            inst->users(), [](const HloInstruction* user) -> bool {
-              return user->opcode() == HloOpcode::kGetTupleElement;
-            });
-        // The root instruction needs to be an inplace tuple - this makes sure
-        // that an particular input is only used in a single place.
-        // The loop also must have been broken up into individual inputs.
-
-        // Check which inputs are actually modified.
-        if (GetRepeatLoopAllowFinerAliasAnalysis(inst) &&
-            IsLoweredInplace(root) && root->opcode() == HloOpcode::kTuple &&
-            num_operands == root->operand_count() && all_users_gtes) {
-          // Vector indiciating whether a given input/output index has a gte
-          // output.
-          std::vector<bool> has_gte(num_operands, false);
-          for (const HloInstruction* user : inst->users()) {
-            CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
-            has_gte[user->tuple_index()] = true;
-          }
-
-          for (int64 idx = 0; idx != num_operands; ++idx) {
-            // An operand is not inplace if there is no gte for it and it's used
-            // directly in the root instruction at the same index.
-            if (has_gte[idx] ||
-                root->operand(idx) != comp->parameter_instruction(idx)) {
-              indexes.push_back(idx);
-            }
-          }
-        } else {
-          // Inplace on all its inputs.
-          indexes.resize(num_operands);
-          absl::c_iota(indexes, 0);
-        }
-
-        inplace_operands_ = indexes;
-        type_ = HloInstructionType::kInplaceReadWrite;
-      } else if (IsPipelineOp(inst) || IsResourceUpdate(inst)) {
-        // Pipeline and ResourceUpdate operations are inplace on all
-        // their inputs.
-        OperandIndexes indexes(inst->operand_count());
-        absl::c_iota(indexes, 0);
-        type_ = HloInstructionType::kInplaceReadWrite;
-        inplace_operands_ = indexes;
-      } else if (IsAnyPipelineStageOp(inst)) {
-        // Pipeline stages are only inplace on operands which are not
-        // parameters/execution counters.
-
-        // Backward pipeline stages don't mark gradient accumulators as inplace
-        // inputs.
-        const bool is_bwd = IsPipelineStageBackward(inst);
-
-        HloComputation* comp = inst->to_apply();
-        for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
-          const HloInstruction* operand = inst->operand(op_idx);
-          if (!IsPipelineStageReadOnlyInput(operand) &&
-              !(is_bwd && IsPoplarInstruction(
-                              PoplarOp::GradientAccumulatorCreate)(operand))) {
-            // If the stage modifies the input inplace, add it as an inplace
-            // operand.
-            if (IsOutputModifiedInplace(comp->parameter_instruction(op_idx))) {
-              inplace_operands_.push_back(op_idx);
-            }
-          }
-        }
-        type_ = HloInstructionType::kInplaceReadWrite;
-      } else if (IsFunction(inst)) {
-        // Functions are inplace on remote buffer inputs.
-        // Assume that the first "num_modified_remote_buffers" inputs are remote
-        // buffers which are modified and they are also the first
-        // "num_modified_remote_buffers" outputs.
-        // Assume that the next "num_unmodified_remote_buffers" inputs are
-        // remote buffers which are only loaded.
-        const int64 num_modified_remote_buffers =
-            GetFunctionNumberModifiedRemoteBufferInputs(inst);
-        const int64 num_unmodified_remote_buffers =
-            GetFunctionNumberUnmodifiedRemoteBufferInputs(inst);
-        // TODO(T10387): consider unmodified remote buffers as read only.
-        if (num_modified_remote_buffers + num_unmodified_remote_buffers) {
-          OperandIndexes indexes(num_modified_remote_buffers +
-                                 num_unmodified_remote_buffers);
-          absl::c_iota(indexes, 0);
-          type_ = HloInstructionType::kInplaceReadWrite;
-          inplace_operands_ = indexes;
-        } else {
-          type_ = HloInstructionType::kNotInplace;
-        }
-      } else {
-        // Calls are not inplace.
-        type_ = HloInstructionType::kNotInplace;
-      }
-      break;
-    }
-
-    case HloOpcode::kWhile: {
-      // Inplace on it's input tuple.
-      CHECK_EQ(inst->operand_count(), 1);
-      type_ = HloInstructionType::kInplaceReadWrite;
-      inplace_operands_ = {0};
-      break;
-    }
-
-    case HloOpcode::kCustomCall: {
-      if (IsPoplibsHloCustomOp(inst)) {
-        auto poplar_inst = Cast<HloPoplarInstruction>(inst);
-
-        const auto use_descriptions = poplar_inst->GetUseDescriptions();
-
-        if (use_descriptions.size()) {
-          for (const HloPoplarUseDescription& description : use_descriptions) {
-            inplace_operands_.push_back(description.operand_number());
-          }
-          absl::c_sort(inplace_operands_);
-          type_ = HloInstructionType::kInplaceReadWrite;
-        } else {
-          type_ = HloInstructionType::kNotInplace;
-        }
-      } else {
-        OperandIndexes indexes(inst->operand_count());
-        absl::c_iota(indexes, 0);
-        type_ = HloInstructionType::kInplaceReadWrite;
-        inplace_operands_ = indexes;
-      }
-      break;
-    }
-
-    case HloOpcode::kAnd:
-    case HloOpcode::kOr:
-    case HloOpcode::kXor: {
-      // Only inplace if their input/output type is the same.
-      if (inst->shape().element_type() ==
-          inst->operand(0)->shape().element_type()) {
-        type_ = HloInstructionType::kInplaceReadWrite;
-        inplace_operands_ = {0};
-      } else {
-        type_ = HloInstructionType::kNotInplace;
-      }
-      break;
-    }
-
-    // Inplace read-only ops.
-    // These ops are implemented as inplace ops on operand 0.
-    case HloOpcode::kAddDependency:
-    case HloOpcode::kBitcastConvert:
-    case HloOpcode::kBroadcast:
-    case HloOpcode::kReshape:
-    case HloOpcode::kReverse:
-    case HloOpcode::kSlice:
-    case HloOpcode::kTranspose: {
-      // All of the above ops are inplace on operand 0.
-      type_ = HloInstructionType::kInplaceReadOnly;
-      inplace_operands_ = {0};
-      break;
-    }
-    // Inplace ops on the first 2 ops.
-    case HloOpcode::kPad: {
-      type_ = HloInstructionType::kInplaceReadOnly;
-      inplace_operands_ = {0, 1};
-      break;
-    }
-    // Inplace on all operands.
-    case HloOpcode::kConcatenate: {
-      OperandIndexes indexes(inst->operand_count());
-      absl::c_iota(indexes, 0);
-      type_ = HloInstructionType::kInplaceReadOnly;
-      inplace_operands_ = indexes;
-      break;
-    }
-
-    // kInplaceGetTupleElement
-    case HloOpcode::kGetTupleElement: {
-      type_ = HloInstructionType::kInplaceGetTupleElement;
-      inplace_operands_ = {0};
-      break;
-    }
-
-    // Not inplace ops.
-    case HloOpcode::kAfterAll:
-    case HloOpcode::kAllToAll:
-    case HloOpcode::kBatchNormGrad:
-    case HloOpcode::kBatchNormInference:
-    case HloOpcode::kBatchNormTraining:
-    case HloOpcode::kCholesky:
-    case HloOpcode::kCompare:
-    case HloOpcode::kConditional:
-    case HloOpcode::kConstant:
-    case HloOpcode::kConvert:
-    case HloOpcode::kConvolution:
-    case HloOpcode::kCopy:
-    case HloOpcode::kDomain:
-    case HloOpcode::kDot:
-    case HloOpcode::kDynamicSlice:
-    case HloOpcode::kGather:
-    case HloOpcode::kImag:
-    case HloOpcode::kInfeed:
-    case HloOpcode::kIota:
-    case HloOpcode::kIsFinite:
-    case HloOpcode::kOutfeed:
-    case HloOpcode::kParameter:
-    case HloOpcode::kReduce:
-    case HloOpcode::kReducePrecision:
-    case HloOpcode::kReduceWindow:
-    case HloOpcode::kRngBitGenerator:
-    case HloOpcode::kRng:
-    case HloOpcode::kSelectAndScatter:
-    case HloOpcode::kTriangularSolve:
-    case HloOpcode::kTupleSelect: {
-      type_ = HloInstructionType::kNotInplace;
-      break;
-    }
-
-    // TODO(T20398): Clamp and Select could be inplace on operand index 1.
-    case HloOpcode::kClamp:
-    case HloOpcode::kSelect: {
-      type_ = HloInstructionType::kNotInplace;
-      break;
-    }
-
-    // Unimplemented ops.
-    case HloOpcode::kBitcast:
-    case HloOpcode::kCollectivePermute:
-    case HloOpcode::kFft:
-    case HloOpcode::kTrace:
-    default: {
-      LOG(FATAL) << "Unrecognized op " << inst->opcode()
-                 << ". Classify whether it is an inplace op or not";
-      type_ = HloInstructionType::kNotInplace;
-    }
-  }
-  inplace_operands_set_ = absl::flat_hash_set<int64>{inplace_operands_.begin(),
-                                                     inplace_operands_.end()};
+HloPoplarInplaceDescription GetInplaceDescription(const HloInstruction* inst) {
+  return CallHloInstructionExtension<InplaceExtension>(inst);
 }
 
-const HloInstructionType& HloInstructionDescription::GetType() const {
+HloPoplarInplaceDescription::HloPoplarInplaceDescription(
+    HloInstructionType type, OperandIndices&& inplace_operands)
+    : type_(type),
+      inplace_operands_(std::move(inplace_operands)),
+      inplace_operands_set_(inplace_operands_.begin(),
+                            inplace_operands_.end()) {}
+
+HloPoplarInplaceDescription::HloPoplarInplaceDescription()
+    : HloPoplarInplaceDescription(HloInstructionType::kNotInplace, {}) {}
+
+const HloInstructionType& HloPoplarInplaceDescription::GetType() const {
   return type_;
 }
 
-const OperandIndexes& HloInstructionDescription::GetInplaceOperandIndexes()
-    const {
+const HloPoplarInplaceDescription::OperandIndices&
+HloPoplarInplaceDescription::GetInplaceOperandIndices() const {
   return inplace_operands_;
 }
 
-const OperandSet& HloInstructionDescription::GetInplaceOperandSet() const {
+const HloPoplarInplaceDescription::OperandSet&
+HloPoplarInplaceDescription::GetInplaceOperandSet() const {
   return inplace_operands_set_;
 }
 
-bool HloInstructionDescription::IsInplaceType() const {
+bool HloPoplarInplaceDescription::IsInplaceType() const {
   switch (GetType()) {
     case HloInstructionType::kInplaceGetTupleElement:
     case HloInstructionType::kInplaceReadWrite:
@@ -728,7 +415,7 @@ bool HloInstructionDescription::IsInplaceType() const {
   }
 }
 
-const std::string HloInstructionDescription::ToString() const {
+const std::string HloPoplarInplaceDescription::ToString() const {
   std::stringstream str_stream;
   str_stream << "type: ";
   switch (GetType()) {
@@ -750,17 +437,17 @@ const std::string HloInstructionDescription::ToString() const {
       break;
     }
   }
-  if (GetInplaceOperandIndexes().size()) {
+  if (GetInplaceOperandIndices().size()) {
     str_stream << " inplace_operands: ";
-    str_stream << absl::StrJoin(GetInplaceOperandIndexes(), ", ");
+    str_stream << absl::StrJoin(GetInplaceOperandIndices(), ", ");
   }
   return str_stream.str();
 }
 
-bool HloInstructionDescription::ConvertToInplace(
+bool HloPoplarInplaceDescription::ConvertToInplace(
     HloInstruction* inst, HloReachabilityMap* reachability_map,
     InplaceWorkList& worklist) {
-  auto inst_description = HloInstructionDescription(inst);
+  auto inst_description = GetInplaceDescription(inst);
   bool converted;
   switch (inst_description.GetType()) {
     case HloInstructionType::kInplaceGetTupleElement: {
@@ -799,11 +486,11 @@ absl::optional<HloInstruction*> GetInplaceModifier(HloInstruction* inst) {
     }
     visited.insert(inst);
     for (HloInstruction* user : inst->users()) {
-      auto inplace_description = HloInstructionDescription(user);
+      auto inplace_description = GetInplaceDescription(user);
       // Returns true if `user` uses `inst` inplace.
       auto is_used_inplace = [inplace_description](HloInstruction* inst,
                                                    HloInstruction* user) {
-        return absl::c_any_of(inplace_description.GetInplaceOperandIndexes(),
+        return absl::c_any_of(inplace_description.GetInplaceOperandIndices(),
                               [&inst, &user](int64 inplace_idx) {
                                 return user->operand(inplace_idx) == inst;
                               });
