@@ -13,20 +13,19 @@
 # limitations under the License.
 # ==============================================================================
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
-from tensorflow.python import ipu
-from tensorflow.python.client import session
+from tensorflow import debugging
 from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.distribute.reduce_util import ReduceOp
+from tensorflow.python.eager import def_function
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu import horovod as hvd
 from tensorflow.python.ipu.horovod import ipu_multi_replica_strategy
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUSyncOnReadVariable
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
+from tensorflow.python.ops.variable_scope import VariableAggregation, VariableSynchronization
 from tensorflow.python.platform import test
 
 
@@ -50,15 +49,20 @@ class IPUMultiReplicaStrategyV1Test(test_util.TensorFlowTestCase):  # pylint: di
         config.experimental.multi_replica_distribution.process_index,
         hvd.rank())
 
-  @test_util.deprecated_graph_mode_only
   def test_strategy(self):
+    config = IPUConfig()
+    config.auto_select_ipus = 1
+    config.configure_ipu_system()
+
+    hvd.init()
+
     strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategyV1()
 
     with strategy.scope():
-
       v = variables.Variable(initial_value=hvd.rank() + 1, dtype=np.float32)
       self.assertEndsWith(v.device, "/device:IPU:0")
 
+      @def_function.function
       def per_replica_fn(x):
         y = v * x
 
@@ -66,83 +70,83 @@ class IPUMultiReplicaStrategyV1Test(test_util.TensorFlowTestCase):  # pylint: di
 
         # This reduction is done on IPU, and hence uses GCL. In this case,
         # since there is no replication in this test, it is an identity op.
-        y_allreduced = replica_context.all_reduce(ReduceOp.SUM, y)
-        self.assertEndsWith(y_allreduced.device, "/device:IPU:0")
+        # We cannot explicitly check for the device of the result, as the
+        # @tf.function decorator does not specify this anymore.
+        y_all_reduced = replica_context.all_reduce(ReduceOp.SUM, y)
 
         # Sanity check that replication normalise does not support int.
         with self.assertRaisesRegex(TypeError,
                                     "int32 not in list of allowed values"):
           replica_context.all_reduce(ReduceOp.MEAN, 1)
 
-        return y_allreduced
+        return y_all_reduced
 
       per_replica_value = strategy.run(per_replica_fn,
                                        args=[constant_op.constant(2.0)])
 
       # This reduction is performed on CPU, and hence uses Horovod.
-      value_allreduced = strategy.reduce(ReduceOp.SUM, per_replica_value)
+      value_all_reduced = strategy.reduce(ReduceOp.SUM, per_replica_value)
 
-      with session.Session() as sess:
-        config = IPUConfig()
-        config.auto_select_ipus = 1
-        config.configure_ipu_system()
+      # The initial value should be broadcast from rank 0.
+      self.assertEqual(v, 1.0)
 
-        sess.run(v.initializer)
+      # There should be one allreduce sum of the values.
+      self.assertEqual(value_all_reduced, hvd.size() * 2.0)
 
-        # The initial value should be broadcast from rank 0.
-        self.assertEqual(sess.run(v), 1.0)
-
-        # There should be one allreduce sum of the values.
-        self.assertEqual(sess.run(value_allreduced), hvd.size() * 2.0)
-
-  @test_util.deprecated_graph_mode_only
   def test_strategy_without_ipu_reduction(self):
+    config = IPUConfig()
+    config.auto_select_ipus = 1
+    config.configure_ipu_system()
+
+    hvd.init()
+
     strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategyV1(
         add_ipu_cross_replica_reductions=False)
 
     with strategy.scope():
-
       v = variables.Variable(initial_value=1.0, dtype=np.float32)
 
+      @def_function.function
       def per_replica_fn(x):
         y = v * x
-
         replica_context = distribution_strategy_context.get_replica_context()
 
         # Since IPU reductions are disabled, this should be an identity op.
         y_out = replica_context.all_reduce(ReduceOp.SUM, y)
-        self.assertEqual(y_out.op.type, "IdentityN")
-        self.assertEqual(y_out.op.inputs[0], y)
+        debugging.assert_equal(y_out.op.type, "IdentityN")
+        debugging.assert_equal(y_out.op.inputs[0], y)
         return y_out
 
       # It is sufficient to test the TF graph construction.
       strategy.run(per_replica_fn, args=[constant_op.constant(2.0)])
 
-  @test_util.deprecated_graph_mode_only
   def test_strategy_with_sync_on_read_variable(self):
+    config = IPUConfig()
+    config.auto_select_ipus = 1
+    config.configure_ipu_system()
+
+    hvd.init()
+
     strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategyV1()
 
     with strategy.scope():
+      w = variables.Variable(initial_value=float(hvd.rank() + 1),
+                             dtype=np.float32,
+                             synchronization=VariableSynchronization.ON_READ,
+                             aggregation=VariableAggregation.MEAN)
 
+      @def_function.function
       def per_replica_fn(x):
-        w0 = variable_scope.get_variable(
-            name="w0",
-            initializer=float(hvd.rank() + 1),
-            synchronization=variable_scope.VariableSynchronization.ON_READ,
-            aggregation=variable_scope.VariableAggregation.MEAN)
-        self.assertIsInstance(w0, IPUSyncOnReadVariable)
-        return w0.assign_add(x)
+        self.assertIsInstance(w, IPUSyncOnReadVariable)
+        w.assign(x + w)
 
-      inputs = array_ops.placeholder(dtype=np.float32, shape=())
-      assign_add_op = strategy.run(per_replica_fn, args=[inputs])
+        return w
 
-      with session.Session() as sess:
-        sess.run(variables.global_variables_initializer())
-        # Both should have initial value from first worker
-        self.assertEqual([1.0], sess.run(variables.global_variables()))
-        sess.run(assign_add_op, feed_dict={inputs: hvd.rank() + 1})
-        # mean(1 + 1, 1 + 2) = 2.5
-        self.assertEqual([2.5], sess.run(variables.global_variables()))
+      # Both should have initial value from first worker
+      debugging.assert_equal([1.0], w)
+      strategy.run(per_replica_fn,
+                   args=[constant_op.constant(hvd.rank() + 1.0)])
+      debugging.assert_equal([2.5], w.read_value())
 
 
 if __name__ == "__main__":
