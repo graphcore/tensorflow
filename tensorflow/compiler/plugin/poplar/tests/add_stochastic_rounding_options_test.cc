@@ -293,6 +293,57 @@ TEST_F(AddStochasticRoundingOptionsTest, SettingOptionsForPoplarFusions) {
               Each(HasDeterministicWorker(THREESTATE_UNDEFINED)));
 }
 
+const char* f16_to_f32_hlo = R"(
+HloModule test
+
+add_reduce {
+  y = f32[] parameter(1)
+  x = f32[] parameter(0)
+  ROOT add = f32[] add(x, y)
+}
+
+_pop_op_reduction_fp16_input {
+  param0 = f16[32,1]{1,0} parameter(0)
+  convert = f32[32,1]{1,0} convert(param0)
+  param1 = f32[] parameter(1)
+  ROOT reduce = f32[] reduce(convert, param1), dimensions={0,1}, to_apply=add_reduce
+}
+
+ENTRY test {
+ param0 = f16[32, 1] parameter(0)
+ f32convert = f32[32, 1] convert(param0)
+
+ constant = f32[] constant(1)
+ f32reduce = f32[] fusion(param0, constant), kind=kCustom, calls=_pop_op_reduction_fp16_input
+
+ ROOT result = (f32[32, 1], f32[]) tuple(f32convert, f32reduce)
+}
+)";
+
+TEST_F(AddStochasticRoundingOptionsTest, StochasticRoundingMethodF16ToF32) {
+  using ::testing::Not;
+
+  ASSERT_TRUE(SetUpHloModule(f16_to_f32_hlo));
+
+  AddStochasticRoundingOptions add_stochastic_rounding_options(
+      StochasticRounding_On);
+
+  TF_ASSERT_OK_AND_ASSIGN(bool modified,
+                          add_stochastic_rounding_options.Run(hlo_module_));
+  ASSERT_TRUE(modified);
+
+  auto* f32convert = FindInstruction(hlo_module_, "f32convert");
+  auto* f32reduce = FindInstruction(hlo_module_, "f32reduce");
+  ASSERT_TRUE(f32convert);
+  ASSERT_TRUE(f32reduce);
+
+  // Both the convert and reduce use SR and so should use a specific seed.
+  ASSERT_THAT(f32convert,
+              Not(HasStochasticRoundingMethod(StochasticRoundingMethod_Any)));
+  ASSERT_THAT(f32reduce,
+              Not(HasStochasticRoundingMethod(StochasticRoundingMethod_Any)));
+}
+
 using AnySeedTest =
     ParameterizedHloTestFixture<AddStochasticRoundingOptionsTest>;
 // It doesn't matter what seed this uses since it doesn't do any compute.
