@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/add_stochastic_rounding_options.h"
 
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
@@ -24,6 +26,17 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
+
+Shape CollectInputAndOutputShapes(const HloInstruction* inst) {
+  std::vector<Shape> shapes;
+  shapes.push_back(inst->shape());
+
+  for (auto* operand : inst->operands()) {
+    shapes.push_back(operand->shape());
+  }
+
+  return ShapeUtil::MakeTupleShape(shapes);
+}
 
 StatusOr<bool> NeedsSpecificSeedType(const HloInstruction* inst) {
   // Instruction types that dont require a specific seed.
@@ -76,8 +89,11 @@ StatusOr<bool> NeedsSpecificSeedType(const HloInstruction* inst) {
       break;
   }
 
+  // We assume that if an instruction has no f16 inputs or outputs
+  // then it won't use SR.
+  const auto all_inst_shapes = CollectInputAndOutputShapes(inst);
   const bool uses_stochastic_rounding =
-      ShapeUtil::HasPrimitiveType(inst->shape(), F16);
+      ShapeUtil::HasPrimitiveType(all_inst_shapes, F16);
   if (!uses_stochastic_rounding) {
     // If we're not using SR then it doesn't matter what
     // seed we use.
