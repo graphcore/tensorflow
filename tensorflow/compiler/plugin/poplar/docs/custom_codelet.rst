@@ -52,7 +52,7 @@ C++ code compiled for, and executed on, the IPU.
 For more information about writing Poplar graph programs and codelets, refer to
 the `Poplar and PopLibs User Guide
 <https://docs.graphcore.ai/projects/poplar-user-guide/>`_ and the `Poplar
-tutorials <https://github.com/graphcore/tutorials/tree/sdk-release-2.2/tutorials/poplar>`_
+tutorials <https://github.com/graphcore/tutorials/tree/sdk-release-2.3/tutorials/poplar>`_
 on the Graphcore GitHub tutorials respository.
 
 Your program must contain a function to build the graph, which will be called
@@ -460,10 +460,10 @@ sections. There are further examples in the Graphcore GitHub tutorials
 repository:
 
 * `Custom op with gradient
-  <https://github.com/graphcore/tutorials/tree/sdk-release-2.2/feature_examples/tensorflow/custom_gradient>`_
+  <https://github.com/graphcore/tutorials/tree/sdk-release-2.3/feature_examples/tensorflow/custom_gradient>`_
 
 * `Custom op with codelet for custom vertex code
-  <https://github.com/graphcore/tutorials/tree/sdk-release-2.2/feature_examples/tensorflow/custom_op>`_
+  <https://github.com/graphcore/tutorials/tree/sdk-release-2.3/feature_examples/tensorflow/custom_op>`_
 
 
 .. _inplace_operations:
