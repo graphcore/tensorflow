@@ -37,9 +37,7 @@ engine. This object is created with a call to
 .. code-block:: python
 
   from tensorflow.python.ipu import embedded_runtime
-
   ...
-
   context = embedded_runtime.embedded_runtime_start(
     poplar_exec_filepath, startup_inputs, engine_name)
 
@@ -52,16 +50,84 @@ function can be called. The context object ensures all appropriate metadata is
 passed, and control dependencies are created.
 
 .. code-block:: python
-
   ...
-  
   results = embedded_runtime.embedded_runtime_call(
     call_inputs, context)
-  session.run(results)
+  session.run(results, feed_dict={...})
 
 Once the IPU embedded application runtime has been created and used within the
 session, the Poplar engine will be running in a background thread. This thread
 can outlive the TensorFlow session.
+
+Pipelining and I/O tiles
+~~~~~~~~~~~~~~~~~~~~~~~~
+When running a pipelined application, or an application with I/O tiles, we must
+handle the additional layer of pipelining. This is a result of there being
+multiple batches of data resident in the device at the same time.
+
+There are two ways to manage this. The first is by submitting multiple requests
+in parallel. The second is to provide a maximum timeout that the application
+should wait for additional data.
+
+Parallel requests
+_________________
+
+To ensure the application isn't starved of data you can submit multiple
+batches of data in parallel in multiple threads. These will be enqueued and
+processed as early as possible by the device. 
+
+When an application is pipelined, these parallel batches of data will overlap
+in time as they are processed by the devices. This improves the overall
+utilisation of the devices and minimises the batch latency.
+
+.. figure:: figures/threads_2.png
+    :width: 75%
+    :alt: Embedded runtime with two threads
+    :align: center
+
+    Embedded runtime with two threads and some waiting
+
+.. figure:: figures/threads_4.png
+    :width: 75%
+    :alt: Embedded runtime with four threads
+    :align: center
+
+    The same application with four threads and no waiting
+
+Timeout
+_______
+When the application is pipelined or using I/O tiles, and data starvation might
+occur, the timeout option allows you to set an upperbound on the time the IPU
+will wait for data. 
+
+When TensorFlow receives a Poplar callback a timer is started. When the
+timer reaches the defined timeout, a "dummy" batch of data is passed to the
+device. This unblocks any pending batches that are in the device.
+
+.. figure:: figures/timeout.png
+    :width: 75%
+    :alt: Embedded runtime timeout
+    :align: center
+
+    An embedded runtime application triggering a 500us timeout
+
+Engine restarts
+_______________
+The number of batches to process in an application is a compile-time decision.
+However, you might later deliver more batches at runtime than compiled for. If
+this happens, the Poplar engine will be restarted. A restart blocks enqueued
+items from being processed, temporarily increasing latency.
+
+To mitigate this, we recommend compiling the application to process as many
+batches as required before it terminates. If the number of batches is unknown,
+choose a value large enough to minimise this.
+
+.. figure:: figures/restart.png
+    :width: 75%
+    :alt: Embedded runtime engine restart
+    :align: center
+
+    An embedded runtime application triggering an engine restart causing increased latency
 
 Example
 ~~~~~~~~
