@@ -31,12 +31,15 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 
 using ::absl::StrCat;
@@ -380,6 +383,18 @@ StatusOr<poplar::OptionFlags> GetSliceOptionsForInst(const HloInstruction* inst,
   for (const auto& opt : poplar_backend_config.slice_options()) {
     opts.set(opt.option(), opt.value());
   }
+
+  bool indices_are_sorted = false;
+  if (IsPoplarInstruction(PoplarOp::MultiSlice)(inst)) {
+    auto* multi_slice_inst = Cast<HloMultiSliceInstruction>(inst);
+    indices_are_sorted = multi_slice_inst->GetIndicesAreSorted();
+  } else if (IsPoplarInstruction(PoplarOp::MultiUpdate)(inst) ||
+             IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst)) {
+    auto* multi_update_inst = Cast<HloMultiUpdateInstruction>(inst);
+    indices_are_sorted = multi_update_inst->GetIndicesAreSorted();
+  }
+  opts.set("indicesAreSorted", indices_are_sorted ? "true" : "false");
+
   return opts;
 }
 
