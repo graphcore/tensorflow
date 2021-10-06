@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import os
 import numpy as np
+from absl.testing import parameterized
 import pva
 from test_utils import ReportHelper
 
@@ -27,8 +28,10 @@ from test_utils import ReportHelper
 from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.python.platform import googletest
+from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu import utils
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -41,11 +44,16 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.keras.layers import GRU
 # pylint: enable=unused-import
 
-dataType = np.float32
-batch_size = 1
-seq_len = 3
-input_size = 5
-num_channels = 8
+DATA_TYPE = np.float32
+BATCH_SIZE = 1
+SEQ_LEN = 3
+INPUT_SIZE = 5
+NUM_CHANNELS = 8
+
+
+def _totalTileMemory(report):
+  return sum(tile.memory.total.excludingGaps
+             for tile in report.compilation.tiles)
 
 
 class AUGRUCell(rnn_cell.RNNCell):
@@ -109,35 +117,37 @@ def _get_variable(name, shape, initializer):
   return variable_scope.get_variable(name,
                                      shape=shape,
                                      initializer=initializer,
-                                     dtype=dataType)
+                                     dtype=DATA_TYPE)
 
 
 def _createGRUInput(value, shape):
-  return np.full(fill_value=value, shape=shape, dtype=dataType)
+  return np.full(fill_value=value, shape=shape, dtype=DATA_TYPE)
 
 
 def _createGRUInitialState(value, shape):
-  return np.full(fill_value=value, shape=shape, dtype=dataType)
+  return np.full(fill_value=value, shape=shape, dtype=DATA_TYPE)
 
 
-class GRUTest(xla_test.XLATestCase):
-  def _GRULayerCPU(self,
-                   inputs,
-                   weights_value,
-                   seq_length,
-                   seq_val,
-                   initial_state,
-                   att_scores,
-                   training,
-                   name,
-                   activation='tanh',
-                   recurrent_activation='sigmoid'):
-    #pylint: disable=unused-argument
+class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=abstract-method
+  def _GRULayerCPU(
+      self,
+      inputs,
+      weights_value,
+      seq_length,
+      seq_val,
+      initial_state,
+      att_scores,
+      training,
+      name,
+      input_size=INPUT_SIZE,  # pylint: disable=unused-argument
+      num_channels=NUM_CHANNELS,
+      activation='tanh',
+      recurrent_activation='sigmoid'):
     del name
     with ops.device("/device:CPU:0"):
-      kernel_init = init_ops.constant_initializer(weights_value, dataType)
-      recurrent_init = init_ops.constant_initializer(weights_value, dataType)
-      bias_init = init_ops.constant_initializer(0.0, dataType)
+      kernel_init = init_ops.constant_initializer(weights_value, DATA_TYPE)
+      recurrent_init = init_ops.constant_initializer(weights_value, DATA_TYPE)
+      bias_init = init_ops.constant_initializer(0.0, DATA_TYPE)
       if att_scores is None:
         gru = GRU(num_channels,
                   activation=activation,
@@ -159,12 +169,12 @@ class GRUTest(xla_test.XLATestCase):
                                      inputs=inputs,
                                      sequence_length=seq_length,
                                      initial_state=initial_state,
-                                     dtype=dataType,
+                                     dtype=DATA_TYPE,
                                      scope="augru",
                                      time_major=True)
 
       outputs = outputs if seq_val is None else outputs[0:min(
-          seq_len, seq_val[0])]
+          SEQ_LEN, seq_val[0])]
       return outputs
 
   def _GRULayer(self,
@@ -177,17 +187,22 @@ class GRUTest(xla_test.XLATestCase):
                 training,
                 name,
                 activation='tanh',
-                recurrent_activation='sigmoid'):
+                recurrent_activation='sigmoid',
+                input_size=INPUT_SIZE,
+                num_channels=NUM_CHANNELS,
+                available_memory_proportion_fwd=None,
+                available_memory_proportion_bwd=None):
     with ops.device("/device:IPU:0"):
       with variable_scope.variable_scope("gru_layer", use_resource=True):
         kernel = _get_variable(
             "kernel",
             shape=[input_size + num_channels, 3 * num_channels],
-            initializer=init_ops.constant_initializer(weights_value, dataType))
+            initializer=init_ops.constant_initializer(weights_value,
+                                                      DATA_TYPE))
         biases = _get_variable("biases",
                                shape=[3, num_channels],
                                initializer=init_ops.constant_initializer(
-                                   0.0, dataType))
+                                   0.0, DATA_TYPE))
 
       if seq_length is None:
         outputs, _, _ = gen_popnn_ops.popnn_gru_layer(
@@ -199,7 +214,9 @@ class GRUTest(xla_test.XLATestCase):
             biases=biases,
             initial_state=initial_state,
             is_training=training,
-            name=name)
+            name=name,
+            available_memory_proportion_fwd=available_memory_proportion_fwd,
+            available_memory_proportion_bwd=available_memory_proportion_bwd)
       elif att_scores is not None:
         outputs, _, _ = gen_popnn_ops.popnn_augru_layer(
             activation=activation,
@@ -212,7 +229,9 @@ class GRUTest(xla_test.XLATestCase):
             is_training=training,
             seq_len=seq_length,
             att_score=att_scores,
-            name=name)
+            name=name,
+            available_memory_proportion_fwd=available_memory_proportion_fwd,
+            available_memory_proportion_bwd=available_memory_proportion_bwd)
       else:
         outputs, _, _ = gen_popnn_ops.popnn_dynamic_gru_layer(
             activation=activation,
@@ -224,27 +243,29 @@ class GRUTest(xla_test.XLATestCase):
             initial_state=initial_state,
             is_training=training,
             seq_len=seq_length,
-            name=name)
+            name=name,
+            available_memory_proportion_fwd=available_memory_proportion_fwd,
+            available_memory_proportion_bwd=available_memory_proportion_bwd)
       outputs = outputs if seq_val is None else outputs[0:min(
-          seq_len, seq_val[0])]
+          SEQ_LEN, seq_val[0])]
       return outputs
 
   def _RunGRULayerInference(self, name, input_value, weights_value, seq_val,
                             init_state_value, att_score_val,
                             gru_layer_function):
     with self.session() as sess:
-      pinputs = array_ops.placeholder(dataType,
-                                      [seq_len, batch_size, input_size],
+      pinputs = array_ops.placeholder(DATA_TYPE,
+                                      [SEQ_LEN, BATCH_SIZE, INPUT_SIZE],
                                       name="inputs")
-      pinitial_state = array_ops.placeholder(dataType,
-                                             [batch_size, num_channels],
+      pinitial_state = array_ops.placeholder(DATA_TYPE,
+                                             [BATCH_SIZE, NUM_CHANNELS],
                                              name="initial_state")
       pseq_len = array_ops.placeholder(
-          np.int32, [batch_size],
+          np.int32, [BATCH_SIZE],
           name="seq_len") if seq_val is not None else None
 
       patt_scores = array_ops.placeholder(
-          dataType, [seq_len, batch_size],
+          DATA_TYPE, [SEQ_LEN, BATCH_SIZE],
           name="att_score") if att_score_val is not None else None
 
       gru_output_seq = gru_layer_function(inputs=pinputs,
@@ -263,7 +284,7 @@ class GRUTest(xla_test.XLATestCase):
       if pseq_len is not None:
         fd[pseq_len] = seq_val
       if patt_scores is not None:
-        fd[patt_scores] = np.full(patt_scores.shape, att_score_val, dataType)
+        fd[patt_scores] = np.full(patt_scores.shape, att_score_val, DATA_TYPE)
 
       sess.run(variables.global_variables_initializer())
       return sess.run(gru_output_seq, fd)
@@ -331,7 +352,7 @@ class GRUTest(xla_test.XLATestCase):
                                      init_state_value=init_state_value)
 
     # Run with '1'' seq_len
-    assert batch_size == 1
+    assert BATCH_SIZE == 1
     for init_state_value in [0., 1.]:
       self._RunInferenceComparison('ones',
                                    input_value=0.,
@@ -347,12 +368,25 @@ class GRUTest(xla_test.XLATestCase):
                                    init_state_value=init_state_value,
                                    seq_val=[0])
 
-  def _RunGRULayerTraining(self, name, input_value, weights_value, seq_val,
-                           init_state_value, training_steps, labels_array,
-                           att_score_val, gru_layer_function, device_string):
+  def _RunGRULayerTraining(self,
+                           name,
+                           input_value,
+                           weights_value,
+                           seq_val,
+                           init_state_value,
+                           training_steps,
+                           labels_array,
+                           att_score_val,
+                           gru_layer_function,
+                           device_string,
+                           batch_size=BATCH_SIZE,
+                           input_size=INPUT_SIZE,
+                           num_channels=NUM_CHANNELS,
+                           available_memory_proportion_fwd=None,
+                           available_memory_proportion_bwd=None):
     with self.session() as sess:
-      pinputs = array_ops.placeholder(dataType,
-                                      [seq_len, batch_size, input_size],
+      pinputs = array_ops.placeholder(DATA_TYPE,
+                                      [SEQ_LEN, batch_size, input_size],
                                       name="inputs")
       plabels = array_ops.placeholder(np.int32, [batch_size], name="labels")
 
@@ -361,7 +395,7 @@ class GRUTest(xla_test.XLATestCase):
           name="seq_len") if seq_val is not None else None
 
       patt_scores = array_ops.placeholder(
-          dataType, [seq_len, batch_size],
+          DATA_TYPE, [SEQ_LEN, batch_size],
           name="att_score") if att_score_val is not None else None
 
       with ops.device(device_string):
@@ -370,7 +404,16 @@ class GRUTest(xla_test.XLATestCase):
               "initial_state",
               shape=[batch_size, num_channels],
               initializer=init_ops.constant_initializer(
-                  init_state_value, dataType))
+                  init_state_value, DATA_TYPE))
+
+        kwargs = {}
+        if available_memory_proportion_fwd is not None:
+          kwargs["available_memory_proportion_fwd"] = \
+            available_memory_proportion_fwd
+        if available_memory_proportion_bwd is not None:
+          kwargs["available_memory_proportion_bwd"] = \
+            available_memory_proportion_bwd
+
         logits = gru_layer_function(inputs=pinputs,
                                     weights_value=weights_value,
                                     seq_length=pseq_len,
@@ -378,13 +421,17 @@ class GRUTest(xla_test.XLATestCase):
                                     initial_state=initial_state,
                                     att_scores=patt_scores,
                                     training=True,
-                                    name=name)
+                                    name=name,
+                                    input_size=input_size,
+                                    num_channels=num_channels,
+                                    **kwargs)
         logits = math_ops.reduce_mean(logits, axis=0)
         softmax = nn.sparse_softmax_cross_entropy_with_logits_v2(
             logits=logits, labels=array_ops.stop_gradient(plabels))
         loss = math_ops.reduce_mean(softmax)
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
+      utils.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
       losses = []
       inputs = _createGRUInput(input_value, pinputs.shape)
@@ -395,7 +442,7 @@ class GRUTest(xla_test.XLATestCase):
       if seq_val is not None:
         fd[pseq_len] = seq_val
       if patt_scores is not None:
-        fd[patt_scores] = np.full(patt_scores.shape, att_score_val, dataType)
+        fd[patt_scores] = np.full(patt_scores.shape, att_score_val, DATA_TYPE)
 
       for _ in range(0, training_steps):
         l, _ = sess.run([loss, train], fd)
@@ -410,7 +457,7 @@ class GRUTest(xla_test.XLATestCase):
                              training_steps,
                              seq_val=None,
                              att_score_val=None):
-    labels_array = np.ones(shape=[batch_size], dtype=np.int32)
+    labels_array = np.ones(shape=[BATCH_SIZE], dtype=np.int32)
     ops.reset_default_graph()
     popnn_losses = self._RunGRULayerTraining(name=name,
                                              input_value=input_value,
@@ -453,7 +500,7 @@ class GRUTest(xla_test.XLATestCase):
                                     training_steps=3)
 
     # Run with a sequence length
-    assert batch_size == 1
+    assert BATCH_SIZE == 1
     for weight in np.random.rand(3):
       for init_state_value in [0., 1.]:
         self._RunTrainingComparison('rand',
@@ -480,21 +527,21 @@ class GRUTest(xla_test.XLATestCase):
     init_state_value = 1.
     seq_val = None
 
-    inputs = _createGRUInput(input_value, [seq_len, batch_size, input_size])
+    inputs = _createGRUInput(input_value, [SEQ_LEN, BATCH_SIZE, INPUT_SIZE])
     initial_state = _createGRUInitialState(init_state_value,
-                                           [batch_size, num_channels])
+                                           [BATCH_SIZE, NUM_CHANNELS])
 
     def run(gru_layer_function, act, rec_act):
       ops.reset_default_graph()
       with self.session() as sess:
-        pinputs = array_ops.placeholder(dataType,
-                                        [seq_len, batch_size, input_size],
+        pinputs = array_ops.placeholder(DATA_TYPE,
+                                        [SEQ_LEN, BATCH_SIZE, INPUT_SIZE],
                                         name="inputs")
-        pinitial_state = array_ops.placeholder(dataType,
-                                               [batch_size, num_channels],
+        pinitial_state = array_ops.placeholder(DATA_TYPE,
+                                               [BATCH_SIZE, NUM_CHANNELS],
                                                name="initial_state")
         pseq_len = array_ops.placeholder(
-            np.int32, [batch_size],
+            np.int32, [BATCH_SIZE],
             name="seq_len") if seq_val is not None else None
 
         gru_output_seq = gru_layer_function(inputs=pinputs,
@@ -529,21 +576,21 @@ class GRUTest(xla_test.XLATestCase):
     cfg.configure_ipu_system()
 
     with self.session() as sess:
-      pinputs1 = array_ops.placeholder(dataType,
-                                       [seq_len, batch_size, input_size],
+      pinputs1 = array_ops.placeholder(DATA_TYPE,
+                                       [SEQ_LEN, BATCH_SIZE, INPUT_SIZE],
                                        name="inputs1")
-      pinputs2 = array_ops.placeholder(dataType,
-                                       [seq_len, batch_size, input_size],
+      pinputs2 = array_ops.placeholder(DATA_TYPE,
+                                       [SEQ_LEN, BATCH_SIZE, INPUT_SIZE],
                                        name="inputs2")
-      plabels = array_ops.placeholder(np.int32, [batch_size], name="labels")
+      plabels = array_ops.placeholder(np.int32, [BATCH_SIZE], name="labels")
 
       with ops.device("/device:IPU:0"):
 
         def gru_layer(inputs, name):
           initial_state = _get_variable(
               "initial_state",
-              shape=[batch_size, num_channels],
-              initializer=init_ops.constant_initializer(0.1, dataType))
+              shape=[BATCH_SIZE, NUM_CHANNELS],
+              initializer=init_ops.constant_initializer(0.1, DATA_TYPE))
           return self._GRULayer(inputs=inputs,
                                 weights_value=1.,
                                 seq_length=None,
@@ -572,7 +619,7 @@ class GRUTest(xla_test.XLATestCase):
           [loss, train], {
               pinputs1: _createGRUInput(0.5, pinputs1.shape),
               pinputs2: _createGRUInput(1.5, pinputs2.shape),
-              plabels: np.ones(shape=[batch_size], dtype=np.int32),
+              plabels: np.ones(shape=[BATCH_SIZE], dtype=np.int32),
           })
 
       report = pva.openReport(report_helper.find_report())
@@ -591,21 +638,21 @@ class GRUTest(xla_test.XLATestCase):
 
     with self.session() as sess:
       # Note here the second GRU is larger.
-      pinputs1 = array_ops.placeholder(dataType,
-                                       [seq_len, batch_size, input_size],
+      pinputs1 = array_ops.placeholder(DATA_TYPE,
+                                       [SEQ_LEN, BATCH_SIZE, INPUT_SIZE],
                                        name="inputs1")
-      pinputs2 = array_ops.placeholder(dataType,
-                                       [seq_len * 2, batch_size, input_size],
+      pinputs2 = array_ops.placeholder(DATA_TYPE,
+                                       [SEQ_LEN * 2, BATCH_SIZE, INPUT_SIZE],
                                        name="inputs2")
-      plabels = array_ops.placeholder(np.int32, [batch_size], name="labels")
+      plabels = array_ops.placeholder(np.int32, [BATCH_SIZE], name="labels")
 
       with ops.device("/device:IPU:0"):
 
         def gru_layer(inputs, name):
           initial_state = _get_variable(
               "initial_state",
-              shape=[batch_size, num_channels],
-              initializer=init_ops.constant_initializer(0.1, dataType))
+              shape=[BATCH_SIZE, NUM_CHANNELS],
+              initializer=init_ops.constant_initializer(0.1, DATA_TYPE))
           return self._GRULayer(inputs=inputs,
                                 weights_value=1.,
                                 seq_length=None,
@@ -634,7 +681,7 @@ class GRUTest(xla_test.XLATestCase):
           [loss, train], {
               pinputs1: _createGRUInput(0.5, pinputs1.shape),
               pinputs2: _createGRUInput(1.5, pinputs2.shape),
-              plabels: np.ones(shape=[batch_size], dtype=np.int32),
+              plabels: np.ones(shape=[BATCH_SIZE], dtype=np.int32),
           })
 
       report = pva.openReport(report_helper.find_report())
@@ -643,6 +690,179 @@ class GRUTest(xla_test.XLATestCase):
           "There should be four fwd GRUs")
       self.assert_compute_sets_matches(report, '*/MulOGate/Op/Multiply', 2,
                                        "There should be two bwd GRUs")
+
+  @parameterized.parameters((True,), (False,))
+  def testGRUWithAvailableMemoryProportionFwd(self, valid_value):
+    cfg = IPUConfig()
+    report_helper = ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    with self.session() as sess:
+      pinputs = array_ops.placeholder(DATA_TYPE,
+                                      [SEQ_LEN, BATCH_SIZE, INPUT_SIZE],
+                                      name="inputs")
+      pinitial_state = array_ops.placeholder(DATA_TYPE,
+                                             [BATCH_SIZE, NUM_CHANNELS],
+                                             name="initial_state")
+
+      gru_output_seq = self._GRULayer(
+          inputs=pinputs,
+          weights_value=1.,
+          seq_length=None,
+          seq_val=None,
+          att_scores=None,
+          initial_state=pinitial_state,
+          training=False,
+          name=None,
+          available_memory_proportion_fwd=0.7 if valid_value else -123.)
+
+      sess.run(variables.global_variables_initializer())
+
+      def run_gru():
+        sess.run(
+            gru_output_seq, {
+                pinputs: _createGRUInput(0.7, pinputs.shape),
+                pinitial_state: _createGRUInitialState(1.,
+                                                       pinitial_state.shape)
+            })
+
+      if valid_value:
+        run_gru()
+      else:
+        self.assertRaisesRegex(errors.InternalError,
+                               "Value must be greater than or equal to 0",
+                               run_gru)
+
+  def testGRUGreaterAvailableMemoryProportionFwdMeansGreaterTotalTileMemory(
+      self):
+    cfg = IPUConfig()
+    report_helper = ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 32
+    cfg.configure_ipu_system()
+
+    name = "availableMemoryProportion"
+    batch_size = 256
+    input_size = 256
+    num_channels = 256
+
+    def run_gru(amp_val):
+      with self.session() as sess:
+        with variable_scope.variable_scope("gru_" +
+                                           str(amp_val).replace(".", "_"),
+                                           use_resource=True):
+          pinputs = array_ops.placeholder(DATA_TYPE,
+                                          [SEQ_LEN, batch_size, input_size],
+                                          name="inputs")
+          pinitial_state = array_ops.placeholder(DATA_TYPE,
+                                                 [batch_size, num_channels],
+                                                 name="initial_state")
+
+        gru_output_seq = self._GRULayer(
+            inputs=pinputs,
+            weights_value=1.,
+            seq_length=None,
+            seq_val=None,
+            att_scores=None,
+            initial_state=pinitial_state,
+            training=False,
+            name=name,
+            input_size=input_size,
+            num_channels=num_channels,
+            available_memory_proportion_fwd=amp_val)
+
+        utils.move_variable_initialization_to_cpu()
+        sess.run(variables.global_variables_initializer())
+        sess.run(
+            gru_output_seq, {
+                pinputs: _createGRUInput(0.7, pinputs.shape),
+                pinitial_state: _createGRUInitialState(1.,
+                                                       pinitial_state.shape)
+            })
+
+    run_gru(0.8)
+    run_gru(0.1)
+
+    report_paths = report_helper.find_reports()
+    self.assertEqual(len(report_paths), 2)
+    reports = [pva.openReport(report) for report in report_paths]
+
+    self.assertGreater(_totalTileMemory(reports[0]),
+                       _totalTileMemory(reports[1]))
+
+  def _run_single_gru_training_step(self,
+                                    name,
+                                    batch_size=BATCH_SIZE,
+                                    input_size=INPUT_SIZE,
+                                    num_channels=NUM_CHANNELS,
+                                    amp_val=None):
+    self._RunGRULayerTraining(name=name,
+                              input_value=0.,
+                              weights_value=0.7,
+                              init_state_value=1.,
+                              training_steps=1,
+                              seq_val=None,
+                              att_score_val=0.5,
+                              labels_array=np.ones(shape=[batch_size],
+                                                   dtype=np.int32),
+                              gru_layer_function=self._GRULayer,
+                              device_string="/device:IPU:0",
+                              batch_size=batch_size,
+                              input_size=input_size,
+                              num_channels=num_channels,
+                              available_memory_proportion_bwd=amp_val)
+
+  @parameterized.parameters((True), (False))
+  def testGRUWithAvailableMemoryProportionBwd(self, valid_value):
+    cfg = IPUConfig()
+    report_helper = ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    name = ("" if valid_value else "in") + "validAvailableMemoryProportionBwd"
+
+    if valid_value:
+      self._run_single_gru_training_step(name, amp_val=0.7)
+    else:
+      with self.assertRaisesRegex(errors.InternalError,
+                                  "Value must be greater than or equal to 0"):
+        self._run_single_gru_training_step(name, amp_val=-123.)
+
+  def testGRUGreaterAvailableMemoryProportionBwdMeansGreaterTotalTileMemory(
+      self):
+    cfg = IPUConfig()
+    report_helper = ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 32
+    cfg.configure_ipu_system()
+
+    name = "availableMemoryProportion"
+    batch_size = 256
+    input_size = 256
+    num_channels = 256
+
+    self._run_single_gru_training_step(name,
+                                       batch_size=batch_size,
+                                       input_size=input_size,
+                                       num_channels=num_channels,
+                                       amp_val=0.8)
+    self._run_single_gru_training_step(name,
+                                       batch_size=batch_size,
+                                       input_size=input_size,
+                                       num_channels=num_channels,
+                                       amp_val=0.1)
+
+    report_paths = report_helper.find_reports()
+    self.assertEqual(len(report_paths), 2)
+    reports = [pva.openReport(report) for report in report_paths]
+
+    self.assertGreater(_totalTileMemory(reports[0]),
+                       _totalTileMemory(reports[1]))
 
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ class HloLSTMFwdInstruction : public HloRNNFwdInstruction {
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-      xla::PrimitiveType partials_type);
+      xla::PrimitiveType partials_type, float available_memory_proportion);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -47,7 +47,7 @@ class HloLSTMBwdInstruction : public HloRNNBwdInstruction {
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-      xla::PrimitiveType partials_type);
+      xla::PrimitiveType partials_type, float available_memory_proportion);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -59,13 +59,13 @@ std::unique_ptr<HloInstruction> CreateLSTMFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type);
+    xla::PrimitiveType partials_type, float available_memory_proportion);
 
 std::unique_ptr<HloInstruction> CreateLSTMBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type);
+    xla::PrimitiveType partials_type, float available_memory_proportion);
 
 class HloDynamicLSTMFwdInstruction : public HloRNNFwdInstruction {
  public:
@@ -73,7 +73,7 @@ class HloDynamicLSTMFwdInstruction : public HloRNNFwdInstruction {
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-      xla::PrimitiveType partials_type);
+      xla::PrimitiveType partials_type, float available_memory_proportion);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -90,7 +90,7 @@ class HloDynamicLSTMBwdInstruction : public HloRNNBwdInstruction {
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-      xla::PrimitiveType partials_type);
+      xla::PrimitiveType partials_type, float available_memory_proportion);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -102,13 +102,13 @@ std::unique_ptr<HloInstruction> CreateDynamicLSTMFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type);
+    xla::PrimitiveType partials_type, float available_memory_proportion);
 
 std::unique_ptr<HloInstruction> CreateDynamicLSTMBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type);
+    xla::PrimitiveType partials_type, float available_memory_proportion);
 
 }  // namespace poplarplugin
 }  // namespace xla

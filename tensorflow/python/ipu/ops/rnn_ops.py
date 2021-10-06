@@ -54,7 +54,9 @@ class _PopnnRNN(base_layer.Layer):  #pylint: disable=W0223
                bias_initializer=None,
                activation='tanh',
                recurrent_activation='sigmoid',
-               name=None):
+               name=None,
+               available_memory_proportion_fwd=None,
+               available_memory_proportion_bwd=None):
     """Creates a _PopnnRNN model from model spec.
 
     Args:
@@ -76,8 +78,20 @@ class _PopnnRNN(base_layer.Layer):  #pylint: disable=W0223
       name: VariableScope for the created subgraph; defaults to class name.
         This only serves the default scope if later no scope is specified when
         invoking ``__call__()``.
+      available_memory_proportion_fwd: Maximum fraction of IPU memory which can
+        be used as temporary scratch space during computation, for the forward
+        propagation layer. A value of -1. or None indicates that the default in
+        Popnn should be used. If available_memory_proportion_bwd is set to None,
+        then this value applies to both phases.
+      available_memory_proportion_bwd: Maximum fraction of IPU memory which can
+        be used as temporary scratch space during computation, for the backward
+        propagation layer. A value of -1. or None indicates that the default in
+        Popnn should be used.
     """
     super(_PopnnRNN, self).__init__(dtype=dtype, name=name)
+
+    if available_memory_proportion_bwd is None:
+      available_memory_proportion_bwd = available_memory_proportion_fwd
 
     if dtype not in [dtypes.float16, dtypes.float32]:
       raise ValueError("Only support float16, float32, provided %s" % dtype)
@@ -98,6 +112,8 @@ class _PopnnRNN(base_layer.Layer):  #pylint: disable=W0223
 
     self._activation = activation
     self._recurrent_activation = recurrent_activation
+    self._available_memory_proportion_fwd = available_memory_proportion_fwd
+    self._available_memory_proportion_bwd = available_memory_proportion_bwd
 
   @property
   def num_layers(self):
@@ -249,7 +265,9 @@ class PopnnLSTM(_PopnnRNN):
                bias_initializer=None,
                activation='tanh',
                recurrent_activation='sigmoid',
-               name=None):
+               name=None,
+               available_memory_proportion_fwd=None,
+               available_memory_proportion_bwd=None):
     """Creates a PopnnLSTM model from model spec.
 
     Args:
@@ -271,16 +289,28 @@ class PopnnLSTM(_PopnnRNN):
       name: VariableScope for the created subgraph; defaults to class name.
         This only serves the default scope if later no scope is specified when
         invoking ``__call__()``.
+      available_memory_proportion_fwd: Maximum fraction of IPU memory which can
+        be used as temporary scratch space during computation, for the forward
+        propagation layer. A value of -1. or None indicates that the default in
+        Popnn should be used. If available_memory_proportion_bwd is set to None,
+        then this value applies to both phases.
+      available_memory_proportion_bwd: Maximum fraction of IPU memory which can
+        be used as temporary scratch space during computation, for the backward
+        propagation layer. A value of -1. or None indicates that the default in
+        Popnn should be used.
     """
-    super(PopnnLSTM, self).__init__(num_units=num_units,
-                                    dtype=dtype,
-                                    partials_dtype=partials_dtype,
-                                    seed=seed,
-                                    weights_initializer=weights_initializer,
-                                    bias_initializer=bias_initializer,
-                                    activation=activation,
-                                    recurrent_activation=recurrent_activation,
-                                    name=name)
+    super(PopnnLSTM, self).__init__(
+        num_units=num_units,
+        dtype=dtype,
+        partials_dtype=partials_dtype,
+        seed=seed,
+        weights_initializer=weights_initializer,
+        bias_initializer=bias_initializer,
+        activation=activation,
+        recurrent_activation=recurrent_activation,
+        name=name,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd)
 
   def build(self, input_shape):
     """Create variables of the PopnnLSTM.
@@ -337,6 +367,13 @@ class PopnnLSTM(_PopnnRNN):
     h = ops.convert_to_tensor(h, dtype=dtype)
     c = ops.convert_to_tensor(c, dtype=dtype)
 
+    available_memory_proportion_fwd = -1. \
+        if self._available_memory_proportion_fwd is None \
+        else self._available_memory_proportion_fwd
+    available_memory_proportion_bwd = -1. \
+        if self._available_memory_proportion_bwd is None \
+        else self._available_memory_proportion_bwd
+
     outputs, output_h, output_c, _ = gen_popnn_ops.popnn_lstm_layer(
         inputs=inputs,
         num_channels=self._num_units,
@@ -348,7 +385,9 @@ class PopnnLSTM(_PopnnRNN):
         partials_dtype=self._partials_dtype,
         activation=self._activation,
         recurrent_activation=self._recurrent_activation,
-        name=self._name)
+        name=self._name,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd)
     state = rnn_cell.LSTMStateTuple(output_c, output_h)
 
     return outputs, state
@@ -417,6 +456,13 @@ class PopnnDynamicLSTM(PopnnLSTM):
     h = ops.convert_to_tensor(h, dtype=dtype)
     c = ops.convert_to_tensor(c, dtype=dtype)
 
+    available_memory_proportion_fwd = -1. \
+        if self._available_memory_proportion_fwd is None \
+        else self._available_memory_proportion_fwd
+    available_memory_proportion_bwd = -1. \
+        if self._available_memory_proportion_bwd is None \
+        else self._available_memory_proportion_bwd
+
     outputs, output_h, output_c, _ = gen_popnn_ops.popnn_dynamic_lstm_layer(
         inputs=inputs,
         seq_len=seq_len,
@@ -429,7 +475,9 @@ class PopnnDynamicLSTM(PopnnLSTM):
         partials_dtype=self._partials_dtype,
         activation=self._activation,
         recurrent_activation=self._recurrent_activation,
-        name=self._name)
+        name=self._name,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd)
     state = rnn_cell.LSTMStateTuple(output_c, output_h)
 
     return outputs, state
@@ -463,7 +511,9 @@ class PopnnGRU(_PopnnRNN):
                activation='tanh',
                recurrent_activation='sigmoid',
                name=None,
-               reset_after=False):
+               reset_after=False,
+               available_memory_proportion_fwd=None,
+               available_memory_proportion_bwd=None):
     """Creates a PopnnGRU model from model spec.
 
     Args:
@@ -490,16 +540,28 @@ class PopnnGRU(_PopnnRNN):
         True = "after".
         Leave as default (False) to match the behaviour of the standard
         TensorFlow GRU.
+      available_memory_proportion_fwd: Maximum fraction of IPU memory which can
+        be used as temporary scratch space during computation, for the forward
+        propagation layer. A value of -1. or None indicates that the default in
+        Popnn should be used. If available_memory_proportion_bwd is set to None,
+        then this value applies to both phases.
+      available_memory_proportion_bwd: Maximum fraction of IPU memory which can
+        be used as temporary scratch space during computation, for the backward
+        propagation layer. A value of -1. or None indicates that the default in
+        Popnn should be used.
     """
-    super(PopnnGRU, self).__init__(num_units=num_units,
-                                   dtype=dtype,
-                                   partials_dtype=partials_dtype,
-                                   seed=seed,
-                                   weights_initializer=weights_initializer,
-                                   bias_initializer=bias_initializer,
-                                   activation=activation,
-                                   recurrent_activation=recurrent_activation,
-                                   name=name)
+    super(PopnnGRU, self).__init__(
+        num_units=num_units,
+        dtype=dtype,
+        partials_dtype=partials_dtype,
+        seed=seed,
+        weights_initializer=weights_initializer,
+        bias_initializer=bias_initializer,
+        activation=activation,
+        recurrent_activation=recurrent_activation,
+        name=name,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd)
     self._reset_after = reset_after
 
   def build(self, input_shape):
@@ -548,6 +610,13 @@ class PopnnGRU(_PopnnRNN):
 
     initial_state = ops.convert_to_tensor(initial_state, dtype=dtype)
 
+    available_memory_proportion_fwd = -1. \
+        if self._available_memory_proportion_fwd is None \
+        else self._available_memory_proportion_fwd
+    available_memory_proportion_bwd = -1. \
+        if self._available_memory_proportion_bwd is None \
+        else self._available_memory_proportion_bwd
+
     output, output_c, _ = gen_popnn_ops.popnn_gru_layer(
         inputs=inputs,
         num_channels=self._num_units,
@@ -559,7 +628,9 @@ class PopnnGRU(_PopnnRNN):
         activation=self._activation,
         recurrent_activation=self._recurrent_activation,
         name=self._name,
-        reset_after=self._reset_after)
+        reset_after=self._reset_after,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd)
     return output, output_c
 
   def state_shape(self, batch_size):
@@ -615,7 +686,9 @@ class PopnnDynamicGRU(PopnnGRU):
                activation='tanh',
                recurrent_activation='sigmoid',
                name=None,
-               reset_after=False):
+               reset_after=False,
+               available_memory_proportion_fwd=None,
+               available_memory_proportion_bwd=None):
     """Creates a PopnnDynamicGRU model from model spec.
 
       Args:
@@ -642,19 +715,29 @@ class PopnnDynamicGRU(PopnnGRU):
           True = "after".
           Leave as default (False) to match the behaviour of the standard
           TensorFlow GRU.
+        available_memory_proportion_fwd: Maximum fraction of IPU memory which
+          can be used as temporary scratch space during computation, for the
+          forward propagation layer. A value of -1. or None indicates that the
+          default in Popnn should be used. If available_memory_proportion_bwd is
+          set to None, then this value applies to both phases.
+        available_memory_proportion_bwd: Maximum fraction of IPU memory which
+          can be used as temporary scratch space during computation, for the
+          backward propagation layer. A value of -1. or None indicates that the
+          default in Popnn should be used.
     """
-
-    super(PopnnDynamicGRU,
-          self).__init__(num_units=num_units,
-                         dtype=dtype,
-                         partials_dtype=partials_dtype,
-                         seed=seed,
-                         weights_initializer=weights_initializer,
-                         bias_initializer=bias_initializer,
-                         activation=activation,
-                         recurrent_activation=recurrent_activation,
-                         name=name,
-                         reset_after=reset_after)
+    super(PopnnDynamicGRU, self).__init__(
+        num_units=num_units,
+        dtype=dtype,
+        partials_dtype=partials_dtype,
+        seed=seed,
+        weights_initializer=weights_initializer,
+        bias_initializer=bias_initializer,
+        activation=activation,
+        recurrent_activation=recurrent_activation,
+        name=name,
+        reset_after=reset_after,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd)
 
   @property
   def saveable(self):
@@ -717,6 +800,13 @@ class PopnnDynamicGRU(PopnnGRU):
       biases = array_ops.concat([biases, biases], axis=1)
     self.biases = biases
 
+    available_memory_proportion_fwd = -1. \
+        if self._available_memory_proportion_fwd is None \
+        else self._available_memory_proportion_fwd
+    available_memory_proportion_bwd = -1. \
+        if self._available_memory_proportion_bwd is None \
+        else self._available_memory_proportion_bwd
+
     output, output_c, _ = gen_popnn_ops.popnn_dynamic_gru_layer(
         inputs=inputs,
         seq_len=seq_len,
@@ -729,7 +819,9 @@ class PopnnDynamicGRU(PopnnGRU):
         activation=self._activation,
         recurrent_activation=self._recurrent_activation,
         name=self._name,
-        reset_after=self._reset_after)
+        reset_after=self._reset_after,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd)
     return output, output_c
 
 
@@ -761,7 +853,9 @@ class PopnnAUGRU(PopnnGRU):
                activation='tanh',
                recurrent_activation='sigmoid',
                name=None,
-               reset_after=False):
+               reset_after=False,
+               available_memory_proportion_fwd=None,
+               available_memory_proportion_bwd=None):
     """Creates a PopnnAUGRU model from model spec.
 
     Args:
@@ -783,17 +877,29 @@ class PopnnAUGRU(PopnnGRU):
       name: VariableScope for the created subgraph; defaults to class name.
         This only serves the default scope if later no scope is specified when
         invoking ``__call__()``.
+      available_memory_proportion_fwd: Maximum fraction of IPU memory which
+        can be used as temporary scratch space during computation, for the
+        forward propagation layer. A value of -1. or None indicates that the
+        default in Popnn should be used. If available_memory_proportion_bwd is
+        set to None, then this value applies to both phases.
+      available_memory_proportion_bwd: Maximum fraction of IPU memory which
+        can be used as temporary scratch space during computation, for the
+        backward propagation layer. A value of -1. or None indicates that the
+        default in Popnn should be used.
     """
-    super(PopnnAUGRU, self).__init__(num_units=num_units,
-                                     dtype=dtype,
-                                     partials_dtype=partials_dtype,
-                                     seed=seed,
-                                     weights_initializer=weights_initializer,
-                                     bias_initializer=bias_initializer,
-                                     activation=activation,
-                                     recurrent_activation=recurrent_activation,
-                                     name=name,
-                                     reset_after=reset_after)
+    super(PopnnAUGRU, self).__init__(
+        num_units=num_units,
+        dtype=dtype,
+        partials_dtype=partials_dtype,
+        seed=seed,
+        weights_initializer=weights_initializer,
+        bias_initializer=bias_initializer,
+        activation=activation,
+        recurrent_activation=recurrent_activation,
+        name=name,
+        reset_after=reset_after,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd)
 
   #pylint: disable=arguments-differ
   def call(self,
@@ -852,6 +958,13 @@ class PopnnAUGRU(PopnnGRU):
       augru_biases = array_ops.expand_dims(augru_biases, 1)
       augru_biases = array_ops.concat([augru_biases, augru_biases], axis=1)
 
+    available_memory_proportion_fwd = -1. \
+        if self._available_memory_proportion_fwd is None \
+        else self._available_memory_proportion_fwd
+    available_memory_proportion_bwd = -1. \
+        if self._available_memory_proportion_bwd is None \
+        else self._available_memory_proportion_bwd
+
     output, output_c, _ = gen_popnn_ops.popnn_augru_layer(
         inputs=inputs,
         att_score=attention_score,
@@ -865,5 +978,7 @@ class PopnnAUGRU(PopnnGRU):
         activation=self._activation,
         recurrent_activation=self._recurrent_activation,
         name=self._name,
-        reset_after=self._reset_after)
+        reset_after=self._reset_after,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd)
     return output, output_c
