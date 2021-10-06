@@ -204,7 +204,7 @@ ENTRY c1 {
   p0 = f16[2, 64] parameter(0)
   p1 = f16[1024, 64] parameter(1)
   p2 = s32[2] parameter(2)
-  slice = f16[2, 64] custom-call(p1, p2), custom_call_target="MultiSlice"
+  slice = f16[2, 64] custom-call(p1, p2), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   p1_t = f16[64, 1024] transpose(p1), dimensions={1, 0}
   dot = f16[2, 1024] dot(p0, p1_t), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   ROOT t = (f16[2, 64], f16[2, 1024]) tuple(slice, dot)
@@ -269,7 +269,7 @@ ENTRY c1 {
   p1 = f16[64, 1024] parameter(1)
   p2 = s32[2] parameter(2)
   p1_t = f16[1024, 64] transpose(p1), dimensions={1, 0}
-  slice = f16[2, 64] custom-call(p1_t, p2), custom_call_target="MultiSlice"
+  slice = f16[2, 64] custom-call(p1_t, p2), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   dot = f16[2, 1024] dot(p0, p1), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   ROOT t = (f16[2, 64], f16[2, 1024]) tuple(slice, dot)
 }
@@ -332,7 +332,7 @@ ENTRY c1 {
   p1 = f16[64, 1024] parameter(1)
   p2 = s32[2] parameter(2)
   p1_t = f16[1024, 64] transpose(p1), dimensions={1, 0}
-  mu = f16[1024, 64] custom-call(p1_t, p2, p0), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  mu = f16[1024, 64] custom-call(p1_t, p2, p0), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   dot = f16[2, 1024] dot(p0, p1), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   ROOT t = (f16[2, 64], f16[2, 1024]) tuple(mu, dot)
 }
@@ -4448,8 +4448,8 @@ ENTRY c1 {
   p1 = f16[64, 1024] parameter(1)
   p2 = s32[2] parameter(2)
   p1_t = f16[1024, 64] transpose(p1), dimensions={1, 0}
-  mu1 = f16[1024, 64] custom-call(p1_t, p2, p0), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
-  mu2 = f16[1024, 64] custom-call(mu1, p2, p0), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  mu1 = f16[1024, 64] custom-call(p1_t, p2, p0), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  mu2 = f16[1024, 64] custom-call(mu1, p2, p0), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   ROOT t = (f16[1024, 64], f16[1024, 64]) tuple(mu1, mu2)
 }
 )";
