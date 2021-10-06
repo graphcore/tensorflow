@@ -17,7 +17,10 @@ IPU specific maths operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+import numpy as np
+from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
+from tensorflow.python.framework import dtypes, ops
 from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
@@ -357,3 +360,95 @@ def serialized_matmul(a,
     return fwd_fn(lhs, rhs, transpose_a, transpose_b, name), grad_fn
 
   return _matmul(a, b)
+
+
+def segment_sum(data, segment_ids, num_segments, name=None):
+  r"""Computes the sum along segments of a tensor, such that:
+
+  .. math::
+
+    output_i = \sum_j data_j
+
+  where sum is over ``j`` such that ``segment_ids[j] == i``.
+
+  If the sum is empty for a given segment ID ``i`` then ``output[i] = 0``.
+
+  Segments are partitions of a tensor along the first dimension indexed by a
+  1-D ``segment_ids`` tensor.
+
+  Read `the TensorFlow documentation on segmentation
+  <https://tensorflow.org/api_docs/python/tf/math#Segmentation>`_ for a more
+  detailed explanation of segments.
+
+  For example:
+
+  .. code-block:: python
+    :name: segment_sum-example
+
+    c = tf.constant([[1, 2, 3, 4], [4, 3, 2, 1], [5, 6, 7, 8]])
+    tf.segment_sum(c, tf.constant([0, 0, 1]), 2)
+    # ==> [[5, 5, 5, 5],
+    #      [5, 6, 7, 8]]
+
+  .. caution::
+
+    The ``segment_ids`` **must** be sorted in ascending order. If provided with
+    an unsorted tensor, no exception will be raised and the behaviour of this
+    operation is undefined.
+
+  ``num_segments`` must be specified and must be greater than
+  ``1 + max(segment_ids)``.
+
+  Args:
+    data: `tf.Tensor` with rank >= 1.
+    segment_ids: A sorted `tf.Tensor` of `int32` with rank == 1 and the same
+      length as the 0th dimension of `data`.
+    num_segments: Number of segments to take within `data`.
+    name: Name for the operation (optional).
+
+  Returns:
+    A `tf.Tensor` of the same type and rank as data but where the length of the
+    0th dimension is equal to `num_segments`, which comprises the sum of all
+    the elements within the same segment in each cross-section.
+
+  Raises:
+    ValueError: If the rank of ``data`` and ``segment_ids`` are not fully
+      defined.
+    ValueError: If the length of the 0th dimension of ``data`` and
+      ``segment_ids`` are not equal.
+    ValueError: If ``data`` does not have at least rank 1.
+    ValueError: If ``segment_ids` does not have a rank equal to 1.
+  """
+  data = ops.convert_to_tensor(data)
+  segment_ids = ops.convert_to_tensor(segment_ids, dtype=dtypes.int32)
+
+  if not data.shape.is_fully_defined():
+    raise ValueError("Shape of data must be fully defined")
+
+  if not segment_ids.shape.is_fully_defined():
+    raise ValueError("Shape of segment_ids must be fully defined")
+
+  data_shape = data.shape.with_rank_at_least(1)
+  segment_ids_shape = segment_ids.shape.with_rank(1)
+
+  num_segments = int(num_segments)
+  if num_segments <= 0:
+    raise ValueError("num_segments must be greater than 0; got " +
+                     str(num_segments))
+
+  if data_shape[0] != segment_ids_shape[0]:
+    raise ValueError(
+        ("segment_ids (shape {}) must have same length as axis 0 of data " +
+         "(shape {})").format(segment_ids_shape, data_shape))
+
+  data_ = array_ops.reshape(data, [data_shape[0], -1])
+
+  zeros = array_ops.zeros([num_segments, np.prod(data_shape[1:])])
+  op = gen_popops_ops.ipu_multi_update_add(zeros,
+                                           segment_ids,
+                                           data_,
+                                           1.0,
+                                           indices_are_sorted=True,
+                                           name=name)
+
+  return array_ops.reshape(op, [num_segments] + data_shape[1:])

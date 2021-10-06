@@ -33,6 +33,20 @@ def _ipu_multi_update(op, grads):
   ]
 
 
+@ops.RegisterGradient("IpuMultiUpdateAdd")
+def _ipu_multi_update_add(op, grads):
+  """Gradients for the IpuMultiUpdateAdd op.
+
+  Returns only the updated slices from the modified tensor."""
+  return [
+      None, None,
+      gen_popops_ops.ipu_multi_slice(
+          grads[2],
+          indices=op.inputs[1],
+          indices_are_sorted=op.get_attr("indices_are_sorted"))
+  ]
+
+
 @ops.RegisterGradient("IpuDeviceEmbeddingLookupTrainable")
 def _ipu_host_embedding_lookup_grad(op, grads):
   """Gradients for the IpuDeviceEmbeddingLookupTrainable op."""
