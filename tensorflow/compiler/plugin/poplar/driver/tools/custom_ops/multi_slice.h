@@ -25,7 +25,8 @@ class HloMultiSliceInstruction : public HloPoplarInstruction {
  public:
   explicit HloMultiSliceInstruction(const Shape& shape,
                                     HloInstruction* const input,
-                                    HloInstruction* const indices);
+                                    HloInstruction* const indices,
+                                    bool indices_are_sorted = false);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -39,9 +40,14 @@ class HloMultiSliceInstruction : public HloPoplarInstruction {
 
   bool IsPopOpsElementwise() const override;
 
+  // Whether or not the given indices are sorted.
+  bool GetIndicesAreSorted() const { return indices_are_sorted_; }
+
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
+
+  const bool indices_are_sorted_;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -56,7 +62,8 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
                                      std::size_t index_vector_dim,
                                      std::size_t update_dim,
                                      uint32 serialization_factor,
-                                     bool is_update_add = false);
+                                     bool is_update_add = false,
+                                     bool indices_are_sorted = false);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -79,6 +86,9 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
   // Factor used for serializing the multi update.
   std::size_t GetSerializationFactor() const { return serialization_factor_; }
 
+  // Whether or not the given indices are sorted.
+  bool GetIndicesAreSorted() const { return indices_are_sorted_; }
+
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
@@ -86,6 +96,7 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
   const std::size_t index_vector_dim_;
   const std::size_t update_dim_;
   const uint32 serialization_factor_;
+  const bool indices_are_sorted_;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -98,7 +109,7 @@ class HloMultiUpdateAddInstruction : public HloMultiUpdateInstruction {
   explicit HloMultiUpdateAddInstruction(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       std::size_t index_vector_dim, std::size_t update_dim,
-      uint32 serialization_factor);
+      uint32 serialization_factor, bool indices_are_sorted);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -106,19 +117,19 @@ class HloMultiUpdateAddInstruction : public HloMultiUpdateInstruction {
       HloCloneContext*) const override;
 };
 
-std::unique_ptr<HloInstruction> CreateMultiSlice(const Shape& shape,
-                                                 HloInstruction* const input,
-                                                 HloInstruction* const indices);
+std::unique_ptr<HloInstruction> CreateMultiSlice(
+    const Shape& shape, HloInstruction* const input,
+    HloInstruction* const indices, bool indices_are_sorted = false);
 
 std::unique_ptr<HloInstruction> CreateMultiUpdate(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     std::size_t index_vector_dim, std::size_t update_dim,
-    uint32 serialization_factor = 1);
+    uint32 serialization_factor = 1, bool indices_are_sorted = false);
 
 std::unique_ptr<HloInstruction> CreateMultiUpdateAdd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     std::size_t index_vector_dim, std::size_t update_dim,
-    uint32 serialization_factor = 1);
+    uint32 serialization_factor = 1, bool indices_are_sorted = false);
 
 }  // namespace poplarplugin
 }  // namespace xla

@@ -79,8 +79,8 @@ ENTRY main {
   input = f32[100,16] parameter(0)
   offsets1 = s32[24,1] parameter(1)
   offsets2 = s32[12,1] parameter(2)
-  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice"
-  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice"
+  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
+  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   ROOT t = (f32[24,16], f32[12,16]) tuple(slice1, slice2)
 }
   )";
@@ -168,9 +168,9 @@ ENTRY main {
   offsets1 = s32[24,1] parameter(1)
   offsets2 = s32[12,1] parameter(2)
   offsets3 = s32[8,1] parameter(3)
-  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice"
-  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice"
-  slice3 = f32[8,16] custom-call(input, offsets3), custom_call_target="MultiSlice"
+  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
+  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
+  slice3 = f32[8,16] custom-call(input, offsets3), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   ROOT t = (f32[24,16], f32[12,16], f32[8,16]) tuple(slice1, slice2, slice3)
 }
   )";
