@@ -20,7 +20,7 @@ from scipy import special
 
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
-from tensorflow.python.framework import test_util
+from tensorflow.python.framework import dtypes, test_util
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gradients_impl
@@ -29,7 +29,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 
-TEST_CASES = ({
+SERIALIZED_MATMUL_TEST_CASES = ({
     'testcase_name': 'a_columns',
     'a_shape': [8, 16],
     'b_shape': [16, 5],
@@ -136,27 +136,45 @@ TEST_CASES = ({
 })
 
 
-def _getTestCases():
+def _getSerialisedMatmulTestCases():
   from copy import deepcopy
 
-  test_cases = list(TEST_CASES)
+  test_cases = list(SERIALIZED_MATMUL_TEST_CASES)
   # Add test cases with a batch dim for a.
-  for case in deepcopy(TEST_CASES):
+  for case in deepcopy(SERIALIZED_MATMUL_TEST_CASES):
     case['testcase_name'] += "_batch_a"
     case['a_shape'] = [2] + case['a_shape']
     test_cases.append(case)
   # Add test cases with a batch dim for b.
-  for case in deepcopy(TEST_CASES):
+  for case in deepcopy(SERIALIZED_MATMUL_TEST_CASES):
     case['testcase_name'] += "_batch_b"
     case['b_shape'] = [3] + case['b_shape']
     test_cases.append(case)
   # Add test cases with a batch dim for a and b.
-  for case in deepcopy(TEST_CASES):
+  for case in deepcopy(SERIALIZED_MATMUL_TEST_CASES):
     case['testcase_name'] += "_batch_a_batch_b"
     case['a_shape'] = [3] + case['a_shape']
     case['b_shape'] = [3] + case['b_shape']
     test_cases.append(case)
   return test_cases
+
+
+def _testOnCpu(model_fn, placeholders, inputs, sess, scope_name=None):
+  scope_name = scope_name if scope_name else "cpu_vs"
+  with variable_scope.variable_scope(scope_name, use_resource=True):
+    output = model_fn(*placeholders)
+  sess.run(variables.global_variables_initializer())
+  return sess.run(output, inputs)
+
+
+def _testOnIpu(model_fn, placeholders, inputs, sess, scope_name=None):
+  with ipu.scopes.ipu_scope('/device:IPU:0'):
+    scope_name = scope_name if scope_name else "ipu_vs"
+    with variable_scope.variable_scope(scope_name, use_resource=True):
+      output = ipu.ipu_compiler.compile(model_fn, placeholders)
+  ipu.utils.move_variable_initialization_to_cpu()
+  sess.run(variables.global_variables_initializer())
+  return sess.run(output, inputs)
 
 
 # Note that in this test we expect small numerical differences as serializing
@@ -167,23 +185,7 @@ class SerializedMatmulTest(test_util.TensorFlowTestCase,
     super().setUp()
     np.random.seed(0xDEADBEEF)
 
-  def _testOnCpu(self, model_fn, placeholders, inputs, sess, scope_name=None):
-    scope_name = scope_name if scope_name else "cpu_vs"
-    with variable_scope.variable_scope(scope_name, use_resource=True):
-      output = model_fn(*placeholders)
-    sess.run(variables.global_variables_initializer())
-    return sess.run(output, inputs)
-
-  def _testOnIpu(self, model_fn, placeholders, inputs, sess, scope_name=None):
-    with ipu.scopes.ipu_scope('/device:IPU:0'):
-      scope_name = scope_name if scope_name else "ipu_vs"
-      with variable_scope.variable_scope(scope_name, use_resource=True):
-        output = ipu.ipu_compiler.compile(model_fn, placeholders)
-    ipu.utils.move_variable_initialization_to_cpu()
-    sess.run(variables.global_variables_initializer())
-    return sess.run(output, inputs)
-
-  @parameterized.named_parameters(*_getTestCases())
+  @parameterized.named_parameters(*_getSerialisedMatmulTestCases())
   @test_util.deprecated_graph_mode_only
   def testSerializedMatmul(self, a_shape, b_shape, transpose_a, transpose_b,
                            serialization_factor, serialization_dimension):
@@ -208,17 +210,11 @@ class SerializedMatmulTest(test_util.TensorFlowTestCase,
     b_val = np.random.normal(2.0, 2.0, b_shape)
 
     with sl.Session() as sess:
-      cpu_output = self._testOnCpu(cpu_matmul, [a, b], {
-          a: a_val,
-          b: b_val
-      }, sess)
-      ipu_output = self._testOnIpu(ipu_matmul, [a, b], {
-          a: a_val,
-          b: b_val
-      }, sess)
+      cpu_output = _testOnCpu(cpu_matmul, [a, b], {a: a_val, b: b_val}, sess)
+      ipu_output = _testOnIpu(ipu_matmul, [a, b], {a: a_val, b: b_val}, sess)
       self.assertAllClose(cpu_output, ipu_output[0], atol=1.e-05, rtol=1.e-05)
 
-  @parameterized.named_parameters(*_getTestCases())
+  @parameterized.named_parameters(*_getSerialisedMatmulTestCases())
   @test_util.deprecated_graph_mode_only
   def testSerializedMatmulGrad(self, a_shape, b_shape, transpose_a,
                                transpose_b, serialization_factor,
@@ -256,9 +252,9 @@ class SerializedMatmulTest(test_util.TensorFlowTestCase,
     ipu_serial_fn = functools.partial(model_fn, serialized_matmul)
 
     with sl.Session() as sess:
-      a, b, l = self._testOnIpu(ipu_fn, [], {}, sess, "normal")
-      serial_a, serial_b, serial_l = self._testOnIpu(ipu_serial_fn, [], {},
-                                                     sess, "serial")
+      a, b, l = _testOnIpu(ipu_fn, [], {}, sess, "normal")
+      serial_a, serial_b, serial_l = _testOnIpu(ipu_serial_fn, [], {}, sess,
+                                                "serial")
 
       self.assertAllClose(a, serial_a, atol=1.e-05, rtol=1.e-05)
       self.assertAllClose(b, serial_b, atol=1.e-05, rtol=1.e-05)
@@ -298,6 +294,141 @@ class ErfTest(test_util.TensorFlowTestCase):
 
   def testLargePositive(self):
     self.run_erf_test(np.linspace(3, 10000, 100, dtype='float32'))
+
+
+SEGMENT_SUM_TEST_CASES = ({
+    "testcase_name": "small_1d_data",
+    "data_shape": (10,)
+}, {
+    "testcase_name": "small_2d_data",
+    "data_shape": (10, 10)
+}, {
+    "testcase_name": "large_2d_data",
+    "data_shape": (500, 500)
+}, {
+    "testcase_name": "small_3d_data",
+    "data_shape": (10, 10, 10)
+}, {
+    "testcase_name": "large_3d_data",
+    "data_shape": (75, 75, 75)
+}, {
+    "testcase_name": "small_4d_data",
+    "data_shape": (4, 4, 4, 4)
+}, {
+    "testcase_name": "large_4d_data",
+    "data_shape": (15, 15, 15, 15)
+})
+
+
+class SegmentSumTest(test_util.TensorFlowTestCase, parameterized.TestCase):
+  configured = False
+
+  def setUp(self):
+    super().setUp()
+    np.random.seed(0xDEADBEEF)
+
+  def _configureIPU(self):
+    if not self.configured:
+      cfg = ipu.config.IPUConfig()
+      cfg.ipu_model.compile_ipu_code = False
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
+      self.configured = True
+
+  @test_util.deprecated_graph_mode_only
+  def testSegmentSumValueErrorWhenDataShapeNotFullyDefined(self):
+    with sl.Session():
+      with self.assertRaisesRegex(ValueError,
+                                  r"Shape of data must be fully defined"):
+        self._configureIPU()
+        data = array_ops.placeholder(shape=(1, 2, None, 4), dtype=dtypes.int32)
+        segment_ids = np.arange(20)
+        ipu.math_ops.segment_sum(data, segment_ids, 20)
+
+  @test_util.deprecated_graph_mode_only
+  def testSegmentSumValueErrorWhenSegmentIdsShapeNotFullyDefined(self):
+    with sl.Session():
+      with self.assertRaisesRegex(
+          ValueError, r"Shape of segment_ids must be fully defined"):
+        self._configureIPU()
+        data = np.arange(20)
+        segment_ids = array_ops.placeholder(shape=(None,), dtype=dtypes.int32)
+        ipu.math_ops.segment_sum(data, segment_ids, 20)
+
+  def testSegmentSumValueErrorWhenDataIsRankZero(self):
+    with self.assertRaisesRegex(ValueError,
+                                r"Shape \(\) must have rank at least 1"):
+      self._configureIPU()
+      data = np.ndarray([])
+      segment_ids = np.arange(20)
+      ipu.math_ops.segment_sum(data, segment_ids, 20)
+
+  def testSegmentSumValueErrorWhenNumSegmentsIdsAreNotRankOne(self):
+    with self.assertRaisesRegex(ValueError,
+                                r"Shape \(10, 2\) must have rank 1"):
+      self._configureIPU()
+      data = np.arange(20)
+      segment_ids = np.arange(20).reshape((10, 2))
+      ipu.math_ops.segment_sum(data, segment_ids, 20)
+
+  def testSegmentSumValueErrorWhenNumSegmentsLessThanZero(self):
+    with self.assertRaisesRegex(
+        ValueError, r"num_segments must be greater than 0; got -123"):
+      self._configureIPU()
+      data = np.arange(20)
+      segment_ids = np.arange(20)
+      ipu.math_ops.segment_sum(data, segment_ids, -123)
+
+  def testSegmentSumValueErrorWhenNumSegmentsIsZero(self):
+    with self.assertRaisesRegex(ValueError,
+                                r"num_segments must be greater than 0; got 0"):
+      self._configureIPU()
+      data = np.arange(20)
+      segment_ids = np.arange(20)
+      ipu.math_ops.segment_sum(data, segment_ids, 0)
+
+  def testSegmentSumValueErrorWhenSegmentIdsAndDataIncompatible(self):
+    with self.assertRaisesRegex(
+        ValueError,
+        r"segment_ids \(shape \(10,\)\) must have same length as axis 0 of " +
+        r"data \(shape \(20,\)\)"):
+      self._configureIPU()
+      data = np.arange(20)
+      segment_ids = np.arange(10)
+      ipu.math_ops.segment_sum(data, segment_ids, 10)
+
+  @parameterized.named_parameters(*SEGMENT_SUM_TEST_CASES)
+  def testSegmentSum(self, data_shape):
+    self._configureIPU()
+
+    segment_ids_shape = (data_shape[0],)
+
+    with sl.Session() as sess:
+      data = array_ops.placeholder(np.float32, data_shape)
+      segment_ids = array_ops.placeholder(np.int32, segment_ids_shape)
+
+      data_val = np.arange(np.prod(data_shape)).reshape(data_shape)
+
+      segment_ids_val = np.sort(
+          np.random.randint(0, segment_ids_shape[0], segment_ids_shape))
+      num_segments = segment_ids_val[-1] + 1
+
+      def cpu_segment_sum(data, segment_ids):
+        return math_ops.segment_sum(data, segment_ids)
+
+      def ipu_segment_sum(data, segment_ids):
+        return ipu.math_ops.segment_sum(data, segment_ids, num_segments)
+
+      cpu_output = _testOnCpu(cpu_segment_sum, [data, segment_ids], {
+          data: data_val,
+          segment_ids: segment_ids_val
+      }, sess)
+
+      ipu_output = _testOnIpu(ipu_segment_sum, [data, segment_ids], {
+          data: data_val,
+          segment_ids: segment_ids_val
+      }, sess)
+      self.assertAllClose(cpu_output, ipu_output[0], atol=1.e-05, rtol=1.e-05)
 
 
 if __name__ == "__main__":
