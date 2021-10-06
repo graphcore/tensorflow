@@ -89,8 +89,8 @@ ENTRY main {
   input = f32[100,16] parameter(0)
   offsets1 = s32[24,1] parameter(1)
   offsets2 = s32[12,1] parameter(2)
-  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice"
-  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice"
+  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
+  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   ROOT t = (f32[24,16], s32[12,16]) tuple(slice1, slice2)
 }
 )";
@@ -122,8 +122,8 @@ ENTRY main {
   input2 = f32[100,16] parameter(1)
   offsets1 = s32[24,1] parameter(2)
   offsets2 = s32[12,1] parameter(3)
-  slice1 = f32[24,16] custom-call(input1, offsets1), custom_call_target="MultiSlice"
-  slice2 = f32[12,16] custom-call(input2, offsets2), custom_call_target="MultiSlice"
+  slice1 = f32[24,16] custom-call(input1, offsets1), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
+  slice2 = f32[12,16] custom-call(input2, offsets2), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   ROOT t = (f32[24,16], f32[12,16]) tuple(slice1, slice2)
 }
 )";
@@ -153,12 +153,12 @@ HloModule main
 ENTRY main {
   input = f32[100,16] parameter(0)
   offsets = s32[24,1] parameter(1)
-  slice = f32[24,16] custom-call(input, offsets), custom_call_target="MultiSlice"
+  slice = f32[24,16] custom-call(input, offsets), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   one = f32[] constant(1)
   big_one = f32[24,16] broadcast(one), dimensions={}
   slice_modified = f32[24,16] add(slice, big_one)
   lr = f32[] constant(-0.1)
-  update = f32[100,16] custom-call(input, offsets, slice_modified, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  update = f32[100,16] custom-call(input, offsets, slice_modified, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   ROOT t = (f32[24,16], f32[100,16]) tuple(slice, update)
 }
 )";
@@ -189,8 +189,8 @@ ENTRY main {
   input = f32[100,16] parameter(0)
   offsets1 = s32[24,1] parameter(1)
   offsets2 = s32[12,1] parameter(2)
-  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice"
-  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice"
+  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
+  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   one = f32[] constant(1)
   big_one1 = f32[24,16] broadcast(one), dimensions={}
   slice1_modified = f32[24,16] add(slice1, big_one1)
@@ -199,7 +199,7 @@ ENTRY main {
   lr = f32[] constant(-0.1)
   concat_offsets = s32[36,1] concatenate(offsets1, offsets2), dimensions={0}
   concat_updates = f32[36,16] concatenate(slice1_modified, slice2_modified), dimensions={0}
-  update = f32[100,16] custom-call(input, concat_offsets, concat_updates, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  update = f32[100,16] custom-call(input, concat_offsets, concat_updates, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   ROOT t = (f32[24,16], f32[12,16], f32[100,16]) tuple(slice1, slice2, update)
 }
 )";
@@ -233,13 +233,13 @@ ENTRY main {
   input = f32[100,16] parameter(0)
   offsets1 = s32[24,1] parameter(1)
   offsets2 = s32[12,1] parameter(2)
-  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice"
-  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice"
+  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
+  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   one = f32[] constant(1)
   big_one1 = f32[24,16] broadcast(one), dimensions={}
   slice1_modified = f32[24,16] add(slice1, big_one1)
   lr = f32[] constant(-0.1)
-  update = f32[100,16] custom-call(input, offsets1, slice1_modified, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  update = f32[100,16] custom-call(input, offsets1, slice1_modified, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   ROOT t = (f32[24,16], f32[12,16], f32[100,16]) tuple(slice1, slice2, update)
 }
 )";
@@ -272,11 +272,11 @@ HloModule main
 ENTRY main {
   input = f32[100,16] parameter(0)
   offsets = s32[24,1] parameter(1)
-  slice = f32[24,16] custom-call(input, offsets), custom_call_target="MultiSlice"
+  slice = f32[24,16] custom-call(input, offsets), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   one = f32[] constant(1)
   big_one = f32[24,16] broadcast(one), dimensions={}
   slice_modified = f32[24,16] add(slice, big_one)
-  update = f32[100,16] custom-call(input, offsets, slice_modified), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  update = f32[100,16] custom-call(input, offsets, slice_modified), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   ROOT t = (f32[24,16], f32[100,16]) tuple(slice, update)
 }
 )";
@@ -307,8 +307,8 @@ ENTRY main {
   input = f32[100,16] parameter(0)
   offsets1 = s32[24,1] parameter(1)
   offsets2 = s32[12,1] parameter(2)
-  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice"
-  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice"
+  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
+  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   one = f32[] constant(1)
   big_one1 = f32[24,16] broadcast(one), dimensions={}
   slice1_modified = f32[24,16] add(slice1, big_one1)
@@ -316,7 +316,7 @@ ENTRY main {
   slice2_modified = f32[12,16] add(slice2, big_one2)
   concat_offsets = s32[36,1] concatenate(offsets1, offsets2), dimensions={0}
   concat_updates = f32[36,16] concatenate(slice1_modified, slice2_modified), dimensions={0}
-  update = f32[100,16] custom-call(input, concat_offsets, concat_updates), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  update = f32[100,16] custom-call(input, concat_offsets, concat_updates), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   ROOT t = (f32[24,16], f32[12,16], f32[100,16]) tuple(slice1, slice2, update)
 }
 )";
@@ -347,12 +347,12 @@ ENTRY main {
   input = f32[100,16] parameter(0)
   offsets1 = s32[24,1] parameter(1)
   offsets2 = s32[12,1] parameter(2)
-  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice"
-  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice"
+  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
+  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   one = f32[] constant(1)
   big_one1 = f32[24,16] broadcast(one), dimensions={}
   slice1_modified = f32[24,16] add(slice1, big_one1)
-  update = f32[100,16] custom-call(input, offsets1, slice1_modified), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  update = f32[100,16] custom-call(input, offsets1, slice1_modified), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   ROOT t = (f32[24,16], f32[12,16], f32[100,16]) tuple(slice1, slice2, update)
 }
 )";

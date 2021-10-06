@@ -14,11 +14,13 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
+
+#include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
-
 #include "tensorflow/compiler/xla/shape_util.h"
 
 namespace xla {
@@ -27,8 +29,10 @@ namespace poplarplugin {
 // MultiSlice
 HloMultiSliceInstruction::HloMultiSliceInstruction(
     const Shape& shape, HloInstruction* const input,
-    HloInstruction* const indices)
-    : HloPoplarInstruction(shape, {input, indices}, PoplarOp::MultiSlice) {}
+    HloInstruction* const indices, bool indices_are_sorted)
+    : HloPoplarInstruction(shape, {input, indices}, PoplarOp::MultiSlice,
+                           indices_are_sorted),
+      indices_are_sorted_(indices_are_sorted) {}
 
 absl::flat_hash_set<int64> HloMultiSliceInstruction::AllocatingIndices() const {
   return {0, 1};
@@ -61,7 +65,8 @@ std::unique_ptr<HloInstruction>
 HloMultiSliceInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
-  return CreateMultiSlice(shape, new_operands[0], new_operands[1]);
+  return CreateMultiSlice(shape, new_operands[0], new_operands[1],
+                          indices_are_sorted_);
 }
 
 std::vector<std::string>
@@ -70,24 +75,28 @@ HloMultiSliceInstruction::ExtraPoplarAttributesToStringImpl(
   return {};
 }
 
-std::unique_ptr<HloInstruction> CreateMultiSlice(
-    const Shape& shape, HloInstruction* const input,
-    HloInstruction* const indices) {
-  return absl::make_unique<HloMultiSliceInstruction>(shape, input, indices);
+std::unique_ptr<HloInstruction> CreateMultiSlice(const Shape& shape,
+                                                 HloInstruction* const input,
+                                                 HloInstruction* const indices,
+                                                 bool indices_are_sorted) {
+  return absl::make_unique<HloMultiSliceInstruction>(shape, input, indices,
+                                                     indices_are_sorted);
 }
 
 // MultiUpdate
 HloMultiUpdateInstruction::HloMultiUpdateInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     std::size_t index_vector_dim, std::size_t update_dim,
-    uint32 serialization_factor, bool is_update)
+    uint32 serialization_factor, bool is_update, bool indices_are_sorted)
     : HloPoplarInstruction(
           shape, operands,
           is_update ? PoplarOp::MultiUpdateAdd : PoplarOp::MultiUpdate,
-          index_vector_dim, update_dim, serialization_factor),
+          index_vector_dim, update_dim, serialization_factor,
+          indices_are_sorted),
       index_vector_dim_(index_vector_dim),
       update_dim_(update_dim),
-      serialization_factor_(serialization_factor) {}
+      serialization_factor_(serialization_factor),
+      indices_are_sorted_(indices_are_sorted) {}
 
 absl::flat_hash_set<int64> HloMultiUpdateInstruction::AllocatingIndices()
     const {
@@ -138,7 +147,7 @@ HloMultiUpdateInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
   return CreateMultiUpdate(shape, new_operands, index_vector_dim_, update_dim_,
-                           serialization_factor_);
+                           serialization_factor_, indices_are_sorted_);
 }
 
 std::vector<std::string>
@@ -149,46 +158,55 @@ HloMultiUpdateInstruction::ExtraPoplarAttributesToStringImpl(
   attributes.push_back("update_dim=" + std::to_string(update_dim_));
   attributes.push_back("serialization_factor=" +
                        std::to_string(serialization_factor_));
+  attributes.push_back("indices_are_sorted=" +
+                       std::string(indices_are_sorted_ ? "true" : "false"));
   return attributes;
 }
 
 std::unique_ptr<HloInstruction> CreateMultiUpdate(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     std::size_t index_vector_dim, std::size_t update_dim,
-    uint32 serialization_factor) {
+    uint32 serialization_factor, bool indices_are_sorted) {
   return absl::make_unique<HloMultiUpdateInstruction>(
-      shape, operands, index_vector_dim, update_dim, serialization_factor);
+      shape, operands, index_vector_dim, update_dim, serialization_factor,
+      indices_are_sorted);
 }
 
 // MultiUpdateAdd
 HloMultiUpdateAddInstruction::HloMultiUpdateAddInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     std::size_t index_vector_dim, std::size_t update_dim,
-    uint32 serialization_factor)
+    uint32 serialization_factor, bool indices_are_sorted)
     : HloMultiUpdateInstruction(shape, operands, index_vector_dim, update_dim,
-                                serialization_factor, true) {}
+                                serialization_factor, true,
+                                indices_are_sorted) {}
 
 std::unique_ptr<HloInstruction>
 HloMultiUpdateAddInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
   return CreateMultiUpdateAdd(shape, new_operands, index_vector_dim_,
-                              update_dim_, serialization_factor_);
+                              update_dim_, serialization_factor_,
+                              indices_are_sorted_);
 }
 
 std::unique_ptr<HloInstruction> CreateMultiUpdateAdd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     std::size_t index_vector_dim, std::size_t update_dim,
-    uint32 serialization_factor) {
+    uint32 serialization_factor, bool indices_are_sorted) {
   return absl::make_unique<HloMultiUpdateAddInstruction>(
-      shape, operands, index_vector_dim, update_dim, serialization_factor);
+      shape, operands, index_vector_dim, update_dim, serialization_factor,
+      indices_are_sorted);
 }
 
 namespace {
 StatusOr<std::unique_ptr<HloInstruction>> HloMultiSliceInstructionFactoryFunc(
     HloCustomCallInstruction* call) {
+  auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+  TF_ASSIGN_OR_RETURN(bool indices_are_sorted,
+                      attribute_map.GetAttributeAsBool("indices_are_sorted"));
   return CreateMultiSlice(call->shape(), call->mutable_operand(0),
-                          call->mutable_operand(1));
+                          call->mutable_operand(1), indices_are_sorted);
 }
 
 StatusOr<std::unique_ptr<HloInstruction>> HloMultiUpdateInstructionFactoryFunc(
@@ -198,8 +216,10 @@ StatusOr<std::unique_ptr<HloInstruction>> HloMultiUpdateInstructionFactoryFunc(
                       attribute_map.GetAttributeAsUInt64("index_vector_dim"));
   TF_ASSIGN_OR_RETURN(uint64 update_dim,
                       attribute_map.GetAttributeAsUInt64("update_dim"));
+  TF_ASSIGN_OR_RETURN(bool indices_are_sorted,
+                      attribute_map.GetAttributeAsBool("indices_are_sorted"));
   return CreateMultiUpdate(call->shape(), call->operands(), index_vector_dim,
-                           update_dim, 1);
+                           update_dim, 1, indices_are_sorted);
 }
 
 StatusOr<std::unique_ptr<HloInstruction>>
@@ -209,8 +229,10 @@ HloMultiUpdateAddInstructionFactoryFunc(HloCustomCallInstruction* call) {
                       attribute_map.GetAttributeAsUInt64("index_vector_dim"));
   TF_ASSIGN_OR_RETURN(uint64 update_dim,
                       attribute_map.GetAttributeAsUInt64("update_dim"));
+  TF_ASSIGN_OR_RETURN(bool indices_are_sorted,
+                      attribute_map.GetAttributeAsBool("indices_are_sorted"));
   return CreateMultiUpdateAdd(call->shape(), call->operands(), index_vector_dim,
-                              update_dim, 1);
+                              update_dim, 1, indices_are_sorted);
 }
 
 static HloPoplarInstructionFactory multi_slice_factory(
