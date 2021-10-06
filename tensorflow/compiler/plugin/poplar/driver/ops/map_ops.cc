@@ -838,8 +838,11 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
     // of the pipeline graph. Provide dummy tensor as won't be used.
     // If not known at compile time we can't create the sequence yet as
     // need to call PropagateDeferredAllocations first
-    visitor->VerifyPipelineArguments(
-        GetGradientAccumulationCountInstruction(inst), poplar::Tensor(), graph);
+    TF_RETURN_IF_ERROR(visitor
+                           ->VerifyPipelineArguments(
+                               GetGradientAccumulationCountInstruction(inst),
+                               poplar::Tensor(), graph)
+                           .status());
   }
 
   auto order = pipeline_computation->parent()
