@@ -43,7 +43,7 @@ ENTRY main {
   updates = f32[24,16] parameter(1)
   zero = f32[] constant(0)
   big_zero = f32[100,16] broadcast(zero), dimensions={}
-  update = f32[100,16] custom-call(big_zero, offsets, updates), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  update = f32[100,16] custom-call(big_zero, offsets, updates), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   lr = f32[] constant(-0.1)
   big_lr = f32[100,16] broadcast(lr), dimensions={}
   ROOT m = f32[100,16] multiply(update, big_lr)
@@ -84,7 +84,7 @@ ENTRY main {
   updates = f32[24,16] parameter(1)
   zero = f32[] constant(0)
   big_zero = f32[100,16] broadcast(zero), dimensions={}
-  update = f32[100,16] custom-call(big_zero, offsets, updates), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  update = f32[100,16] custom-call(big_zero, offsets, updates), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   lr = f32[] constant(-0.1)
   big_lr = f32[100,16] broadcast(lr), dimensions={}
   ROOT m = f32[100,16] divide(update, big_lr)
@@ -128,7 +128,7 @@ ENTRY main {
   zero = f32[] constant(0)
   big_zero = f32[100,16] broadcast(zero), dimensions={}
   one = f32[] constant(1)
-  update = f32[100,16] custom-call(big_zero, offsets, updates, one), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  update = f32[100,16] custom-call(big_zero, offsets, updates, one), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   lr = f32[] constant(-0.1)
   big_lr = f32[100,16] broadcast(lr), dimensions={}
   ROOT m = f32[100,16] multiply(update, big_lr)
@@ -170,7 +170,7 @@ ENTRY main {
   zero = f32[] constant(0)
   big_zero = f32[100,16] broadcast(zero), dimensions={}
   one = f32[] constant(1)
-  update = f32[100,16] custom-call(big_zero, offsets, updates, one), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  update = f32[100,16] custom-call(big_zero, offsets, updates, one), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   lr = f32[] constant(-0.1)
   big_lr = f32[100,16] broadcast(lr), dimensions={}
   ROOT m = f32[100,16] divide(update, big_lr)
@@ -214,7 +214,7 @@ ENTRY main {
   zero = f32[] constant(0)
   big_zero = f32[100,16] broadcast(zero), dimensions={}
   two = f32[] constant(2)
-  update = f32[100,16] custom-call(big_zero, offsets, updates, two), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  update = f32[100,16] custom-call(big_zero, offsets, updates, two), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
   lr = f32[] constant(-0.1)
   big_lr = f32[100,16] broadcast(lr), dimensions={}
   ROOT m = f32[100,16] divide(update, big_lr)

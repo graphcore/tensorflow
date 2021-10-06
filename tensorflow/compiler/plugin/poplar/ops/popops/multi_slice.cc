@@ -23,6 +23,7 @@ REGISTER_OP("IpuMultiSlice")
     .Input("indices: int32")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32, int32}")
+    .Attr("indices_are_sorted: bool = false")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       // outshape = list(ids.shape) + [N]
       shape_inference::ShapeHandle output, N, in_shape, indices;
@@ -42,6 +43,7 @@ REGISTER_OP("IpuMultiUpdate")
     .Input("updates: dtype")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32, int32}")
+    .Attr("indices_are_sorted: bool = false")
     .SetShapeFn(shape_inference::UnchangedShape);
 
 REGISTER_OP("IpuMultiUpdateAdd")
@@ -51,6 +53,7 @@ REGISTER_OP("IpuMultiUpdateAdd")
     .Input("scale: dtype")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32, int32}")
+    .Attr("indices_are_sorted: bool = false")
     .SetShapeFn(shape_inference::UnchangedShape);
 
 }  // namespace tensorflow

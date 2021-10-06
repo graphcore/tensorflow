@@ -28,6 +28,14 @@ class PopopsMultiSliceOp : public XlaOpKernel, IpuOpKernel {
  public:
   using XlaOpKernel::XlaOpKernel;
 
+  explicit PopopsMultiSliceOp(OpKernelConstruction* ctx)
+      : XlaOpKernel(ctx), IpuOpKernel() {
+    bool indices_are_sorted;
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("indices_are_sorted", &indices_are_sorted));
+    attribute_map_.AddAttribute("indices_are_sorted", indices_are_sorted);
+  }
+
   void Compile(XlaOpKernelContext* ctx) override {
     const TensorShape input_shape = ctx->InputShape(0);
     const TensorShape indices_shape = ctx->InputShape(1);
@@ -67,7 +75,12 @@ REGISTER_IPU_OP("IpuMultiSlice", PopopsMultiSliceOp);
 class PopopsMultiUpdateOp : public XlaOpKernel, IpuOpKernel {
  public:
   PopopsMultiUpdateOp(OpKernelConstruction* ctx, bool is_update_add = false)
-      : XlaOpKernel(ctx), IpuOpKernel(), is_update_add_(is_update_add) {}
+      : XlaOpKernel(ctx), IpuOpKernel(), is_update_add_(is_update_add) {
+    bool indices_are_sorted;
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("indices_are_sorted", &indices_are_sorted));
+    attribute_map_.AddAttribute("indices_are_sorted", indices_are_sorted);
+  }
 
   void Compile(XlaOpKernelContext* ctx) override {
     const TensorShape input_shape = ctx->InputShape(0);
