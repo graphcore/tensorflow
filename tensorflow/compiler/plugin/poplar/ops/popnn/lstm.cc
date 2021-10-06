@@ -36,6 +36,8 @@ REGISTER_OP("PopnnLstmLayer")
     .Attr("is_training: bool")
     .Attr("dtype: {float16, float32}")
     .Attr("partials_dtype: {float16, float32} = DT_FLOAT")
+    .Attr("available_memory_proportion_fwd: float = -1.0")
+    .Attr("available_memory_proportion_bwd: float = -1.0")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       int32 num_channels;
       TF_RETURN_IF_ERROR(c->GetAttr("num_channels", &num_channels));
@@ -80,6 +82,8 @@ REGISTER_OP("PopnnLstmLayerBackprop")
     .Attr("is_training: bool")
     .Attr("dtype: {float16, float32}")
     .Attr("partials_dtype: {float16, float32}")
+    .Attr("available_memory_proportion_fwd: float = -1.0")
+    .Attr("available_memory_proportion_bwd: float = -1.0")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
       auto in_h_shape = c->input(1);
@@ -115,6 +119,8 @@ REGISTER_OP("PopnnDynamicLstmLayer")
     .Attr("dtype: {float16, float32}")
     .Attr("seq_dtype: {int32}")
     .Attr("partials_dtype: {float16, float32} = DT_FLOAT")
+    .Attr("available_memory_proportion_fwd: float = -1.0")
+    .Attr("available_memory_proportion_bwd: float = -1.0")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       int32 num_channels;
       TF_RETURN_IF_ERROR(c->GetAttr("num_channels", &num_channels));
@@ -161,6 +167,8 @@ REGISTER_OP("PopnnDynamicLstmLayerBackprop")
     .Attr("dtype: {float16, float32}")
     .Attr("seq_dtype: {int32}")
     .Attr("partials_dtype: {float16, float32}")
+    .Attr("available_memory_proportion_fwd: float = -1.0")
+    .Attr("available_memory_proportion_bwd: float = -1.0")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
       auto in_h_shape = c->input(1);

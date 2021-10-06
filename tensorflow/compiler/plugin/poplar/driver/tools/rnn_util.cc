@@ -109,6 +109,14 @@ StatusOr<poplar::OptionFlags> GetLstmOpts(const HloInstruction* inst,
     lstm_opts.set({{"inferenceOnly", "true"}});
   }
 
+  auto available_memory_proportion = lstm_inst->available_memory_proportion();
+  /* Only pass on available_memory_proportion if it is not (relatively) equal
+     to -1.0, which is to assume the default. */
+  if (std::fabs(available_memory_proportion + 1.0) > 0.001) {
+    lstm_opts.set({{"availableMemoryProportion",
+                    std::to_string(available_memory_proportion)}});
+  }
+
   // Get the partial type
   xla::PrimitiveType partials_xla_type = lstm_inst->partials_type();
   TF_ASSIGN_OR_RETURN(poplar::Type partials_poplar_type,
@@ -180,6 +188,14 @@ StatusOr<poplar::OptionFlags> GetGruOpts(const HloInstruction* inst,
   bool is_training = gru_inst->is_training();
   if (!is_training) {
     gru_opts.set({{"inferenceOnly", "true"}});
+  }
+
+  auto available_memory_proportion = gru_inst->available_memory_proportion();
+  /* Only pass on available_memory_proportion if it is not (relatively) equal
+     to -1.0, which is to assume the default. */
+  if (std::fabs(available_memory_proportion + 1.0) > 0.001) {
+    gru_opts.set({{"availableMemoryProportion",
+                   std::to_string(available_memory_proportion)}});
   }
 
   // Get the partial type.
