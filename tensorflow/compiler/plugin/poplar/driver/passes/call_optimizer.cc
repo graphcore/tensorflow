@@ -53,8 +53,10 @@ std::vector<HloInstruction*> OrderInnerPipelineFunctions(
   return ordered_stages;
 }
 
-Status ReplaceOutputUses(HloInstruction* stage,
-                         std::map<int64, std::set<int64>> duplicate_outputs) {
+Status ReplaceOutputUses(
+    HloInstruction* stage,
+    const absl::flat_hash_map<int64, absl::flat_hash_set<int64>>&
+        duplicate_outputs) {
   // Get all the GTEs by tuple index.
   absl::flat_hash_map<int64, HloInstructionSet> gte_users;
   for (HloInstruction* user : stage->users()) {
@@ -65,7 +67,7 @@ Status ReplaceOutputUses(HloInstruction* stage,
   // Replace all duplicate uses with a single GTE.
   for (auto pair : duplicate_outputs) {
     int64 output_idx = pair.first;
-    std::set<int64> duplicate_indices = pair.second;
+    absl::flat_hash_set<int64>& duplicate_indices = pair.second;
     VLOG(3) << "Replacing duplicate output indices "
             << absl::StrJoin(duplicate_indices, ", ") << " with output index "
             << output_idx;
@@ -86,12 +88,14 @@ Status ReplaceOutputUses(HloInstruction* stage,
 }
 
 Status ReplaceDuplicateInputs(
-    HloInstruction* stage, std::map<int64, std::set<int64>> duplicate_inputs) {
+    HloInstruction* stage,
+    const absl::flat_hash_map<int64, absl::flat_hash_set<int64>>&
+        duplicate_inputs) {
   HloComputation* stage_comp = stage->to_apply();
   // Replace any duplicate inputs which will make parameters unused.
   for (auto pair : duplicate_inputs) {
     int64 param_number = pair.first;
-    std::set<int64> duplicate_indices = pair.second;
+    absl::flat_hash_set<int64>& duplicate_indices = pair.second;
     VLOG(3) << "Replacing duplicate parameter numbers "
             << absl::StrJoin(duplicate_indices, ", ")
             << " with parameter number " << param_number;
@@ -269,7 +273,7 @@ StatusOr<HloInstruction*> CallOptimizer::OptimizeCallInstruction(
   }
 
   // Find any unused outputs.
-  TF_ASSIGN_OR_RETURN(std::set<int64> unused_outputs,
+  TF_ASSIGN_OR_RETURN(absl::flat_hash_set<int64> unused_outputs,
                       GetUnusedCallOutputIndices(inst));
   if (unused_outputs.size()) {
     VLOG(3) << "Removing unused outputs.";
@@ -286,7 +290,7 @@ StatusOr<HloInstruction*> CallOptimizer::OptimizeCallInstruction(
   }
 
   // Find any unused inputs and remove them.
-  TF_ASSIGN_OR_RETURN(std::set<int64> unused_parameters,
+  TF_ASSIGN_OR_RETURN(absl::flat_hash_set<int64> unused_parameters,
                       GetUnusedParametersInCall(inst));
   if (unused_parameters.size()) {
     VLOG(3) << "Removing unused inputs.";

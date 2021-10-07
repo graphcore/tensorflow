@@ -132,7 +132,8 @@ ENTRY e {
     auto unused_or = GetUnusedCallOutputIndices(pipeline_stage_0);
     EXPECT_TRUE(unused_or.ok());
     auto unused = unused_or.ValueOrDie();
-    EXPECT_THAT(unused, ::testing::ElementsAre(1));
+    EXPECT_THAT(unused.size(), 1);
+    EXPECT_TRUE(unused.contains(1));
   }
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");
@@ -192,8 +193,11 @@ ENTRY e {
     EXPECT_TRUE(duplicate_or.ok());
     auto duplicate = duplicate_or.ValueOrDie();
     EXPECT_THAT(duplicate.size(), 2);
-    EXPECT_THAT(duplicate[0], ::testing::ElementsAre(4, 5));
-    EXPECT_THAT(duplicate[1], ::testing::ElementsAre(3));
+    EXPECT_THAT(duplicate[0].size(), 2);
+    EXPECT_TRUE(duplicate[0].contains(4));
+    EXPECT_TRUE(duplicate[0].contains(5));
+    EXPECT_THAT(duplicate[1].size(), 1);
+    EXPECT_TRUE(duplicate[1].contains(3));
   }
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");
@@ -253,7 +257,8 @@ ENTRY e {
     EXPECT_TRUE(duplicate_or.ok());
     auto duplicate = duplicate_or.ValueOrDie();
     EXPECT_THAT(duplicate.size(), 1);
-    EXPECT_THAT(duplicate[0], ::testing::ElementsAre(2));
+    EXPECT_THAT(duplicate[0].size(), 1);
+    EXPECT_TRUE(duplicate[0].contains(2));
   }
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");
