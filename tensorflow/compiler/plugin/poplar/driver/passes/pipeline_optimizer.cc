@@ -78,7 +78,7 @@ StatusOr<bool> MoveParameterInputsToBackwardStages(
     HloInstruction* bwd_stage = stages.backward[stage_id];
     // Go through the inputs to the fwd stage and identify operand indices
     // which are parameters.
-    std::set<int64> parameter_input_indices;
+    absl::flat_hash_set<int64> parameter_input_indices;
     for (int64 op_idx = 0; op_idx != fwd_stage->operand_count(); ++op_idx) {
       if (fwd_stage->operand(op_idx)->opcode() == HloOpcode::kParameter) {
         parameter_input_indices.insert(op_idx);

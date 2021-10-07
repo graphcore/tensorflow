@@ -289,6 +289,7 @@ class PipelineDataflowAnalysis {
   HloValue* CreateValue(HloInstruction* inst);
 
   // Internal storage of values.
+  // Using std::map as absl maps lack pointer stability.
   std::map<HloValue::Id, HloValue> values_;
 
   // Value sets for each instruction.

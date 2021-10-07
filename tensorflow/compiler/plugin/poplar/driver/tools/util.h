@@ -20,9 +20,7 @@ limitations under the License.
  * optimizers target within the BUILD file.
  */
 
-#include <map>
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -326,7 +324,8 @@ T Permute(const T& in, const std::vector<int64>& permutation) {
 
 // Deterministically return the list of unreachable roots within the given
 // computation.
-std::vector<HloInstruction*> FindUnreachableRoots(HloComputation* computation);
+std::vector<HloInstruction*> FindUnreachableRoots(
+    const HloComputation* computation);
 
 // Clone of the computation subtree starting at the 'root' to the given
 // computation.
@@ -337,26 +336,27 @@ StatusOr<HloInstruction*> CloneComputationSubtree(
 // Get tuple indices for call outputs which are used in multiple places.
 // Returns a map from the tuple index of first occurrence to a set of all other
 // occurrences.
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallOutputs(
-    const HloInstruction* call);
+StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
+GetDuplicateCallOutputs(const HloInstruction* call);
 
 // Get tuple indices for call operands which are used in multiple places.
 // Returns a map from the tuple index of first occurrence to a set of all other
 // occurrences.
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallInputs(
-    const HloInstruction* call);
+StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
+GetDuplicateCallInputs(const HloInstruction* call);
 
 // Get output tuple indices for unused call outputs.
-StatusOr<std::set<int64>> GetUnusedCallOutputIndices(
+StatusOr<absl::flat_hash_set<int64>> GetUnusedCallOutputIndices(
     const HloInstruction* call);
 
 // Get parameter numbers for parameter instructions in the call which have no
 // users.
-StatusOr<std::set<int64>> GetUnusedParametersInCall(const HloInstruction* call);
+StatusOr<absl::flat_hash_set<int64>> GetUnusedParametersInCall(
+    const HloInstruction* call);
 
 // Removes outputs from the call, and GTEs which are not used by anything.
-Status RemoveOutputsFromCall(HloInstruction* call,
-                             const std::set<int64>& outputs_to_remove);
+Status RemoveOutputsFromCall(
+    HloInstruction* call, const absl::flat_hash_set<int64>& outputs_to_remove);
 
 // Set sharding of destination output tuple based on source output tuple.
 Status SetTupleUniqueDeviceSharding(const HloInstruction* source,
@@ -372,7 +372,8 @@ StatusOr<HloInstruction*> ReplaceCallWith(
 
 // Removes parameters from the call, and any operands which now have no users.
 StatusOr<HloInstruction*> RemoveParametersFromCall(
-    HloInstruction* call, const std::set<int64>& parameters_to_remove);
+    HloInstruction* call,
+    const absl::flat_hash_set<int64>& parameters_to_remove);
 
 // Adds the given operands to the call and adds a parameter to the called
 // computation corresponding to each operand.
