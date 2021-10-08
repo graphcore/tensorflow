@@ -38,36 +38,88 @@ namespace xla {
 namespace m = match;
 namespace poplarplugin {
 namespace {
-// TODO(T45278) popops::multiUpdate and popops::multiUpdateAdd only supports the
-// 2D case.
-bool CheckValidMultiUpdateAttributes(const HloScatterInstruction* inst) {
-  const Shape operand_shape = inst->operand(0)->shape();
-  const Shape indices_shape = inst->operand(1)->shape();
-  const Shape updates_shape = inst->operand(2)->shape();
-  const auto dim_numbers = inst->scatter_dimension_numbers();
-  const auto update_window_dims = dim_numbers.update_window_dims();
-  const auto inserted_window_dims = dim_numbers.inserted_window_dims();
-  const auto scatter_dims_to_operand_dims =
+absl::optional<int64> GetScatterDimension(
+    int64 rank, absl::Span<const int64> update_window_dims) {
+  std::vector<int64> all_dims(rank);
+  absl::c_iota(all_dims, 0);
+
+  std::vector<int64> scatter_dims;
+  absl::c_set_difference(all_dims, update_window_dims,
+                         std::inserter(scatter_dims, scatter_dims.begin()));
+  if (scatter_dims.size() == 1) {
+    return scatter_dims[0];
+  }
+  return absl::nullopt;
+}
+
+bool CheckValidMultiUpdateAttributes(const HloInstruction* inst) {
+  const Shape& operand_shape = inst->operand(0)->shape();
+  const Shape& indices_shape = inst->operand(1)->shape();
+  const Shape& updates_shape = inst->operand(2)->shape();
+  const auto& dim_numbers = inst->scatter_dimension_numbers();
+  const auto& update_window_dims = dim_numbers.update_window_dims();
+  const auto& inserted_window_dims = dim_numbers.inserted_window_dims();
+  const auto& scatter_dims_to_operand_dims =
       dim_numbers.scatter_dims_to_operand_dims();
   const auto index_vector_dim = dim_numbers.index_vector_dim();
   const uint64 index_dim_size =
       indices_shape.rank() == index_vector_dim
           ? 1
           : indices_shape.dimensions(index_vector_dim);
-  return operand_shape.rank() == 2 && index_dim_size == 1 &&
-         scatter_dims_to_operand_dims.size() == 1 &&
-         scatter_dims_to_operand_dims[0] == 0 &&
-         inserted_window_dims.size() == 1 && inserted_window_dims[0] == 0 &&
-         update_window_dims.size() == 1 &&
-         update_window_dims[0] == (updates_shape.rank() - 1);
+
+  if (updates_shape.rank() == 0) {
+    return false;
+  }
+
+  if (updates_shape.rank() != operand_shape.rank()) {
+    return false;
+  }
+
+  if (index_dim_size != 1) {
+    return false;
+  }
+
+  if (update_window_dims.size() != (updates_shape.rank() - 1)) {
+    return false;
+  }
+
+  auto scatter_dimension_opt = GetScatterDimension(
+      updates_shape.rank(), AsInt64Slice(update_window_dims));
+  if (!scatter_dimension_opt) {
+    return false;
+  }
+
+  const int64 scatter_dimension = *scatter_dimension_opt;
+
+  if (ShapeUtil::DeleteDimension(scatter_dimension, updates_shape) !=
+      ShapeUtil::DeleteDimension(scatter_dimension, operand_shape)) {
+    return false;
+  }
+
+  if (scatter_dims_to_operand_dims.size() != 1) {
+    return false;
+  }
+
+  if (scatter_dims_to_operand_dims[0] != 0) {
+    return false;
+  }
+
+  if (inserted_window_dims.size() != 1) {
+    return false;
+  }
+
+  if (inserted_window_dims[0] != 0) {
+    return false;
+  }
+
+  return true;
 }
 
 bool IsMultiUpdateScatter(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kScatter) {
     const HloScatterInstruction* scatter = Cast<HloScatterInstruction>(inst);
     const HloInstruction* root = inst->to_apply()->root_instruction();
-    return Match(root, m::Parameter(1)) &&
-           CheckValidMultiUpdateAttributes(scatter);
+    return Match(root, m::Parameter(1));
   }
   return false;
 }
@@ -76,8 +128,7 @@ bool IsMultiUpdateAddScatter(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kScatter) {
     const HloScatterInstruction* scatter = Cast<HloScatterInstruction>(inst);
     const HloInstruction* root = inst->to_apply()->root_instruction();
-    return Match(root, m::Add(m::Parameter(0), m::Parameter(1))) &&
-           CheckValidMultiUpdateAttributes(scatter);
+    return Match(root, m::Add(m::Parameter(0), m::Parameter(1)));
   }
   return false;
 }
@@ -86,32 +137,26 @@ bool IsConvertableScatter(const HloInstruction* inst) {
   return IsMultiUpdateScatter(inst) || IsMultiUpdateAddScatter(inst);
 }
 
-StatusOr<HloInstruction*> MoveInstructionDimensionToBack(
-    HloInstruction* inst, std::size_t dim_to_move) {
+std::vector<int64> GetPermutation(const HloInstruction* inst,
+                                  std::size_t dim_to_move) {
   std::vector<int64> permutation(inst->shape().rank());
-  for (size_t i = 0, next_idx = 0; i != permutation.size(); ++i) {
+  permutation[0] = dim_to_move;
+  for (size_t i = 0, next_idx = 1; i != permutation.size(); ++i) {
     if (i != dim_to_move) {
       permutation[next_idx++] = i;
     }
   }
-  permutation.back() = dim_to_move;
-  TF_ASSIGN_OR_RETURN(HloInstruction * new_inst,
-                      MakeTransposeHlo(inst, permutation));
-  inst->SetupDerivedInstruction(new_inst);
-  return new_inst;
+  return permutation;
 }
 
-StatusOr<HloInstruction*> CollapseAllButLastDimension(HloInstruction* inst) {
+StatusOr<HloInstruction*> CollapseAllButZerothDimension(HloInstruction* inst) {
   HloComputation* computation = inst->parent();
   const Shape inst_shape = inst->shape();
-  const int64 last_dim = inst_shape.dimensions(inst_shape.rank() - 1);
-  const Shape new_inst_shape = ShapeUtil::MakeShape(
+  const int64 zero_dim = inst_shape.dimensions(0);
+  const Shape new_shape = ShapeUtil::MakeShape(
       inst_shape.element_type(),
-      {ShapeUtil::ElementsIn(inst_shape) / last_dim, last_dim});
-  HloInstruction* new_inst = computation->AddInstruction(
-      HloInstruction::CreateReshape(new_inst_shape, inst));
-  inst->SetupDerivedInstruction(new_inst);
-  return new_inst;
+      {zero_dim, ShapeUtil::ElementsIn(inst_shape) / zero_dim});
+  return MakeReshapeHlo(new_shape, inst);
 }
 
 StatusOr<bool> ReplaceScatter(HloInstruction* scatter) {
@@ -120,19 +165,12 @@ StatusOr<bool> ReplaceScatter(HloInstruction* scatter) {
   HloComputation* computation = scatter->parent();
   auto dim_numbers = scatter->scatter_dimension_numbers();
   const int64 index_vector_dim = dim_numbers.index_vector_dim();
+  const auto& update_window_dims = dim_numbers.update_window_dims();
   const bool is_update_add = IsMultiUpdateAddScatter(scatter);
-  int64 update_dim = dim_numbers.update_window_dims()[0];
 
   HloInstruction* operand = scatter->mutable_operand(0);
   HloInstruction* indices = scatter->mutable_operand(1);
   HloInstruction* updates = scatter->mutable_operand(2);
-
-  // If the indices are scalar then this is a dynamic-update-slice kind of
-  // scatter.
-  if (ShapeUtil::IsScalar(indices->shape())) {
-    TF_ASSIGN_OR_RETURN(updates, PrependDegenerateDims(updates, 1));
-    update_dim += 1;
-  }
 
   // Reshape the indices into a 2D shape [num_lookups, 1].
   const Shape& indices_shape = indices->shape();
@@ -140,18 +178,23 @@ StatusOr<bool> ReplaceScatter(HloInstruction* scatter) {
       indices_shape.element_type(), {ShapeUtil::ElementsIn(indices_shape), 1});
   TF_ASSIGN_OR_RETURN(indices, MakeReshapeHlo(new_indices_shape, indices));
 
-  // Move the update_dim to the back.
-  if ((updates->shape().rank() - 1) != update_dim) {
-    TF_ASSIGN_OR_RETURN(updates,
-                        MoveInstructionDimensionToBack(updates, update_dim));
-    update_dim = updates->shape().rank() - 1;
-  }
+  const int64 scatter_dimension = *GetScatterDimension(
+      updates->shape().rank(), AsInt64Slice(update_window_dims));
 
-  // Collapse all but the last dimension of updates.
-  if (updates->shape().rank() != 2) {
-    TF_ASSIGN_OR_RETURN(updates, CollapseAllButLastDimension(updates));
-    update_dim = 1;
-  }
+  const std::vector<int64> permutation =
+      GetPermutation(operand, scatter_dimension);
+  const std::vector<int64> invert_permutation =
+      InvertPermutations<int64>(permutation);
+
+  // Move the scatter dimension to the front.
+  TF_ASSIGN_OR_RETURN(operand, MakeTransposeHlo(operand, permutation));
+  TF_ASSIGN_OR_RETURN(updates, MakeTransposeHlo(updates, permutation));
+
+  const Shape pre_flatten_operand_shape = operand->shape();
+
+  // Collapse all but the zeroth dimension.
+  TF_ASSIGN_OR_RETURN(operand, CollapseAllButZerothDimension(operand));
+  TF_ASSIGN_OR_RETURN(updates, CollapseAllButZerothDimension(updates));
 
   HloInstruction* multi_update;
   if (is_update_add) {
@@ -160,12 +203,20 @@ StatusOr<bool> ReplaceScatter(HloInstruction* scatter) {
         computation->AddInstruction(HloInstruction::CreateConstant(
             LiteralUtil::One(scatter->shape().element_type())));
     multi_update = computation->AddInstruction(CreateMultiUpdateAdd(
-        scatter->shape(), {operand, indices, updates, one}, update_dim));
+        operand->shape(), {operand, indices, updates, one}));
   } else {
-    multi_update = computation->AddInstruction(CreateMultiUpdate(
-        scatter->shape(), {operand, indices, updates}, update_dim));
+    multi_update = computation->AddInstruction(
+        CreateMultiUpdate(operand->shape(), {operand, indices, updates}));
   }
   scatter->SetupDerivedInstruction(multi_update);
+
+  // Uncollapse the dimensions.
+  TF_ASSIGN_OR_RETURN(multi_update,
+                      MakeReshapeHlo(pre_flatten_operand_shape, multi_update));
+  // Undo the transpose.
+  TF_ASSIGN_OR_RETURN(multi_update,
+                      MakeTransposeHlo(multi_update, invert_permutation));
+
   TF_RETURN_IF_ERROR(computation->ReplaceInstruction(scatter, multi_update));
   return true;
 }
@@ -185,7 +236,7 @@ StatusOr<bool> ScatterSimplifier::Run(HloModule* module) {
     // operands.
     auto insts = comp->MakeInstructionPostOrder();
     for (HloInstruction* inst : insts) {
-      if (IsConvertableScatter(inst)) {
+      if (IsConvertableScatter(inst) && CheckValidMultiUpdateAttributes(inst)) {
         TF_ASSIGN_OR_RETURN(bool replaced, ReplaceScatter(inst));
         changed |= replaced;
       }

@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
@@ -71,6 +72,7 @@ main {
 
   ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
   HloCSE cse(false);
   EXPECT_TRUE(cse.Run(module).ValueOrDie());
@@ -166,6 +168,7 @@ main {
 
   ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 3);
   MultiUpdateCombiner mu_combiner(annotations);
   int64 execution_count = -1;
@@ -233,6 +236,7 @@ main {
 
   ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 3);
   MultiUpdateCombiner mu_combiner(annotations);
   int64 execution_count = -1;
@@ -304,6 +308,7 @@ main {
 
   ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
   MultiUpdateCombiner mu_combiner(annotations);
   int64 execution_count = -1;
@@ -366,6 +371,7 @@ main {
 
   ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
   HloCSE cse(false);
   cse.Run(module).ValueOrDie();
@@ -419,6 +425,7 @@ main {
 
   ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
   HloCSE cse(false);
   cse.Run(module).ValueOrDie();

@@ -109,7 +109,6 @@ main {
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
   auto root = module->entry_computation()->root_instruction();
   EXPECT_EQ(GetNumMultiUpdates(module->entry_computation()), 2);
-  auto mu0 = Cast<HloMultiUpdateInstruction>(root->operand(0));
 }
 
 TEST_F(ScatterSimplifierTest, TestNotValid) {
@@ -139,6 +138,41 @@ main {
   ScatterSimplifier sc;
   EXPECT_FALSE(sc.Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdates(module->entry_computation()), 0);
+}
+
+TEST_F(ScatterSimplifierTest, TestMultiUpdateAddsMultiDim) {
+  std::string hlo_string = R"(
+HloModule top
+scatter-combiner {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT add = f32[] add(p0, p1)
+}
+
+main {
+  arg0 = s32[15] parameter(0)
+  arg1 = f32[15,10,10,1] parameter(1)
+	zero = f32[] constant(0)
+	big_zero = f32[2000,10,10,1] broadcast(zero), dimensions={}
+  ROOT s1 = f32[2000,10,10,1] scatter(big_zero, arg0, arg1), update_window_dims={1,2,3}, inserted_window_dims={0}, scatter_dims_to_operand_dims={0}, index_vector_dim=1, to_apply=scatter-combiner
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string, config));
+
+  EXPECT_TRUE(ScatterSimplifier().Run(module.get()).ValueOrDie());
+  auto root = module->entry_computation()->root_instruction();
+  EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 1);
+  EXPECT_TRUE(Match(
+      root,
+      m::Transpose(m::Reshape(m::CustomCall(
+          m::Reshape(m::Transpose(m::Broadcast(m::ConstantScalar(0)))),
+          m::Reshape(m::Parameter(0)),
+          m::Reshape(m::Transpose(m::Parameter(1))), m::ConstantScalar(1))))));
 }
 
 }  // namespace
