@@ -89,7 +89,7 @@ ENTRY main {
   updates = $GT[24,16] parameter(2)
   scale = $GT[] parameter(3)
   big_zero = $GT[100,16] fusion(), kind=kCustom, calls=_pop_op_wide_const
-  mua = $GT[100,16] custom-call(big_zero, offsets, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  mua = $GT[100,16] custom-call(big_zero, offsets, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
   add = $AT[100,16] custom-call(accumulator, mua), custom_call_target="GradientAccumulatorAdd"
   ROOT t = ($AT[100, 16]) tuple(add)
 }
@@ -164,7 +164,7 @@ ENTRY main {
   grads1 = $GT[100, 16] parameter(4)
   grads2 = $GT[100, 16] parameter(5)
   add_grads = $GT[100, 16] add(grads1, grads2)
-  mua = $GT[100,16] custom-call(add_grads, offsets, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  mua = $GT[100,16] custom-call(add_grads, offsets, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
   add = $AT[100,16] custom-call(accumulator, mua), custom_call_target="GradientAccumulatorAdd"
   ROOT t = ($AT[100, 16]) tuple(add)
 }

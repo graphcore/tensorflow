@@ -96,8 +96,6 @@ Status ReplaceMatch(HloMatcherMatched& match) {
           multi_update->shape(),
           {multi_update->mutable_operand(0), multi_update->mutable_operand(1),
            multi_update->mutable_operand(2), scale},
-          multi_update->GetIndexVectorDimension(),
-          multi_update->GetUpdateSliceDimension(),
           multi_update->GetSerializationFactor()));
 
   // Replace it.

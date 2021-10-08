@@ -105,7 +105,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_conv_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_slice_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_apply.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_canonicalize.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_scale_apply.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_use_feeds_finder.h"
@@ -1399,9 +1398,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           pass.AddPass<GatherSimplifier>();
         }
         pass.AddPass<ScatterSimplifier>();
-        pass.AddPass<MultiUpdateCanonicalize>();
         pass.AddPass<EmbeddingsGradientOptimizer>();
-        pass.AddPass<MultiUpdateCanonicalize>();
         pass.AddPass<MultiUpdateCombiner>(resources.annotations);
         if (poplar_executor->EnableMultiSliceCombiner()) {
           pass.AddPass<MultiSliceCombiner>(resources.annotations);

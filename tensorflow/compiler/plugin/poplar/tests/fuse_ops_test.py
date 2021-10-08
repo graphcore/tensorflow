@@ -838,7 +838,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     ok = [
         '__seed*',
         '/negate/Op/Negate',
-        'ExpandDims/input/multi-update-add.3/multiUpdateAdd',
+        'ExpandDims/input/multi-update-add*/multiUpdateAdd',
         '[cC]opy*/OnTileCopy',
         'vs/Gather*/multi-slice',
         'vs/add/add*/Add',
@@ -904,7 +904,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     ok = [
         '__seed*',
         '/negate/Op/Negate',
-        'ExpandDims/input/multi-update-add.3/multiUpdateAdd',
+        'ExpandDims/input/multi-update-add*/multiUpdateAdd',
         '[cC]opy*/OnTileCopy',
         'vs/Gather*/multi-slice',
         'vs/add/add*/Add',
