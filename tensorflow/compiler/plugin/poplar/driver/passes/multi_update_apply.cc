@@ -242,8 +242,6 @@ StatusOr<HloInstruction*> CreateNewMultiUpdate(
   // Create a new multi update add instruction.
   HloInstruction* new_multi_update_add = comp->AddInstruction(
       CreateMultiUpdateAdd(operand->shape(), {operand, indices, updates, scale},
-                           multi_update->GetIndexVectorDimension(),
-                           multi_update->GetUpdateSliceDimension(),
                            multi_update->GetSerializationFactor()));
 
   if (shard) {

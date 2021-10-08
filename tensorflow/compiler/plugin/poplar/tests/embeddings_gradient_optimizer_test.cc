@@ -95,7 +95,7 @@ std::string GetTemplateHloString() {
     %broadcast.update = $DT[$BS,$E] broadcast($DT[] %const.update), dimensions={}, metadata={op_type="SparseSoftmaxCrossEntropyWithLogits" op_name="Update"}, backend_config="{}"
 
     %custom-call.1 = $AT[$R,$E] custom-call($DT[$R,$E] %arg0), custom_call_target="GradientAccumulatorCreate", custom_call_has_side_effect=true, metadata={op_type="GradientAccumulatorCreate" op_name="GradientAccumulatorCreate"}, backend_config="{}"
-    %custom-call.2 = $DT[$R,$E] custom-call($DT[$R,$E] %arg1, s32[$BS,1] %broadcast.indices, $DT[$BS,$E] %broadcast.update, $DT[] %const.scale), custom_call_target="MultiUpdateAdd", metadata={op_type="IpuMultiUpdateAdd" op_name="gradients/embedding_lookup_grad/IpuMultiUpdateAdd"}, backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"serialization_factor\":1,\"indices_are_sorted\":false}"
+    %custom-call.2 = $DT[$R,$E] custom-call($DT[$R,$E] %arg1, s32[$BS,1] %broadcast.indices, $DT[$BS,$E] %broadcast.update, $DT[] %const.scale), custom_call_target="MultiUpdateAdd", metadata={op_type="IpuMultiUpdateAdd" op_name="gradients/embedding_lookup_grad/IpuMultiUpdateAdd"}, backend_config="{\"serialization_factor\":1,\"indices_are_sorted\":false}"
     %custom-call.3 = $AT[$R,$E] custom-call($AT[$R,$E] %custom-call.1, $DT[$R,$E] %custom-call.2), custom_call_target="GradientAccumulatorAdd", metadata={op_type="GradientAccumulatorAdd" op_name="GradientAccumulatorAdd"}, backend_config="{}"
     %custom-call.4 = $AT[$R,$E] custom-call($AT[$R,$E] %custom-call.3), custom_call_target="GradientAccumulatorSink", metadata={op_type="GradientAccumulatorSink" op_name="GradientAccumulatorSink"}, backend_config="{\"num_mini_batches\":$BN}"
     ROOT %call.1 = $DT[$R,$E] call($DT[$R,$E] %arg0, $DT[$R,$E] %arg1, $AT[$R,$E] %custom-call.4), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\"}}}"
@@ -139,7 +139,7 @@ std::string GetPipelineTemplateHloString() {
     %broadcast.update = $DT[$BS,$E] broadcast($DT[] %const.update), dimensions={}, metadata={op_type="SparseSoftmaxCrossEntropyWithLogits" op_name="Update"}, backend_config="{}"
 
     %add = $DT[$R,$E] add($DT[$R,$E] %arg0, $DT[$R,$E] %arg1)
-    %custom-call.1 = $DT[$R,$E] custom-call($DT[$R,$E] %add, s32[$BS,1] %broadcast.indices, $DT[$BS,$E] %broadcast.update, $DT[] %const.scale), custom_call_target="MultiUpdateAdd", metadata={op_type="IpuMultiUpdateAdd" op_name="gradients/embedding_lookup_grad/IpuMultiUpdateAdd"}, backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"serialization_factor\":1,\"indices_are_sorted\":false}"
+    %custom-call.1 = $DT[$R,$E] custom-call($DT[$R,$E] %add, s32[$BS,1] %broadcast.indices, $DT[$BS,$E] %broadcast.update, $DT[] %const.scale), custom_call_target="MultiUpdateAdd", metadata={op_type="IpuMultiUpdateAdd" op_name="gradients/embedding_lookup_grad/IpuMultiUpdateAdd"}, backend_config="{\"serialization_factor\":1,\"indices_are_sorted\":false}"
     %custom-call.2 = $AT[$R,$E] custom-call($AT[$R,$E] %arg2, $DT[$R,$E] %custom-call.1), custom_call_target="GradientAccumulatorAdd", metadata={op_type="GradientAccumulatorAdd" op_name="GradientAccumulatorAdd"}, backend_config="{}"
 
     ROOT %tuple = ($AT[$R,$E], $DT[$E]) tuple(%custom-call.2, arg3)

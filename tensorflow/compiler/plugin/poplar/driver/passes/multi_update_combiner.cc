@@ -125,14 +125,13 @@ static const std::vector<HloMatcherPattern> patterns = {
 // clang-format on
 
 uint64 GetIndexDimSize(const HloMultiUpdateInstruction* inst) {
-  Shape shape = inst->operand(1)->shape();
-  return shape.rank() == static_cast<int64>(inst->GetIndexVectorDimension())
-             ? 1
-             : shape.dimensions(inst->GetIndexVectorDimension());
+  const Shape& shape = inst->operand(1)->shape();
+  return shape.dimensions(shape.rank() - 1);
 }
 
 uint64 GetUpdateDimSize(const HloMultiUpdateInstruction* inst) {
-  return inst->operand(2)->shape().dimensions(inst->GetUpdateSliceDimension());
+  const Shape& shape = inst->operand(2)->shape();
+  return shape.dimensions(shape.rank() - 1);
 }
 
 bool IndicesCastable(const HloInstruction* inst) {
@@ -166,16 +165,13 @@ StatusOr<bool> MultiUpdateCombiner::HandleMatch(
   // Get the multi updates.
   HloMultiUpdateInstruction* multi_update1 =
       Cast<HloMultiUpdateInstruction>(match.instruction_mapping.at(1));
-  const uint64 multi_update1_index_dim_size = GetIndexDimSize(multi_update1);
   const uint64 multi_update1_update_dim_size = GetUpdateDimSize(multi_update1);
 
   HloMultiUpdateInstruction* multi_update2 =
       Cast<HloMultiUpdateInstruction>(match.instruction_mapping.at(2));
-  const uint64 multi_update2_index_dim_size = GetIndexDimSize(multi_update2);
   const uint64 multi_update2_update_dim_size = GetUpdateDimSize(multi_update2);
   // Check that the ops are compatible.
-  if (multi_update1_index_dim_size != multi_update2_index_dim_size ||
-      multi_update1_update_dim_size != multi_update2_update_dim_size) {
+  if (multi_update1_update_dim_size != multi_update2_update_dim_size) {
     return false;
   }
 
@@ -218,8 +214,6 @@ StatusOr<bool> MultiUpdateCombiner::HandleMatch(
       computation->AddInstruction(CreateMultiUpdateAdd(
           multi_update1->shape(),
           {multi_update1->mutable_operand(0), new_indices, new_updates, one},
-          multi_update1->GetIndexVectorDimension(),
-          multi_update1->GetUpdateSliceDimension(),
           std::max(multi_update1->GetSerializationFactor(),
                    multi_update2->GetSerializationFactor())));
   multi_update1->SetupDerivedInstruction(new_multi_update);
