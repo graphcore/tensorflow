@@ -417,7 +417,7 @@ Runtime errors
 
 These errors and exceptions occur when running a Poplar program. The full list
 of all the exceptions and their meanings can be found in the Poplar
-documentation in the `Exceptions <https://docs.graphcore.ai/projects/poplar-api/en/latest/poplar_api.html#exceptions>`__
+documentation in the `Exceptions <https://docs.graphcore.ai/projects/poplar-api/page/poplar/execution/exceptions.html>`__
 section of the Poplar API reference manual.
 
 These runtime errors are handled in the following manner:
