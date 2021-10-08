@@ -416,7 +416,7 @@ allocate the tensors with linear mapping.
 You can override this behaviour by defining a function that allocates
 tensors in a way that is most efficient for your operation.
 See the section on variable mapping in the `Poplar and PopLibs API Reference
-<https://docs.graphcore.ai/projects/poplar-api/page/poplar_api.html#poplar-variablemappingmethod-hpp>`_
+<https://docs.graphcore.ai/projects/poplar-api/page/poplar_api/poplar/graph/VariableMappingMethod.html>`_
 for moe information.
 
 To do this, define a function with the suffix ``_allocator`` with the following
