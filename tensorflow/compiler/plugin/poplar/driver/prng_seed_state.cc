@@ -22,7 +22,10 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/core/platform/logging.h"
 
+#include <gcl/Collectives.hpp>
 #include <poplar/RandomSeed.hpp>
+#include <popops/AllTrue.hpp>
+#include <popops/ElementWise.hpp>
 #include <poprand/RandomGen.hpp>
 
 namespace xla {
@@ -37,8 +40,10 @@ std::unique_ptr<poputil::graphfn::TensorFunction> CreateChangeHwSeedsFn(
       poputil::graphfn::Signature{poputil::graphfn::input(seed_template)},
       [&graph, &debug_name_and_id](std::vector<poplar::Tensor>& args,
                                    poplar::program::Sequence& seq) {
-        auto old_seeds = poplar::getHwSeeds(graph, seq, {debug_name_and_id});
-        poplar::setHwSeeds(graph, args[0], seq, {debug_name_and_id});
+        auto old_seeds =
+            poplar::getHwSeeds(graph, seq, {debug_name_and_id, "GetHwSeed"});
+        poplar::setHwSeeds(graph, args[0], seq,
+                           {debug_name_and_id, "SetHwSeed"});
         return old_seeds;
       },
       /*inlined*/ false, debug_name_and_id);
@@ -103,14 +108,19 @@ bool PrngSeedState::ChangeStochasticRoundingMethod(
   const bool change_seed = new_method != StochasticRoundingMethod_Any &&
                            new_method != stochastic_rounding_method_;
   if (change_seed) {
+    // We do a poplar::program::Copy from the old seeds to avoid invalidating
+    // differing_hw_seed_/identical_hw_seed_ if the given seq is not
+    // executed, otherwise they can point at an uninitialized tensor.
     if (new_method == StochasticRoundingMethod_IdenticalSeeds) {
       std::vector<poplar::Tensor> args{identical_hw_seed_};
-      differing_hw_seed_ = (*change_hw_seeds_)(args, seq, debug_name_and_id);
+      auto old_seed = (*change_hw_seeds_)(args, seq, debug_name_and_id);
+      seq.add(poplar::program::Copy(old_seed, differing_hw_seed_));
     } else {
       CHECK_EQ(new_method, StochasticRoundingMethod_DifferingSeeds);
 
       std::vector<poplar::Tensor> args{differing_hw_seed_};
-      identical_hw_seed_ = (*change_hw_seeds_)(args, seq, debug_name_and_id);
+      auto old_seed = (*change_hw_seeds_)(args, seq, debug_name_and_id);
+      seq.add(poplar::program::Copy(old_seed, identical_hw_seed_));
     }
 
     stochastic_rounding_method_ = new_method;
@@ -118,6 +128,48 @@ bool PrngSeedState::ChangeStochasticRoundingMethod(
   }
 
   return false;
+}
+
+void AssertStochasticRoundingMethod(poplar::Graph& graph,
+                                    const StochasticRoundingMethod& method,
+                                    poplar::program::Sequence& seq,
+                                    const std::string& inst_name) {
+  if (method != StochasticRoundingMethod_Any) {
+    // Verbose logging so it's clear when we're asserting and harder to
+    // accidentially submit code with it enabled.
+    LOG(INFO) << "AssertStochasticRoundingMethod!";
+
+    auto seeds = poplar::getHwSeeds(graph, seq, {});
+
+    auto all_seeds = gcl::allGatherCrossReplica(graph, seeds, seq);
+    const auto replication_factor = all_seeds.dim(0);
+
+    // Compare the seed in different replicas. Aborting if they're
+    // not identical/differing respetively.
+    for (auto i = 1u; i < replication_factor; ++i) {
+      auto equal = popops::map(graph, popops::expr::BinaryOpType::EQUAL,
+                               all_seeds[0], all_seeds[i], seq);
+      auto all_equal = popops::allTrue(graph, equal, seq);
+
+      if (method == StochasticRoundingMethod_IdenticalSeeds) {
+        auto not_all_equal = popops::map(
+            graph, popops::expr::UnaryOpType::LOGICAL_NOT, all_equal, seq);
+        const std::string message =
+            "SR method is set to identical but seeds are differing on replicas "
+            "0 and " +
+            std::to_string(i) + " for " + inst_name;
+        seq.add(poplar::program::AbortOnCondition(not_all_equal, message));
+      } else {
+        CHECK_EQ(method, StochasticRoundingMethod_DifferingSeeds);
+
+        const std::string message =
+            "SR method is set to differing but seeds are identical on replicas "
+            "0 and " +
+            std::to_string(i) + " for " + inst_name;
+        seq.add(poplar::program::AbortOnCondition(all_equal, message));
+      }
+    }
+  }
 }
 
 }  // namespace poplarplugin

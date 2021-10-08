@@ -17,6 +17,7 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PRNG_SEED_STATE_H_
 
 #include <memory>
+#include <string>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 
@@ -67,6 +68,14 @@ class PrngSeedState {
   StochasticRoundingMethod stochastic_rounding_method_ =
       StochasticRoundingMethod_Undefined;
 };
+
+// Debug utility for checking whether the state of the seed matches the given
+// StochasticRoundingMethod, terminating poplar program execution if not. Note
+// that using this comes with a large overhead.
+void AssertStochasticRoundingMethod(poplar::Graph& graph,
+                                    const StochasticRoundingMethod& method,
+                                    poplar::program::Sequence& seq,
+                                    const std::string& inst_name = "");
 
 }  // namespace poplarplugin
 }  // namespace xla
