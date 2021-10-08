@@ -247,7 +247,6 @@ cc_library(
         "driver/passes/multi_conv_fixer.cc",
         "driver/passes/multi_slice_combiner.cc",
         "driver/passes/multi_update_apply.cc",
-        "driver/passes/multi_update_canonicalize.cc",
         "driver/passes/multi_update_combiner.cc",
         "driver/passes/multi_update_scale_apply.cc",
         "driver/passes/multi_use_feeds_finder.cc",
@@ -456,7 +455,6 @@ cc_library(
         "driver/passes/multi_conv_fixer.h",
         "driver/passes/multi_slice_combiner.h",
         "driver/passes/multi_update_apply.h",
-        "driver/passes/multi_update_canonicalize.h",
         "driver/passes/multi_update_combiner.h",
         "driver/passes/multi_update_scale_apply.h",
         "driver/passes/multi_use_feeds_finder.h",
@@ -3071,21 +3069,6 @@ xla_test(
 )
 
 xla_test(
-    name = "multi_update_canonicalize_test",
-    size = "small",
-    srcs = ["tests/multi_update_canonicalize_test.cc"],
-    backends = ["poplar"],
-    copts = ["-fexceptions"],
-    deps = [
-        ":optimizers",
-        "//tensorflow/compiler/xla/service:hlo_matchers",
-        "//tensorflow/compiler/xla/service:hlo_query",
-        "//tensorflow/compiler/xla/service:shape_inference",
-        "//tensorflow/compiler/xla/tests:hlo_test_base",
-    ],
-)
-
-xla_test(
     name = "resource_update_fixer_test",
     size = "small",
     srcs = ["tests/resource_update_fixer_test.cc"],
@@ -5574,7 +5557,6 @@ test_suite(
         "multi_run_test",
         "multi_slice_combiner_test",
         "multi_update_apply_test",
-        "multi_update_canonicalize_test",
         "multi_update_combiner_test",
         "multi_update_scale_apply_test",
         "multi_use_feeds_finder_test",

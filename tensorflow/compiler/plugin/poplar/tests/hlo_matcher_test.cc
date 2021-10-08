@@ -900,6 +900,10 @@ ENTRY c1 {
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 
+  auto is_multi_update_add_scatter = [](const HloInstruction* inst) -> bool {
+    return inst->opcode() == HloOpcode::kScatter;
+  };
+
   // clang-format off
   std::vector<HloMatcherPattern> patterns = {
     HloMatcherPattern(
@@ -919,7 +923,7 @@ ENTRY c1 {
           {HloOpcode::kReshape, NodeOperands({2})},
           {HloOpcode::kMultiply, NodeOperands({4, 3})},
           {HloOpcode::kBroadcast, NodeOperands({10})},
-          {HloOpcode::kScatter, NodeOperands({5, 8, 9}), IsMultiUpdateAddScatter},
+          {HloOpcode::kScatter, NodeOperands({5, 8, 9}), is_multi_update_add_scatter}, // NOLINT
           {HloOpcode::kBroadcast, NodeOperands({6})},
           {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
           {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},

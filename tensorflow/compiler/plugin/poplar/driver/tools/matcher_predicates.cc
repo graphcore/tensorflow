@@ -32,32 +32,6 @@ namespace xla {
 namespace m = match;
 
 namespace poplarplugin {
-namespace {
-// TODO popops::multiUpdate and popops::multiUpdateAdd only supports the 2D
-// case.
-bool CheckValidMultiUpdateAttributes(const HloScatterInstruction* inst) {
-  const Shape operand_shape = inst->operand(0)->shape();
-  const Shape indices_shape = inst->operand(1)->shape();
-  const Shape updates_shape = inst->operand(2)->shape();
-  const auto dim_numbers = inst->scatter_dimension_numbers();
-  const auto update_window_dims = dim_numbers.update_window_dims();
-  const auto inserted_window_dims = dim_numbers.inserted_window_dims();
-  const auto scatter_dims_to_operand_dims =
-      dim_numbers.scatter_dims_to_operand_dims();
-  const auto index_vector_dim = dim_numbers.index_vector_dim();
-  const uint64 index_dim_size =
-      indices_shape.rank() == index_vector_dim
-          ? 1
-          : indices_shape.dimensions(index_vector_dim);
-  return operand_shape.rank() == 2 && index_dim_size == 1 &&
-         scatter_dims_to_operand_dims.size() == 1 &&
-         scatter_dims_to_operand_dims[0] == 0 &&
-         inserted_window_dims.size() == 1 && inserted_window_dims[0] == 0 &&
-         update_window_dims.size() == 1 &&
-         update_window_dims[0] == (updates_shape.rank() - 1);
-}
-}  // namespace
-
 bool HasSingleUser(const HloInstruction* inst) {
   return inst->user_count() == 1;
 }
@@ -381,26 +355,6 @@ bool IsMultiSliceOrUpdate(const HloInstruction* inst) {
     if (IsPoplarInstruction(op)(inst)) {
       return true;
     }
-  }
-  return false;
-}
-
-bool IsMultiUpdateScatter(const HloInstruction* inst) {
-  if (inst->opcode() == HloOpcode::kScatter) {
-    const HloScatterInstruction* scatter = Cast<HloScatterInstruction>(inst);
-    const HloInstruction* root = inst->to_apply()->root_instruction();
-    return Match(root, m::Parameter(1)) &&
-           CheckValidMultiUpdateAttributes(scatter);
-  }
-  return false;
-}
-
-bool IsMultiUpdateAddScatter(const HloInstruction* inst) {
-  if (inst->opcode() == HloOpcode::kScatter) {
-    const HloScatterInstruction* scatter = Cast<HloScatterInstruction>(inst);
-    const HloInstruction* root = inst->to_apply()->root_instruction();
-    return Match(root, m::Add(m::Parameter(0), m::Parameter(1))) &&
-           CheckValidMultiUpdateAttributes(scatter);
   }
   return false;
 }

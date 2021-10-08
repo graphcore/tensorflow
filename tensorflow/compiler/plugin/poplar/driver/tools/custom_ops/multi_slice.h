@@ -59,8 +59,6 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
  public:
   explicit HloMultiUpdateInstruction(const Shape& shape,
                                      absl::Span<HloInstruction* const> operands,
-                                     std::size_t index_vector_dim,
-                                     std::size_t update_dim,
                                      uint32 serialization_factor,
                                      bool is_update_add = false,
                                      bool indices_are_sorted = false);
@@ -75,14 +73,6 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
 
   bool IsPopOpsElementwise() const override;
 
-  // The dimension in indices which contains the starting indices. If it is
-  // equal to the indices tensor rank we implicitly consider that tensor to
-  // have a trailing 1 dimension.
-  std::size_t GetIndexVectorDimension() const { return index_vector_dim_; }
-
-  // The dimension of the update operand which represents the slice.
-  std::size_t GetUpdateSliceDimension() const { return update_dim_; }
-
   // Factor used for serializing the multi update.
   std::size_t GetSerializationFactor() const { return serialization_factor_; }
 
@@ -93,8 +83,6 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
 
-  const std::size_t index_vector_dim_;
-  const std::size_t update_dim_;
   const uint32 serialization_factor_;
   const bool indices_are_sorted_;
 
@@ -108,7 +96,6 @@ class HloMultiUpdateAddInstruction : public HloMultiUpdateInstruction {
  public:
   explicit HloMultiUpdateAddInstruction(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
-      std::size_t index_vector_dim, std::size_t update_dim,
       uint32 serialization_factor, bool indices_are_sorted);
 
  private:
@@ -123,12 +110,10 @@ std::unique_ptr<HloInstruction> CreateMultiSlice(
 
 std::unique_ptr<HloInstruction> CreateMultiUpdate(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    std::size_t index_vector_dim, std::size_t update_dim,
     uint32 serialization_factor = 1, bool indices_are_sorted = false);
 
 std::unique_ptr<HloInstruction> CreateMultiUpdateAdd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    std::size_t index_vector_dim, std::size_t update_dim,
     uint32 serialization_factor = 1, bool indices_are_sorted = false);
 
 }  // namespace poplarplugin

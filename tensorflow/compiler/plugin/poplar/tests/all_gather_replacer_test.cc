@@ -54,7 +54,7 @@ ENTRY c1 {
 
   %multi_update_add = f32[100000,200]{1,0} custom-call(f32[100000, 200]{1,0} %zero_tensor,
        s32[1000]{0} %indices, f32[1000, 200]{1,0} %updates,
-       f32[] %scale), custom_call_target="MultiUpdateAdd", sharding={maximal device=1}, backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"isInplace\":true,\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
+       f32[] %scale), custom_call_target="MultiUpdateAdd", sharding={maximal device=1}, backend_config="{\"isInplace\":true,\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
 
   %all-reduce = f32[100000,200]{1,0} all-reduce(f32[100000,200]{1,0} %multi_update_add),to_apply=%to_apply_func, replica_groups={}, sharding={maximal device=1}, backend_config="{}"
 
@@ -89,7 +89,7 @@ ENTRY c1 {
     %constant = f32[] constant(-1)
     ROOT %custom-call.5 = f32[100000,200]{1,0} custom-call(f32[100000,200]{1,0}
   %embeddings, s32[4000]{0} %reshape, f32[4000,200]{1,0} %multiply.1, f32[]
-  %constant), custom_call_target="MultiUpdateAdd", index_vector_dim=1,
+  %constant), custom_call_target="MultiUpdateAdd",
   update_dim=1, sharding={maximal device=1},
   backend_config="{\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
   }
@@ -199,7 +199,7 @@ ENTRY c1 {
 
   %multi_update_add = f16[100000,200]{1,0} custom-call(f16[100000, 200]{1,0} %zero_tensor,
        s32[1000]{0} %indices, f16[1000, 200]{1,0} %updates,
-       f16[] %scale), custom_call_target="MultiUpdateAdd", sharding={maximal device=1}, backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"isInplace\":true,\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
+       f16[] %scale), custom_call_target="MultiUpdateAdd", sharding={maximal device=1}, backend_config="{\"isInplace\":true,\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
 
   %all-reduce = f16[100000,200]{1,0} all-reduce(f16[100000,200]{1,0} %multi_update_add),to_apply=%to_apply_func, replica_groups={}, sharding={maximal device=1}, backend_config="{}"
 
@@ -234,7 +234,7 @@ ENTRY c1 {
     %constant = f16[] constant(-1)
     ROOT %custom-call.5 = f16[100000,200]{1,0} custom-call(f16[100000,200]{1,0}
   %embeddings, s32[4000]{0} %reshape, f16[4000,200]{1,0} %multiply.1, f16[]
-  %constant), custom_call_target="MultiUpdateAdd", index_vector_dim=1,
+  %constant), custom_call_target="MultiUpdateAdd",
   update_dim=1, sharding={maximal device=1},
   backend_config="{\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
   }
@@ -344,7 +344,7 @@ ENTRY c1 {
 
   %multi_update_add = s32[100000,200]{1,0} custom-call(s32[100000, 200]{1,0} %zero_tensor,
        s32[1000]{0} %indices, s32[1000, 200]{1,0} %updates,
-       s32[] %scale), custom_call_target="MultiUpdateAdd", sharding={maximal device=1}, backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"isInplace\":true,\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
+       s32[] %scale), custom_call_target="MultiUpdateAdd", sharding={maximal device=1}, backend_config="{\"isInplace\":true,\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
 
   %all-reduce = s32[100000,200]{1,0} all-reduce(s32[100000,200]{1,0} %multi_update_add),to_apply=%to_apply_func, replica_groups={}, sharding={maximal device=1}, backend_config="{}"
 
@@ -398,7 +398,7 @@ ENTRY c1 {
 
   %multi_update_add = f16[10000,200]{1,0} custom-call(f16[10000, 200]{1,0} %zero_tensor,
        s32[10000]{0} %indices, f16[10000, 200]{1,0} %updates,
-       f16[] %scale), custom_call_target="MultiUpdateAdd", sharding={maximal device=1}, backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"isInplace\":true,\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
+       f16[] %scale), custom_call_target="MultiUpdateAdd", sharding={maximal device=1}, backend_config="{\"isInplace\":true,\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
 
   %all-reduce = f16[10000,200]{1,0} all-reduce(f16[10000,200]{1,0} %multi_update_add),to_apply=%to_apply_func, replica_groups={}, sharding={maximal device=1}, backend_config="{}"
 
@@ -452,7 +452,7 @@ ENTRY c1 {
 
   %multi_update_add = f16[100000,200]{1,0} custom-call(f16[100000, 200]{1,0} %zero_tensor,
        s32[1000]{0} %indices, f16[1000, 200]{1,0} %updates,
-       f16[] %scale), custom_call_target="MultiUpdateAdd", sharding={maximal device=1}, backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"isInplace\":true,\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
+       f16[] %scale), custom_call_target="MultiUpdateAdd", sharding={maximal device=1}, backend_config="{\"isInplace\":true,\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
 
   %all-reduce = f16[100000,200]{1,0} all-reduce(f16[100000,200]{1,0} %multi_update_add),to_apply=%to_apply_func, replica_groups={}, sharding={maximal device=1}, backend_config="{}"
 
@@ -489,14 +489,14 @@ ENTRY c1 {
   slice={[0:4000], [0:200]} %constant = f16[] constant(-1) %custom-call.5 =
   f16[100000,200]{1,0} custom-call(f16[100000,200]{1,0} %embeddings,
   s32[4000]{0} %slice, f16[4000,200]{1,0} %slice.1, f16[] %constant),
-  custom_call_target="MultiUpdateAdd", index_vector_dim=1, update_dim=1,
+  custom_call_target="MultiUpdateAdd", update_dim=1,
   backend_config="{\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
     %slice.2 = s32[4000]{0} slice(s32[8000]{0} %reshape), slice={[4000:8000]}
     %slice.3 = f16[4000,200]{1,0} slice(f16[8000,200]{1,0} %multiply.1),
   slice={[4000:8000], [0:200]} ROOT %custom-call.6 = f16[100000,200]{1,0}
   custom-call(f16[100000,200]{1,0} %custom-call.5, s32[4000]{0} %slice.2,
   f16[4000,200]{1,0} %slice.3, f16[] %constant),
-  custom_call_target="MultiUpdateAdd", index_vector_dim=1, update_dim=1,
+  custom_call_target="MultiUpdateAdd", update_dim=1,
   sharding={maximal device=1},
   backend_config="{\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
   }

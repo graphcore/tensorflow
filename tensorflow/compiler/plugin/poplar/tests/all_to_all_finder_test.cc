@@ -49,7 +49,7 @@ ENTRY main {
   updates = f32[24,16] parameter(1)
   zero = f32[] constant(0)
   big_zero = f32[1000,16] broadcast(zero), dimensions={}
-  operand = f32[1000,16] custom-call(big_zero, offsets, updates), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  operand = f32[1000,16] custom-call(big_zero, offsets, updates), custom_call_target="MultiUpdate", backend_config="{\"indices_are_sorted\":false}\n"
   operand_all = f32[1000,16] all-reduce(operand), to_apply=add
   ROOT operand_norm = f32[1000,16] custom-call(operand_all), custom_call_target="ReplicationNormalise", backend_config="{}\n"
 }
@@ -103,7 +103,7 @@ ENTRY main {
   updates = f32[24,16] parameter(1)
   zero = f32[] constant(0)
   big_zero = f32[1000,16] broadcast(zero), dimensions={}
-  operand = f32[1000,16] custom-call(big_zero, offsets, updates), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  operand = f32[1000,16] custom-call(big_zero, offsets, updates), custom_call_target="MultiUpdate", backend_config="{\"indices_are_sorted\":false}\n"
   operand_all = f32[1000,16] all-reduce(operand), to_apply=add
   ROOT operand_norm = f32[1000,16] custom-call(operand_all), custom_call_target="ReplicationNormalise", backend_config="{}\n"
 }
@@ -158,7 +158,7 @@ ENTRY main {
   zero = f32[] constant(0)
   scale = f32[] constant(1)
   big_zero = f32[1000,16] broadcast(zero), dimensions={}
-  operand = f32[1000,16] custom-call(big_zero, offsets, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  operand = f32[1000,16] custom-call(big_zero, offsets, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
   operand_all = f32[1000,16] all-reduce(operand), to_apply=add
   ROOT operand_norm = f32[1000,16] custom-call(operand_all), custom_call_target="ReplicationNormalise", backend_config="{}\n"
 }
@@ -215,7 +215,7 @@ ENTRY main {
   zero = f32[] constant(0)
   scale = f32[] constant(1)
   big_zero = f32[1000,16] broadcast(zero), dimensions={}
-  operand = f32[1000,16] custom-call(big_zero, offsets, updates, scale), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  operand = f32[1000,16] custom-call(big_zero, offsets, updates, scale), custom_call_target="MultiUpdate", backend_config="{\"indices_are_sorted\":false}\n"
   operand_all = f32[1000,16] all-reduce(operand), to_apply=add
   ROOT operand_norm = f32[1000,16] custom-call(operand_all), custom_call_target="ReplicationNormalise", backend_config="{}\n"
 }

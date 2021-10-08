@@ -22,7 +22,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_canonicalize.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/embedding_plans_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
@@ -65,7 +64,6 @@ using SlicePlanTest = HloPoplarTestBase;
 HloPassPipeline GetMockPipeline(CompilerResources& resources) {
   HloPassPipeline pipeline("mock_pipeline");
   pipeline.AddPass<CustomOpReplacer>();
-  pipeline.AddPass<MultiUpdateCanonicalize>();
   pipeline.AddPass<ModuleFlatten>(resources.annotations);
   pipeline.AddPass<InplaceFinder>();
   pipeline.AddPass<ShardingPass>();
@@ -158,7 +156,7 @@ ENTRY main {
   big_one = f32[24,16] broadcast(one), dimensions={}
   slice_modified = f32[24,16] add(slice, big_one)
   lr = f32[] constant(-0.1)
-  update = f32[100,16] custom-call(input, offsets, slice_modified, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  update = f32[100,16] custom-call(input, offsets, slice_modified, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
   ROOT t = (f32[24,16], f32[100,16]) tuple(slice, update)
 }
 )";
@@ -199,7 +197,7 @@ ENTRY main {
   lr = f32[] constant(-0.1)
   concat_offsets = s32[36,1] concatenate(offsets1, offsets2), dimensions={0}
   concat_updates = f32[36,16] concatenate(slice1_modified, slice2_modified), dimensions={0}
-  update = f32[100,16] custom-call(input, concat_offsets, concat_updates, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  update = f32[100,16] custom-call(input, concat_offsets, concat_updates, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
   ROOT t = (f32[24,16], f32[12,16], f32[100,16]) tuple(slice1, slice2, update)
 }
 )";
@@ -239,7 +237,7 @@ ENTRY main {
   big_one1 = f32[24,16] broadcast(one), dimensions={}
   slice1_modified = f32[24,16] add(slice1, big_one1)
   lr = f32[] constant(-0.1)
-  update = f32[100,16] custom-call(input, offsets1, slice1_modified, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  update = f32[100,16] custom-call(input, offsets1, slice1_modified, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
   ROOT t = (f32[24,16], f32[12,16], f32[100,16]) tuple(slice1, slice2, update)
 }
 )";
@@ -276,7 +274,7 @@ ENTRY main {
   one = f32[] constant(1)
   big_one = f32[24,16] broadcast(one), dimensions={}
   slice_modified = f32[24,16] add(slice, big_one)
-  update = f32[100,16] custom-call(input, offsets, slice_modified), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  update = f32[100,16] custom-call(input, offsets, slice_modified), custom_call_target="MultiUpdate", backend_config="{\"indices_are_sorted\":false}\n"
   ROOT t = (f32[24,16], f32[100,16]) tuple(slice, update)
 }
 )";
@@ -316,7 +314,7 @@ ENTRY main {
   slice2_modified = f32[12,16] add(slice2, big_one2)
   concat_offsets = s32[36,1] concatenate(offsets1, offsets2), dimensions={0}
   concat_updates = f32[36,16] concatenate(slice1_modified, slice2_modified), dimensions={0}
-  update = f32[100,16] custom-call(input, concat_offsets, concat_updates), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  update = f32[100,16] custom-call(input, concat_offsets, concat_updates), custom_call_target="MultiUpdate", backend_config="{\"indices_are_sorted\":false}\n"
   ROOT t = (f32[24,16], f32[12,16], f32[100,16]) tuple(slice1, slice2, update)
 }
 )";
@@ -352,7 +350,7 @@ ENTRY main {
   one = f32[] constant(1)
   big_one1 = f32[24,16] broadcast(one), dimensions={}
   slice1_modified = f32[24,16] add(slice1, big_one1)
-  update = f32[100,16] custom-call(input, offsets1, slice1_modified), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"indices_are_sorted\":false}\n"
+  update = f32[100,16] custom-call(input, offsets1, slice1_modified), custom_call_target="MultiUpdate", backend_config="{\"indices_are_sorted\":false}\n"
   ROOT t = (f32[24,16], f32[12,16], f32[100,16]) tuple(slice1, slice2, update)
 }
 )";

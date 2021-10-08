@@ -117,8 +117,9 @@ class PopopsMultiUpdateOp : public XlaOpKernel, IpuOpKernel {
     for (int i = 0; i != num_inputs; ++i) {
       args[i] = ctx->Input(i);
     }
-    attribute_map_.AddAttribute("update_dim", updates_shape.dims() - 1);
-    attribute_map_.AddAttribute("index_vector_dim", indices_shape.dims());
+
+    // Add a trailing 1 dimension to indices.
+    args[1] = xla::Reshape(args[1], {indices_shape.dim_size(0), 1});
 
     xla::XlaOp call_output =
         xla::CustomCall(&b,
