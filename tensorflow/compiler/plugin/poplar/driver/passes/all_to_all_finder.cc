@@ -161,9 +161,6 @@ static Status ApplyTransformation(HloMatcherMatched& match,
 
   HloMultiUpdateInstruction* multi_update =
       Cast<HloMultiUpdateInstruction>(match.instruction_mapping[2]);
-  // This pass should have been run after MultiUpdateCanonicalize.
-  CHECK_EQ(multi_update->GetIndexVectorDimension(), 1);
-  CHECK_EQ(multi_update->GetUpdateSliceDimension(), 1);
 
   HloInstruction* broadcast = match.instruction_mapping[3];
   HloInstruction* indices = match.instruction_mapping[5];
@@ -199,14 +196,14 @@ static Status ApplyTransformation(HloMatcherMatched& match,
     HloInstruction* scale = match.instruction_mapping[7];
     output = comp->AddInstruction(CreateMultiUpdateAdd(
         broadcast->shape(),
-        {broadcast, reduced_indices, normalized_updates, scale}, 1, 1,
+        {broadcast, reduced_indices, normalized_updates, scale},
         serialization_factor));
   } else {
     // Create MultiUpdate.
     CHECK_EQ(match.pattern_idx, 1);
     output = comp->AddInstruction(CreateMultiUpdate(
-        broadcast->shape(), {broadcast, reduced_indices, normalized_updates}, 1,
-        1, serialization_factor));
+        broadcast->shape(), {broadcast, reduced_indices, normalized_updates},
+        serialization_factor));
   }
 
   // Replace with the new output.

@@ -29,9 +29,11 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
+
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
 namespace xla {
@@ -280,8 +282,6 @@ HloComputation* ReplaceResourceUpdateFunction(
       CreateMultiUpdateAdd(old_sink_shape,
                            {zero_broadcast.get(), new_indices_reshape.get(),
                             new_grads_arg.get(), const_1.get()},
-                           multi_update_add->GetIndexVectorDimension(),
-                           multi_update_add->GetUpdateSliceDimension(),
                            multi_update_add->GetSerializationFactor());
 
   for (auto old_sink_user : old_sink_arg->users()) {
@@ -355,8 +355,15 @@ StatusOr<HloComputation*> ReplaceAccumulatorCaller(
       ShapeUtil::MakeShape(update_index->shape().element_type(),
                            {plan.mini_batch_size}),
       update_index.get(), {});
-  auto update_index_broadcast_indices = HloInstruction::CreateBroadcast(
-      ShapeUtil::MakeShape(update_index->shape().element_type(), {1}),
+
+  auto update_index_broadcast_grads_reshaped = HloInstruction::CreateReshape(
+      ShapeUtil::MakeShape(update_index->shape().element_type(),
+                           /*dimensions=*/{plan.mini_batch_size, 1}),
+      update_index_broadcast_grads.get(), {});
+
+  auto update_index_broadcast_indices_reshaped = HloInstruction::CreateReshape(
+      ShapeUtil::MakeShape(update_index->shape().element_type(),
+                           /*dimensions=*/{1, 1}),
       update_index.get(), {});
 
   auto const_int_1 = HloInstruction::CreateConstant(LiteralUtil::One(S32));
@@ -369,15 +376,19 @@ StatusOr<HloComputation*> ReplaceAccumulatorCaller(
       plan.accum_grads_shape,
       {pipeline_stage_accum_grads_param ? pipeline_stage_accum_grads_param.get()
                                         : accum_grads.get(),
-       update_index_broadcast_grads.get(), grads, scale},
-      1, 1, multi_update_add->GetSerializationFactor());
-  auto indices_update = CreateMultiUpdateAdd(
-      plan.accum_indices_shape,
-      {pipeline_stage_accum_indices_param
-           ? pipeline_stage_accum_indices_param.get()
-           : accum_indices.get(),
-       update_index_broadcast_indices.get(), indices, const_int_1.get()},
-      0, 0, multi_update_add->GetSerializationFactor());
+       update_index_broadcast_grads_reshaped.get(), grads, scale},
+      multi_update_add->GetSerializationFactor());
+
+  TF_ASSIGN_OR_RETURN(auto indices_transpose,
+                      MakeTransposeHlo(indices, {1, 0}));
+  auto indices_update =
+      CreateMultiUpdateAdd(plan.accum_indices_shape,
+                           {pipeline_stage_accum_indices_param
+                                ? pipeline_stage_accum_indices_param.get()
+                                : accum_indices.get(),
+                            update_index_broadcast_indices_reshaped.get(),
+                            indices_transpose, const_int_1.get()},
+                           multi_update_add->GetSerializationFactor());
 
   std::unique_ptr<HloInstruction> grads_update_gte, indices_update_gte;
   if (pipeline_stage) {
@@ -525,6 +536,11 @@ absl::optional<Candidate> CheckEmbeddingsCandidate(HloInstruction* inst) {
                "found.";
     return absl::nullopt;
   }
+  // Updates need to be 2D.
+  if (inst->shape().rank() != 2) {
+    VLOG(2) << "The shape needs to be 2D.";
+    return absl::nullopt;
+  }
   return Candidate{Cast<HloGradientAccumulatorSink>(inst), {}};
 }
 
@@ -624,6 +640,11 @@ absl::optional<PipelineCandidate> CheckPipelineEmbeddingsCandidate(
 
   if (!resource_update) {
     VLOG(2) << "Could not find resource update function";
+    return absl::nullopt;
+  }
+
+  if (grad_create->shape().rank() != 2) {
+    VLOG(2) << "The shape needs to be 2D.";
     return absl::nullopt;
   }
 

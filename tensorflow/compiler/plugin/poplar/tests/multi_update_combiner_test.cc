@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_canonicalize.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
@@ -73,8 +72,6 @@ main {
   ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
-  MultiUpdateCanonicalize mu_canon;
-  EXPECT_TRUE(mu_canon.Run(module).ValueOrDie());
   HloCSE cse(false);
   EXPECT_TRUE(cse.Run(module).ValueOrDie());
   MultiUpdateCombiner mu_combiner(annotations);
@@ -170,8 +167,6 @@ main {
   ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 3);
-  MultiUpdateCanonicalize mu_canon;
-  EXPECT_TRUE(mu_canon.Run(module).ValueOrDie());
   MultiUpdateCombiner mu_combiner(annotations);
   int64 execution_count = -1;
   bool changed = false;
@@ -239,8 +234,6 @@ main {
   ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 3);
-  MultiUpdateCanonicalize mu_canon;
-  EXPECT_TRUE(mu_canon.Run(module).ValueOrDie());
   MultiUpdateCombiner mu_combiner(annotations);
   int64 execution_count = -1;
   bool changed = false;
@@ -312,8 +305,6 @@ main {
   ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
-  MultiUpdateCanonicalize mu_canon;
-  EXPECT_TRUE(mu_canon.Run(module).ValueOrDie());
   MultiUpdateCombiner mu_combiner(annotations);
   int64 execution_count = -1;
   bool changed = false;
@@ -376,8 +367,6 @@ main {
   ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
-  MultiUpdateCanonicalize mu_canon;
-  EXPECT_TRUE(mu_canon.Run(module).ValueOrDie());
   HloCSE cse(false);
   cse.Run(module).ValueOrDie();
   MultiUpdateCombiner mu_combiner(annotations);
@@ -431,8 +420,6 @@ main {
   ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
-  MultiUpdateCanonicalize mu_canon;
-  EXPECT_TRUE(mu_canon.Run(module).ValueOrDie());
   HloCSE cse(false);
   cse.Run(module).ValueOrDie();
   MultiUpdateCombiner mu_combiner(annotations);

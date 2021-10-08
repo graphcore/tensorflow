@@ -75,12 +75,6 @@ main {
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
   auto root = module->entry_computation()->root_instruction();
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
-  auto mu0 = Cast<HloMultiUpdateAddInstruction>(root->operand(0));
-  EXPECT_THAT(mu0->GetIndexVectorDimension(), 1);
-  EXPECT_THAT(mu0->GetUpdateSliceDimension(), 1);
-  auto mu1 = Cast<HloMultiUpdateAddInstruction>(root->operand(1));
-  EXPECT_THAT(mu1->GetIndexVectorDimension(), 1);
-  EXPECT_THAT(mu1->GetUpdateSliceDimension(), 1);
 }
 
 TEST_F(ScatterSimplifierTest, TestMultiUpdates) {
@@ -116,11 +110,6 @@ main {
   auto root = module->entry_computation()->root_instruction();
   EXPECT_EQ(GetNumMultiUpdates(module->entry_computation()), 2);
   auto mu0 = Cast<HloMultiUpdateInstruction>(root->operand(0));
-  EXPECT_THAT(mu0->GetIndexVectorDimension(), 1);
-  EXPECT_THAT(mu0->GetUpdateSliceDimension(), 1);
-  auto mu1 = Cast<HloMultiUpdateInstruction>(root->operand(1));
-  EXPECT_THAT(mu1->GetIndexVectorDimension(), 1);
-  EXPECT_THAT(mu1->GetUpdateSliceDimension(), 1);
 }
 
 TEST_F(ScatterSimplifierTest, TestNotValid) {
