@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/literal_util.h"
 
 #include <poplar/CSRFunctions.hpp>
+#include <poplar/RandomSeed.hpp>
 #include <popops/Cast.hpp>
 #include <popops/codelets.hpp>
 #include <poprand/codelets.hpp>
@@ -67,11 +68,16 @@ struct PrngSeedStateTest : HloPoplarTestBase {
   }
 
   std::pair<std::vector<float>, std::vector<float>> RunFloatToHalfCast() {
-    poplar::Tensor half = popops::cast(*graph_, input_, poplar::HALF, seq_);
-    poplar::Tensor full = popops::cast(*graph_, half, poplar::FLOAT, seq_);
-    seq_.add(poplar::program::Copy(full, output_));
+    return RunFloatToHalfCast(seq_);
+  }
 
-    poplar::Engine engine(*graph_, seq_);
+  std::pair<std::vector<float>, std::vector<float>> RunFloatToHalfCast(
+      poplar::program::Sequence& seq) {
+    poplar::Tensor half = popops::cast(*graph_, input_, poplar::HALF, seq);
+    poplar::Tensor full = popops::cast(*graph_, half, poplar::FLOAT, seq);
+    seq.add(poplar::program::Copy(full, output_));
+
+    poplar::Engine engine(*graph_, seq);
     engine.load(device_);
 
     const uint32_t differing_seed_vals[] = {1, 2, 3, 4};
@@ -177,6 +183,49 @@ TEST_F(PrngSeedStateTest, SwichingDifferingSeed) {
 
   ASSERT_NE(next_replicas.first, replicas.first);
   ASSERT_NE(next_replicas.second, replicas.second);
+}
+
+TEST_F(PrngSeedStateTest, VanishingSeed) {
+  auto prng_state = PrngSeedState::SetupSeeds(*graph_, identical_seed_,
+                                              differing_seed_, seq_);
+
+  // We want to check that calling ChangeStochasticRoundingMethod without
+  // executing it's poplar::program doesn't modify the seed we're changing from
+  // (differing in this case), which can get set to all 0s.
+  poplar::program::Sequence unexecuted_seq;
+  prng_state.ChangeStochasticRoundingMethod(
+      StochasticRoundingMethod_IdenticalSeeds, unexecuted_seq);
+  prng_state.ChangeStochasticRoundingMethod(
+      StochasticRoundingMethod_DifferingSeeds, seq_);
+
+  auto replicas = RunFloatToHalfCast();
+  ASSERT_NE(replicas.first, replicas.second);
+}
+
+TEST_F(PrngSeedStateTest, AssertSeed) {
+  auto expected_sr_method = StochasticRoundingMethod_DifferingSeeds;
+  auto actual_sr_method = StochasticRoundingMethod_IdenticalSeeds;
+
+  poplar::program::Sequence setup_seq;
+  auto prng_state = PrngSeedState::SetupSeeds(*graph_, identical_seed_,
+                                              differing_seed_, setup_seq);
+  prng_state.ChangeStochasticRoundingMethod(actual_sr_method, setup_seq);
+  auto hw_seed = poplar::getHwSeeds(*graph_, setup_seq);
+
+  // Set the expected_sr_method and change the seed so it doesn't
+  // reflect the semantics of the SR method we've set.
+  prng_state.ChangeStochasticRoundingMethod(expected_sr_method, setup_seq);
+  poplar::setHwSeeds(*graph_, hw_seed, setup_seq);
+
+  // We want to check that the generated assert program causes an error if the
+  // seed and SR method don't match.
+  poplar::program::Sequence throw_seq(setup_seq);
+  AssertStochasticRoundingMethod(*graph_, expected_sr_method, throw_seq);
+  ASSERT_ANY_THROW(RunFloatToHalfCast(throw_seq));
+
+  poplar::program::Sequence no_throw_seq(setup_seq);
+  AssertStochasticRoundingMethod(*graph_, actual_sr_method, no_throw_seq);
+  ASSERT_NO_THROW(RunFloatToHalfCast(no_throw_seq));
 }
 
 }  // namespace
