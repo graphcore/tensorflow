@@ -29,6 +29,8 @@ from tensorflow.python.ipu.ipu_multi_worker_strategy import \
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.training import server_lib
 
+import popdist
+
 
 def _to_horovod_op(reduce_op):
   if reduce_op == reduce_util.ReduceOp.SUM:
@@ -97,6 +99,10 @@ class IPUMultiReplicaExtendedV1(IPUMultiWorkerExtendedV1):
                      variables_on_host=False)
     self._num_workers = size()
     self._add_ipu_cross_replica_reductions = add_ipu_cross_replica_reductions
+
+  @property
+  def _num_replicas_in_sync(self):
+    return popdist.getNumTotalReplicas()
 
   def non_slot_devices(self, var_list):
     del var_list

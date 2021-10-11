@@ -4258,7 +4258,7 @@ poprun_py_test(
     srcs = ["tests/distributed_tf2_test.py"],
     main = "tests/distributed_tf2_test.py",
     num_instances = 2,
-    num_replicas = 4,
+    num_replicas = 8,
     deps = [
         "//tensorflow/python/ipu:ipu_lib",
     ],
