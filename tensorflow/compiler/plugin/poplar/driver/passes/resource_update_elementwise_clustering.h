@@ -24,6 +24,7 @@ limitations under the License.
 #include "absl/container/flat_hash_set.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/elementwise_cluster.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 #include "tensorflow/compiler/xla/statusor.h"
 
@@ -32,10 +33,6 @@ namespace xla {
 class HloModule;
 
 namespace poplarplugin {
-
-class ElementwiseCluster;
-struct ElementwiseClusterValidator;
-struct UserPositions;
 
 enum struct ClusterOutlinePolicy { Ignore, Outline, OutlineNonUnique };
 
@@ -50,7 +47,10 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
     return "resource-update-elementwise-clustering";
   }
 
-  StatusOr<bool> Run(HloModule* module);
+  StatusOr<bool> Run(HloModule* module) override;
+
+  // Exposed for tests only.
+  virtual Status RunDataflowAnalysis(const HloModule* module);
 
   // Get clusters inside of the call, where the call has to be a repeat loop or
   // a pipeline.
@@ -70,12 +70,10 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
 
   // Creates validator specific to the concrete pass implementation.
   virtual std::unique_ptr<ElementwiseClusterValidator> CreateValidator(
-      const HloComputation*,
-      const std::function<bool(int64)>& allowed_resource_update_parameter)
-      const;
+      const HloComputation* resource_update_comp) const;
 
-  virtual std::unique_ptr<ElementwiseClusterValidator> CreateValidator(
-      const HloInstruction* call, const HloInstruction* resource_update) const;
+  std::unique_ptr<ElementwiseClusterValidator> CreateValidator(
+      const ElementwiseClusterValidator::Inputs& valid_inputs) const;
 
   virtual StatusOr<HloInstruction*> AddClusterInput(
       int64 param_idx, const ElementwiseCluster& cluster,

@@ -77,68 +77,6 @@ StatusOr<HloComputation*> CloneAndReshapeComputation(
   return cloned_comp;
 }
 
-absl::flat_hash_set<int64> GetPartitionableResourceUpdateInputs(
-    const HloInstruction* call, const HloInstruction* resource_update,
-    uint32 replication_factor) {
-  absl::flat_hash_set<int64> allowed_resource_update_parameter_indices;
-  if (replication_factor < 2) {
-    // When the graph is not replicated, all the inputs are valid.
-    absl::flat_hash_set<int64> allowed_resource_update_parameter_indices;
-    for (int64 i = 0; i != resource_update->operand_count(); ++i) {
-      allowed_resource_update_parameter_indices.insert(i);
-    }
-    return allowed_resource_update_parameter_indices;
-  }
-
-  const HloComputation* call_comp = call->to_apply();
-  const HloInstruction* call_root = call_comp->root_instruction();
-
-  for (int64 i = 0; i != call->operand_count(); ++i) {
-    const HloInstruction* call_operand = call->operand(i);
-    if (!IsParameter(call_operand) && !call_operand->IsConstant() &&
-        !IsWideConstant(call_operand)) {
-      continue;
-    }
-
-    // Can only be used by call at a single index.
-    if (call_operand->user_count() != 1) {
-      continue;
-    }
-    auto input_indices = call->OperandIndices(call_operand);
-    if (input_indices.size() != 1) {
-      continue;
-    }
-
-    const int64 input_index = input_indices[0];
-    HloInstruction* call_parameter =
-        call_comp->parameter_instruction(input_index);
-
-    auto resource_update_indices =
-        resource_update->OperandIndices(call_parameter);
-    const HloInstruction* call_root_operand = call_root->operand(input_index);
-    if (call_root_operand == call_parameter) {
-      // This value is not modified inside of the loop - any uses within the
-      // resource update will be identical across replicas.
-    } else {
-      // This value is modified within the resource update.
-      if (resource_update_indices.size() != 1) {
-        continue;
-      }
-      if (call_root_operand->opcode() != HloOpcode::kGetTupleElement) {
-        continue;
-      }
-      if (call_root_operand->operand(0) != resource_update) {
-        continue;
-      }
-    }
-    absl::c_copy(
-        resource_update_indices,
-        std::inserter(allowed_resource_update_parameter_indices,
-                      allowed_resource_update_parameter_indices.begin()));
-  }
-  return allowed_resource_update_parameter_indices;
-}
-
 std::unique_ptr<HloComputation> CreateSumReduction(const Shape& shape,
                                                    const std::string& name) {
   HloComputation::Builder builder(name);
@@ -159,19 +97,31 @@ std::unique_ptr<HloComputation> CreateSumReduction(const Shape& shape,
 
 std::unique_ptr<ElementwiseClusterValidator>
 ReplicatedResourceUpdateElementwiseClustering::CreateValidator(
-    const HloInstruction* call, const HloInstruction* resource_update) const {
-  absl::flat_hash_set<int64> allowed_resource_update_parameter_indices =
-      GetPartitionableResourceUpdateInputs(call, resource_update,
-                                           partition_replication_factor_);
+    const HloComputation* resource_update_comp) const {
+  ElementwiseClusterValidator::Inputs valid_inputs;
+  for (const HloInstruction* inst :
+       resource_update_comp->MakeInstructionPostOrder()) {
+    bool valid_input = false;
+    if (partition_replication_factor_ < 2) {
+      valid_input = true;
+    } else {
+      // Check that all the leaf shapes are identical.
+      valid_input = absl::c_all_of(
+          ShapeUtil::GetLeafShapes(inst->shape()),
+          [this, inst](const ShapeUtil::IndexedShape& indexed_shape) {
+            auto status_or =
+                replica_identical_dataflow_analysis_
+                    .IsValueIdenticalAcrossReplicas(inst, indexed_shape.index);
+            return status_or.ok() ? status_or.ValueOrDie() : false;
+          });
+    }
 
-  VLOG(2) << "Allowed resource update parameters are: "
-          << absl::StrJoin(allowed_resource_update_parameter_indices, ", ");
+    if (valid_input) {
+      valid_inputs.insert(inst);
+    }
+  }
 
-  return ResourceUpdateElementwiseClustering::CreateValidator(
-      resource_update->to_apply(),
-      [&allowed_resource_update_parameter_indices](int64 param_index) {
-        return allowed_resource_update_parameter_indices.contains(param_index);
-      });
+  return ResourceUpdateElementwiseClustering::CreateValidator(valid_inputs);
 }
 
 // For each input of partitioned clusters:
@@ -569,6 +519,11 @@ ReplicatedResourceUpdateElementwiseClustering::UpdateClusterBackendConfig(
   // - We may use different visitor for such clusters later.
   function_config->set_partitioned_elementwise_cluster(true);
   return Status::OK();
+}
+
+Status ReplicatedResourceUpdateElementwiseClustering::RunDataflowAnalysis(
+    const HloModule* module) {
+  return replica_identical_dataflow_analysis_.Run(module);
 }
 
 }  // namespace poplarplugin
