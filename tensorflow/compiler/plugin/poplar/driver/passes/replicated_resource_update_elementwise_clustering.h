@@ -33,15 +33,19 @@ class ReplicatedResourceUpdateElementwiseClustering final
  public:
   ReplicatedResourceUpdateElementwiseClustering(
       CompilerAnnotations& annotations, uint32 partition_replication_factor,
-      uint32 global_replication_factor)
+      uint32 global_replication_factor,
+      uint32 ipu_link_domain_replication_factor)
       : annotations_(annotations),
         partition_replication_factor_(partition_replication_factor),
-        global_replication_factor_(global_replication_factor) {}
+        global_replication_factor_(global_replication_factor),
+        ipu_link_domain_replication_factor_(
+            ipu_link_domain_replication_factor) {}
 
   explicit ReplicatedResourceUpdateElementwiseClustering(
       CompilerAnnotations& annotations, uint32 replication_factor)
       : ReplicatedResourceUpdateElementwiseClustering(
-            annotations, replication_factor, replication_factor) {}
+            annotations, replication_factor, replication_factor,
+            replication_factor) {}
 
   absl::string_view name() const override {
     return "replicated-resource-update-elementwise-clustering";
@@ -86,6 +90,7 @@ class ReplicatedResourceUpdateElementwiseClustering final
   CompilerAnnotations& annotations_;
   uint32 partition_replication_factor_;
   uint32 global_replication_factor_;
+  uint32 ipu_link_domain_replication_factor_;
 };
 
 }  // namespace poplarplugin
