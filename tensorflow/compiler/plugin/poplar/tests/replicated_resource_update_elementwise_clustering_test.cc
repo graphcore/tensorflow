@@ -1667,26 +1667,8 @@ TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
-  ASSERT_THAT(clusters.size(), 1);
-
-  const int64 shard_size = 128 / partition_replication_factor;
-  auto& cluster = *std::begin(clusters);
-  EXPECT_THAT(cluster.GetClusterSize(), 128);
-  EXPECT_THAT(cluster.GetAlignedClusterSize(), 128);
-  EXPECT_THAT(cluster.GetShardSize(), shard_size);
-
-  // Convert the cluster.
-  TF_ASSERT_OK(pass.OutlineCluster(cluster).status());
-  TF_ASSERT_OK_AND_ASSIGN(bool eliminated, HloDCE().Run(module.get()));
-
-  EXPECT_THAT(arg0->user_count(), 1);
-  HloInstruction* all_reduce = GetNextUser(arg0).ValueOrDie();
-
-  // The non-global all-reduce should be left alone.
-  EXPECT_THAT(all_reduce->opcode(), HloOpcode::kAllReduce);
-  EXPECT_THAT(all_reduce->replica_groups().size(), 1);
-  EXPECT_THAT(all_reduce->replica_groups()[0].replica_ids(),
-              ::testing::ElementsAre(0));
+  // No clusters because the all-reduce is not global.
+  ASSERT_THAT(clusters.size(), 0);
 }
 
 TEST_F(TestPartitionReplicationFactor, IgnoreImplicit2ScalarBroadcast) {
