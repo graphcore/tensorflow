@@ -126,7 +126,7 @@ Status PoplarExecutableBinaryFile::Write(
   try {
     // Append the protobuf metadata.
     popef_opaque->stream << serialized;
-    popef_exe = popef_writer->createExecutable(exec_hash);
+    popef_exe = popef_writer->createExecutable(exec_hash, /*compress=*/false);
   } catch (const std::exception& e) {
     return PopEFExceptionToTensorflowStatus("[WriteOpaque]", e);
   }
