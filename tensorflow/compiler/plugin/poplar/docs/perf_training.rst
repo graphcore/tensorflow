@@ -112,6 +112,10 @@ predictions for an inference model to achieve minimal latency for each sample.
 
 .. _replicated_graphs:
 
+
+You can also follow `this tutorial on using outfeed queues to inspect tensors and return activation and gradient tensors <https://github.com/graphcore/tutorials/tree/sdk-release-2.3/feature_examples/tensorflow/inspecting_tensors>`_
+from the Graphcore tutorials repository.
+
 Replicated graphs
 ~~~~~~~~~~~~~~~~~
 
@@ -122,6 +126,10 @@ See the `Poplar and PopLibs User Guide
 about replicated graphs.
 
 .. note:: Replicated graphs are not supported when running on an IPU Model.
+
+The Graphcore tutorials repository also has a `tutorial on
+using replication in TensorFlow to train a simple model. <https://github.com/graphcore/tutorials/tree/sdk-release-2.3/feature_examples/tensorflow/replication>`_.
+
 
 Selecting the number of replicas
 ________________________________
@@ -368,6 +376,9 @@ gone through the whole model pipeline, where the number of mini-batches is the
 .. Note:: Since the pipelined models always implement gradient accumulation, no
   gradient accumulation optimizer should be used in combination with pipelining.
 
+You can also find a practical example of this in the Graphcore tutorials repository:
+`Using pipelining for a simple model in TensorFlow <https://github.com/graphcore/tutorials/tree/sdk-release-2.3/feature_examples/tensorflow/pipelining>`_.
+
 Accumulation data type
 ______________________
 
@@ -472,3 +483,14 @@ be loaded into a JSON object using the native JSON library, for example:
   with tf.Session() as sess:
       json_string = sess.run(benchmark_op)
       json_object = json.loads(json_string[0])
+
+
+Half and mixed precision training
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+TensorFlow provides native support for using 16-bit floating point precision data types. 
+You can write your model or modify an existing model to perform some or all computations 
+using the native ``tf.float16`` data type. To find out more about using half or mixed precision 
+data types for training models in TensorFlow, take a look at this tutorial from the Graphcore
+tutorials repository:
+`TensorFlow 1 on the IPU: Training a model using half- and mixed-precision <https://github.com/graphcore/tutorials/tree/sdk-release-2.3/tutorials/tensorflow1/half_precision_training>`_.
