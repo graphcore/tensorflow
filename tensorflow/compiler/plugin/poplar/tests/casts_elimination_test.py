@@ -126,7 +126,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     ok = [
         '__seed*', 'host-exchange-local-copy-', 'Sum/reduce*/Reduce',
-        'Sum_1/reduce*/Reduce', 'add/add*/Add'
+        'Sum_1/reduce*/Reduce', 'add/add'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 

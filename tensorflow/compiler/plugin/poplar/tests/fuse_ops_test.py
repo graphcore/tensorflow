@@ -489,7 +489,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         'vs/conv2d_1/BiasAdd/fusion.1/Op/Add',
         'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion*/Reduce',
         'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion*/negate/Op/Negate',
-        'GradientDescent/update_vs/conv2d_1/bias/ResourceApplyGradientDescent/multiply*/Op/Multiply',
+        'GradientDescent/update_vs/conv2d_1/bias/ResourceApplyGradientDescent/multiply',
         'GradientDescent/update_vs/conv2d_1/bias/ResourceApplyGradientDescent/fusion*/Subtract',
         'vs/conv2d/BiasAdd/fusion*/Op/Add',
         'Sum/reduce*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
@@ -1273,7 +1273,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*', 'Mean/fusion*/Reduce', 'Mean/multiply*/Multiply',
+        '__seed*', 'Mean/fusion*/Reduce', 'Mean/multiply',
         'Mean/convert*/Cast', 'copy*_host-exchange-local-copy-*/OnTileCopy-*'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
