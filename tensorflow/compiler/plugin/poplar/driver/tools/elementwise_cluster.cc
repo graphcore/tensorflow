@@ -42,14 +42,6 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-bool IsBroadcast(const HloInstruction* inst) {
-  return inst->opcode() == HloOpcode::kBroadcast;
-}
-
-bool IsParameter(const HloInstruction* inst) {
-  return inst->opcode() == HloOpcode::kParameter;
-}
-
 bool IsRemoteParameterLoad(const HloInstruction* inst) {
   return IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst);
 }
@@ -122,34 +114,6 @@ HloInstructionSet GetNonScalarInputs(HloInstruction* root) {
 std::string UserPositions::ToString() const {
   return absl::StrCat("UserPositions: ", instruction->name(), ":",
                       absl::StrJoin(indices, ","));
-}
-
-ElementwiseClusterValidator::Inputs ElementwiseClusterValidator::GetValidInputs(
-    const std::function<bool(int64)>& parameter_filter,
-    const HloComputation* comp) {
-  Inputs valid_inputs;
-  for (const HloInstruction* inst : comp->MakeInstructionPostOrder()) {
-    bool valid_input = false;
-    if (IsParameter(inst)) {
-      valid_input = parameter_filter(inst->parameter_number());
-    } else if (IsGlobalAllReduce(inst)) {
-      valid_input = true;
-    } else if (IsBroadcast(inst)) {
-      valid_input =
-          IsScalar(inst->operand(0)) && valid_inputs.contains(inst->operand(0));
-    } else if (!IsPoplarInstruction(PoplarOp::ExecutionCounter, inst) &&
-               !inst->HasSideEffect()) {
-      valid_input = absl::c_all_of(
-          inst->operands(), [&valid_inputs](const HloInstruction* operand) {
-            return valid_inputs.contains(operand);
-          });
-    }
-
-    if (valid_input) {
-      valid_inputs.insert(inst);
-    }
-  }
-  return valid_inputs;
 }
 
 ElementwiseCluster::ElementwiseCluster(HloInstruction* top) noexcept

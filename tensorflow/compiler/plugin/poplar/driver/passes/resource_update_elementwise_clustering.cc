@@ -32,6 +32,10 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
+bool IsParameter(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kParameter;
+}
+
 bool IsAllReduce(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kAllReduce;
 }
@@ -42,15 +46,15 @@ bool IsBroadcast(const HloInstruction* inst) {
 
 struct ResourceUpdateElementwiseClusterValidator final
     : ElementwiseClusterValidator {
-  Inputs valid_inputs;
-
-  ResourceUpdateElementwiseClusterValidator(
-      const HloComputation* comp, const std::function<bool(int64)>& filter)
-      : valid_inputs(GetValidInputs(filter, comp)) {}
+  explicit ResourceUpdateElementwiseClusterValidator(const Inputs& valid_inputs)
+      : valid_inputs_(valid_inputs) {}
 
   bool IsValidInput(const HloInstruction* inst) const override {
-    return valid_inputs.contains(inst);
+    return valid_inputs_.contains(inst);
   }
+
+ private:
+  Inputs valid_inputs_;
 };
 
 }  // namespace
@@ -71,17 +75,37 @@ Status ResourceUpdateElementwiseClustering::CloneInstruction(
 
 std::unique_ptr<ElementwiseClusterValidator>
 ResourceUpdateElementwiseClustering::CreateValidator(
-    const HloComputation* comp,
-    const std::function<bool(int64)>& allowed_resource_update_parameter) const {
-  return absl::make_unique<ResourceUpdateElementwiseClusterValidator>(
-      comp, allowed_resource_update_parameter);
+    const HloComputation* resource_update_comp) const {
+  ElementwiseClusterValidator::Inputs valid_inputs;
+  for (const HloInstruction* inst :
+       resource_update_comp->MakeInstructionPostOrder()) {
+    bool valid_input = false;
+    if (IsParameter(inst) || IsGlobalAllReduce(inst)) {
+      valid_input = true;
+    } else if (IsBroadcast(inst)) {
+      valid_input =
+          IsScalar(inst->operand(0)) && valid_inputs.contains(inst->operand(0));
+    } else if (!IsPoplarInstruction(PoplarOp::ExecutionCounter, inst) &&
+               !inst->HasSideEffect()) {
+      valid_input = absl::c_all_of(
+          inst->operands(), [&valid_inputs](const HloInstruction* operand) {
+            return valid_inputs.contains(operand);
+          });
+    }
+
+    if (valid_input) {
+      valid_inputs.insert(inst);
+    }
+  }
+
+  return CreateValidator(valid_inputs);
 }
 
 std::unique_ptr<ElementwiseClusterValidator>
 ResourceUpdateElementwiseClustering::CreateValidator(
-    const HloInstruction* call, const HloInstruction* resource_update) const {
-  return CreateValidator(resource_update->to_apply(),
-                         [](int64) { return true; });
+    const ElementwiseClusterValidator::Inputs& valid_inputs) const {
+  return absl::make_unique<ResourceUpdateElementwiseClusterValidator>(
+      valid_inputs);
 }
 
 StatusOr<std::vector<ElementwiseCluster>>
@@ -124,7 +148,7 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
     return std::vector<ElementwiseCluster>{};
   }
 
-  auto validator = CreateValidator(call, resource_update);
+  auto validator = CreateValidator(resource_update_comp);
   TF_ASSIGN_OR_RETURN(std::vector<ElementwiseCluster> clusters,
                       ElementwiseCluster::GetClustersIn(
                           resource_update, elementwise_comps, *validator));
@@ -440,6 +464,8 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
     return false;
   }
 
+  TF_RETURN_IF_ERROR(RunDataflowAnalysis(module));
+
   const absl::flat_hash_set<const HloComputation*> elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module);
 
@@ -459,6 +485,11 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
   }
 
   return module_changed;
+}
+
+Status ResourceUpdateElementwiseClustering::RunDataflowAnalysis(
+    const HloModule* module) {
+  return Status::OK();
 }
 
 }  // namespace poplarplugin

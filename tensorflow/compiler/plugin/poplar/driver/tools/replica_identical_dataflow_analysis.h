@@ -37,6 +37,8 @@ std::ostream& operator<<(std::ostream& stream,
                          const ValueReplicaCategory& category);
 
 using ValueCategoryTree = ShapeTree<ValueReplicaCategory>;
+std::ostream& operator<<(std::ostream& stream,
+                         const ValueCategoryTree& category_tree);
 
 // Visitor for traversing a module to determine which values of each
 // instruction will be identical across replicas.
@@ -151,11 +153,11 @@ class ReplicaIdenticalDataflowAnalysis {
   // or an error if the instruction has not been analysed.
   StatusOr<ValueReplicaCategory> ValueCategory(
       const HloInstruction* inst,
-      const ShapeIndex& value_index = RootShapeIndex());
+      const ShapeIndex& value_index = RootShapeIndex()) const;
 
   StatusOr<bool> IsValueIdenticalAcrossReplicas(
       const HloInstruction* inst,
-      const ShapeIndex& value_index = RootShapeIndex());
+      const ShapeIndex& value_index = RootShapeIndex()) const;
 
  private:
   ValuesIdenticalAcrossReplicasVisitor value_category_visitor_;

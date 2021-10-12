@@ -161,6 +161,7 @@ ENTRY main {
   ReplicatedResourceUpdateElementwiseClustering pass(annotations, 1);
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
+  TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
   CHECK_EQ(elementwise_comps.size(), 2);
   absl::flat_hash_set<std::string> elementwise_comp_names = {"_comp0",
                                                              "_comp2"};
@@ -292,6 +293,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   auto& pass = *pass_ptr;
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
+  TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 2);
@@ -403,6 +405,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   auto& pass = *pass_ptr;
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
+  TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
@@ -602,6 +605,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   auto& pass = *pass_ptr;
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
+  TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
@@ -794,6 +798,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   auto& pass = *pass_ptr;
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
+  TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
@@ -1061,6 +1066,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringShapeTest, DoTest) {
   auto& pass = *pass_ptr;
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
+  TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
@@ -1439,6 +1445,7 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
       global_replication_factor);
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
+  TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
@@ -1575,6 +1582,7 @@ TEST_F(TestPartitionReplicationFactor, TestUnsupportedPartitioning) {
       ipu_link_domain_replication_factor);
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
+  TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
@@ -1665,6 +1673,7 @@ TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
       global_replication_factor);
   auto elementwise_comps =
       ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
+  TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   // No clusters because the all-reduce is not global.

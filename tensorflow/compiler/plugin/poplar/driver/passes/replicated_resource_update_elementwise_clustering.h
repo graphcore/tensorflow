@@ -20,6 +20,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_elementwise_clustering.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/replica_identical_dataflow_analysis.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -51,10 +52,12 @@ class ReplicatedResourceUpdateElementwiseClustering final
     return "replicated-resource-update-elementwise-clustering";
   }
 
+  // Exposed for tests only.
+  Status RunDataflowAnalysis(const HloModule* module) override;
+
  private:
   std::unique_ptr<ElementwiseClusterValidator> CreateValidator(
-      const HloInstruction* call,
-      const HloInstruction* resource_update) const override;
+      const HloComputation* resource_update_comp) const override;
 
   static StatusOr<HloInstruction*> PadInput(const ElementwiseCluster& cluster,
                                             HloInstruction* input,
@@ -91,6 +94,7 @@ class ReplicatedResourceUpdateElementwiseClustering final
   uint32 partition_replication_factor_;
   uint32 global_replication_factor_;
   uint32 ipu_link_domain_replication_factor_;
+  ReplicaIdenticalDataflowAnalysis replica_identical_dataflow_analysis_;
 };
 
 }  // namespace poplarplugin

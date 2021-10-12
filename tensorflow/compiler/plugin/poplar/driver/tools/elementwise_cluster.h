@@ -45,10 +45,6 @@ struct ElementwiseClusterValidator {
 
   virtual ~ElementwiseClusterValidator() = default;
   virtual bool IsValidInput(const HloInstruction* inst) const = 0;
-
-  static Inputs GetValidInputs(
-      const std::function<bool(int64)>& parameter_filter,
-      const HloComputation* comp);
 };
 
 using ElementwiseComputationSet = absl::flat_hash_set<const HloComputation*>;

@@ -137,6 +137,15 @@ std::ostream& operator<<(std::ostream& stream,
   return stream;
 }
 
+std::ostream& operator<<(std::ostream& stream,
+                         const ValueCategoryTree& category_tree) {
+  for (auto itr = category_tree.leaf_begin(); itr != category_tree.leaf_end();
+       itr++) {
+    stream << "ShapeIndex: " << itr->first << ": " << itr->second;
+  }
+  return stream;
+}
+
 ValuesIdenticalAcrossReplicasVisitor::ValuesIdenticalAcrossReplicasVisitor(
     const absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>&
         category_overrides)
@@ -523,7 +532,10 @@ ValuesIdenticalAcrossReplicasVisitor::VisitSubComputation(
   ValuesIdenticalAcrossReplicasVisitor comp_visitor(parameter_overrides);
 
   VLOG(3) << "Running replica dataflow analysis on '" << comp->name()
-          << "' computation.";
+          << "' computation with inputs:";
+  for (auto& pair : parameter_overrides) {
+    VLOG(3) << "'" << pair.first->name() << "' " << pair.second;
+  }
   TF_RETURN_IF_ERROR(comp->Accept(&comp_visitor));
 
   for (auto& item : comp_visitor.value_category_mapping_) {
@@ -672,7 +684,7 @@ bool ReplicaIdenticalDataflowAnalysis::Analysed(
 }
 
 StatusOr<ValueReplicaCategory> ReplicaIdenticalDataflowAnalysis::ValueCategory(
-    const HloInstruction* inst, const ShapeIndex& value_index) {
+    const HloInstruction* inst, const ShapeIndex& value_index) const {
   auto& value_category_mapping = value_category_visitor_.ValueCategoryMapping();
   auto inst_it = value_category_mapping.find(inst);
   if (inst_it != value_category_mapping.end()) {
@@ -689,7 +701,7 @@ StatusOr<ValueReplicaCategory> ReplicaIdenticalDataflowAnalysis::ValueCategory(
 }
 
 StatusOr<bool> ReplicaIdenticalDataflowAnalysis::IsValueIdenticalAcrossReplicas(
-    const HloInstruction* inst, const ShapeIndex& value_index) {
+    const HloInstruction* inst, const ShapeIndex& value_index) const {
   TF_ASSIGN_OR_RETURN(ValueReplicaCategory category,
                       ValueCategory(inst, value_index));
   return category == ValueReplicaCategory::Identical;
