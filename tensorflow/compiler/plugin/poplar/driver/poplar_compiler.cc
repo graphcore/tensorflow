@@ -771,9 +771,8 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   const auto num_ipus = target.getNumIPUs();
   const auto tiles_per_ipu = target.getTilesPerIPU();
 
-  TF_ASSIGN_OR_RETURN(const auto num_io_tiles, GetNumIoTiles(poplar_executor));
   const absl::optional<Tilesets> tilesets =
-      PartitionTiles(main_graph, num_io_tiles, tiles_per_ipu);
+      PartitionTiles(main_graph, resources.num_io_tiles, tiles_per_ipu);
 
   if (ShardingEnabled(module)) {
     IpuSelectionOrder order = poplar_executor->GetSelectionOrder();
@@ -852,8 +851,8 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
 
       if (tilesets.has_value()) {
         if (has_io_instructions) {
-          LOG(INFO) << "Reserving " << num_io_tiles << " IO tile(s) on IPU "
-                    << ipu << ".";
+          LOG(INFO) << "Reserving " << resources.num_io_tiles
+                    << " IO tile(s) on IPU " << ipu << ".";
           resources.shard_compute_graphs.emplace_back(
               ipu_graph.createVirtualGraph(tilesets->compute_tiles));
           resources.shard_io_graphs.emplace_back(
@@ -1534,9 +1533,10 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<InterIpuCopyInserter>();
       pipeline.AddPass<PipelineControlDependencyInserter>();
       pipeline.AddPass<IoTilesPlacer>(
-          poplar_executor->ShouldPlaceOpsOnIoTiles(), num_io_tiles,
+          poplar_executor->ShouldPlaceOpsOnIoTiles(), resources.num_io_tiles,
           target.getBytesPerTile(),
-          poplar_executor->GetIoTileAvailableMemoryProportion());
+          poplar_executor->GetIoTileAvailableMemoryProportion(),
+          resources.num_io_tiles);
       pipeline.AddPass<InterTilesetCopyInserter>();
       pipeline.AddPass<TupleSimplifier>(true);
       pipeline.AddPass<FixRootInstructionsPass>();
@@ -1616,7 +1616,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   // Indicates whether the binary generated for this module can stall without
   // more data arriving.
   TF_ASSIGN_OR_RETURN(const bool is_module_which_can_stall,
-                      ModuleExecutionCanStall(module, num_io_tiles));
+                      ModuleExecutionCanStall(module, resources.num_io_tiles));
 
   VLOG(1) << "End XLA compilation: " << module->name() << " (Hash: 0x"
           << std::hex << HloHash(module).GetHash() << ")";

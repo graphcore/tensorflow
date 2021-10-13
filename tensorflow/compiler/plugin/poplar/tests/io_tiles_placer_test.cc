@@ -59,6 +59,8 @@ ENTRY top {
 
   const int64 num_io_tiles = 1;
   const int64 bytes_per_io_tile = fits_on_io_tiles ? 1024 : 4;
+  // This is set to zero just so can still check changed value correctly
+  int64 resource_num_io_tiles = 0;
 
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
@@ -70,16 +72,16 @@ ENTRY top {
 
   EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
 
-  EXPECT_FALSE(
-      IoTilesPlacer(/*enabled=*/false, num_io_tiles, bytes_per_io_tile, 0.5)
-          .Run(module)
-          .ValueOrDie());
+  EXPECT_FALSE(IoTilesPlacer(/*enabled=*/false, num_io_tiles, bytes_per_io_tile,
+                             0.5, resource_num_io_tiles)
+                   .Run(module)
+                   .ValueOrDie());
 
-  EXPECT_EQ(
-      IoTilesPlacer(/*enabled=*/true, num_io_tiles, bytes_per_io_tile, 0.5)
-          .Run(module)
-          .ValueOrDie(),
-      fits_on_io_tiles);
+  EXPECT_EQ(IoTilesPlacer(/*enabled=*/true, num_io_tiles, bytes_per_io_tile,
+                          0.5, resource_num_io_tiles)
+                .Run(module)
+                .ValueOrDie(),
+            fits_on_io_tiles);
 
   const auto* mul = module->entry_computation()->root_instruction();
   const auto* load = mul->operand(0);
@@ -113,12 +115,14 @@ TEST_P(TestInfeedGtes, DoTest) {
 
   const int64 num_io_tiles = 1;
   const int64 bytes_per_io_tile = fits_on_io_tiles ? 1024 : 4;
+  // This is set to zero just so can still check changed value correctly
+  int64 resource_num_io_tiles = 0;
 
-  EXPECT_EQ(
-      IoTilesPlacer(/*enabled=*/true, num_io_tiles, bytes_per_io_tile, 0.5)
-          .Run(module)
-          .ValueOrDie(),
-      fits_on_io_tiles);
+  EXPECT_EQ(IoTilesPlacer(/*enabled=*/true, num_io_tiles, bytes_per_io_tile,
+                          0.5, resource_num_io_tiles)
+                .Run(module)
+                .ValueOrDie(),
+            fits_on_io_tiles);
 
   const auto* mul = module->entry_computation()->root_instruction();
   const auto* gte0 = mul->operand(0);
