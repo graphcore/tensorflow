@@ -569,16 +569,22 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
   // prefix "i".
   Status HandleInplaceForwardAllBuffers(HloInstruction* inst,
                                         BufferUseKind kind) {
+    const Shape& shape = inst->shape();
+    bool is_tuple = shape.IsTuple();
+    if (is_tuple && ShapeUtil::IsEmptyTuple(shape)) {
+      analysis_->SetInstructionBufferSet(inst,
+                                         InstructionPoplarBufferSet(shape));
+      return Status::OK();
+    }
     for (int64 i = 0; i != inst->operand_count(); ++i) {
       HloInstruction* operand = inst->mutable_operand(i);
       for (auto& indexed_shape : ShapeUtil::GetLeafShapes(operand->shape())) {
         const HloPoplarPosition input_position{operand, indexed_shape.index};
 
         ShapeIndex output_index = indexed_shape.index;
-        if (inst->shape().IsTuple()) {
+        if (is_tuple) {
           // If it's tuple, prepend index to output index.
-          CHECK_EQ(ShapeUtil::TupleElementCount(inst->shape()),
-                   inst->operand_count());
+          CHECK_EQ(ShapeUtil::TupleElementCount(shape), inst->operand_count());
           output_index.push_front(i);
         } else {
           // If it's not a tuple, use empty index and allow only one operand.

@@ -343,6 +343,27 @@ TEST_F(HloPoplarDataflowAnalysisTest, TestConstant) {
   EXPECT_EQ(arg0_buffer, analysis->GetUniqueBufferAt(add));
 }
 
+TEST_F(HloPoplarDataflowAnalysisTest, TestEmptyCluster) {
+  std::string hlo = R"(
+ HloModule top
+
+ ENTRY cluster_1 {
+  ROOT tuple1 = () tuple()
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  EXPECT_THAT(analysis->buffer_count(), 0);
+
+  HloInstruction* tuple1 = FindInstruction(m.get(), "tuple1");
+  analysis->GetInstructionBufferSet(tuple1);
+}
+
 TEST_F(HloPoplarDataflowAnalysisTest, TestTupleAndGte) {
   std::string hlo = R"(
  HloModule top
