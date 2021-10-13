@@ -269,6 +269,7 @@ cc_library(
         "driver/passes/resource_update_copy_inserter.cc",
         "driver/passes/resource_update_elementwise_clustering.cc",
         "driver/passes/resource_update_fixer.cc",
+        "driver/passes/resource_update_merger.cc",
         "driver/passes/resource_update_schedule_optimizer.cc",
         "driver/passes/root_token_replacer.cc",
         "driver/passes/scatter_simplifier.cc",
@@ -475,6 +476,7 @@ cc_library(
         "driver/passes/resource_update_copy_inserter.h",
         "driver/passes/resource_update_elementwise_clustering.h",
         "driver/passes/resource_update_fixer.h",
+        "driver/passes/resource_update_merger.h",
         "driver/passes/resource_update_schedule_optimizer.h",
         "driver/passes/root_token_replacer.h",
         "driver/passes/scatter_simplifier.h",
@@ -3138,6 +3140,22 @@ xla_test(
     name = "resource_update_fixer_test",
     size = "small",
     srcs = ["tests/resource_update_fixer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
+    name = "resource_update_merger_test",
+    size = "small",
+    srcs = ["tests/resource_update_merger_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -5889,6 +5907,7 @@ test_suite(
         "resource_update_copy_inserter_test",
         "resource_update_elementwise_clustering_test",
         "resource_update_fixer_test",
+        "resource_update_merger_test",
         "resource_update_schedule_optimizer_test",
         "root_token_replacer_test",
         "scalar_elementwise_graph_test",

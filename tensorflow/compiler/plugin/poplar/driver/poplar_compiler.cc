@@ -143,6 +143,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_fixer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_merger.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_schedule_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
@@ -1343,6 +1344,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<ParsePoplarBackendConfig>();
       pipeline.AddPass<DynamicPadder>();
       pipeline.AddPass<PipelineFixer>();
+      pipeline.AddPass<ResourceUpdateMerger>();
       pipeline.AddPass<PipelineTupleRemover>();
       pipeline.AddPass<ReplicationFactorToConstant>(
           resources.replication_factor);
