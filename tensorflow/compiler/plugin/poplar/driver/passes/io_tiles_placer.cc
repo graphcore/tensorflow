@@ -150,6 +150,45 @@ StatusOr<bool> IoTilesPlacer::RunOnComputation(HloComputation* comp,
   return change;
 }
 
+static bool PoplarInstructionUsesIOTiles(const HloInstruction* inst) {
+  // The call to should be on io tiles ensures this GetTileset will succeed
+  return GetTileset(inst).ValueOrDie() == TILESET_IO_TILES;
+}
+
+static bool UsesIOTiles(const HloInstruction* inst,
+                        const CallGraph& call_graph) {
+  return ShouldBeOnIoTiles(inst, call_graph) &&
+         PoplarInstructionUsesIOTiles(inst);
+}
+
+static bool UsesIOTiles(const HloComputation* computation,
+                        const CallGraph& call_graph) {
+  return absl::c_any_of(computation->instructions(),
+                        [&](const HloInstruction* inst) {
+                          return UsesIOTiles(inst, call_graph);
+                        });
+}
+
+static bool UsesIOTiles(const std::vector<HloComputation*>& computations,
+                        const CallGraph& call_graph) {
+  return absl::c_any_of(computations, [&](const HloComputation* comp) {
+    return UsesIOTiles(comp, call_graph);
+  });
+}
+
+static bool UpdateNumIoTiles(int64& resources_num_io_tiles_,
+                             const std::vector<HloComputation*>& computations,
+                             const CallGraph& call_graph) {
+  const bool any_instruction_on_io_tiles =
+      UsesIOTiles(computations, call_graph);
+  if (any_instruction_on_io_tiles || resources_num_io_tiles_ == 0) {
+    return false;  // Haven't changed resources so return false
+  }
+  // Remove io tiles from resources/graph as no ops placed on them
+  resources_num_io_tiles_ = 0;
+  return true;
+}
+
 StatusOr<bool> IoTilesPlacer::Run(HloModule* module) {
   if (!enabled_) {
     return false;
@@ -162,7 +201,9 @@ StatusOr<bool> IoTilesPlacer::Run(HloModule* module) {
 
   const auto call_graph = CallGraph::Build(module);
 
-  for (auto* comp : module->MakeComputationPostOrder()) {
+  auto computations = module->MakeComputationPostOrder();
+
+  for (auto* comp : computations) {
     if (IsPopOpsFusion(comp)) {
       continue;
     }
@@ -171,6 +212,9 @@ StatusOr<bool> IoTilesPlacer::Run(HloModule* module) {
                         RunOnComputation(comp, *call_graph));
     changed |= computation_changed;
   }
+
+  changed |=
+      UpdateNumIoTiles(resources_num_io_tiles_, computations, *call_graph);
 
   if (changed) {
     VLOG(2) << "After IoTilesPlacer:";

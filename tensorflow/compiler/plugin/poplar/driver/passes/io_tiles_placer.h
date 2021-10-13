@@ -35,11 +35,13 @@ class IoTilesPlacer : public HloModulePass {
  public:
   explicit IoTilesPlacer(bool enabled, int64 num_io_tiles,
                          int64 bytes_per_io_tile,
-                         const double available_memory_proportion)
+                         const double available_memory_proportion,
+                         int64& resources_num_io_tiles)
       : enabled_(enabled),
         num_io_tiles(num_io_tiles),
         bytes_per_io_tile(bytes_per_io_tile),
-        available_memory_proportion(available_memory_proportion) {}
+        available_memory_proportion(available_memory_proportion),
+        resources_num_io_tiles_(resources_num_io_tiles) {}
 
   absl::string_view name() const override { return "io-tiles-placer"; }
 
@@ -57,6 +59,7 @@ class IoTilesPlacer : public HloModulePass {
   const int64 num_io_tiles;
   const int64 bytes_per_io_tile;
   const double available_memory_proportion;
+  int64& resources_num_io_tiles_;
 };
 
 }  // namespace poplarplugin

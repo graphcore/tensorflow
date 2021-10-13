@@ -37,6 +37,8 @@ namespace {
 
 using InterTilesetCopyInserterTest = HloTestBase;
 
+int64 resource = 0;
+
 TEST_F(InterTilesetCopyInserterTest, RemoteParameterLoadStore) {
   const auto hlo_string = R"(
 HloModule top
@@ -60,7 +62,8 @@ ENTRY top {
   auto* module = module_or_status.ValueOrDie().get();
 
   EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
-  EXPECT_TRUE(IoTilesPlacer(true, 32, 0x40000, 0.5).Run(module).ValueOrDie());
+  EXPECT_TRUE(
+      IoTilesPlacer(true, 32, 0x40000, 0.5, resource).Run(module).ValueOrDie());
   EXPECT_TRUE(InterTilesetCopyInserter().Run(module).ValueOrDie());
 
   const auto* root = module->entry_computation()->root_instruction();
@@ -112,7 +115,8 @@ ENTRY top {
   auto* module = module_or_status.ValueOrDie().get();
 
   EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
-  EXPECT_TRUE(IoTilesPlacer(true, 32, 0x40000, 0.5).Run(module).ValueOrDie());
+  EXPECT_TRUE(
+      IoTilesPlacer(true, 32, 0x40000, 0.5, resource).Run(module).ValueOrDie());
   EXPECT_TRUE(InterTilesetCopyInserter().Run(module).ValueOrDie());
 
   const auto* root = module->entry_computation()->root_instruction();
@@ -172,7 +176,8 @@ ENTRY top {
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  EXPECT_TRUE(IoTilesPlacer(true, 32, 0x40000, 0.5).Run(module).ValueOrDie());
+  EXPECT_TRUE(
+      IoTilesPlacer(true, 32, 0x40000, 0.5, resource).Run(module).ValueOrDie());
   EXPECT_TRUE(InterTilesetCopyInserter().Run(module).ValueOrDie());
 
   const auto* mul2 = module->entry_computation()->root_instruction();
@@ -224,7 +229,8 @@ ENTRY top {
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  EXPECT_TRUE(IoTilesPlacer(true, 32, 0x40000, 0.5).Run(module).ValueOrDie());
+  EXPECT_TRUE(
+      IoTilesPlacer(true, 32, 0x40000, 0.5, resource).Run(module).ValueOrDie());
   EXPECT_TRUE(InterTilesetCopyInserter().Run(module).ValueOrDie());
 
   const auto* mul = module->entry_computation()->root_instruction();
@@ -275,7 +281,8 @@ ENTRY top {
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  EXPECT_TRUE(IoTilesPlacer(true, 32, 0x4000, 0.5).Run(module).ValueOrDie());
+  EXPECT_TRUE(
+      IoTilesPlacer(true, 32, 0x4000, 0.5, resource).Run(module).ValueOrDie());
   EXPECT_TRUE(InterTilesetCopyInserter().Run(module).ValueOrDie());
 
   const auto* call = module->entry_computation()->root_instruction();

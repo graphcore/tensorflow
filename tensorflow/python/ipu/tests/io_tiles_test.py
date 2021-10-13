@@ -101,11 +101,13 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         if buffer_fits_on_io_tiles:
           self.assertLessEqual(len(t.tiles), num_io_tiles)
         else:
-          self.assertLessEqual(len(t.tiles), num_compute_tiles)
+          # as nothing on io tiles compute tiles = all tiles
+          self.assertLessEqual(len(t.tiles), tiles_per_ipu)
 
       self.assertGreater(len(compute_tensors), 0)
       for t in compute_tensors:
-        self.assertLessEqual(len(t.tiles), num_compute_tiles)
+        if buffer_fits_on_io_tiles:
+          self.assertLessEqual(len(t.tiles), num_compute_tiles)
 
     report = pva.openReport(report_helper.find_report())
     # Check that the expected inter-tileset exchanges are performed.
@@ -116,7 +118,8 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     expected_exchanges = [
         "infeed/*/inter-tileset-copy",  # copy from IO tiles to compute tiles
         "matmul/*/inter-tileset-copy",  # copy from compute tiles to IO tiles
-    ]
+    ] if buffer_fits_on_io_tiles else []
+
     if buffer_fits_on_io_tiles:
       self.assertFalse(
           tu.missing_whitelist_entries_in_names(exchanges, expected_exchanges),
