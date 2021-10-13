@@ -40,7 +40,9 @@ class AutomaticLossScalingOptimizer(IpuOptimizer):
                accumulate_statistics_over_update_period=True,
                ratio_threshold=10e-6,
                name="AutomaticLossScalingOptimizer"):
-    """ Construct an AutomaticLossScalingOptimizer.
+    """EXPERIMENTAL - DO NOT USE
+
+    Construct an AutomaticLossScalingOptimizer.
 
     Args:
       wrapped_optimizer: TensorFlow (derived) optimizer.
