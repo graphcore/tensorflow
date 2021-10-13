@@ -27,7 +27,9 @@ from tensorflow.python.ipu.optimizers.automatic_loss_scaling_optimizer import Au
 
 
 class AutomaticLossScalingOptimizer(IpuOptimizer):
-  """An optimizer that automatically computes and applies
+  """EXPERIMENTAL - DO NOT USE
+
+  An optimizer that automatically computes and applies
   a loss scaling factor (LSF) prior to gradient computation.
 
   The LSF is computed such that the magnitude of the loss is increased
