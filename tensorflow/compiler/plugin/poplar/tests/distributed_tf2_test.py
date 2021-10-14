@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from contextlib import contextmanager
+
 import numpy as np
 
 import popdist
@@ -19,11 +21,14 @@ import popdist.tensorflow
 
 import tensorflow as tf
 from tensorflow.python import ipu
+from tensorflow.python.client import session
 from tensorflow.python.framework import constant_op, test_util
 from tensorflow.python.ipu.horovod import ipu_multi_replica_strategy
-from tensorflow.python.platform import test
 from tensorflow.python.ipu import horovod as hvd
 from tensorflow.python.ipu import ipu_strategy
+from tensorflow.python.platform import test
+from tensorflow.python.keras.engine import data_adapter
+from tensorflow.python.ops import control_flow_v2_toggles
 
 
 class DistributedTF2Test(test_util.TensorFlowTestCase):
@@ -390,6 +395,227 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
         val_loss_final_keras = run_eval_step_keras(x_keras_eval, y_keras_eval)
 
       self.assertEqual(val_loss_final_tf, val_loss_final_keras)
+
+  @contextmanager
+  def control_flow_v1(self):
+    control_flow_v2_toggles.disable_control_flow_v2()
+    try:
+      yield
+    finally:
+      control_flow_v2_toggles.enable_control_flow_v2()
+
+  @test_util.deprecated_graph_mode_only
+  def single_training_step_equal_tf1(self):
+    num_iterations = 2
+    learning_rate = 0.5
+    batch_size = 2
+
+    np.random.seed(1234)
+    input_sample = np.random.uniform(
+        0, 1, (batch_size * popdist.getNumLocalReplicas(), 4, 4, 1)).astype(
+            np.float32)
+    output_sample = np.random.randint(
+        1, 2,
+        size=batch_size * popdist.getNumLocalReplicas()).astype(np.float32)
+
+    config = ipu.config.IPUConfig()
+    popdist.tensorflow.set_ipu_config(config, ipus_per_replica=1)
+    config.configure_ipu_system()
+
+    hvd.init()
+
+    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+
+    def initialize_model_with_seed():
+      # Make sure we initialize the kernels in a reproducible manner, create
+      # an initializer with a constant seed.
+      initializer = tf.keras.initializers.GlorotNormal(seed=1234)
+
+      return tf.keras.models.Sequential([
+          tf.keras.layers.Flatten(),
+          tf.keras.layers.Dense(2,
+                                kernel_initializer=initializer,
+                                use_bias=False),
+      ])
+
+    with self.control_flow_v1(), strategy.scope():
+      dataset = tf.data.Dataset.from_tensor_slices(
+          (input_sample, output_sample))
+      dataset = dataset.repeat()
+      dataset = dataset.batch(batch_size=batch_size, drop_remainder=True)
+
+      optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate)
+
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue_gradients = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+      outfeed_queue_losses = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+
+      model_tf = initialize_model_with_seed()
+
+      def per_replica_step(loss_sum, x, y):
+        with tf.GradientTape() as tape:
+          logits = model_tf(x)
+          per_example_loss = tf.keras.losses.sparse_categorical_crossentropy(
+              y_true=y, y_pred=logits, from_logits=True)
+          loss = tf.nn.compute_average_loss(per_example_loss,
+                                            global_batch_size=batch_size *
+                                            popdist.getNumTotalReplicas())
+
+        loss_sum += loss
+        gradients_ = tape.gradient(loss, model_tf.trainable_variables)
+        gradient_enqueue_op = outfeed_queue_gradients.enqueue(gradients_)
+        loss_enqueue_op = outfeed_queue_losses.enqueue(loss)
+        train_op = optimizer.apply_gradients(
+            zip(gradients_, model_tf.trainable_variables))
+
+        return loss_sum, train_op, gradient_enqueue_op, loss_enqueue_op
+
+      def per_replica_loop():
+        return ipu.loops.repeat(num_iterations,
+                                per_replica_step,
+                                infeed_queue=infeed_queue,
+                                inputs=[0.0])
+
+      def run_model():
+        per_replica_loss = strategy.run(per_replica_loop)
+
+        return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_loss)
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        compiled_model = ipu.ipu_compiler.compile(run_model)
+
+      with session.Session() as sess:
+        sess.run(infeed_queue.initializer)
+        sess.run(tf.compat.v1.global_variables_initializer())
+        loss = sess.run(compiled_model)[0] / num_iterations
+        gradients = sess.run(outfeed_queue_gradients.dequeue())
+        losses = sess.run(outfeed_queue_losses.dequeue())
+        weights = [
+            var.eval(session=sess) for var in model_tf.trainable_variables
+        ]
+
+      return loss, gradients, losses, weights
+
+  def single_training_step_equal_keras(self):
+    # This test verifies that a training loop in raw TensorFlow 1 and Keras
+    # yield the same losses, gradients and weight updates.
+    num_iterations = 2
+    learning_rate = 0.5
+    batch_size = 2
+
+    def initialize_model_with_seed():
+      # Make sure we initialize the kernels in a reproducible manner, create
+      # an initializer with a constant seed.
+      initializer = tf.keras.initializers.GlorotNormal(seed=1234)
+
+      return tf.keras.models.Sequential([
+          tf.keras.layers.Flatten(),
+          tf.keras.layers.Dense(2,
+                                kernel_initializer=initializer,
+                                use_bias=False),
+      ])
+
+    # Instantiate a custom optimizer that allows us to keep track of the
+    # gradients in `model.fit()`.
+    class ModelKeras(tf.keras.Sequential):
+      def __init__(self, layers):
+        super(ModelKeras, self).__init__(layers)
+        self.outfeed_queue_gradients = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+        self.outfeed_queue_losses = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+
+      def train_step(self, data):
+        data = data_adapter.expand_1d(data)
+        x, y, _ = data_adapter.unpack_x_y_sample_weight(data)
+
+        with tf.GradientTape() as tape:
+          y_pred = self(x, training=True)
+          loss = self.compiled_loss(y,
+                                    y_pred,
+                                    regularization_losses=self.losses)
+
+        # Save the loss to an outfeed queue so we can use it later.
+        self.outfeed_queue_losses.enqueue(loss)
+
+        # Compute gradients
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+
+        # Save the gradients to an outfeed queue so we can use them later.
+        self.outfeed_queue_gradients.enqueue(gradients)
+
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        self.compiled_metrics.update_state(y, y_pred)
+
+        return {m.name: m.result() for m in self.metrics}
+
+    # First generate some random data using numpy, so we can reuse the same
+    # data for both TF1 and Keras in order to force reproducibility.
+    np.random.seed(1234)
+    input_sample = np.random.uniform(
+        0, 1, (batch_size * popdist.getNumLocalReplicas(), 4, 4, 1)).astype(
+            np.float32)
+    output_sample = np.random.randint(
+        1, 2,
+        size=batch_size * popdist.getNumLocalReplicas()).astype(np.float32)
+
+    config = ipu.config.IPUConfig()
+    popdist.tensorflow.set_ipu_config(config, ipus_per_replica=1)
+    config.configure_ipu_system()
+
+    hvd.init()
+
+    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+
+    with strategy.scope():
+      dataset = tf.data.Dataset.from_tensor_slices(
+          (input_sample, output_sample))
+      dataset = dataset.repeat()
+      dataset = dataset.batch(batch_size=batch_size, drop_remainder=True)
+
+      optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate)
+      loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+
+      model_keras = ModelKeras(initialize_model_with_seed())
+      model_keras.compile(optimizer=optimizer,
+                          loss=loss_fn,
+                          steps_per_execution=popdist.getNumTotalReplicas() *
+                          num_iterations)
+      history = model_keras.fit(dataset,
+                                steps_per_epoch=popdist.getNumTotalReplicas() *
+                                num_iterations,
+                                epochs=1)
+      loss = history.history['loss'][0]
+
+    # Extract weights to numpy now we are still in eager mode, this will not be
+    # possible afterwards.
+    weights = [var.numpy() for var in model_keras.trainable_variables]
+    gradients = [
+        g.numpy() for g in model_keras.outfeed_queue_gradients.dequeue()
+    ]
+    losses = [l.numpy() for l in model_keras.outfeed_queue_losses.dequeue()]
+
+    return loss, gradients, losses, weights
+
+  def test_single_training_step_equal_tf1_and_keras(self):
+    loss_tf1, gradients_tf1, losses_tf1, weights_tf1 =\
+      self.single_training_step_equal_tf1()
+    loss_keras, gradients_keras, losses_keras, weights_keras =\
+      self.single_training_step_equal_keras()
+    np.testing.assert_equal(loss_tf1, loss_keras)
+
+    # Assert that both models have identical losses (both reduced and non-
+    # reduced.
+    np.testing.assert_almost_equal(loss_keras, loss_tf1)
+    for l_1, l_2 in zip(losses_keras, losses_tf1):
+      np.testing.assert_equal(l_1, l_2)
+
+    # Assert that both models have the same gradients.
+    np.testing.assert_equal(gradients_keras, gradients_tf1)
+
+    # Assert that both models have the same weights after the first backwards
+    # pass.
+    for w_1, w_2 in zip(weights_tf1, weights_keras):
+      np.testing.assert_equal(w_1, w_2)
 
 
 if __name__ == "__main__":
