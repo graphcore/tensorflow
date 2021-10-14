@@ -23,6 +23,7 @@ from tensorflow.python.keras.engine import training as training_module
 from tensorflow.python.keras import layers
 from tensorflow.python.keras import models
 from tensorflow.python.framework import test_util
+from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
 
 
@@ -347,7 +348,8 @@ class FunctionalPipelineApiTest(test.TestCase):
       f2 = layers.Flatten()(d2)
       c1 = layers.Concatenate()([f1, f2])
       x1 = layers.Dense(4)(c1)
-      m = training_module.Model((d1, d2), x1)
+      y1 = math_ops.multiply(1.0, x1)
+      m = training_module.Model((d1, d2), y1)
 
       strings = []
 
@@ -388,7 +390,12 @@ class FunctionalPipelineApiTest(test.TestCase):
           strings[11],
           'dense (Dense) (0)                 concatenate                       None             '
       )
-      self.assertEqual(strings[12], '=' * 85)
+      self.assertEqual(strings[12], '_' * 85)
+      self.assertEqual(
+          strings[13],
+          'tf.math.multiply (TFOpLambda) (0) dense                             None             '
+      )
+      self.assertEqual(strings[14], '=' * 85)
       # pylint: enable=line-too-long
 
 

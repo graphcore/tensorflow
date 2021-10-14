@@ -133,7 +133,8 @@ class FunctionalLayerPipelineStageAssignment:
   def inbound_layers(self):
     """Returns the input layers for the layer in this assignment. This can be
     useful for identifying which specific `node_index` this is."""
-    return self._layer._inbound_nodes[self.node_index].inbound_layers  # pylint: disable=protected-access
+    node = self._layer._inbound_nodes[self.node_index]  # pylint: disable=protected-access
+    return [n.layer for n in node.parent_nodes]
 
   @property
   def pipeline_stage(self):
