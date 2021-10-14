@@ -21,6 +21,7 @@ limitations under the License.
  * optimizers target in the BUILD file.
  */
 
+#include <gcl/Collectives.hpp>
 #include <popfloat/experimental/CastToGfloat.hpp>
 #include <poplar/Program.hpp>
 #include <poplar/exceptions.hpp>
@@ -297,6 +298,7 @@ StatusOr<poplar::program::Program> CreateZeroPadOp(
 StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
+    const popops::CollectiveOperator op,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 StatusOr<poplar::program::Program> CreateReplicatedAllToAll(

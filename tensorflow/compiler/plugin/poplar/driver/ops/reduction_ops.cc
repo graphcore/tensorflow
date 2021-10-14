@@ -966,6 +966,7 @@ StatusOr<poplar::program::Program> CreateSimpleSelectAndScatter(
 StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
+    const popops::CollectiveOperator op,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
   poplar::Graph& graph = GetGraph(res, inst);
@@ -991,9 +992,8 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
 
     // Use multi-tensor allReduce to reduce them all at the same time even if
     // they have different types.
-    gcl::allReduceInPlaceCrossReplica(GetMasterGraph(res), flat_tensors,
-                                      popops::CollectiveOperator::ADD, seq,
-                                      gcl_comm_group, {debug_name_and_id},
+    gcl::allReduceInPlaceCrossReplica(GetMasterGraph(res), flat_tensors, op,
+                                      seq, gcl_comm_group, {debug_name_and_id},
                                       GetReplicatedCollectiveOptions(res));
   }
 

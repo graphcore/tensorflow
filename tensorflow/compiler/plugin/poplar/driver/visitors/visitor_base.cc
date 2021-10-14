@@ -37,6 +37,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/layout_util.h"
@@ -178,24 +179,20 @@ Status BaseVisitor::HandleAllReduce(HloInstruction* inst) {
 
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
 
-  auto reduction = inst->to_apply();
-  auto reduction_root = reduction->root_instruction();
+  popops::CollectiveOperator op = popops::CollectiveOperator::LOCAL;
 
-  if (reduction_root->opcode() != HloOpcode::kAdd) {
+  if (IsAllReduceAdd(inst)) {
+    op = popops::CollectiveOperator::ADD;
+  } else if (IsAllReduceMean(inst)) {
+    op = popops::CollectiveOperator::MEAN;
+  } else {
     return xla::FailedPrecondition(
         "Unsupported all-reduce reduction computation.");
   }
 
-  for (auto& reduction_operand : reduction_root->operands()) {
-    if (reduction_operand->opcode() != HloOpcode::kParameter) {
-      return xla::FailedPrecondition(
-          "Unsupported all-reduce reduction computation.");
-    }
-  }
-
   TF_ASSIGN_OR_RETURN(auto seq, CreateReplicatedAllReduce(
                                     resources_, inst, GetOutputShape(inst),
-                                    tensor_map, debug_name_and_id));
+                                    tensor_map, op, debug_name_and_id));
 
   return AddSequenceForInstruction(inst, seq);
 }

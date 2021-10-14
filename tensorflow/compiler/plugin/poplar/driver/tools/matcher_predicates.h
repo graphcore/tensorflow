@@ -83,6 +83,9 @@ bool IsGlobalAllReduce(const HloInstruction*);
 bool IsReduceAdd(const HloInstruction*);
 bool IsReduceAddOrMultiply(const HloInstruction*);
 bool IsSerializedGradientAccumulation(const HloInstruction*);
+bool IsAllReduceAdd(const HloInstruction* inst);
+bool IsAllReduceMean(const HloInstruction* inst);
+
 /**
  * Construct a unary predicate which checks if a given HloInstruction is a
  * custom Poplibs instruction of a specified type.

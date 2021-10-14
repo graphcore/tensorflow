@@ -64,7 +64,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     Pattern({
         {HloOpcode::kCustomCall, NodeOperands({1}), IsPoplarInstruction(PoplarOp::ReplicationNormalise)},
-        {HloOpcode::kAllReduce, NodeOperands({2})},
+        {HloOpcode::kAllReduce, NodeOperands({2}), IsAllReduceAdd},
         {HloOpcode::kCustomCall, NodeOperands({3, 5, 6, 7}), IsPoplarInstruction(PoplarOp::MultiUpdateAdd)},
         {HloOpcode::kBroadcast, NodeOperands({4})},
         {HloOpcode::kConstant, NodeOperands({}), IsScalarConstant},
@@ -80,7 +80,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     Pattern({
         {HloOpcode::kCustomCall, NodeOperands({1}), IsPoplarInstruction(PoplarOp::ReplicationNormalise)},
-        {HloOpcode::kAllReduce, NodeOperands({2})},
+        {HloOpcode::kAllReduce, NodeOperands({2}), IsAllReduceAdd},
         {HloOpcode::kCustomCall, NodeOperands({3, 5, 6}), IsPoplarInstruction(PoplarOp::MultiUpdate)},
         {HloOpcode::kBroadcast, NodeOperands({4})},
         {HloOpcode::kConstant, NodeOperands({}), IsScalarConstant},

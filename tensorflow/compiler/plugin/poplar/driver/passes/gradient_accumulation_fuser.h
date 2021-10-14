@@ -23,6 +23,7 @@ namespace xla {
 
 namespace poplarplugin {
 
+// TODO(T47736): Support AllReduceMean
 // The purpose of this pass is to fuse any operations specific to gradient
 // accumulation.
 class GradientAccumulationFuser : public HloMatcher {

@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/window_util.h"
+
 namespace xla {
 
 namespace m = match;
@@ -342,11 +343,7 @@ bool IsCompareGreaterOrEqual(const HloInstruction* inst) {
 }
 
 bool IsSupportedAllReduce(const HloInstruction* inst) {
-  if (inst->opcode() == HloOpcode::kAllReduce) {
-    const HloInstruction* root = inst->to_apply()->root_instruction();
-    return Match(root, m::Add(m::Parameter(0), m::Parameter(1)));
-  }
-  return false;
+  return IsAllReduceAdd(inst) || IsAllReduceMean(inst);
 }
 
 bool IsMultiSliceOrUpdate(const HloInstruction* inst) {
@@ -447,6 +444,33 @@ std::function<bool(const HloInstruction*)> IsPoplarInstruction(PoplarOp op) {
     return IsPoplibsHloCustomOp(inst) &&
            inst->custom_call_target() == PoplarOp_Name(op);
   };
+}
+
+bool IsAllReduceAdd(const HloInstruction* inst) {
+  if (inst->opcode() == HloOpcode::kAllReduce) {
+    const HloInstruction* root = inst->to_apply()->root_instruction();
+    return Match(root, m::Add(m::Parameter(0), m::Parameter(1)));
+  }
+  return false;
+}
+
+bool IsAllReduceMean(const HloInstruction* inst) {
+  if (inst->opcode() != HloOpcode::kAllReduce) {
+    return false;
+  }
+
+  const HloInstruction* root = inst->to_apply()->root_instruction();
+  if (!Match(root, m::Add(m::Parameter(0),
+                          m::Op().WithOpcode(HloOpcode::kCustomCall)))) {
+    return false;
+  }
+
+  auto root_op1 = Cast<HloCustomCallInstruction>(root->operand(1));
+  if (!IsPoplarInstruction(PoplarOp::ReplicationNormalise)(root_op1)) {
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace poplarplugin

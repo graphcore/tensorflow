@@ -58,7 +58,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     Pattern({
       {HloOpcode::kCustomCall, NodeOperands({1}), IsGradientAccumulationWithMinBatchSize},
       {HloOpcode::kCustomCall, NodeOperands({2}), IsPoplarInstruction(PoplarOp::ReplicationNormalise)},
-      {HloOpcode::kAllReduce, NodeOperands({3}), IsSupportedAllReduce},
+      {HloOpcode::kAllReduce, NodeOperands({3}), IsAllReduceAdd},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
     })
   ),
@@ -69,7 +69,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kCustomCall, NodeOperands({1}), IsGradientAccumulationWithMinBatchSize},
-      {HloOpcode::kAllReduce, NodeOperands({2}), IsSupportedAllReduce},
+      {HloOpcode::kAllReduce, NodeOperands({2}), IsAllReduceAdd},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
     })
   ),
@@ -81,7 +81,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     Pattern({
       {HloOpcode::kCustomCall, NodeOperands({4, 1, 5}), IsGradientAccumulationWithMinBatchSize},
       {HloOpcode::kCustomCall, NodeOperands({2}), IsPoplarInstruction(PoplarOp::ReplicationNormalise)},
-      {HloOpcode::kAllReduce, NodeOperands({3}), IsSupportedAllReduce},
+      {HloOpcode::kAllReduce, NodeOperands({3}), IsAllReduceAdd},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},  // grad
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},  // accum
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}   // momentum
