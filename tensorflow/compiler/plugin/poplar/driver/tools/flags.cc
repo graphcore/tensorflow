@@ -259,7 +259,22 @@ PoplarXlaFlags::PoplarXlaFlags() {
                              sync_replica_start, ipu_model_tiles);
 }
 
-const PoplarXlaFlags& PoplarXlaFlags::Get() {
+void PoplarXlaFlags::ReloadFlagsForTesting() {
+  auto& flags = GetMutable();
+
+  // TF flag parsing will remove parsed flags from the env,
+  // so we have to create our new flags object after resetting
+  // the env, otherwise the flag might get lost if it's parsed
+  // before the assignment.
+  int* argc;
+  std::vector<char*>* argv;
+  xla::ResetFlagsFromEnvForTesting(kEnvVarName, &argc, &argv);
+  flags = PoplarXlaFlags();
+}
+
+const PoplarXlaFlags& PoplarXlaFlags::Get() { return GetMutable(); }
+
+PoplarXlaFlags& PoplarXlaFlags::GetMutable() {
   static PoplarXlaFlags poplar_xla_flags;
   return poplar_xla_flags;
 }

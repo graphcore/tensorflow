@@ -63,6 +63,12 @@ class RepeatLoopVisitor : public InplaceDeferredVisitor {
   // The tensors representing the inputs/outputs of the loops (they have to
   // alias).
   TensorOrRemoteBufferVector loop_state_;
+
+  // Track the SR method at points in the loop. These are used
+  // to make sure the seed remains consistent as the loop restarts and
+  // as we go in/out of the resource update function.
+  StochasticRoundingMethod loop_start_sr_method_;
+  StochasticRoundingMethod ru_end_sr_method_;
 };
 }  // namespace poplarplugin
 }  // namespace xla

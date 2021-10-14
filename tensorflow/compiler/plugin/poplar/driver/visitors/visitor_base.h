@@ -185,6 +185,16 @@ class BaseVisitor : public DfsHloVisitor {
   poplar::program::Sequence GetRawSequence() const;
 
  protected:
+  // Wrappers for the equivalent PrngSeedState calls that check if prng
+  // stability functionality is enabled before calling through.
+  bool MaybeChangeStochasticRoundingMethod(
+      const HloInstruction* inst, const StochasticRoundingMethod& method,
+      poplar::program::Sequence& seq);
+  void MaybeSetStochasticRoundingMethod(const StochasticRoundingMethod& method);
+  StochasticRoundingMethod GetStochasticRoundingMethod() const;
+
+  bool AllowSeedChanges() const;
+
   Status Unimplemented(HloInstruction* inst);
 
   poplar::DebugNameAndId GetDebugNameAndId(const HloInstruction* inst) const;

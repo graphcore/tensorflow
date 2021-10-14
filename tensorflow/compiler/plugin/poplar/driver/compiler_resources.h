@@ -188,6 +188,7 @@ struct CompilerResources {
   std::unique_ptr<ProgressBarBase> progress_bar;
 
   PrngSeedState prng_seed_state;
+  const bool enable_prng_seed_consistency_checks = false;
 
   CompilerResources(
       HloModule* module, const CompilerInformation& information,
@@ -247,36 +248,66 @@ struct CompilerResources {
     } else {
       progress_bar = absl::make_unique<NoProgressBar>();
     }
+
+    CHECK_EQ(enable_prng_seed_consistency_checks, false)
+        << "PRNG seed consistency checks are only intended for use when "
+           "testing.";
   }
 
   static std::unique_ptr<CompilerResources> CreateTestDefault(
       HloModule* module,
       const CompilerInformation& information = CompilerInformation()) {
-    return absl::make_unique<CompilerResources>(
-        module, information,
-        /*conv_options=*/poplar::OptionFlags(),
-        /*matmul_options=*/poplar::OptionFlags(),
-        /*pooling_options=*/poplar::OptionFlags(),
-        /*slice_options=*/poplar::OptionFlags(),
-        /*clear_matmul_pass_type=*/false,
-        /*disable_graph_outlining=*/false, /*merge_infeed_io_copies=*/false,
-        /*replication_factor=*/1, /*local_replication_factor=*/1,
-        /*partition_replication_factor=*/1,
-        /*floating_point_behaviour=*/IpuOptions::FloatingPointBehaviour(),
-        /*always_rearrange_copies_on_host=*/false,
-        /*scheduler_selection=*/IpuSchedulingAlgorithm::CHOOSE_BEST,
-        /*recomputation_enabled=*/false, /*use_stable_norm_statistics=*/false,
-        /*experimental_distributed_batch_norm_replica_group_size=*/1,
-        /*remote_memory_supported=*/false,
-        /*gcl_options=*/poplar::OptionFlags(),
-        /*triangular_solve_expander_block_size=*/0,
-        /*cholesky_block_size=*/0,
-        /*enable_experimental_remote_buffer_embedding=*/false,
-        /*enable_experimental_prng_stability=*/false,
-        /*enable_fast_math=*/false,
-        /*num_io_tiles=*/0,
-        /*io_tile_available_memory_proportion*/ 0.9,
-        /*enable_progress_bar=*/false);
+    return CreateTestDefault(module,
+                             /*enable_prng_seed_consistency_checks*/ false,
+                             IpuOptions::FloatingPointBehaviour(), information);
+  }
+
+  static std::unique_ptr<CompilerResources> CreateTestDefault(
+      HloModule* module, bool enable_prng_seed_consistency_checks,
+      const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
+      const CompilerInformation& information = CompilerInformation()) {
+    return absl::WrapUnique(
+        new CompilerResources(module, enable_prng_seed_consistency_checks,
+                              floating_point_behaviour, information));
+  }
+
+ private:
+  CompilerResources(
+      HloModule* module, bool enable_prng_seed_consistency_checks,
+      const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
+      const CompilerInformation& information)
+      : annotations(module),
+        information(information),
+        global_floating_point_behaviour(floating_point_behaviour),
+        default_conv_options(),
+        default_matmul_options(),
+        default_pooling_options(),
+        default_slice_options(),
+        clear_matmul_pass_type(false),
+        disable_graph_outlining(false),
+        replication_factor(1),
+        local_replication_factor(1),
+        partition_replication_factor(1),
+        merge_infeed_io_copies(false),
+        always_rearrange_copies_on_host(false),
+        preamble_sequence({}, "Preamble"),
+        scheduler_selection(IpuSchedulingAlgorithm::CHOOSE_BEST),
+        recomputation_enabled(false),
+        use_stable_norm_statistics(false),
+        experimental_distributed_batch_norm_replica_group_size(1),
+        remote_memory_supported(false),
+        gcl_options(),
+        triangular_solve_expander_block_size(0),
+        cholesky_block_size(9),
+        enable_experimental_remote_buffer_embedding(false),
+        enable_experimental_prng_stability(false),
+        enable_fast_math(false),
+        num_io_tiles(0),
+        io_tile_available_memory_proportion(0.9),
+        current_cluster_visitor(nullptr),
+        enable_prng_seed_consistency_checks(
+            enable_prng_seed_consistency_checks) {
+    progress_bar = absl::make_unique<NoProgressBar>();
   }
 };
 

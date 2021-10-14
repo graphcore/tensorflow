@@ -46,9 +46,19 @@ class PrngSeedState {
 
   StochasticRoundingMethod GetStochasticRoundingMethod() const;
 
+  // Set the current stochastic rounding method, without performing any seed
+  // changes. This can be used to set the SR method explicitly when control
+  // flow programs make it difficult to do so by calling
+  // ChangeStochasticRoundingMethod.
+  void SetStochasticRoundingMethod(const StochasticRoundingMethod& method);
+
   // Change the StochasticRoundingMethod to the given type, switching to
   // the appropriate seed. Changes are only made if the method differs to
   // the current one and is not StochasticRoundingMethod_Any.
+  // Note, we need to be careful to call this function in the same order that
+  // the poplar programs are executed, to make sure that we're actually
+  // switching between different SR methods. Consecutive switches between the
+  // same SR method can cause the seed values to become inconsistent.
   bool ChangeStochasticRoundingMethod(
       const StochasticRoundingMethod& new_method,
       poplar::program::Sequence& seq,

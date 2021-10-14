@@ -99,6 +99,15 @@ StochasticRoundingMethod PrngSeedState::GetStochasticRoundingMethod() const {
   return stochastic_rounding_method_;
 }
 
+void PrngSeedState::SetStochasticRoundingMethod(
+    const StochasticRoundingMethod& method) {
+  CHECK_NE(method, StochasticRoundingMethod_Undefined);
+
+  if (method != StochasticRoundingMethod_Any) {
+    stochastic_rounding_method_ = method;
+  }
+}
+
 bool PrngSeedState::ChangeStochasticRoundingMethod(
     const StochasticRoundingMethod& new_method, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -137,7 +146,8 @@ void AssertStochasticRoundingMethod(poplar::Graph& graph,
   if (method != StochasticRoundingMethod_Any) {
     // Verbose logging so it's clear when we're asserting and harder to
     // accidentially submit code with it enabled.
-    LOG(INFO) << "AssertStochasticRoundingMethod!";
+    LOG(INFO) << "AssertStochasticRoundingMethod "
+              << StochasticRoundingMethod_Name(method) << " for " << inst_name;
 
     auto seeds = poplar::getHwSeeds(graph, seq, {});
 

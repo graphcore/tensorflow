@@ -39,6 +39,7 @@ RepeatLoopVisitor::RepeatLoopVisitor(
     : InplaceDeferredVisitor(res, inputs, description, debug_name_and_id, {},
                              reallocate_inputs_info) {
   EnterVariableScope();
+  loop_start_sr_method_ = GetStochasticRoundingMethod();
 }
 
 Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
@@ -60,10 +61,28 @@ Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
         DeferredArgRBVectors inputs,
         GetInputsForDeferredRBInstruction(inst, /*preserve_aliasing*/ true));
 
+    // The point at which we visit the resource update op differs from the point
+    // at which it is executed within the poplar program, as it gets pulled out
+    // of the inner loop. Due to this we have to change the SR method that its
+    // seed updates are done relative to. resource_update_sequence_ is executed
+    // after the main inner loop and so the seed type is determined by the inner
+    // loop. Since we set the seed type to loop_start_sr_method_ at the end of
+    // each iteration then this is the method the resource updates seed changes
+    // should be relative to.
+    auto ru_start_sr_method = GetStochasticRoundingMethod();
+    MaybeSetStochasticRoundingMethod(loop_start_sr_method_);
+
     TF_ASSIGN_OR_RETURN(
         resource_update_sequence_,
         CreateResourceUpdateOp(resources_, inst, inputs, inst->shape(),
                                tensor_map, debug_name_and_id));
+
+    ru_end_sr_method_ = GetStochasticRoundingMethod();
+
+    // Restore the seed method as instructions after the resource update call
+    // will be executed before it.
+    MaybeSetStochasticRoundingMethod(ru_start_sr_method);
+
     return Status::OK();
   } else {
     return InplaceDeferredVisitor::HandleDeferredAllocationCall(inst);
@@ -142,10 +161,15 @@ poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(
 
   poplar::program::Sequence seq({}, debug_name_and_id);
   seq.add(pre_loop_sequence_);
-
   poplar::program::Sequence repeat_seq({}, {debug_name_and_id, "repeat"});
+
   {
     repeat_seq.add(GetSequence(/*copy_execution_counters*/ false));
+    // We need to be in the loop_start_sr_method_ when the loop starts each
+    // iteration as the seed state changes made during the loop are all done
+    // relative to this.
+    MaybeChangeStochasticRoundingMethod(inst, loop_start_sr_method_,
+                                        repeat_seq);
     // Increase the local execution counters at the end of each iteration.
     repeat_seq.add(execution_counters_.IncrementLiveCounters());
   }
@@ -162,6 +186,12 @@ poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(
     inner_seq.add(poplar::program::Repeat(num_mini_batches_to_accumulate_,
                                           repeat_seq, {debug_name_and_id}));
     inner_seq.add(resource_update_sequence_);
+
+    // Similar to repeat_seq, when we finish calling resource_update_sequence_
+    // we will be using ru_end_sr_method_ but need to be in
+    // loop_start_sr_method_ for when the loop restarts.
+    MaybeSetStochasticRoundingMethod(ru_end_sr_method_);
+    MaybeChangeStochasticRoundingMethod(inst, loop_start_sr_method_, inner_seq);
 
     // Repeat the inner loop.
     seq.add(
