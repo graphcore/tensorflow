@@ -19,10 +19,16 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 
-#include "tensorflow/compiler/xla/literal_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
+#include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 
 #include <poplar/CSRFunctions.hpp>
 #include <poplar/RandomSeed.hpp>
+#include <poplin/codelets.hpp>
+#include <popnn/codelets.hpp>
 #include <popops/Cast.hpp>
 #include <popops/codelets.hpp>
 #include <poprand/codelets.hpp>
@@ -31,11 +37,20 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-struct PrngSeedStateTest : HloPoplarTestBase {
-  void SetUp() override {
+struct PrngSeedTest : HloPoplarTestBase {
+  bool SetUpOrSkip() {
+    // GTEST_SKIP can only be called from a void function, hence
+    // this overload.
+    bool skip = false;
+    SetUpOrSkip(skip);
+    return !skip;
+  }
+
+  void SetUpOrSkip(bool& skip) {
     TF_ASSERT_OK_AND_ASSIGN(auto ipu_count, GetMaxIpuCount());
     const bool enough_hw = ipu_count >= replication_factor_;
     if (!enough_hw) {
+      skip = true;
       GTEST_SKIP() << "Skipping PrngSeedStateTests. They need to run with "
                    << replication_factor_ << " IPUs but only " << ipu_count
                    << "available.";
@@ -44,6 +59,8 @@ struct PrngSeedStateTest : HloPoplarTestBase {
 
       graph_ = absl::make_unique<poplar::Graph>(
           device_, poplar::replication_factor(replication_factor_));
+      poplin::addCodelets(*graph_);
+      popnn::addCodelets(*graph_);
       popops::addCodelets(*graph_);
       poprand::addCodelets(*graph_);
 
@@ -54,7 +71,22 @@ struct PrngSeedStateTest : HloPoplarTestBase {
       identical_seed_ = graph_->addVariable(
           poplar::UNSIGNED_INT, {2}, poplar::VariableMappingMethod::LINEAR);
       graph_->setInitialValue<unsigned>(identical_seed_, {10, 11});
+    }
+    skip = false;
+  }
 
+  int64 replication_factor_ = 2;
+  poplar::Device device_;
+
+  std::unique_ptr<poplar::Graph> graph_;
+
+  poplar::Tensor differing_seed_;
+  poplar::Tensor identical_seed_;
+};
+
+struct PrngSeedStateTest : PrngSeedTest {
+  void SetUp() override {
+    if (SetUpOrSkip()) {
       input_ = graph_->addVariable(poplar::FLOAT, {5},
                                    poplar::VariableMappingMethod::LINEAR);
       graph_->setInitialValue<float>(input_, {0.3f, 0.4f, 0.7f, 0.8f, 0.11f});
@@ -94,17 +126,10 @@ struct PrngSeedStateTest : HloPoplarTestBase {
     return {replica1, replica2};
   }
 
-  int64 replication_factor_ = 2;
-  poplar::Device device_;
+  poplar::program::Sequence seq_;
 
-  std::unique_ptr<poplar::Graph> graph_;
-
-  poplar::Tensor differing_seed_;
-  poplar::Tensor identical_seed_;
   poplar::Tensor input_;
   poplar::Tensor output_;
-
-  poplar::program::Sequence seq_;
 };
 
 TEST_F(PrngSeedStateTest, SetupIdenticalSeed) {
@@ -227,6 +252,171 @@ TEST_F(PrngSeedStateTest, AssertSeed) {
   AssertStochasticRoundingMethod(*graph_, actual_sr_method, no_throw_seq);
   ASSERT_NO_THROW(RunFloatToHalfCast(no_throw_seq));
 }
+
+// Fixture for tests that need to execute lowered hlo on an IPU device.
+struct PrngSeedConsistencyTest : PrngSeedTest,
+                                 ::testing::WithParamInterface<HloTestCase> {
+  void SetUp() override {
+    // Force enable synthetic data so that we don't have to setup any
+    // infeed/outfeeds. Seeds are uneffected since we're setting those up
+    // ourselves as part of the test.
+    // This must be called first since the flags are global and set during
+    // device setup.
+    ForceEnableSyntheticData();
+
+    if (SetUpOrSkip()) {
+      auto config = GetModuleConfigForTest();
+      config.set_replica_count(replication_factor_);
+
+      const auto& hlo_string = GetParam().hlo;
+      TF_ASSERT_OK_AND_ASSIGN(module_,
+                              ParseAndReturnVerifiedModule(hlo_string, config));
+
+      CustomOpReplacer custom_op_replacer;
+      custom_op_replacer.Run(module_.get());
+
+      HloTrivialScheduler scheduler;
+      scheduler.Run(module_.get());
+
+      IpuOptions::FloatingPointBehaviour floating_point_behaviour;
+      floating_point_behaviour.set_esr(StochasticRounding_On);
+
+      resources_ = CompilerResources::CreateTestDefault(
+          module_.get(), /*enable_prng_seed_consistency_checks*/ true,
+          floating_point_behaviour);
+      resources_->annotations.input_output_aliasing_map =
+          InputOutputAliasingMap(module_.get());
+      resources_->module_call_graph = CallGraph::Build(module_.get());
+      resources_->partition_replication_factor = replication_factor_;
+      resources_->replication_factor = replication_factor_;
+      resources_->main_graph = std::move(graph_);
+
+      graph_ = nullptr;
+    }
+  }
+
+  void TearDown() override {
+    setenv(poplar_flag_name, original_poplar_flags_.c_str(),
+           true /*overwrite*/);
+  }
+
+  void ForceEnableSyntheticData() {
+    if (const char* flag_buffer = std::getenv(poplar_flag_name)) {
+      original_poplar_flags_ = flag_buffer;
+    }
+
+    const auto poplar_flags =
+        original_poplar_flags_ + " --use_synthetic_data=true";
+    setenv(poplar_flag_name, poplar_flags.c_str(), true /*overwrite*/);
+    PoplarXlaFlags::ReloadFlagsForTesting();
+  }
+
+  void RunSequence(poplar::Graph& graph, poplar::program::Sequence& seq) {
+    poplar::Engine engine(graph, seq);
+    engine.load(device_);
+
+    const uint32_t differing_seed_vals[] = {1, 2, 3, 4};
+    engine.writeTensor("differing_seed", &differing_seed_vals[0],
+                       &differing_seed_vals[4]);
+
+    engine.run(0);
+  }
+
+  std::unique_ptr<CompilerResources> resources_;
+  std::unique_ptr<HloModule> module_;
+
+  const char* poplar_flag_name = "TF_POPLAR_FLAGS";
+  std::string original_poplar_flags_ = "";
+};
+
+// The specific instruction types within the various functions aren't that
+// important, the stochastic_rounding_method values are the main thing as those
+// are what determine the different state changes, which is what we're trying to
+// test.
+static const HloTestCase simple_repeat = {"simple_repeat", R"(
+HloModule test
+repeat {
+  x = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  increment = f32[] constant(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  ROOT count = f32[] add(x, increment), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+}
+
+ENTRY test {
+  param0 = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  loop_count = f32[] call(param0), to_apply=repeat, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"3\"}}, \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\", \"stochastic_rounding\":\"THREESTATE_ON\"}"
+  ROOT end = f32[] add(loop_count, loop_count), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+}
+)"};
+static const HloTestCase repeat_with_resource_update = {
+    "repeat_with_resource_update", R"(
+HloModule test
+reduce_add {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  add = f32[] add(x, y)
+}
+
+resource_update {
+  ru_arg0 = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ru_arg1 = f32[] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  add0 = f32[] add(ru_arg0, ru_arg1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  ROOT t = (f32[],f32[]) tuple(add0, ru_arg1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  counter = s32[] constant(4), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  gac = () custom-call(s32[] counter), custom_call_target="GradientAccumulationCount", backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+loop {
+  param0 = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  param1 = f32[] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  call_ru = (f32[],f32[]) call(param0, param1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}, \"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  gte0 = f32[] get-tuple-element(call_ru), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  gte1 = f32[] get-tuple-element(call_ru), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  add = f32[] add(gte1, gte0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  reduce = f32[] all-reduce(add), to_apply=reduce_add, replica_groups={}, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  ROOT root = (f32[], f32[]) tuple(reduce, gte0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+ENTRY e {
+  weights0 = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  weights1 = f32[] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  loop_call = (f32[], f32[]) call(weights0, weights1), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"8\"}}, \"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  loop_count = f32[] get-tuple-element(loop_call), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT end = f32[] add(loop_count, loop_count), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+}
+)"};
+
+TEST_P(PrngSeedConsistencyTest, Check) {
+  auto& graph = *(resources_->main_graph);
+
+  // This test runs the given module with seed consistency checks (enabled at
+  // CompilerResource construction) to make sure that seed value matches the
+  // semantics of the StochasticRoundingMethod of the corresponding Hlo
+  // instruction. So if the instruction is setup with
+  // StochasticRoundingMethod_IdenticalSeeds but the seeds are differing across
+  // replicas then the test will fail.
+  poplar::program::Sequence seq;
+
+  resources_->enable_experimental_prng_stability = true;
+  resources_->prng_seed_state =
+      PrngSeedState::SetupSeeds(graph, identical_seed_, differing_seed_, seq);
+
+  auto entry = module_->entry_computation();
+  auto order = module_->schedule().sequence(entry).instructions();
+  EntryVisitor visitor(*resources_, entry);
+  entry->AcceptOrdered(&visitor, order);
+
+  seq.add(resources_->preamble_sequence);
+  seq.add(visitor.GetSequenceAndInitializeCounters());
+
+  // Failed consistency checks will cause poplar execution to stop and an
+  // exception to be thrown.
+  ASSERT_NO_THROW(RunSequence(graph, seq));
+}
+
+INSTANTIATE_TEST_SUITE_P(PrngSeedHlo, PrngSeedConsistencyTest,
+                         ::testing::Values(simple_repeat,
+                                           repeat_with_resource_update),
+                         HloTestCaseName);
 
 }  // namespace
 }  // namespace poplarplugin

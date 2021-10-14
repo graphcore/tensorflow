@@ -32,7 +32,11 @@ namespace poplarplugin {
 
 class PoplarXlaFlags {
  public:
+  // Used only for testing.
+  static void ReloadFlagsForTesting();
+
   static const PoplarXlaFlags& Get();
+
   // Getter for the flag usage string.
   static const std::string GetFlagUsageString();
   // Display all the flags infos.
@@ -131,6 +135,8 @@ class PoplarXlaFlags {
   std::size_t hlo_hash;
 
  private:
+  static PoplarXlaFlags& GetMutable();
+
   PoplarXlaFlags();
 
   // copy of the synthetic_data_categories argument, used for hashing.
