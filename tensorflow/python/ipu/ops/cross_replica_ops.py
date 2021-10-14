@@ -49,6 +49,31 @@ def cross_replica_sum(x, replica_group_size=None, name=None):
       x, replica_group_size=replica_group_size, name=name)
 
 
+def cross_replica_mean(x, replica_group_size=None, name=None):
+  """Computes the mean of the input tensor across replicas.
+
+  Args:
+    x: The local tensor to the mean.
+    replica_group_size: The number of replicas in each collective group.
+      If None, there is a single group containing all the replicas. If a
+      number less than the total number of replicas in the model is
+      provided, the replicas are divided into consecutive groups of the
+      given size, and the collective operation is performed within each
+      respective group. Given `N` total replicas denoted `{0, ... N-1}`
+      and a `replica_group_size` of k, the groups are:
+      `{0, 1, ... k-1}, {k, ... 2k-1} ... {N-k-1, ... N-1}`.
+      Note that `N` must be evenly divisible by `k`, otherwise an exception
+      will be thrown during compilation.
+    name: Optional op name.
+
+  Returns:
+    A `Tensor` which is averaged across the replicas in the same group.
+  """
+
+  return gen_popops_ops.ipu_cross_replica_mean(
+      x, replica_group_size=replica_group_size, name=name)
+
+
 def assume_equal_across_replicas(tensors, inplace=False):
   """
   Mark the given tensors as equal across replicas to try and prevent divergent

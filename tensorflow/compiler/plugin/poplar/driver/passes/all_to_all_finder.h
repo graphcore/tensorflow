@@ -21,6 +21,7 @@ limitations under the License.
 
 namespace xla {
 
+// TODO(T47736): Support AllReduceMean
 namespace poplarplugin {
 
 class AllToAllFinder : public HloMatcher {

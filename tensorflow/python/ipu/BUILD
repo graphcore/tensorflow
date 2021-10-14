@@ -727,6 +727,22 @@ tf_py_test(
 )
 
 py_test(
+    name = "popops_cross_replica_mean_test",
+    size = "large",
+    srcs = ["tests/popops_cross_replica_mean_test.py"],
+    tags = ["hw_poplar_test"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+py_test(
     name = "replication_normalise_test",
     size = "medium",
     srcs = ["tests/replication_normalise_test.py"],
@@ -1634,6 +1650,7 @@ test_suite(
         "pipelining_test",
         "pop_datastream_test",
         "popnn_normalization_test",
+        "popops_cross_replica_mean_test",
         "popops_cross_replica_sum_test",
         "poprun_replica_partitioning_test",
         "random_constant_matmul_test",
