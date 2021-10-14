@@ -79,6 +79,5 @@ class CrossReplicaOptimizer(IpuOptimizer):
       else:
         with ops.colocate_with(grad):
           summed_grads_and_vars.append(
-              (gen_poputil_ops.ipu_replication_normalise(
-                  cross_replica_ops.cross_replica_sum(grad)), var))
+              (cross_replica_ops.cross_replica_mean(grad), var))
     return self._opt.apply_gradients(summed_grads_and_vars, global_step, name)
