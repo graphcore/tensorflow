@@ -204,6 +204,7 @@ void FunctionBaseOp::Compile(XlaOpKernelContext* ctx) {
   XlaCompiler::CompileOptions compile_options =
       poplarplugin::GetDefaultCompileOptions();
   compile_options.return_updated_values_for_all_resources = false;
+  compile_options.keep_constant_expression_outputs = true;
 
   // Compile the computation.
   XlaCompiler::CompilationResult result;

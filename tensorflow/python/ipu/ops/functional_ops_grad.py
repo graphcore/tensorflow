@@ -82,10 +82,6 @@ class _XlaFuncGradGraph(FuncGraph):
       return self._captured_constants[tensor_id]
     elif constant_op.is_constant(tensor):
       return capture_constant(tensor)
-    elif tensor.op.type == "InvertPermutation" and constant_op.is_constant(
-        tensor.op.inputs[0]):
-      permutation = capture_constant(tensor.op.inputs[0])
-      return array_ops.invert_permutation(permutation)
 
     if control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph()):
       # Capture the intermidate so that it can be added as an extra output

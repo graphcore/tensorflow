@@ -429,7 +429,6 @@ Status BuildComputation(
 
 }  // namespace
 
-
 string XlaCompiler::Argument::HumanString() const {
   string common;
   if (!name.empty()) {
@@ -1340,7 +1339,12 @@ Status XlaCompiler::CompileGraph(
   result->computation = std::make_shared<xla::XlaComputation>();
   result->outputs.resize(context->retvals().size());
   std::vector<XlaExpression> retvals = context->retvals();
-  ConvertConstantsToExpressions(&builder, absl::Span<XlaExpression>(retvals));
+
+  // IPU specific change.
+  if (!options.keep_constant_expression_outputs) {
+    ConvertConstantsToExpressions(&builder, absl::Span<XlaExpression>(retvals));
+  }
+
   TF_RETURN_IF_ERROR(BuildComputation(
       real_args, retvals, arg_shardings, retval_shardings, context->resources(),
       std::move(token_output),
