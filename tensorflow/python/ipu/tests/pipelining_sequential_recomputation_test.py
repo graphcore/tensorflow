@@ -15,7 +15,6 @@
 
 import numpy as np
 import pva
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu

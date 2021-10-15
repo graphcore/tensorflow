@@ -78,7 +78,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.ipu_model.tiles_per_ipu = 1472
     cfg.configure_ipu_system()
     with sl.Session() as sess:

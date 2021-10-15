@@ -21,7 +21,7 @@ import numpy as np
 from numpy.random import rand
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -39,7 +39,7 @@ class IpuXlaCholeskyTest(xla_test.XLATestCase):
 
   def __configureIPU(self):
     if not self.configured:
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.optimizations.cholesky_block_size = IpuXlaCholeskyTest.BLOCK_SIZE

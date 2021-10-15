@@ -25,12 +25,12 @@ from tensorflow.python import ipu
 class IPUReconfigureTest(test_util.TensorFlowTestCase):
   @classmethod
   def setUpClass(cls):
-    cls.first_cfg = IPUConfig()
+    cls.first_cfg = ipu.config.IPUConfig()
     cls.first_cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cls.first_cfg.auto_select_ipus = [1, 1]
     cls.first_cfg.ipu_model.compile_ipu_code = True
 
-    cls.second_cfg = IPUConfig()
+    cls.second_cfg = ipu.config.IPUConfig()
     cls.second_cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cls.second_cfg.auto_select_ipus = [1, 2, 1]
 

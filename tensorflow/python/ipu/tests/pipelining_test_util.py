@@ -15,8 +15,6 @@
 
 import math
 import pva
-from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.python.ipu.config import MergeRemoteBuffersBehaviour
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.framework import ops

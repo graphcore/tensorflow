@@ -28,7 +28,6 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent as gd
 from tensorflow.python.ipu import embedding_ops
-from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu import loops
 
@@ -75,7 +74,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
     report_helper = tu.ReportHelper()
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
@@ -136,7 +135,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
     report_helper = tu.ReportHelper()
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
@@ -181,7 +180,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.experimental.always_rearrange_copies_on_the_host = True
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
@@ -218,7 +217,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.experimental.always_rearrange_copies_on_the_host = True
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
@@ -275,7 +274,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i, w])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.experimental.always_rearrange_copies_on_the_host = True
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
