@@ -25,6 +25,7 @@ from tensorflow.python import ipu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -329,6 +330,9 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
     bl = ['*convert*/Cast*']
     self.assert_compute_sets_not_in_blacklist(report, bl)
 
+  @test_util.run_v1_only(
+      "Non-fused BatchNormalization Layers with fp16 inputs in TF2 are always"
+      " done in fp32 since de0a617f4ef3.")
   def testBatchNormalizeLayerFp16(self):
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
