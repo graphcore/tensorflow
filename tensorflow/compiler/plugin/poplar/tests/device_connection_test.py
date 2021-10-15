@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import multiprocessing
-from tensorflow.python.ipu.config import IPUConfig
 import time
 import numpy as np
 
@@ -46,7 +45,7 @@ class Process:
 
 
 def _ConfigureSystem(connection_type):
-  cfg = IPUConfig()
+  cfg = ipu.config.IPUConfig()
   cfg.select_ipus = [0]  # Always use the same IPU.
   cfg.device_connection.version = 'ipu1'
   cfg.device_connection.type = connection_type

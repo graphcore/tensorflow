@@ -42,7 +42,6 @@ from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.compiler.xla.python_api import types
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.platform import test
-from tensorflow.python.ipu.config import IPUConfig
 
 
 class FeedId:
@@ -69,7 +68,7 @@ def PrimitiveTypeStringToNumpyDtype(primitive_type_str):
 
 class IpuSerializationTest(xla_test.XLATestCase):
   def _configureIPU(self, serialization_folder):
-    opts = IPUConfig()
+    opts = ipu.config.IPUConfig()
     opts.device_connection.version = 'ipu1'
     opts.device_connection.type = utils.DeviceConnectionType.NEVER
     opts.serialization_output_folder = serialization_folder

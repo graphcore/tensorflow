@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session as sl
@@ -54,7 +53,7 @@ class TestRandomNumberGeneration(test_util.TensorFlowTestCase):
           dtype=np.int32)
 
     # Configure the hardware
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     tu.add_hw_ci_connection_options(config)
     config.configure_ipu_system()
 

@@ -14,7 +14,6 @@
 # =============================================================================
 
 import glob
-from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from absl.testing import parameterized
@@ -26,6 +25,7 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import utils as ipu_utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.ipu_pipeline_estimator import IPUPipelineEstimator
 from tensorflow.python.ipu.ipu_pipeline_estimator import IPUPipelineEstimatorSpec
 from tensorflow.python.ipu.ops import pipelining_ops

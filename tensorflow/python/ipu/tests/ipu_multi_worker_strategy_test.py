@@ -14,7 +14,6 @@
 # =============================================================================
 
 import collections
-from tensorflow.python.ipu.config import IPUConfig
 import glob
 import json
 import multiprocessing
@@ -47,6 +46,7 @@ from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils as ipu_utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMirroredVariable
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategyV1
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUSyncOnReadVariable

@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python import ipu
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -40,7 +39,7 @@ class TestReplicatedIndex(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [inp])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()

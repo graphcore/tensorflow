@@ -14,7 +14,6 @@
 #  =============================================================================
 
 from absl.testing import parameterized
-from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.compat.v1 import disable_v2_behavior
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
@@ -35,7 +34,7 @@ class ContribIpuGetConfigOpTest(test_util.TensorFlowTestCase,
   @test_util.deprecated_graph_mode_only
   def testGetConfig(self):
     # Generate a simple IPU config.
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = True
     cfg.auto_select_ipus = [2, 4]
 
@@ -66,7 +65,7 @@ class ContribIpuGetConfigOpTest(test_util.TensorFlowTestCase,
   @test_util.deprecated_graph_mode_only
   def testGetNumberOfIpus(self):
     # Generate a simple IPU config.
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = True
     cfg.auto_select_ipus = [2, 4]
     cfg.configure_ipu_system()

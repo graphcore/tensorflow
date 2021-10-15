@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
@@ -46,7 +45,7 @@ class TestAllGather(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [x])
 
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = [8]
     tu.add_hw_ci_connection_options(config)
     config.configure_ipu_system()
@@ -98,7 +97,7 @@ class TestAllGather(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       out = ipu.ipu_compiler.compile(my_graph, [idx, updates, scale])
 
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = [8]
     tu.add_hw_ci_connection_options(config)
     config.configure_ipu_system()
@@ -152,7 +151,7 @@ class TestAllToAll(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [x])
 
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = [8]
     tu.add_hw_ci_connection_options(config)
     config.configure_ipu_system()

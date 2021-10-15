@@ -1,5 +1,4 @@
 import argparse
-from tensorflow.python.ipu.config import IPUConfig
 import time
 
 import tensorflow.compat.v1 as tf
@@ -116,7 +115,7 @@ def parse_args():
 
 
 def create_ipu_estimator(args):
-  ipu_options = IPUConfig()
+  ipu_options = ipu.config.IPUConfig()
   ipu_options.auto_select_ipus = args.replicas
 
   ipu_run_config = ipu.ipu_run_config.IPURunConfig(

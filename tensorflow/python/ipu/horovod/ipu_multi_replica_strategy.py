@@ -81,10 +81,10 @@ class IPUMultiReplicaStrategyV1(distribute_lib.StrategyV1,
     distribution options.
 
     Args:
-      config: The IpuOptions configuration protobuf to update.
+      config: The IPUConfig instance to update.
 
     Returns:
-      The IpuOptions configuration protobuf.
+      The IPUConfig instance.
     """
     config.experimental.multi_replica_distribution.process_count = size()
     config.experimental.multi_replica_distribution.process_index = rank()

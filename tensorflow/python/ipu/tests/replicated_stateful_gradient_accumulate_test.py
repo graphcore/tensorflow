@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.compiler.xla import xla
@@ -58,7 +57,7 @@ class TestReplicatedStatefulGradientAccumulate(test_util.TensorFlowTestCase):
         y = array_ops.placeholder(dtype, [1])
         report = gen_ipu_ops.ipu_event_trace()
 
-      config = IPUConfig()
+      config = ipu.config.IPUConfig()
       config.optimizations.maximum_cross_replica_sum_buffer_size = 1000
       config.auto_select_ipus = [2]
       tu.add_hw_ci_connection_options(config)
@@ -97,7 +96,7 @@ class TestReplicatedStatefulGradientAccumulate(test_util.TensorFlowTestCase):
         y = array_ops.placeholder(dtype, [1])
         report = gen_ipu_ops.ipu_event_trace()
 
-      config = IPUConfig()
+      config = ipu.config.IPUConfig()
       config.optimizations.maximum_cross_replica_sum_buffer_size = 1000
       config.auto_select_ipus = [2]
       tu.add_hw_ci_connection_options(config)
@@ -137,7 +136,7 @@ class TestReplicatedStatefulGradientAccumulate(test_util.TensorFlowTestCase):
         y = array_ops.placeholder(dtype, [1])
         report = gen_ipu_ops.ipu_event_trace()
 
-      config = IPUConfig()
+      config = ipu.config.IPUConfig()
       config.optimizations.maximum_cross_replica_sum_buffer_size = 1000
       config.auto_select_ipus = [2]
       tu.add_hw_ci_connection_options(config)
@@ -190,7 +189,7 @@ class TestReplicatedStatefulGradientAccumulate(test_util.TensorFlowTestCase):
         y = array_ops.placeholder(dtype, [1])
         report = gen_ipu_ops.ipu_event_trace()
 
-      config = IPUConfig()
+      config = ipu.config.IPUConfig()
       config.optimizations.maximum_cross_replica_sum_buffer_size = 1000
       config.auto_select_ipus = [2]
       tu.add_hw_ci_connection_options(config)
@@ -264,7 +263,7 @@ class TestReplicatedStatefulGradientAccumulate(test_util.TensorFlowTestCase):
         y = array_ops.placeholder(dtype, [1])
         report = gen_ipu_ops.ipu_event_trace()
 
-      config = IPUConfig()
+      config = ipu.config.IPUConfig()
       config.optimizations.maximum_cross_replica_sum_buffer_size = 1000
       config.auto_select_ipus = [2]
       tu.add_hw_ci_connection_options(config)

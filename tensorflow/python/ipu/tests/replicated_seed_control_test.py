@@ -14,7 +14,6 @@
 # =============================================================================
 
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python import ipu
 from tensorflow.python.client import session as session_lib
@@ -59,7 +58,7 @@ class TestSeedControl(test_util.TensorFlowTestCase):
       out1 = math_ops.cast(inp, dtype=np.float16)
 
     # Configure the hardware
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = [2, 2]
     tu.add_hw_ci_connection_options(config)
     config.floating_point_behaviour.inv = True
@@ -134,7 +133,7 @@ class TestSeedControl(test_util.TensorFlowTestCase):
 
     dequeue_op = outfeed.dequeue()
 
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = [2]
     tu.add_hw_ci_connection_options(config)
     config.floating_point_behaviour.inv = True
@@ -188,7 +187,7 @@ class TestSeedControl(test_util.TensorFlowTestCase):
       out0 = gen_popops_ops.ipu_all_gather(cast1, replication_factor=2)
 
     # Configure the hardware
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = [2]
     config.experimental.enable_prng_stability = True
     tu.add_hw_ci_connection_options(config)
@@ -206,7 +205,7 @@ class TestSeedControl(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
   def test_experimental_identical_compute(self):
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = [4]
     config.experimental.enable_prng_stability = True
     tu.add_hw_ci_connection_options(config)

@@ -31,7 +31,6 @@ from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
-from tensorflow.python.ipu.config import IPUConfig
 
 
 class IpuIpuModelTest(xla_test.XLATestCase):

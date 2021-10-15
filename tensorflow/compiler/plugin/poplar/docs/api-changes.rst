@@ -202,8 +202,13 @@ Autosharding removed
 Autosharding has been removed. You should now use alternative execution modes
 such as pipelining instead.
 
-IPU config change
-'''''''''''''''''
+Old IPU option configuration API changes
+''''''''''''''''''''''''''''''''''''''''
+
+.. note::
+  These are changes to the old option configuration API. A new option
+  configuration API has been introduced in this release and the old API is
+  being deprecated. For more information, please see :ref:`new-configuration-api`.
 
 The ``disable_graph_convolution_caching`` parameter for ``create_ipu_config``
 (from ``tensorflow.python.ipu.utils``) has been removed.

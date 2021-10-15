@@ -31,7 +31,6 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import linalg_ops
 from tensorflow.python.training import gradient_descent
-from tensorflow.python.ipu.config import IPUConfig
 
 
 class IpuXlaCholeskyTest(xla_test.XLATestCase):
@@ -40,7 +39,7 @@ class IpuXlaCholeskyTest(xla_test.XLATestCase):
 
   def __configureIPU(self):
     if not self.configured:
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.optimizations.cholesky_block_size = IpuXlaCholeskyTest.BLOCK_SIZE

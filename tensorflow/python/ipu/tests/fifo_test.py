@@ -14,7 +14,6 @@
 # =============================================================================
 
 import os
-from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 import pva
 
@@ -38,7 +37,7 @@ class FifoTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[2])
       run_loop = ipu.ipu_compiler.compile(my_net, inputs=[x])
 
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = 1
     tu.add_hw_ci_connection_options(config)
     config.configure_ipu_system()
@@ -59,7 +58,7 @@ class FifoTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[2])
       run_loop = ipu.ipu_compiler.compile(my_net, inputs=[x])
 
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = 1
     tu.add_hw_ci_connection_options(config)
     config.configure_ipu_system()
@@ -97,7 +96,7 @@ class FifoTest(test_util.TensorFlowTestCase):
     dequeue_outfeed2 = outfeed_queue2.dequeue()
 
     # Configure the hardware
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = 1
     tu.add_hw_ci_connection_options(config)
     config.configure_ipu_system()

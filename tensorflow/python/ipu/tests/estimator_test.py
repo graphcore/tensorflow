@@ -14,12 +14,12 @@
 # ==============================================================================
 
 import random
-from tensorflow.python.ipu.config import IPUConfig
 import shutil
 import glob
 
 from tensorflow.python.ipu import summary_ops
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.platform import googletest
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.estimator import estimator

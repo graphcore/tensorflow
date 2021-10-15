@@ -14,7 +14,6 @@
 # =============================================================================
 
 import os
-from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 from tensorflow.python import keras
 from tensorflow.python.client import session
@@ -28,6 +27,7 @@ from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import utils as ipu_utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.horovod.ipu_horovod_strategy import IPUHorovodStrategyV1
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.scopes import ipu_scope

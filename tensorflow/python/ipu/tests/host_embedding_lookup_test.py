@@ -26,7 +26,6 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.ipu import embedding_ops
-from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.training import gradient_descent as gd
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
@@ -65,7 +64,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = False
     if tu.has_ci_ipus():
@@ -125,7 +124,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = False
     if tu.has_ci_ipus():
@@ -179,7 +178,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = False
     if tu.has_ci_ipus():
@@ -219,7 +218,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = False
     if tu.has_ci_ipus():

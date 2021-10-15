@@ -30,14 +30,13 @@ from tensorflow.python.ops import nn
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.training import gradient_descent
-from tensorflow.python.ipu.config import IPUConfig
 
 
 class IpuXlaMatMulOptionTest(xla_test.XLATestCase):
   def testMatMulFwdBackwd(self):
     with self.session() as sess:
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()

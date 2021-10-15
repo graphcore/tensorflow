@@ -14,7 +14,6 @@
 # =============================================================================
 
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 from absl.testing import parameterized
 
 from tensorflow.python import ipu
@@ -123,7 +122,7 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
   def testSlice(self, sequences, output_shape, num_elems, src_offsets,
                 dst_offsets, zero_unused):
     with sl.Session() as sess:
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -156,7 +155,7 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
       return
 
     with sl.Session() as sess:
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -196,7 +195,7 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
       dst_offsets,  #pylint: disable=unused-argument
       zero_unused):  #pylint: disable=unused-argument
     with sl.Session() as sess:
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -236,7 +235,7 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
       return
 
     with sl.Session() as sess:
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -276,7 +275,7 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
       dst_offsets,  #pylint: disable=unused-argument
       zero_unused):
     with sl.Session() as sess:
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -336,7 +335,7 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
       return
 
     with sl.Session() as sess:
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -459,7 +458,7 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
     dst_offsets = src_offsets
 
     with sl.Session() as sess:
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 

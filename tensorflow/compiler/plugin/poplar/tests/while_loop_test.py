@@ -41,7 +41,6 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import momentum
 from tensorflow.python.platform import googletest
 from tensorflow.compat.v1 import disable_v2_behavior
-from tensorflow.python.ipu.config import IPUConfig
 
 disable_v2_behavior()
 
@@ -285,7 +284,7 @@ class WhileLoopTest(xla_test.XLATestCase):
 
       out = ipu.ipu_compiler.compile(my_net, inputs=[])
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
@@ -317,7 +316,7 @@ class WhileLoopTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope('/device:IPU:0'):
         ret = ipu.ipu_compiler.compile(model, [features])
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()

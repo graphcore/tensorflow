@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
@@ -46,7 +45,7 @@ class CodeletExpressionOpTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[a, b, c])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
     with sl.Session() as sess:

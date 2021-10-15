@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import contextlib
-from tensorflow.python.ipu.config import IPUConfig
 import glob
 import multiprocessing
 import numpy as np
@@ -90,7 +89,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_basic_model(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     _extra_ipu_config(cfg)
@@ -127,7 +126,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_model_with_infeed_and_outfeed(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     _extra_ipu_config(cfg)
@@ -181,7 +180,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_model_with_send_to_host_op(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     _extra_ipu_config(cfg)
@@ -224,7 +223,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_new_graph_in_same_process(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     _extra_ipu_config(cfg)
@@ -290,7 +289,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       return dataset.batch(1, drop_remainder=True)
 
     def build_and_run_model():
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       report_helper = tu.ReportHelper()
       report_helper.set_autoreport_options(cfg)
       _extra_ipu_config(cfg)
@@ -333,7 +332,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_model_with_outside_compilation_scope(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     _extra_ipu_config(cfg)
@@ -368,7 +367,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_unhashable_op(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     _extra_ipu_config(cfg)
@@ -421,7 +420,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_hashable_op(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     _extra_ipu_config(cfg)

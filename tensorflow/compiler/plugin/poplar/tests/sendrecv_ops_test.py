@@ -28,11 +28,11 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
-from tensorflow.python.ipu.config import IPUConfig
 
 
 class IpuSendRecvOpsTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=abstract-method

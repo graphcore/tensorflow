@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 import six
-from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -47,7 +46,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [inp])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -85,7 +84,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [inp])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -120,7 +119,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [x, y])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -154,7 +153,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -192,7 +191,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     outfed = outfeed_queue.dequeue()
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -244,7 +243,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     outfed = outfeed_queue.dequeue()
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -307,7 +306,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     outfed = outfeed_queue.dequeue()
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -392,7 +391,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
         ]
 
     out = ipu.ipu_compiler.compile(my_graph, [])
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -429,7 +428,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     outfed = outfeed_queue.dequeue()
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)

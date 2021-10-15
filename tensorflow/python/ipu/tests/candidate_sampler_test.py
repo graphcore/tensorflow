@@ -14,7 +14,6 @@
 # =============================================================================
 
 from functools import partial
-from tensorflow.python.ipu.config import IPUConfig
 from collections import Counter
 import numpy as np
 
@@ -90,7 +89,7 @@ def softmax_cifar(sampled=True, k=25, iters=1000):
     def my_net():
       return ipu.loops.repeat(iters, body, [], infeed)
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
@@ -150,7 +149,7 @@ def generate_ops(sess,
   with ipu.scopes.ipu_scope("/device:IPU:0"):
     ipu_op = ipu.ipu_compiler.compile(body, inputs=[inp])
 
-  cfg = IPUConfig()
+  cfg = ipu.config.IPUConfig()
   tu.add_hw_ci_connection_options(cfg)
   cfg.configure_ipu_system()
 

@@ -14,7 +14,6 @@
 # ==============================================================================
 
 from absl.testing import parameterized
-from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.python import ipu
@@ -103,7 +102,7 @@ class DistributedBatchNormTest(xla_test.XLATestCase, parameterized.TestCase):
         grad_scales), np.concatenate(grad_offsets)
 
   def _configure(self, replicas, group_size):
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = replicas
     tu.add_hw_ci_connection_options(config)
     config.norms.experimental.distributed_batch_norm_replica_group_size = \

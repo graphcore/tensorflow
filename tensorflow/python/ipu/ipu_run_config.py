@@ -20,6 +20,7 @@ import collections
 
 from tensorflow.python.estimator import run_config as run_config_lib
 from tensorflow.python.ipu.utils import IPUConfig, IpuOptions
+from tensorflow.python.platform import tf_logging as logging
 
 
 class IPURunConfig(
@@ -46,11 +47,11 @@ class IPURunConfig(
         counter is increased by `iterations_per_loop` for every `Session.run`.
         The number of weight updates can be less than the number of iterations
         if gradient accumulation is used.
-      ipu_options: An :py:class:`~tensorflow.python.ipu.utils.IPUConfig` or an
-        `IpuOptions` configuration protobuf which you have populated with your
-        desired configuration options before creating this IPURunConfig. The
-        `IPUEstimator` will then configure the IPU system with this
-        `ipu_options` object when it builds your model.
+      ipu_options: An :py:class:`~tensorflow.python.ipu.utils.IPUConfig`, or an
+        `IpuOptions` configuration protobuf (deprecated), which you have
+        populated with your desired configuration options before creating this
+        IPURunConfig. The `IPUEstimator` will then configure the IPU system with
+        this `ipu_options` object when it builds your model.
       compile_summary: Generate compilation summary
       num_replicas: Number of replicated graphs (data parallelism)
       num_shards: Number of IPU devices on which the graph is sharded (model
@@ -64,16 +65,20 @@ class IPURunConfig(
 
     num_devices = num_replicas * num_shards
     if num_devices > 1 and ipu_options is None:
-      raise ValueError(
-          'IPU configuration requires more than one device, but `ipu_options` is None'
-      )
+      raise ValueError("IPU configuration requires more than one device, but"
+                       " `ipu_options` is None")
 
     num_configured_devices = 1
     if ipu_options is not None:
       if not isinstance(ipu_options, IPUConfig):
         if not isinstance(ipu_options, IpuOptions):
           raise TypeError("ipu_options must be an IPUConfig, or an IpuOptions"
-                          " configuration protobuf.")
+                          " configuration protobuf (deprecated).")
+        else:
+          logging.warn(
+              "Passing an IpuOptions configuration protobuf to IPURunConfig"
+              " is deprecated and will be removed in a future release. Use an"
+              " IPUConfig instance instead.")
       else:
         # Convert IPUConfig to IpuOptions
         ipu_options = ipu_options._create_protobuf()
@@ -85,14 +90,15 @@ class IPURunConfig(
       if ipu_options.device_config[ordinal].auto_count:
         num_configured_devices = ipu_options.device_config[ordinal].auto_count
       else:
-        # We're using cfg_index.  Set equal for now and check later once the device has been created
+        # We're using cfg_index. Set equal for now and check later once the
+        # device has been created
         num_configured_devices = num_devices
 
     if num_devices != num_configured_devices:
       raise ValueError(
-          '`IPURunConfig` configured with {} devices ({} num_replicas times {} num_shards),'
-          ' but `IpuOptions` configured with {} devices'.format(
-              num_devices, num_replicas, num_shards, num_configured_devices))
+          f"`IPURunConfig` configured with {num_devices} devices"
+          f" ({num_replicas} replicas times {num_shards} shards), but"
+          f" `ipu_options` configured with {num_configured_devices} devices")
 
     return super(IPURunConfig,
                  cls).__new__(cls,

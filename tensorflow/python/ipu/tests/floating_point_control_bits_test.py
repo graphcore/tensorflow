@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 import os
-from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -33,7 +32,7 @@ class TestFloatingPointControlBits(test_util.TensorFlowTestCase):
                  overflow=False,
                  stochastic_rounding=False,
                  nan_overflow=False):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.floating_point_behaviour.inv = invalid_operation
     cfg.floating_point_behaviour.div0 = division_by_zero
     cfg.floating_point_behaviour.oflo = overflow

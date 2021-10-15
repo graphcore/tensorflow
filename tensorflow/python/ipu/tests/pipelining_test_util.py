@@ -17,9 +17,6 @@ import math
 import pva
 from functools import partial
 
-from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.python.ipu.config import MergeRemoteBuffersBehaviour
-
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.eager.backprop import GradientTape
 from tensorflow.python.framework import ops
@@ -38,6 +35,7 @@ from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import cross_replica_optimizer
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.keras.optimizers import ipu_wrappers
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour

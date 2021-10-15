@@ -44,7 +44,7 @@ def run_collective_ops(inputs, generate_collective_ops, num_replicas):
 
     dequeued = outfeed_queue.dequeue()
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.optimizations.maximum_reduce_scatter_buffer_size = 10000
     cfg.auto_select_ipus = num_replicas
     tu.add_hw_ci_connection_options(cfg)

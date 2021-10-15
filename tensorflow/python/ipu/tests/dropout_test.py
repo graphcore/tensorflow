@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 import itertools
-from tensorflow.python.ipu.config import IPUConfig
 
 import numpy as np
 from absl.testing import parameterized

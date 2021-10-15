@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import contextlib
-from tensorflow.python.ipu.config import IPUConfig
 import multiprocessing
 import os
 import tempfile
@@ -83,7 +82,7 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
 
   @test_util.deprecated_graph_mode_only
   def test_basic_model(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     _options_function(cfg)
@@ -114,7 +113,7 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
 
   @test_util.deprecated_graph_mode_only
   def test_model_with_infeed_and_outfeed(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     _options_function(cfg)
@@ -161,7 +160,7 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
 
   @test_util.deprecated_graph_mode_only
   def test_new_graph_in_same_process(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     _options_function(cfg)
@@ -197,7 +196,7 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
       self.assertEqual(0, num_reports_1)
 
   def test_ipu_estimator(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.auto_select_ipus = 1
@@ -261,7 +260,7 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
   @test_util.deprecated_graph_mode_only
   def test_unhashable_op(self):
     def build_and_run_model():
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       _options_function(cfg)
       cfg.configure_ipu_system()
 
@@ -302,7 +301,7 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
   @tu.skip_with_asan("non-deterministic dlopen user ops addresses with asan")
   @test_util.deprecated_graph_mode_only
   def test_hashable_op(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     _options_function(cfg)
@@ -347,7 +346,7 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
 
   @test_util.deprecated_graph_mode_only
   def test_host_embeddings(self):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     _options_function(cfg)

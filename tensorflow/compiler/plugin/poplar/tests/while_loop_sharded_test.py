@@ -30,7 +30,6 @@ from tensorflow.python.ops import nn
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent as gd
-from tensorflow.python.ipu.config import IPUConfig
 
 
 class WhileLoopShardedTest(xla_test.XLATestCase):
@@ -67,7 +66,7 @@ class WhileLoopShardedTest(xla_test.XLATestCase):
       lr = array_ops.placeholder(dtypes.float32, [])
       out = ipu.ipu_compiler.compile(my_net, inputs=[lr])
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 2
       cfg.configure_ipu_system()
