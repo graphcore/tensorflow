@@ -25,6 +25,7 @@ from tensorflow.python import ipu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -312,6 +313,40 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
           a = array_ops.placeholder(np.float32, [4, 64, 64, 4], name="input_a")
 
           normed = layers_norm.batch_normalization(a, fused=True)
+
+      report_json = ReportJSON(self, sess)
+      sess.run(variables.global_variables_initializer())
+
+      report_json.reset()
+      report_helper.clear_reports()
+
+      result = sess.run(normed, {a: np.zeros([4, 64, 64, 4])})
+      self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
+
+      report_json.parse_log()
+      report_json.assert_tensor_input_names("input_a")
+
+    report = pva.openReport(report_helper.find_report())
+    bl = ['*convert*/Cast*']
+    self.assert_compute_sets_not_in_blacklist(report, bl)
+
+  @test_util.run_v1_only(
+      "Non-fused BatchNormalization Layers with fp16 inputs in TF2 are always"
+      " done in fp32 since de0a617f4ef3.")
+  def testBatchNormalizeLayerFp16(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("", use_resource=True):
+          a = array_ops.placeholder(np.float16, [4, 64, 64, 4], name="input_a")
+
+          normed = layers_norm.batch_normalization(a, fused=False)
 
       report_json = ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
