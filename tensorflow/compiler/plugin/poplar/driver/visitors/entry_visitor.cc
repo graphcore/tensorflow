@@ -273,10 +273,10 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
       for (uint64 tuple_index = 0; tuple_index != layout_sub_shapes.size();
            ++tuple_index) {
         if (in_tensors[tuple_index] != out_tensors[tuple_index]) {
-          AddSequenceForInstruction(
+          TF_RETURN_IF_ERROR(AddSequenceForInstruction(
               root, poplar::program::Copy(out_tensors[tuple_index],
                                           in_tensors[tuple_index], false,
-                                          debug_name_and_id));
+                                          debug_name_and_id)));
         }
       }
     }
@@ -305,7 +305,7 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
     }
 
     if (out_info.IsStreaming()) {
-      AddSequenceForInstruction(root, seq);
+      TF_RETURN_IF_ERROR(AddSequenceForInstruction(root, seq));
     } else {
       device_to_host.add(seq);
     }

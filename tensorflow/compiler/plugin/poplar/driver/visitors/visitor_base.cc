@@ -85,7 +85,7 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
     poplar::setStochasticRounding(GetGraph(resources_, inst), seq,
                                   new_stochastic_rounding_enabled,
                                   {debug_name_and_id, "Preprocess"});
-    AddSequenceForInstruction(inst, seq);
+    TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
     stochastic_rounding_enabled_ = new_stochastic_rounding_enabled;
   }
 
@@ -97,7 +97,7 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
         poplar_backend_config.stochastic_rounding_method();
     if (resources_.prng_seed_state.ChangeStochasticRoundingMethod(
             new_sr_method, seq, debug_name_and_id)) {
-      AddSequenceForInstruction(inst, seq);
+      TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
     }
 
     VLOG(3) << "Using SR method "
