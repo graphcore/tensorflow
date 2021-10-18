@@ -161,11 +161,23 @@ def _compile_function(func,
       add_control_dependencies=add_control_dependencies,
       capture_by_value=capture_by_value)
 
-  # Add the external captures (resources) to arguments.
-  for t in func_graph.external_captures:
+  # Add the external captures (resources) to arguments, and remove placeholders
+  # for constants that have already been captured by value from
+  # external_captures, and add their real values to arguments.
+  new_captures = []
+  for t, i in zip(func_graph.external_captures, func_graph.internal_captures):
     if not allow_external_captures and t.dtype != dtypes.resource:
+      if isinstance(t, ops.EagerTensor) and constant_op.is_constant(i):
+        # Find out the real value for this constant, and add it to the list of
+        # captured arguments, but discard the placeholder.
+        captured_args.append(constant_op.constant(t))
+        continue
       raise _InvalidCaptureException(t.name)
-  captured_args += func_graph.external_captures
+    new_captures.append((t, i))
+    captured_args.append(t)
+
+  # Reset the function graph's captures with the placeholders discarded.
+  func_graph.reset_captures(new_captures)
 
   # Add any control outputs.  Autograph will add control outputs to the graph
   # automatically, so only add ones which are not already present.
