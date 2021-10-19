@@ -17,8 +17,6 @@ import random
 import shutil
 import glob
 
-from tensorflow.python.ipu import summary_ops
-from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.platform import googletest
 from tensorflow.python.data.ops import dataset_ops
@@ -55,8 +53,6 @@ def model_fn(features, labels, mode):
         train = opt.minimize(loss, training_util.get_global_step())
       else:
         train = None
-
-  summary_ops.ipu_compile_summary("compile_summary", [train, loss])
 
   return model_fn_lib.EstimatorSpec(mode=mode,
                                     predictions=x,

@@ -225,8 +225,7 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
 
     def build_and_run_model():
       ipu_config = ipu.ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                                   ipu_options=cfg,
-                                                   compile_summary=True)
+                                                   ipu_options=cfg)
 
       run_config = ipu.ipu_run_config.RunConfig(ipu_run_config=ipu_config)
       estimator = ipu.ipu_estimator.IPUEstimator(model_fn=my_model_fn,

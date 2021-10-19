@@ -777,12 +777,6 @@ def _augment_model_fn(model_fn, wrapper_class, ipu_device):
           outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.ALL)
       hooks.append(_IPUOutfeedLifecycleHook(outfeed_queue))
 
-    if config.ipu_run_config.ipu_options is None:
-      if config.ipu_run_config.compile_summary:
-        logging.warning(
-            "Compile summary enabled but IpuOptions is None. No profile will be generated"
-        )
-
     if config.ipu_run_config.ipu_options is not None:
       hooks.append(
           _IPUConfigureIPUSystemHook(config.ipu_run_config,
@@ -804,17 +798,11 @@ def _augment_model_fn(model_fn, wrapper_class, ipu_device):
       compiled_loop = ipu_compiler.compile(loop)
 
     if config.ipu_run_config.compile_summary:
-      compile_summary_op = ipu_ops.summary_ops.ipu_compile_summary(
-          "compile_summary", compiled_loop)
-
-      # The SummarySaverHook is not added by default for evaluation,
-      # so add it here if the user requested a compile summary.
-      if mode == model_fn_lib.ModeKeys.EVAL and config.save_summary_steps:
-        hooks.append(
-            basic_session_run_hooks.SummarySaverHook(
-                save_steps=config.save_summary_steps,
-                output_dir=config.model_dir,
-                summary_op=compile_summary_op))
+      raise NotImplementedError(
+          "Generating compilation summaries for the IPUEstimator through"
+          " IPURunConfig.compile_summary is deprecated, is non-functional and"
+          " will be removed in a future release. Use the PopVision suite of"
+          " analysis tools to profile IPU programs.")
 
     ipu_utils.move_variable_initialization_to_cpu()
 

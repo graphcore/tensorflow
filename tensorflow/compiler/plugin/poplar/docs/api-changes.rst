@@ -1,6 +1,39 @@
 API changes
 -----------
 
+Release 2.4
+~~~~~~~~~~~
+
+The following changes have been made to the TensorFlow API in the Poplar SDK version 2.3.
+This may require you to change your code.
+
+Breaking changes
+________________
+
+.. warning::
+
+  These will require changes to any code that uses them.
+
+Summary ops
+'''''''''''
+
+The following items related to summary ops have been deprecated, **are no longer
+functional** and will be removed in a future release. To profile IPU programs,
+use the PopVision suite of analysis tools. Trying to use these items will raise
+a `NotImplementedError`:
+
+  - `tensorflow.python.ipu.ops.summary_ops`:
+
+    - `ipu_compile_summary`
+    - `get_ipu_reports`
+
+  - `IPUEstimator`:
+
+    - The `compile_summary` argument to :py:class:`~tensorflow.python.ipu.ipu_run_config.IPURunConfig`
+    - Passing a `IPURunConfig` with `compile_summary` set to `True` to an `IPUEstimator`
+
+
+
 Release 2.3
 ~~~~~~~~~~~
 

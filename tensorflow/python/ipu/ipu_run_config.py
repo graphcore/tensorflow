@@ -21,6 +21,7 @@ import collections
 from tensorflow.python.estimator import run_config as run_config_lib
 from tensorflow.python.ipu.utils import IPUConfig, IpuOptions
 from tensorflow.python.platform import tf_logging as logging
+from tensorflow.python.util import deprecation
 
 
 class IPURunConfig(
@@ -31,6 +32,11 @@ class IPURunConfig(
   """IPU related configuration required by `IPUEstimator`.
 
   """
+  @deprecation.deprecated_args(
+      None,
+      "compile_summary is deprecated and will be removed in a future release."
+      " Use the PopVision suite of analysis tools to profile IPU programs.",
+      "compile_summary")
   def __new__(cls,
               iterations_per_loop=1,
               ipu_options=None,
@@ -52,7 +58,7 @@ class IPURunConfig(
         populated with your desired configuration options before creating this
         IPURunConfig. The `IPUEstimator` will then configure the IPU system with
         this `ipu_options` object when it builds your model.
-      compile_summary: Generate compilation summary
+      compile_summary: DEPRECATED. Generate compilation summary.
       num_replicas: Number of replicated graphs (data parallelism)
       num_shards: Number of IPU devices on which the graph is sharded (model
         parallelism)
@@ -62,6 +68,11 @@ class IPURunConfig(
         :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue` that is
         created internally.
     """
+    if compile_summary:
+      raise NotImplementedError(
+          "IPURunConfig.compile_summary is deprecated, is no longer functional"
+          " and will be removed in a future release. Use the PopVision suite of"
+          " analysis tools to profile IPU programs.")
 
     num_devices = num_replicas * num_shards
     if num_devices > 1 and ipu_options is None:

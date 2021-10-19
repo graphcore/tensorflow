@@ -17,15 +17,19 @@ Summary operations for IPUs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.core.framework import summary_pb2
-from tensorflow.python.framework import ops
-from tensorflow.python.summary.summary import tensor_summary
-from tensorflow import executing_eagerly
+from tensorflow.python.util import deprecation
 
 
+@deprecation.deprecated(
+    None,
+    "ipu_compile_summary is deprecated and will be removed in a future release."
+    " Use the PopVision suite of analysis tools to profile IPU programs.")
 def ipu_compile_summary(name, op_list, collections=None):
-  """Create an IPU compiler summary operation.
+  """DEPRECATED. Create an IPU compiler summary operation.
+
+  This function is deprecated and is no longer functional. It will be removed
+  in a future release. Use the PopVision suite of analysis tools to profile IPU
+  programs.
 
   Args:
     name: A name for the summary.
@@ -37,44 +41,28 @@ def ipu_compile_summary(name, op_list, collections=None):
     The new summary operation
 
   """
-
-  if not isinstance(op_list, list):
-    op_list = [op_list]
-
-  with ops.device("cpu"):
-    with ops.control_dependencies(op_list):
-
-      reports = gen_ipu_ops.ipu_event_trace()
-
-      summary_metadata = summary_pb2.SummaryMetadata(
-          plugin_data=summary_pb2.SummaryMetadata.PluginData(
-              plugin_name="ipu"))
-
-      t_summary = tensor_summary(name='ipu_trace',
-                                 tensor=reports,
-                                 summary_metadata=summary_metadata,
-                                 collections=collections,
-                                 display_name=name)
-
-  return t_summary
+  raise NotImplementedError(
+      "ipu_compile_summary is deprecated, is no longer functional and will be"
+      " removed in a future release. Use the PopVision suite of analysis tools"
+      " to profile IPU programs.")
 
 
+@deprecation.deprecated(
+    None,
+    "get_ipu_reports is deprecated and will be removed in a future release."
+    " Use the PopVision suite of analysis tools to profile IPU programs.")
 def get_ipu_reports():
-  """Extracts all reports and converts them from EagerTensor to array of events.
+  """DEPRECATED. Extracts all reports and converts them from EagerTensor to
+  array of events.
+
+  This function is deprecated and is no longer functional. It will be removed
+  in a future release. Use the PopVision suite of analysis tools to profile IPU
+  programs.
 
   Returns:
     A two dimensional numpy.ndarray of IPUTraceEvents protobufs.
   """
-
-  # make sure we are running in eager mode (default in tf2)
-  if not executing_eagerly():
-    raise ValueError("Eager execution mode should be used.")
-
-  # retrieve all reports as an eager tensor
-  reports = gen_ipu_ops.ipu_event_trace()
-
-  # convert from eager tensor to numpy array
-  if isinstance(reports, ops.EagerTensor):
-    reports = reports.numpy()
-
-  return reports
+  raise NotImplementedError(
+      "get_ipu_reports is deprecated, is no longer functional and will be"
+      " removed in a future release. Use the PopVision suite of analysis tools"
+      " to profile IPU programs.")

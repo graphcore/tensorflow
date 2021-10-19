@@ -128,13 +128,6 @@ class BatchCallbackCounter(keras.callbacks.Callback):
     return self._logs
 
 
-def _count_host_to_device_events(evts):
-  evt_types = ipu.utils.extract_all_types_from_event_trace(evts)
-  evt_types = filter(lambda x: x == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER,
-                     evt_types)
-  return len(list(evt_types))
-
-
 class IPUModelModelTest(test.TestCase):
   @test_util.run_v2_only
   def testModelCreation(self):
@@ -581,10 +574,12 @@ class IPUModelModelTest(test.TestCase):
     cfg.auto_select_ipus = 1
     cfg.configure_ipu_system()
 
+    report_json = tu.ReportJSON(self, eager_mode=True)
+
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
-      ipu.ops.summary_ops.get_ipu_reports()
+      report_json.reset()
 
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
@@ -599,8 +594,8 @@ class IPUModelModelTest(test.TestCase):
 
       # Ensure that we are only downloading the weights at the end of each
       # epoch.
-      evts = ipu.ops.summary_ops.get_ipu_reports()
-      self.assertEqual(4, _count_host_to_device_events(evts))
+      report_json.parse_log()
+      report_json.assert_num_host_to_device_transfer_events(4)
 
   @test_util.run_v2_only
   def testFitWithExponentialDecayLearningRateSchedule(self):
@@ -610,10 +605,12 @@ class IPUModelModelTest(test.TestCase):
     cfg.auto_select_ipus = 1
     cfg.configure_ipu_system()
 
+    report_json = tu.ReportJSON(self, eager_mode=True)
+
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
-      ipu.ops.summary_ops.get_ipu_reports()
+      report_json.reset()
 
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
@@ -629,8 +626,8 @@ class IPUModelModelTest(test.TestCase):
 
       # Ensure that we are only downloading the weights at the end of each
       # epoch.
-      evts = ipu.ops.summary_ops.get_ipu_reports()
-      self.assertEqual(4, _count_host_to_device_events(evts))
+      report_json.parse_log()
+      report_json.assert_num_host_to_device_transfer_events(4)
 
   @test_util.run_v2_only
   def testFitWithPiecewiseConstantDecayLearningRateSchedule(self):
@@ -640,10 +637,12 @@ class IPUModelModelTest(test.TestCase):
     cfg.auto_select_ipus = 1
     cfg.configure_ipu_system()
 
+    report_json = tu.ReportJSON(self, eager_mode=True)
+
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
-      ipu.ops.summary_ops.get_ipu_reports()
+      report_json.reset()
 
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
@@ -659,8 +658,8 @@ class IPUModelModelTest(test.TestCase):
 
       # Ensure that we are only downloading the weights at the end of each
       # epoch.
-      evts = ipu.ops.summary_ops.get_ipu_reports()
-      self.assertEqual(4, _count_host_to_device_events(evts))
+      report_json.parse_log()
+      report_json.assert_num_host_to_device_transfer_events(4)
 
   @test_util.run_v2_only
   def testFitWithMetrics(self):

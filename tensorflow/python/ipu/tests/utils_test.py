@@ -50,28 +50,6 @@ def count_compile_end_events(events):
 
 class ContribIpuOpsTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
-  def testSummary(self):
-    with ops.device("/device:IPU:0"):
-      a = array_ops.placeholder(np.float32, [1], name="a")
-      b = array_ops.placeholder(np.float32, [1], name="b")
-      out = a + b
-
-    summary = ipu.summary_ops.ipu_compile_summary('comp', [out])
-
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
-    with sl.Session() as sess:
-      fd = {
-          a: [1.0],
-          b: [2.0],
-      }
-      result, s = sess.run([out, summary], fd)
-      self.assertAllClose(result, [3.0])
-      self.assertTrue(len(s) > 100)
-
-  @test_util.deprecated_graph_mode_only
   def testBypassUtilsCreator(self):
     cfg = IpuOptions()
     with self.assertRaisesRegex(Exception,

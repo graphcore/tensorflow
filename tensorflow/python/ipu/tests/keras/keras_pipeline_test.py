@@ -144,13 +144,6 @@ class BatchCallbackCounter(keras.callbacks.Callback):
     return self._logs
 
 
-def _count_host_to_device_events(evts):
-  evt_types = ipu.utils.extract_all_types_from_event_trace(evts)
-  evt_types = filter(lambda x: x == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER,
-                     evt_types)
-  return len(list(evt_types))
-
-
 class IPUPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testFitCpuMatch(self):
@@ -313,10 +306,12 @@ class IPUPipelineTest(test.TestCase):
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
 
+    report_json = tu.ReportJSON(self, eager_mode=True)
+
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
-      ipu.ops.summary_ops.get_ipu_reports()
+      report_json.reset()
 
       ds = test_dataset()
 
@@ -330,8 +325,8 @@ class IPUPipelineTest(test.TestCase):
 
       # Ensure that we are only downloading the weights at the end of each
       # epoch.
-      evts = ipu.ops.summary_ops.get_ipu_reports()
-      self.assertEqual(6, _count_host_to_device_events(evts))
+      report_json.parse_log()
+      report_json.assert_num_host_to_device_transfer_events(6)
 
   @test_util.run_v2_only
   def testFitWithExponentialDecayLearningRateSchedule(self):
@@ -341,10 +336,12 @@ class IPUPipelineTest(test.TestCase):
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
 
+    report_json = tu.ReportJSON(self, eager_mode=True)
+
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
-      ipu.ops.summary_ops.get_ipu_reports()
+      report_json.reset()
 
       ds = test_dataset()
 
@@ -359,8 +356,8 @@ class IPUPipelineTest(test.TestCase):
 
       # Ensure that we are only downloading the weights at the end of each
       # epoch.
-      evts = ipu.ops.summary_ops.get_ipu_reports()
-      self.assertEqual(6, _count_host_to_device_events(evts))
+      report_json.parse_log()
+      report_json.assert_num_host_to_device_transfer_events(6)
 
   @test_util.run_v2_only
   def testFitWithPiecewiseConstantDecayLearningRateSchedule(self):
@@ -370,10 +367,12 @@ class IPUPipelineTest(test.TestCase):
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
 
+    report_json = tu.ReportJSON(self, eager_mode=True)
+
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
-      ipu.ops.summary_ops.get_ipu_reports()
+      report_json.reset()
 
       ds = test_dataset()
 
@@ -388,8 +387,8 @@ class IPUPipelineTest(test.TestCase):
 
       # Ensure that we are only downloading the weights at the end of each
       # epoch.
-      evts = ipu.ops.summary_ops.get_ipu_reports()
-      self.assertEqual(6, _count_host_to_device_events(evts))
+      report_json.parse_log()
+      report_json.assert_num_host_to_device_transfer_events(6)
 
   @test_util.run_v2_only
   def testTrainPipelineWithLstm(self):
