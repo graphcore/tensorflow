@@ -30,6 +30,7 @@ limitations under the License.
 #include <poplin/codelets.hpp>
 #include <popnn/codelets.hpp>
 #include <popops/Cast.hpp>
+#include <popops/ElementWise.hpp>
 #include <popops/codelets.hpp>
 #include <poprand/codelets.hpp>
 
@@ -55,7 +56,8 @@ struct PrngSeedTest : HloPoplarTestBase {
                    << replication_factor_ << " IPUs but only " << ipu_count
                    << "available.";
     } else {
-      TF_ASSERT_OK_AND_ASSIGN(device_, CreateIpuDevice(replication_factor_, 4));
+      TF_ASSERT_OK_AND_ASSIGN(device_,
+                              CreateIpuDevice(device_count_, tile_count_));
 
       graph_ = absl::make_unique<poplar::Graph>(
           device_, poplar::replication_factor(replication_factor_));
@@ -76,6 +78,8 @@ struct PrngSeedTest : HloPoplarTestBase {
   }
 
   int64 replication_factor_ = 2;
+  int32 tile_count_ = 4;
+  int32 device_count_ = 2;
   poplar::Device device_;
 
   std::unique_ptr<poplar::Graph> graph_;
@@ -251,6 +255,126 @@ TEST_F(PrngSeedStateTest, AssertSeed) {
   poplar::program::Sequence no_throw_seq(setup_seq);
   AssertStochasticRoundingMethod(*graph_, actual_sr_method, no_throw_seq);
   ASSERT_NO_THROW(RunFloatToHalfCast(no_throw_seq));
+}
+
+struct PrngSeedStateShardedTest : PrngSeedTest {
+  void SetUp() override {
+    // tile_count_ of 0 means use the native number of tiles.
+    tile_count_ = 0;
+    device_count_ = 4;
+    replication_factor_ = 2;
+
+    if (SetUpOrSkip()) {
+      const poplar::Target& target = graph_->getTarget();
+      ASSERT_EQ(target.getNumIPUs(), 2);
+      const auto tiles_per_ipu = target.getTilesPerIPU();
+
+      left_graph_ = graph_->createVirtualGraph(0, tiles_per_ipu);
+      left_input_ =
+          left_graph_.addConstant(poplar::FLOAT, {tensor_size_}, 0.1f);
+      left_output_ = left_graph_.addVariable(
+          poplar::FLOAT, {tensor_size_}, poplar::VariableMappingMethod::LINEAR);
+      left_graph_.setTileMapping(left_input_, 0);
+      left_graph_.createHostRead("left_outstream", left_output_);
+
+      right_graph_ =
+          graph_->createVirtualGraph(tiles_per_ipu, tiles_per_ipu * 2);
+      right_input_ =
+          right_graph_.addConstant(poplar::FLOAT, {tensor_size_}, 0.1f);
+      right_output_ = right_graph_.addVariable(
+          poplar::FLOAT, {tensor_size_}, poplar::VariableMappingMethod::LINEAR);
+      right_graph_.setTileMapping(right_input_, 0);
+      right_graph_.createHostRead("right_outstream", right_output_);
+    }
+  }
+
+  void AddFloatToHalfCast(poplar::Graph& graph, const poplar::Tensor& input,
+                          poplar::Tensor& output,
+                          poplar::program::Sequence& seq,
+                          const std::string& debug_name) {
+    poplar::Tensor half =
+        popops::cast(graph, input, poplar::HALF, seq, debug_name + "Half");
+    poplar::Tensor full =
+        popops::cast(graph, half, poplar::FLOAT, seq, debug_name + "Full");
+    seq.add(poplar::program::Copy(full, output));
+  }
+
+  std::pair<std::vector<float>, std::vector<float>> RunSequence(
+      poplar::program::Sequence& seq) {
+    poplar::Engine engine(*graph_, seq);
+    engine.load(device_);
+
+    const uint32_t differing_seed_vals[] = {1, 2, 3, 4};
+    engine.writeTensor("differing_seed", &differing_seed_vals[0],
+                       &differing_seed_vals[4]);
+    engine.run(0);
+
+    std::vector<float> left_result(replication_factor_ * tensor_size_);
+    engine.readTensor("left_outstream", &left_result.front(),
+                      &left_result.back() + 1);
+
+    auto right_result = left_result;
+    engine.readTensor("right_outstream", &right_result.front(),
+                      &right_result.back() + 1);
+
+    return {left_result, right_result};
+  }
+
+  poplar::Graph left_graph_;
+  poplar::Tensor left_input_;
+  poplar::Tensor left_output_;
+
+  poplar::Graph right_graph_;
+  poplar::Tensor right_input_;
+  poplar::Tensor right_output_;
+
+  std::size_t tensor_size_ = 1000;
+};
+
+TEST_F(PrngSeedStateShardedTest, TaskParallelism) {
+  // This test checks that using either stochastic rounding mode produces
+  // the correct results when running a replicated graph with task parallelism,
+  // where the seed changes can happen at the same time on different IPUs.
+  poplar::program::Sequence seq;
+
+  poplar::setStochasticRounding(*graph_, seq, true);
+  auto prng_state =
+      PrngSeedState::SetupSeeds(*graph_, identical_seed_, differing_seed_, seq);
+
+  // An arbitrary operation so that both graphs don't start with the same
+  // programs.
+  auto right_square = popops::map(
+      right_graph_, popops::expr::UnaryOpType::SQUARE, right_input_, seq);
+
+  prng_state.ChangeStochasticRoundingMethod(
+      StochasticRoundingMethod_IdenticalSeeds, seq);
+  AddFloatToHalfCast(left_graph_, left_input_, left_output_, seq, "left");
+
+  prng_state.ChangeStochasticRoundingMethod(
+      StochasticRoundingMethod_DifferingSeeds, seq);
+  AddFloatToHalfCast(right_graph_, right_input_, right_output_, seq, "right");
+
+  // Since the operations in left/right graph have no data dependencies between
+  // each other they're able to be run in parallel.
+  const auto results = RunSequence(seq);
+  const auto& left_result = results.first;
+  const auto& right_result = results.second;
+
+  auto left_replica1_start = left_result.begin();
+  auto left_replica1_end = left_result.begin() + tensor_size_;
+  auto left_replica2_start = left_replica1_end;
+  ASSERT_TRUE(
+      std::equal(left_replica1_start, left_replica1_end, left_replica2_start))
+      << "The left_graph casts are done using identical seed so should produce "
+         "the same result across replicas.";
+
+  auto right_replica1_start = right_result.begin();
+  auto right_replica1_end = right_result.begin() + tensor_size_;
+  auto right_replica2_start = right_replica1_end;
+  ASSERT_FALSE(std::equal(right_replica1_start, right_replica1_end,
+                          right_replica2_start))
+      << "The right_graph casts are done using differing seeds so should "
+         "produce different results across replicas.";
 }
 
 // Fixture for tests that need to execute lowered hlo on an IPU device.
