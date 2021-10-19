@@ -14,11 +14,11 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
+#include <vector>
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 
@@ -108,7 +108,13 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternMetaTarget(0),
     PatternInputs({2}),
     PatternOutputs({0}),
-    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
+    PatternInplaceDescriptionFn([] (const HloMatcherMatched&) {
+      return HloPoplarUseDescriptions{
+        HloPoplarUseDescription{/*operand_number=*/0,
+          /*operand_index=*/ShapeIndex{},
+          /*output_index=*/ShapeIndex{},
+          /*kind=*/BufferUseKind::USE_ALIAS_READ_ONLY} };
+    }),
     Pattern({
       {HloOpcode::kPad, NodeOperands({2, 1}), IsExternalPadding},
       {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
