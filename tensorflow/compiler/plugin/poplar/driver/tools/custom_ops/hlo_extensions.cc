@@ -486,21 +486,45 @@ REGISTER_HLO_INST_EXTENSIONS(kFusion, [](HloOpcode opcode) {
   RegisterHloInstructionExtension<InplaceExtension>(
       opcode, [](const HloInstruction* inst) {
         if (IsPopOpsFusion(inst)) {
+          // Aggregate op inplace type from its buffer use kind.
+          // For each inplace description, look on its buffer use.
+          // Because we have only per-instruction inplace type,
+          // we mark instruction read/write if it has at least one r/w aliased
+          // buffer. We mark instruction read/only if it has at least one r/o
+          // aliased buffer and has no r/w buffers.
+          BufferUseKind use_kind = BufferUseKind::USE_NO_ALIAS;
           HloPoplarInplaceDescription::OperandIndices inplace_operands;
           auto fusion_config = inst->backend_config<PoplarBackendConfig>()
                                    .ValueOrDie()
                                    .fusion_config();
           auto inplace_descriptions = fusion_config.inplace_descriptions();
           for (const auto& inplace_description : inplace_descriptions) {
-            inplace_operands.push_back(
-                HloPoplarUseDescription::FromProto(inplace_description)
-                    .operand_number());
+            auto use_description =
+                HloPoplarUseDescription::FromProto(inplace_description);
+            if (use_description.kind() > use_kind) {
+              use_kind = use_description.kind();
+            }
+            inplace_operands.push_back(use_description.operand_number());
           }
           absl::c_sort(inplace_operands);
           if (inplace_operands.size()) {
-            return HloPoplarInplaceDescription(
-                HloInstructionType::kInplaceReadWrite,
-                std::move(inplace_operands), /*allow_non_inplace=*/false);
+            HloInstructionType inplace_type;
+            switch (use_kind) {
+              case BufferUseKind::USE_ALIAS_READ_ONLY:
+                inplace_type = HloInstructionType::kInplaceReadOnly;
+                break;
+              case BufferUseKind::USE_ALIAS_READ_WRITE:
+                inplace_type = HloInstructionType::kInplaceReadWrite;
+                break;
+              case BufferUseKind::USE_NO_ALIAS:
+                inplace_type = HloInstructionType::kNotInplace;
+                break;
+              default:
+                LOG(FATAL) << "Invalid buffer use kind.";
+            }
+            return HloPoplarInplaceDescription(inplace_type,
+                                               std::move(inplace_operands),
+                                               /*allow_non_inplace=*/false);
           } else {
             return HloPoplarInplaceDescription();
           }

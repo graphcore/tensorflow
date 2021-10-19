@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_into_poplar_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/shortest_path_scheduler.h"
@@ -580,11 +581,53 @@ ENTRY c1 {
   // Make sure that the only inplace instruction is a call to scaled add to.
   auto inplace_instructions = GetInplaceInstructions(module0);
   EXPECT_THAT(inplace_instructions.size(), 1);
+  auto inplace_description =
+      GetInplaceDescription(*inplace_instructions.begin());
+  EXPECT_TRUE(inplace_description.GetType() ==
+              HloInstructionType::kInplaceReadWrite);
 
   EXPECT_TRUE(module0->entry_computation()->root_instruction() ==
               *inplace_instructions.begin());
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ScaledInplaceXbY)(
       module0->entry_computation()->root_instruction()));
+}
+
+TEST_F(HloInplaceDependencyTest, PadZeroInplaceType) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  a = f32[20] parameter(0)
+  b = f32[10] parameter(1)
+  c = f32[] constant(0)
+  ROOT pad = f32[20] pad(b, c), padding=0_0x0_0x0_0x0_10
+}
+
+)";
+
+  auto module =
+      HloRunner::CreateModuleFromString(hlo, GetDebugOptionsForTest());
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module0);
+
+  FuseOpsLate fol(annotations);
+  EXPECT_TRUE(fol.Run(module0).ValueOrDie());
+  InplaceFinder inplaceFinder;
+  EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
+
+  auto inplace_instructions = GetInplaceInstructions(module0);
+  EXPECT_THAT(inplace_instructions.size(), 1);
+  auto inplace_description =
+      GetInplaceDescription(*inplace_instructions.begin());
+  EXPECT_TRUE(inplace_description.GetType() ==
+              HloInstructionType::kInplaceReadOnly);
+
+  EXPECT_TRUE(module0->entry_computation()->root_instruction() ==
+              *inplace_instructions.begin());
+  EXPECT_TRUE(IsPopOpsFusion(module0->entry_computation()->root_instruction(),
+                             "zero_pad"));
 }
 
 TEST_F(HloInplaceDependencyTest, InplaceInsideWhile) {
