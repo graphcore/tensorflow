@@ -28,7 +28,7 @@ from tensorflow.compat.v1 import global_variables
 from tensorflow.compat.v1 import train
 from tensorflow.python.ops.variables import global_variables_initializer
 from tensorflow.core.framework import attr_value_pb2
-from tensorflow.python.ipu.dataset_extractor import export_variables, import_variables
+from tensorflow.python.ipu.dataset_extractor import export_variables, import_variables, get_variable_handles
 from tensorflow.python.saved_model import saved_model
 
 
@@ -59,10 +59,12 @@ class Model(abc.ABC):
     variables = self.variables()
     if dirname:
       os.makedirs(dirname, exist_ok=True)
+    handle_names = self.session().run(get_variable_handles(variables))
+    handle_names = [x[0] for x in handle_names]
     self.session().run(
         export_variables(variables,
-                         output_file,
-                         is_input=False,
+                         names=handle_names,
+                         filename=output_file,
                          metadata=metadata))
 
 

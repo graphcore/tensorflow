@@ -31,15 +31,20 @@ REGISTER_OP("DatasetExtractor")
     .SetShapeFn(shape_inference::NoOutputs);
 
 REGISTER_OP("VariablesExporter")
-    .Input("inputs: output_types")
+    .Input("variables: var_types")
     .Attr("print_stats: bool")
-    .Attr("is_input: bool")
     .Attr("filename: string")
     .Attr("names: list(string)")
     .Attr("metadata_file: string")
-    .Attr("output_types: list(type) >= 1")
+    .Attr("var_types: list(type) >= 1")
     .SetIsStateful()
     .SetShapeFn(shape_inference::NoOutputs);
+
+REGISTER_OP("ResourceToHandleName")
+    .Input("variables: N * resource")
+    .Output("outputs: N * string")
+    .Attr("N: int >= 0")
+    .SetIsStateful();
 
 REGISTER_OP("VariablesImporter")
     .Output("outputs: output_types")

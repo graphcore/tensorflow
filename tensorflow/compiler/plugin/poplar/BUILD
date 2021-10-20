@@ -4065,6 +4065,22 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "var_handle_name_test",
+    size = "large",
+    srcs = ["tests/var_handle_name_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:random_ops",
+        "//tensorflow/python:resource_variable_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_xla_py_test(
     name = "variable_test",
     size = "large",
     srcs = ["tests/variable_test.py"],
@@ -5940,6 +5956,7 @@ test_suite(
         "update_op_dependencies_test",
         "user_op_internal_test",
         "util_test",
+        "var_handle_name_test",
         "variable_test",
         "variables_offload_and_partition_test",
         "weights_transpose_chans_flip_xy_test",
