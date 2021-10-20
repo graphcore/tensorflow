@@ -94,6 +94,7 @@ enum CollectiveOperator {
   COLLECTIVE_OP_LOGICAL_OR = 5;
   COLLECTIVE_OP_SQUARE_ADD = 6;
   COLLECTIVE_OP_LOCAL = 7;
+  COLLECTIVE_OP_MEAN = 8;
 };
 
 // An enum representing a subset of tiles per IPU.

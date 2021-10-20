@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
+from absl.testing import parameterized
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
@@ -23,10 +24,15 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.ops import array_ops
 
 
-class TestReplicatedReduceScatter(test_util.TensorFlowTestCase):
+class TestReplicatedReduceScatter(test_util.TensorFlowTestCase,
+                                  parameterized.TestCase):
+  @parameterized.named_parameters(
+      ('reduce_add', 'COLLECTIVE_OP_ADD', 4),
+      ('reduce_mean', 'COLLECTIVE_OP_MEAN', 1),
+  )
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
-  def test_reduce_scatter(self):
+  def test_reduce_scatter(self, op, scale):
     with session_lib.Session() as sess:
       num_replicas = 4
 
@@ -35,7 +41,7 @@ class TestReplicatedReduceScatter(test_util.TensorFlowTestCase):
       def my_net(*xs):
         y = [
             ipu.ops.reduce_scatter_op.reduce_scatter(
-                x, replication_factor=num_replicas) for x in xs
+                x, replication_factor=num_replicas, op=op) for x in xs
         ]
         return outfeed_queue.enqueue(y)
 
@@ -66,11 +72,11 @@ class TestReplicatedReduceScatter(test_util.TensorFlowTestCase):
       self.assertEqual(len(out[4]), np.ceil(5 / num_replicas) * num_replicas)
 
       # Check payloads.
-      self.assertAllEqual(1.0 * num_replicas * np.arange(1), out[0][:1])
-      self.assertAllEqual(2.0 * num_replicas * np.arange(2), out[1][:2])
-      self.assertAllEqual(3.0 * num_replicas * np.arange(3), out[2][:3])
-      self.assertAllEqual(4.0 * num_replicas * np.arange(4), out[3][:4])
-      self.assertAllEqual(5.0 * num_replicas * np.arange(5), out[4][:5])
+      self.assertAllEqual(1.0 * scale * np.arange(1), out[0][:1])
+      self.assertAllEqual(2.0 * scale * np.arange(2), out[1][:2])
+      self.assertAllEqual(3.0 * scale * np.arange(3), out[2][:3])
+      self.assertAllEqual(4.0 * scale * np.arange(4), out[3][:4])
+      self.assertAllEqual(5.0 * scale * np.arange(5), out[4][:5])
 
 
 if __name__ == "__main__":

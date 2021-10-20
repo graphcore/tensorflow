@@ -51,6 +51,8 @@ StatusOr<popops::CollectiveOperator> ToPoplarCollectiveOperator(
       return popops::CollectiveOperator::SQUARE_ADD;
     case CollectiveOperator::COLLECTIVE_OP_LOCAL:
       return popops::CollectiveOperator::LOCAL;
+    case CollectiveOperator::COLLECTIVE_OP_MEAN:
+      return popops::CollectiveOperator::MEAN;
     default:
       return InternalError("Invalid collective operator type.");
   }
