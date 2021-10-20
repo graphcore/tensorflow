@@ -27,6 +27,7 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.framework import dtypes
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import rnn
 from tensorflow.python.ops import variables
@@ -56,6 +57,7 @@ def _createFeeders(inputs, dimensions, dtype):
 
 
 class FrontendAttributesTest(test_util.TensorFlowTestCase):
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testSimpleSingleAttribute(self):
     with ops.device("/device:IPU:0"):
@@ -70,6 +72,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
         self.assertIsNone(_getFrontendAttributes(op1))
         self.assertEqual(attributes2.map.get("attr_a"), "a")
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testSimpleMultipleAttributes(self):
     with ops.device("/device:IPU:0"):
@@ -92,6 +95,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
           self.assertEqual(attributes3.map.get("attr_a"), "a")
           self.assertEqual(attributes3.map.get("attr_b"), "b")
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testSingleAttributeWithScopes(self):
     op1 = None
@@ -121,6 +125,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
       self.assertEqual(attributes3.map.get("attr_a"), "a")
       self.assertIsNone(_getFrontendAttributes(op4))
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testMultipleAttributesWithScopes(self):
     op1 = None
@@ -154,6 +159,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
       self.assertIsNone(attributes3.map.get("attr_b"))
       self.assertIsNone(_getFrontendAttributes(op4))
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testStochasticRounding(self):
     op1 = None
@@ -218,6 +224,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
           threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_UNDEFINED))
       self.assertIsNone(attributes5.map.get("attr_b"))
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testMatMulPartialsType(self):
     cfg = ipu.config.IPUConfig()
@@ -252,6 +259,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
         self.assert_vertices_contain_list(report, [expected_output[0]])
         report_helper.clear_reports()
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testLSTMPartialsType(self):
     cfg = ipu.config.IPUConfig()
@@ -328,12 +336,49 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
         report = pva.openReport(report_helper.find_report())
         self.assert_vertices_contain_list(report, [expected_output])
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testUnsupportedPartialsType(self):
     with self.assertRaisesRegex(
         ValueError, "Only support float16, float32, provided float64"):
       with ipu.scopes.partials_type(np.float64):
         pass
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def testStochasticRoundingNestedVisits(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.floating_point_behaviour.esr = True
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
+
+    # This tests that the stochastic rounding state persists
+    # as we lower code that invokes multiple visitors - one for the
+    # outer my_net function and another for the loop.
+    def my_net(data, dummy):
+      def body(data, _):
+        with ipu.scopes.stochastic_rounding(True):
+          data_f16 = math_ops.cast(data, dtype=np.float16)
+          return (data, data_f16)
+
+      with ipu.scopes.stochastic_rounding(False):
+        data_f16_no_sr = math_ops.cast(data, dtype=np.float16)
+        _, data_f16_sr = ipu.loops.repeat(2, body, inputs=[data, dummy])
+        return data_f16_no_sr, data_f16_sr
+
+    data = random_ops.random_uniform([10, 10], dtype=np.float32, seed=1)
+    dummy = np.zeros([10, 10], dtype=np.float16)
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net, inputs=[data, dummy])
+
+    with self.session() as sess:
+      data_f16_no_sr, data_f16_sr = sess.run(res)
+      matching = data_f16_no_sr == data_f16_sr
+      self.assertFalse(
+          matching.all(),
+          "Expected different results since one cast uses stochastic rounding and the other doesn't"  # pylint: disable=line-too-long
+      )
 
 
 if __name__ == "__main__":

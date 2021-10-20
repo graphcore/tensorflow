@@ -1010,6 +1010,7 @@ tf_py_test(
     name = "frontend_attributes_test",
     size = "medium",
     srcs = ["tests/frontend_attributes_test.py"],
+    tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/xla:xla_data_proto_py",

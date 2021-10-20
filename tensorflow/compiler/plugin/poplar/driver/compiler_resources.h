@@ -187,6 +187,8 @@ struct CompilerResources {
   // The implementation of the progress bar.
   std::unique_ptr<ProgressBarBase> progress_bar;
 
+  bool stochastic_rounding_enabled;
+
   PrngSeedState prng_seed_state;
   const bool enable_prng_seed_consistency_checks = false;
 
@@ -242,7 +244,8 @@ struct CompilerResources {
         num_io_tiles(num_io_tiles),
         io_tile_available_memory_proportion(
             io_tile_available_memory_proportion),
-        current_cluster_visitor(nullptr) {
+        current_cluster_visitor(nullptr),
+        stochastic_rounding_enabled(floating_point_behaviour.esr()) {
     if (enable_progress_bar) {
       progress_bar = absl::make_unique<ProgressBar>(module);
     } else {
@@ -305,6 +308,7 @@ struct CompilerResources {
         num_io_tiles(0),
         io_tile_available_memory_proportion(0.9),
         current_cluster_visitor(nullptr),
+        stochastic_rounding_enabled(floating_point_behaviour.esr()),
         enable_prng_seed_consistency_checks(
             enable_prng_seed_consistency_checks) {
     progress_bar = absl::make_unique<NoProgressBar>();
