@@ -81,7 +81,15 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
 
   Status HandleParameter(HloInstruction* inst) override {
     // Create a buffer for each shape.
-    for (auto& indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
+
+    const auto shapes = ShapeUtil::GetLeafShapes(inst->shape());
+    // If shapes is empty then won't hit for loop below so special case
+    // this and add an empty buffer.
+    if (shapes.size() == 0) {
+      analysis_->SetInstructionBufferSet(
+          inst, InstructionPoplarBufferSet(inst->shape()));
+    }
+    for (auto& indexed_shape : shapes) {
       HloPoplarBufferSet buffer_set;
       if (input_buffer_sets_.size()) {
         // A buffer set was passed in at the callsite.
@@ -417,43 +425,46 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
   }
 
   // Unary Elementwise Ops - inplace on 0th operand.
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleAbs)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleCeil)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleClz)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleCos)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleExp)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleExpm1)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleFloor)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleLog1p)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleLog)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleNegate)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleNot)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandlePopulationCount)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleReal)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleRound)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleRsqrt)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleSign)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleSin)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleSqrt)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleTanh)
-  // Binary Elementwise ops - inplace on 0th operand.
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleAdd)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleAtan2)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleComplex)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleDivide)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleMaximum)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleMinimum)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleMultiply)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandlePower)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleRemainder)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleSubtract)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleShiftLeft)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleShiftRightArithmetic)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleShiftRightLogical)
-  // These ops are implemented as inplace ops on operand 0 as well.
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleDynamicUpdateSlice)
-  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleScatter)
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleAbs);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleCeil);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleCbrt);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleClz);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleCos);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleExp);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleExpm1);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleFloor);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleLog1p);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleLog);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleLogistic);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleNegate);
 
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleNot);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandlePopulationCount);
+
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleReal);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleRound);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleRsqrt);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleSign);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleSin);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleSqrt);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleTanh);
+  // Binary Elementwise ops - inplace on 0th operand.
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleAdd);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleAtan2);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleComplex);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleDivide);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleMaximum);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleMinimum);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleMultiply);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandlePower);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleRemainder);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleSubtract);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleShiftLeft);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleShiftRightArithmetic);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleShiftRightLogical);
+  // These ops are implemented as inplace ops on operand 0 as well.
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleDynamicUpdateSlice);
+  HANDLE_AS_SIMPLE_INPLACE_READ_WRITE(HandleScatter);
 #undef HANDLE_AS_SIMPLE_INPLACE_READ_WRITE
 
 #define HANDLE_LOGICAL_BINARY_ELEMENTWISE(Name)  \
@@ -461,9 +472,9 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
     return HandleLogicalBinaryElementwise(inst); \
   }
 
-  HANDLE_LOGICAL_BINARY_ELEMENTWISE(HandleAnd)
-  HANDLE_LOGICAL_BINARY_ELEMENTWISE(HandleOr)
-  HANDLE_LOGICAL_BINARY_ELEMENTWISE(HandleXor)
+  HANDLE_LOGICAL_BINARY_ELEMENTWISE(HandleAnd);
+  HANDLE_LOGICAL_BINARY_ELEMENTWISE(HandleOr);
+  HANDLE_LOGICAL_BINARY_ELEMENTWISE(HandleXor);
 
 #undef HANDLE_LOGICAL_BINARY_ELEMENTWISE
 
@@ -472,53 +483,59 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
     return HandleSimpleInplace(inst,                                         \
                                /*kind=*/BufferUseKind::USE_ALIAS_READ_ONLY); \
   }
-  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleAddDependency)
-  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleBitcastConvert)
-  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleBroadcast)
-  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleReshape)
-  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleReverse)
-  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleSlice)
-  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleTranspose)
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleAddDependency);
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleBitcastConvert);
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleBroadcast);
+
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleReshape);
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleReverse);
+
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleSlice);
+  HANDLE_AS_SIMPLE_INPLACE_READ_ONLY(HandleTranspose);
 
 #undef HANDLE_AS_SIMPLE_INPLACE_READ_ONLY
 
 #define HANDLE_AS_NOT_INPLACE(Name) \
   Status Name(HloInstruction* inst) override { return HandleNotInplace(inst); }
 
-  HANDLE_AS_NOT_INPLACE(HandleAfterAll)
-  HANDLE_AS_NOT_INPLACE(HandleAllToAll)
-  HANDLE_AS_NOT_INPLACE(HandleBatchNormGrad)
-  HANDLE_AS_NOT_INPLACE(HandleBatchNormInference)
-  HANDLE_AS_NOT_INPLACE(HandleBatchNormTraining)
-  HANDLE_AS_NOT_INPLACE(HandleCompare)
-  HANDLE_AS_NOT_INPLACE(HandleConstant)
-  HANDLE_AS_NOT_INPLACE(HandleConvert)
-  HANDLE_AS_NOT_INPLACE(HandleConvolution)
-  HANDLE_AS_NOT_INPLACE(HandleCopy)
-  HANDLE_AS_NOT_INPLACE(HandleDomain)
-  HANDLE_AS_NOT_INPLACE(HandleDot)
-  HANDLE_AS_NOT_INPLACE(HandleDynamicSlice)
-  HANDLE_AS_NOT_INPLACE(HandleGather)
-  HANDLE_AS_NOT_INPLACE(HandleInfeed)
-  HANDLE_AS_NOT_INPLACE(HandleIota)
-  HANDLE_AS_NOT_INPLACE(HandleIsFinite)
-  HANDLE_AS_NOT_INPLACE(HandleOutfeed)
-  HANDLE_AS_NOT_INPLACE(HandleReduce)
-  HANDLE_AS_NOT_INPLACE(HandleReducePrecision)
-  HANDLE_AS_NOT_INPLACE(HandleReduceWindow)
-  HANDLE_AS_NOT_INPLACE(HandleRng)
-  HANDLE_AS_NOT_INPLACE(HandleSelectAndScatter)
-  HANDLE_AS_NOT_INPLACE(HandleTupleSelect)
+  HANDLE_AS_NOT_INPLACE(HandleAfterAll);
+  HANDLE_AS_NOT_INPLACE(HandleAllToAll);
+  HANDLE_AS_NOT_INPLACE(HandleBatchNormGrad);
+  HANDLE_AS_NOT_INPLACE(HandleBatchNormInference);
+  HANDLE_AS_NOT_INPLACE(HandleBatchNormTraining);
+  HANDLE_AS_NOT_INPLACE(HandleCholesky);
+  HANDLE_AS_NOT_INPLACE(HandleCompare);
+  HANDLE_AS_NOT_INPLACE(HandleConstant);
+  HANDLE_AS_NOT_INPLACE(HandleConvert);
+  HANDLE_AS_NOT_INPLACE(HandleConvolution);
+  HANDLE_AS_NOT_INPLACE(HandleCopy);
+  HANDLE_AS_NOT_INPLACE(HandleDomain);
+  HANDLE_AS_NOT_INPLACE(HandleDot);
+  HANDLE_AS_NOT_INPLACE(HandleDynamicSlice);
+  HANDLE_AS_NOT_INPLACE(HandleGather);
+  HANDLE_AS_NOT_INPLACE(HandleInfeed);
+  HANDLE_AS_NOT_INPLACE(HandleIota);
+  HANDLE_AS_NOT_INPLACE(HandleIsFinite);
+
+  HANDLE_AS_NOT_INPLACE(HandleOutfeed);
+  HANDLE_AS_NOT_INPLACE(HandleReduce);
+
+  HANDLE_AS_NOT_INPLACE(HandleReducePrecision);
+  HANDLE_AS_NOT_INPLACE(HandleReduceWindow);
+  HANDLE_AS_NOT_INPLACE(HandleRng);
+  HANDLE_AS_NOT_INPLACE(HandleSelectAndScatter);
+  HANDLE_AS_NOT_INPLACE(HandleTriangularSolve);
+  HANDLE_AS_NOT_INPLACE(HandleTupleSelect);
   // TODO(T20398): Clamp and Select could be inplace on operand index 1.
-  HANDLE_AS_NOT_INPLACE(HandleClamp)
-  HANDLE_AS_NOT_INPLACE(HandleSelect)
+  HANDLE_AS_NOT_INPLACE(HandleClamp);
+  HANDLE_AS_NOT_INPLACE(HandleSelect);
 
 #undef HANDLE_AS_NOT_INPLACE
 
  private:
-  // Handles instructions which are inplace on all the inputs, call the "comp"
-  // computation and the output is the buffer outputs from the root instruction
-  // of that computation.
+  // Handles instructions which are inplace on all the inputs, call the
+  // "comp" computation and the output is the buffer outputs from the root
+  // instruction of that computation.
   Status HandleInplaceVisitor(HloInstruction* inst, HloComputation* comp) {
     ComputationInputBufferSets map_input_buffer_sets(inst->operand_count());
     for (int64 i = 0; i != inst->operand_count(); ++i) {
@@ -625,7 +642,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
     const auto& buffer_set = analysis_->GetBufferSet(operand_0);
     analysis_->SetInstructionBufferSetOutput(inst, ShapeIndex{}, buffer_set);
 
-    VLOG(2) << "Forwarding buffer set " << buffer_set << " from "
+    VLOG(3) << "Forwarding buffer set " << buffer_set << " from "
             << operand_0->ToString() << " to " << inst->ToString();
     return Status::OK();
   }
@@ -673,7 +690,7 @@ HloPoplarBuffer* HloPoplarDataflowAnalysis::NewHloPoplarBuffer(
                             locality));
   CHECK(emplaced.second);
 
-  VLOG(2) << "New HloPoplarBuffer = " << emplaced.first->second.ToString();
+  VLOG(3) << "New HloPoplarBuffer = " << emplaced.first->second.ToString();
 
   return &emplaced.first->second;
 }
