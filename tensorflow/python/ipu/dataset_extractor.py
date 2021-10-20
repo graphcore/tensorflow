@@ -67,17 +67,32 @@ def dataset_extractor(dataset,
                                                  **dataset._flat_structure)  # pylint: disable=protected-access
 
 
+def get_variable_handles(variables):
+  """Allows the user to resolve variables to their variable handle names.
+
+    Args:
+      variables: List of variables to resolve to handles.
+
+    Returns:
+      List of strings giving the variable handles.
+  """
+  handles = [v.handle for v in variables]
+  return gen_dataset_exporters.resource_to_handle_name(variables=handles)
+
+
 def export_variables(variables,
+                     names,
                      filename,
-                     is_input=True,
                      metadata=None,
                      print_stats=True):
   """Allows the user to export to file the content of the variables.
 
     Args:
       variables: List of variables to export to file.
+      names: The names to export the variables under. Should normally be the
+             names of the variable handles, in order to match anchor names
+             exported with the executable (see get_variable_handles()).
       filename: Where to save the extracted elements to.
-      is_input: True if the variables are inputs, False if they're parameters.
       metadata: (optional) Path to a metadata file to validate the variables
         against. If provided then the list of variables must exactly match the
         number, type and shape of the parameters or inputs from the metadata
@@ -92,11 +107,11 @@ def export_variables(variables,
       The operation that will export the content of the variables to file.
 
     """
-  names = [v.name for v in variables]
-
-  return gen_dataset_exporters.variables_exporter(variables, print_stats,
-                                                  is_input, filename, names,
-                                                  metadata or "")
+  return gen_dataset_exporters.variables_exporter(variables=variables,
+                                                  names=names,
+                                                  print_stats=print_stats,
+                                                  filename=filename,
+                                                  metadata_file=metadata or "")
 
 
 def import_variables(variables,

@@ -271,11 +271,30 @@ class DatasetExtractor : public OpKernel {
 REGISTER_KERNEL_BUILDER(Name("DatasetExtractor").Device(DEVICE_CPU),
                         DatasetExtractor);
 
+class ResourceToHandleName : public OpKernel {
+ public:
+  explicit ResourceToHandleName(OpKernelConstruction* ctx) : OpKernel(ctx) {}
+
+  void Compute(OpKernelContext* ctx) override {
+    auto num_inputs = ctx->num_inputs();
+    for (int i = 0; i < num_inputs; i++) {
+      Tensor* output_tensor = nullptr;
+      OP_REQUIRES_OK(ctx,
+                     ctx->allocate_output(i, TensorShape({1}), &output_tensor));
+      auto output_flat = output_tensor->flat<tstring>();
+      const ResourceHandle& rh = HandleFromInput(ctx, i);
+      output_flat(0) = rh.name();
+    }
+  }
+};
+
+REGISTER_KERNEL_BUILDER(Name("ResourceToHandleName").Device(DEVICE_DEFAULT),
+                        ResourceToHandleName);
+
 class VariablesExporter : public OpKernel {
  public:
   explicit VariablesExporter(OpKernelConstruction* ctx) : OpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("print_stats", &print_stats_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("is_input", &is_input_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("filename", &filename_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("names", &names_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("metadata_file", &metadata_));
@@ -343,7 +362,6 @@ class VariablesExporter : public OpKernel {
 
  private:
   bool print_stats_;
-  bool is_input_;
   std::string filename_;
   std::vector<std::string> names_;
   std::string metadata_;
