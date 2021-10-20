@@ -609,14 +609,18 @@ class ReportJSON(object):
                                              encoding="utf-8")
         if evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
           if evt.data_transfer.data_transfer:
-            assert IpuTraceEvent.HOST_TO_DEVICE_TRANSFER not in self.events
-            self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER] = js.loads(
-                evt.data_transfer.data_transfer, encoding="utf-8")
+            # Save every transfer event
+            if IpuTraceEvent.HOST_TO_DEVICE_TRANSFER not in self.events:
+              self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER] = []
+            data = js.loads(evt.data_transfer.data_transfer, encoding="utf-8")
+            self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER].append(data)
         if evt.type == IpuTraceEvent.DEVICE_TO_HOST_TRANSFER:
           if evt.data_transfer.data_transfer:
-            assert IpuTraceEvent.DEVICE_TO_HOST_TRANSFER not in self.events
-            self.events[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER] = js.loads(
-                evt.data_transfer.data_transfer, encoding="utf-8")
+            # Save every transfer event
+            if IpuTraceEvent.DEVICE_TO_HOST_TRANSFER not in self.events:
+              self.events[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER] = []
+            data = js.loads(evt.data_transfer.data_transfer, encoding="utf-8")
+            self.events[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER].append(data)
         if evt.type == IpuTraceEvent.LOAD_ENGINE:
           pass
         if evt.type == IpuTraceEvent.EXECUTE:
@@ -626,39 +630,47 @@ class ReportJSON(object):
         pass
     return events_types
 
-  def get_host_to_device_event_names(self):
+  def get_host_to_device_event_names(self, event_idx=0):
     return [
-        t["name"]
-        for t in self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER]["tensors"]
+        t["name"] for t in self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER]
+        [event_idx]["tensors"]
     ]
 
-  def get_device_to_host_event_names(self):
+  def get_device_to_host_event_names(self, event_idx=0):
     return [
-        t["name"]
-        for t in self.events[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER]["tensors"]
+        t["name"] for t in self.events[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER]
+        [event_idx]["tensors"]
     ]
 
-  def assert_host_to_device_event_names(self, names, msg=None):
-    self.test.assertEqual(
-        len(names),
-        len(
-            self.events.get(IpuTraceEvent.HOST_TO_DEVICE_TRANSFER,
-                            {}).get("tensors", [])), msg)
-    for name in names:
-      self.test.assertEqual(
-          count_matches_in_list(self.get_host_to_device_event_names(), name),
-          1, msg)
+  def assert_host_to_device_event_names(self, names, msg=None, event_idx=0):
+    if names:
+      self.test.assertTrue(
+          IpuTraceEvent.HOST_TO_DEVICE_TRANSFER in self.events)
+      transfer_events = self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER]
+      self.test.assertTrue(len(transfer_events) > event_idx)
+      event = transfer_events[event_idx]
+      self.test.assertEqual(len(names), len(event.get('tensors', [])), msg)
 
-  def assert_device_to_host_event_names(self, names, msg=None):
-    self.test.assertEqual(
-        len(names),
-        len(
-            self.events.get(IpuTraceEvent.DEVICE_TO_HOST_TRANSFER,
-                            {}).get("tensors", [])), msg)
-    for name in names:
-      self.test.assertEqual(
-          count_matches_in_list(self.get_device_to_host_event_names(), name),
-          1, msg)
+      for name in names:
+        self.test.assertEqual(
+            count_matches_in_list(
+                self.get_host_to_device_event_names(event_idx=event_idx),
+                name), 1, msg)
+
+  def assert_device_to_host_event_names(self, names, msg=None, event_idx=0):
+    if names:
+      self.test.assertTrue(
+          IpuTraceEvent.DEVICE_TO_HOST_TRANSFER in self.events)
+      transfer_events = self.events[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER]
+      self.test.assertTrue(len(transfer_events) > event_idx)
+      event = transfer_events[event_idx]
+      self.test.assertEqual(len(names), len(event.get('tensors', [])), msg)
+
+      for name in names:
+        self.test.assertEqual(
+            count_matches_in_list(
+                self.get_device_to_host_event_names(event_idx=event_idx),
+                name), 1, msg)
 
   def get_instruction_info(self):
     return self.instruction_info
@@ -675,6 +687,12 @@ class ReportJSON(object):
 
   def assert_contains_device_to_host_transfer_event(self):
     assert IpuTraceEvent.DEVICE_TO_HOST_TRANSFER in self.events
+
+  def assert_num_host_to_device_transfer_events(self, num):
+    assert len(self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER]) == num
+
+  def assert_num_device_to_host_transfer_events(self, num):
+    assert len(self.events[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER]) == num
 
   def get_tensor_map(self):
     return self.tensor_map
