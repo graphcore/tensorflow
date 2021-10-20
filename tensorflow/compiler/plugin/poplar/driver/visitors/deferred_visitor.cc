@@ -209,7 +209,10 @@ Status DeferredAllocations::PostProcessAllocation(
   DeferredAllocationsLocationsSet& locations =
       to_allocate_locations_.at(input_location);
   locations.insert(allocation_location);
-  for (const TensorLocation location : locations) {
+  std::vector<TensorLocation> flat_locations(locations.begin(),
+                                             locations.end());
+  absl::c_sort(flat_locations);
+  for (const TensorLocation& location : flat_locations) {
     VLOG(1) << "Setting the allocation at (" << location.instruction->name()
             << "," << location.flattened_output_tuple_index << ").";
     TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map_, location.instruction,
