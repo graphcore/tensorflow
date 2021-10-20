@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/all_to_all_finder.h"
 
 #include <algorithm>
+#include <string>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
@@ -37,8 +38,14 @@ limitations under the License.
 Find the pattern:
 
 a = MultiUpdateAdd(WideConstant, Indices, Updates, Scale)
-a = AllReduce(a)
+a = AllReduce(a, method=ADD)
 a = ReplicationNormalise(a)
+
+Or
+
+a = MultiUpdateAdd(WideConstant, Indices, Updates, Scale)
+a = AllReduce(a, method=MEAN)
+
 
 And transform it into:
 
@@ -54,18 +61,26 @@ tensor * replication factor.
 namespace xla {
 namespace poplarplugin {
 
+bool IsMultiUpdateAdd(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst);
+}
+
+bool IsMultiUpdate(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::MultiUpdate)(inst);
+}
+
 namespace {
 // clang-format off
 static const std::vector<HloMatcherPattern> patterns = {
   HloMatcherPattern(
-    PatternType("multi_update_add"),
+    PatternType("reduce_add_multi_update_add"),
     PatternMetaTarget(2),
     PatternInputs({5, 6, 7}),
     PatternOutputs({0}),
     Pattern({
         {HloOpcode::kCustomCall, NodeOperands({1}), IsPoplarInstruction(PoplarOp::ReplicationNormalise)},
         {HloOpcode::kAllReduce, NodeOperands({2}), IsAllReduceAdd},
-        {HloOpcode::kCustomCall, NodeOperands({3, 5, 6, 7}), IsPoplarInstruction(PoplarOp::MultiUpdateAdd)},
+        {HloOpcode::kCustomCall, NodeOperands({3, 5, 6, 7}), IsMultiUpdateAdd},
         {HloOpcode::kBroadcast, NodeOperands({4})},
         {HloOpcode::kConstant, NodeOperands({}), IsScalarConstant},
         {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
@@ -74,22 +89,61 @@ static const std::vector<HloMatcherPattern> patterns = {
     })
   ),
   HloMatcherPattern(
-    PatternType("multi_update"),
+    PatternType("reduce_add_multi_update"),
     PatternMetaTarget(2),
     PatternInputs({5, 6}),
     PatternOutputs({0}),
     Pattern({
         {HloOpcode::kCustomCall, NodeOperands({1}), IsPoplarInstruction(PoplarOp::ReplicationNormalise)},
         {HloOpcode::kAllReduce, NodeOperands({2}), IsAllReduceAdd},
-        {HloOpcode::kCustomCall, NodeOperands({3, 5, 6}), IsPoplarInstruction(PoplarOp::MultiUpdate)},
+        {HloOpcode::kCustomCall, NodeOperands({3, 5, 6}), IsMultiUpdate},
         {HloOpcode::kBroadcast, NodeOperands({4})},
         {HloOpcode::kConstant, NodeOperands({}), IsScalarConstant},
         {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
         {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16OrF32},
     })
   ),
+  HloMatcherPattern(
+    PatternType("reduce_mean_multi_update_add"),
+    PatternMetaTarget(2),
+    PatternInputs({4, 5, 6}),
+    PatternOutputs({0}),
+    Pattern({
+        {HloOpcode::kAllReduce, NodeOperands({1}), IsAllReduceMean},
+        {HloOpcode::kCustomCall, NodeOperands({2, 4, 5, 6}), IsMultiUpdateAdd},
+        {HloOpcode::kBroadcast, NodeOperands({3})},
+        {HloOpcode::kConstant, NodeOperands({}), IsScalarConstant},
+        {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+        {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16OrF32},
+        {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16OrF32},
+    })),
+  HloMatcherPattern(
+    PatternType("reduce_mean_multi_update"),
+    PatternMetaTarget(2),
+    PatternInputs({4, 5}),
+    PatternOutputs({0}),
+    Pattern({
+        {HloOpcode::kAllReduce, NodeOperands({1}), IsAllReduceMean},
+        {HloOpcode::kCustomCall, NodeOperands({2, 4, 5}), IsMultiUpdate},
+        {HloOpcode::kBroadcast, NodeOperands({3})},
+        {HloOpcode::kConstant, NodeOperands({}), IsScalarConstant},
+        {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+        {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16OrF32},
+    })),
 };
 // clang-format on
+
+struct InstructionIndices {
+  int32 all_reduce;
+  int32 multi_update;
+  int32 broadcast;
+  int32 indices;
+  int32 updates;
+  int32 scale;
+};
+
+struct InstructionIndices reduce_add_indices = {1, 2, 3, 5, 6, 7};
+struct InstructionIndices reduce_mean_indices = {0, 1, 2, 4, 5, 6};
 
 // Add an all gather and reshape it.
 static HloInstruction* AddAllGatherAndReshape(HloInstruction* original,
@@ -156,16 +210,18 @@ static bool IsSwapCostEffective(HloInstruction* multi_update,
 
 // Actually apply the transformation.
 static Status ApplyTransformation(HloMatcherMatched& match,
-                                  uint32 replication_factor) {
+                                  uint32 replication_factor,
+                                  const InstructionIndices& instr_indices) {
   HloComputation* comp = match.computation;
 
-  HloMultiUpdateInstruction* multi_update =
-      Cast<HloMultiUpdateInstruction>(match.instruction_mapping[2]);
+  HloMultiUpdateInstruction* multi_update = Cast<HloMultiUpdateInstruction>(
+      match.instruction_mapping[instr_indices.multi_update]);
 
-  HloInstruction* broadcast = match.instruction_mapping[3];
-  HloInstruction* indices = match.instruction_mapping[5];
+  HloInstruction* broadcast =
+      match.instruction_mapping[instr_indices.broadcast];
+  HloInstruction* indices = match.instruction_mapping[instr_indices.indices];
   CHECK_EQ(indices->shape().rank(), 2);
-  HloInstruction* updates = match.instruction_mapping[6];
+  HloInstruction* updates = match.instruction_mapping[instr_indices.updates];
   CHECK_EQ(updates->shape().rank(), 2);
 
   // Take the indices parameter to the multi update add and all gather it
@@ -191,16 +247,14 @@ static Status ApplyTransformation(HloMatcherMatched& match,
   }
 
   HloInstruction* output;
-  if (match.pattern_idx == 0) {
+  if (match.pattern.GetType().find("multi_update_add") != std::string::npos) {
     // Create MultiUpdateAdd.
-    HloInstruction* scale = match.instruction_mapping[7];
+    HloInstruction* scale = match.instruction_mapping[instr_indices.scale];
     output = comp->AddInstruction(CreateMultiUpdateAdd(
         broadcast->shape(),
         {broadcast, reduced_indices, normalized_updates, scale},
         serialization_factor));
   } else {
-    // Create MultiUpdate.
-    CHECK_EQ(match.pattern_idx, 1);
     output = comp->AddInstruction(CreateMultiUpdate(
         broadcast->shape(), {broadcast, reduced_indices, normalized_updates},
         serialization_factor));
@@ -221,10 +275,18 @@ AllToAllFinder::AllToAllFinder(CompilerAnnotations& annotations,
 
 StatusOr<bool> AllToAllFinder::HandleMatch(HloMatcherMatched& match,
                                            const absl::optional<int64>) {
-  HloInstruction* all_reduce = match.instruction_mapping[1];
-  HloInstruction* multi_update = match.instruction_mapping[2];
+  const auto& instr_indices = match.pattern.GetType().find("reduce_mean_") == 0
+                                  ? reduce_mean_indices
+                                  : reduce_add_indices;
+
+  HloInstruction* all_reduce =
+      match.instruction_mapping[instr_indices.all_reduce];
+  HloInstruction* multi_update =
+      match.instruction_mapping[instr_indices.multi_update];
+
   if (IsSwapCostEffective(multi_update, all_reduce, replication_factor)) {
-    TF_RETURN_IF_ERROR(ApplyTransformation(match, replication_factor));
+    TF_RETURN_IF_ERROR(
+        ApplyTransformation(match, replication_factor, instr_indices));
     return true;
   }
 
