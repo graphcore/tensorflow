@@ -1092,19 +1092,22 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
       // We do not call GetNext if queues are full.
       // We make an assumption that all tensors from each queue for each
       // replica for an infeed are dequeued every iteration - we therefore
-      // only need to check if the first queue is full to know whether all the
-      // queues are full.
+      // only need to check if the first replica is full to know whether all the
+      // queues are full. We do, however, have to check each queue for the first
+      // replica since these may not be aligned.
       if (VLOG_IS_ON(3)) {
-        if (infeed_queues[0][0]->IsFull()) {
-          VLOG(3) << "Infeed queue is full.";
-        }
-
-        if (infeed_queues[0][0]->IsEmpty()) {
-          VLOG(3) << "Infeed queue is empty.";
+        for (size_t j = 0; j != infeed_queues[0].size(); ++j) {
+          if (infeed_queues[0][j]->IsFull()) {
+            VLOG(3) << "Infeed queue is full (j==" << j << ").";
+          }
+          if (infeed_queues[0][j]->IsEmpty()) {
+            VLOG(3) << "Infeed queue is empty (j==" << j << ").";
+          }
         }
       }
 
-      if (infeed_queues[0][0]->IsFull()) {
+      if (absl::c_any_of(infeed_queues[0],
+                         [](InfeedQueue* queue) { return queue->IsFull(); })) {
         _mm_pause();
         continue;
       }
