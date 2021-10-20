@@ -47,7 +47,8 @@ def reduce_scatter(x, replication_factor, op='COLLECTIVE_OP_ADD', name=None):
     op: Reduce operation, valid ops are: COLLECTIVE_OP_ADD,
       COLLECTIVE_OP_MUL, COLLECTIVE_OP_MIN, COLLECTIVE_OP_MAX,
       COLLECTIVE_OP_LOGICAL_AND, COLLECTIVE_OP_LOGICAL_OR,
-      COLLECTIVE_OP_SQUARE_ADD and COLLECTIVE_OP_LOCAL.
+      COLLECTIVE_OP_SQUARE_ADD, COLLECTIVE_OP_LOCAL and
+      COLLECTIVE_OP_MEAN.
     name: Optional op name.
 
   Returns:
