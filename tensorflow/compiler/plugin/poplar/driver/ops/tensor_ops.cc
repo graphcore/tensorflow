@@ -414,39 +414,6 @@ StatusOr<poplar::program::Program> CreateSlice(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateZeroPadOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output, TensorMap& tensor_map,
-    const poplar::DebugNameAndId& debug_name_and_id) {
-  poplar::program::Sequence seq({}, debug_name_and_id);
-
-  poplar::Graph& graph = GetGraph(res, inst);
-
-  const HloInstruction* root = inst->fused_expression_root();
-  const PaddingConfig& cfg(root->padding_config());
-
-  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                      FindInplaceOutputTensors(tensor_map, res, inst, seq,
-                                               debug_name_and_id, false));
-  CHECK_EQ(inputs.size(), 1);
-  CHECK_EQ(inputs[0].size(), 1);
-  poplar::Tensor in = inputs[0][0];
-
-  std::vector<std::ptrdiff_t> paddingLower;
-  std::vector<std::ptrdiff_t> paddingUpper;
-  for (auto& d : cfg.dimensions()) {
-    paddingLower.push_back(d.edge_padding_low());
-    paddingUpper.push_back(d.edge_padding_high());
-  }
-  poplar::Tensor zero = graph.addConstant(in.elementType(), {}, 0,
-                                          {debug_name_and_id, "ZeroPad"});
-  graph.setTileMapping(zero, 0);
-  poplar::Tensor out = popops::pad(graph, in, paddingLower, paddingUpper, zero);
-
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
-  return seq;
-}
-
 StatusOr<poplar::program::Program> CreateSelectScalarFromRows(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
