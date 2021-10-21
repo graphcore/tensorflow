@@ -1261,7 +1261,7 @@ class _IPUDeviceConnectionConfig(_ConfigBase):
     If you see ``remote buffers supported: 1`` in the output, that means that
     remote buffers are supported on your system. For more information, see the
     `gc-info documentation
-    <https://docs.graphcore.ai/projects/command-line-tools/en/latest/gc-info_main.html>`__.
+    <https://docs.graphcore.ai/projects/command-line-tools/en/latest/gc-info_main.html>`_.
     """
     self.enable_remote_buffers = False
 
@@ -1349,14 +1349,18 @@ class _MatmulConfig(_ConfigBase):
     the PopLibs API reference for the full list of options. The options will be
     applied to all matmul operations in the session graph during compilation.
 
-    Of note is the "availableMemoryProportion" flag, which indicates the
-    proportion of tile memory to be made available as temporary memory for
-    matrix multiplications (float between 0 and 1.0). Less temporary memory will
-    generally result in a matrix multiplication that takes more cycles to
-    complete. However, because always live memory (such as control code and
-    vertex state) is not tracked when planning it, a matrix multiplication using
-    less temporary memory may use more memory overall, due to an increase of
-    always live memory.
+    Of particular note is the `availableMemoryProportion` parameter which is
+    the amount of memory allocated for use for temporary data whilst the
+    operation is executing (for example, for intermediate calculated values or
+    temporary values passed between tiles on the IPU). The value is specified
+    as a proportion of available memory on the IPU. So, for example, a value of
+    0.1 will constrain the library to use 10% of the total memory for temporary
+    data.
+
+    See the technical note on `Optimising Temporary Memory Usage for
+    Convolutions and Matmuls on the IPU
+    <https://docs.graphcore.ai/projects/available-memory/>`_ for more details and for some practical
+    examples of using `availableMemoryProportion`.
     """
     self.poplar_options = {}
 
@@ -1373,13 +1377,18 @@ class _ConvolutionConfig(_ConfigBase):
     reference for the full list of options. The options will be applied to all
     convolution operations in the session graph during compilation.
 
-    Of note is the "availableMemoryProportion" flag, which indicates the
-    proportion of tile memory to be made available as temporary memory for
-    convolutions (float between 0 and 1.0). Less temporary memory will generally
-    result in a convolution that takes more cycles to complete. However, because
-    always live memory (such as control code and vertex state) is not tracked
-    when planning it, a convolution using less temporary memory may use more
-    memory overall, due to an increase of always live memory.
+    Of particular note is the `availableMemoryProportion` parameter which is
+    the amount of memory allocated for use for temporary data whilst the
+    operation is executing (for example, for intermediate calculated values or
+    temporary values passed between tiles on the IPU). The value is specified
+    as a proportion of available memory on the IPU. So, for example, a value of
+    0.1 will constrain the library to use 10% of the total memory for temporary
+    data.
+
+    See the technical note on `Optimising Temporary Memory Usage for
+    Convolutions and Matmuls on the IPU
+    <https://docs.graphcore.ai/projects/available-memory/>`_ for more details and for some practical
+    examples of using `availableMemoryProportion`.
     """
     self.poplar_options = {}
 
@@ -1396,14 +1405,13 @@ class _SliceConfig(_ConfigBase):
     multiUpdate, and multiUpdateAdd poplibs calls. These are most commonly
     generated when using embeddings.
 
-    Of note is the "availableMemoryProportion" flag, which indicates the
-    proportion of tile memory to be made available as temporary memory for
-    slice operations (float between 0 and 1.0). Less temporary memory will
-    generally result in a slice operation that takes more cycles to complete.
-    However, because always live memory (such as control code and vertex state)
-    is not tracked when planning it, a slice operation using less temporary
-    memory may use more memory overall, due to an increase of always live
-    memory.
+    Of particular note is the `availableMemoryProportion` parameter which is
+    the amount of memory allocated for use for temporary data whilst the
+    operation is executing (for example, for intermediate calculated values or
+    temporary values passed between tiles on the IPU). The value is specified
+    as a proportion of available memory on the IPU. So, for example, a value of
+    0.1 will constrain the library to use 10% of the total memory for temporary
+    data.
     """
     self.poplar_options = {}
 
@@ -1817,8 +1825,8 @@ class IPUConfig(_ConfigBase):
       # IPUs in the second device.
       config.auto_select_ipus = [1, 2]
     """
-    self.auto_select_ipus: typing.Union[int, typing.List[int], typing.
-                                        Tuple[int, ...]] = []
+    self.auto_select_ipus: typing.Union[int, typing.List[int],
+                                        typing.Tuple[int, ...]] = []
     """
     Configure the IPUs to be used by the session.
 
@@ -1960,8 +1968,8 @@ class IPUConfig(_ConfigBase):
         # 0000:1a:00.0, 0000:1b:00.0, 0000:23:00.0, 0000:24:00.0.
         config.select_ipus = [0, 1, 2, 3]
     """
-    self.select_ipus: typing.Union[int, typing.List[int], typing.
-                                   Tuple[int, ...]] = []
+    self.select_ipus: typing.Union[int, typing.List[int],
+                                   typing.Tuple[int, ...]] = []
     """
     Sub-category containing configuration options that affect convolutions.
     """
