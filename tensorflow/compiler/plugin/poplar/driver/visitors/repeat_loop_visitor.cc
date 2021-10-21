@@ -39,7 +39,7 @@ RepeatLoopVisitor::RepeatLoopVisitor(
     : InplaceDeferredVisitor(res, inputs, description, debug_name_and_id, {},
                              reallocate_inputs_info) {
   EnterVariableScope();
-  loop_start_sr_method_ = GetStochasticRoundingMethod();
+  loop_start_sr_method_ = GetStochasticRoundingMethod(resources_);
 }
 
 Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
@@ -69,19 +69,19 @@ Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
     // loop. Since we set the seed type to loop_start_sr_method_ at the end of
     // each iteration then this is the method the resource updates seed changes
     // should be relative to.
-    auto ru_start_sr_method = GetStochasticRoundingMethod();
-    MaybeSetStochasticRoundingMethod(loop_start_sr_method_);
+    auto ru_start_sr_method = GetStochasticRoundingMethod(resources_);
+    MaybeSetStochasticRoundingMethod(resources_, loop_start_sr_method_);
 
     TF_ASSIGN_OR_RETURN(
         resource_update_sequence_,
         CreateResourceUpdateOp(resources_, inst, inputs, inst->shape(),
                                tensor_map, debug_name_and_id));
 
-    ru_end_sr_method_ = GetStochasticRoundingMethod();
+    ru_end_sr_method_ = GetStochasticRoundingMethod(resources_);
 
     // Restore the seed method as instructions after the resource update call
     // will be executed before it.
-    MaybeSetStochasticRoundingMethod(ru_start_sr_method);
+    MaybeSetStochasticRoundingMethod(resources_, ru_start_sr_method);
 
     return Status::OK();
   } else {
@@ -168,8 +168,8 @@ poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(
     // We need to be in the loop_start_sr_method_ when the loop starts each
     // iteration as the seed state changes made during the loop are all done
     // relative to this.
-    MaybeChangeStochasticRoundingMethod(inst, loop_start_sr_method_,
-                                        repeat_seq);
+    MaybeChangeStochasticRoundingMethod(resources_, inst->name() + "_iter_end",
+                                        loop_start_sr_method_, repeat_seq);
     // Increase the local execution counters at the end of each iteration.
     repeat_seq.add(execution_counters_.IncrementLiveCounters());
   }
@@ -190,8 +190,9 @@ poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(
     // Similar to repeat_seq, when we finish calling resource_update_sequence_
     // we will be using ru_end_sr_method_ but need to be in
     // loop_start_sr_method_ for when the loop restarts.
-    MaybeSetStochasticRoundingMethod(ru_end_sr_method_);
-    MaybeChangeStochasticRoundingMethod(inst, loop_start_sr_method_, inner_seq);
+    MaybeSetStochasticRoundingMethod(resources_, ru_end_sr_method_);
+    MaybeChangeStochasticRoundingMethod(resources_, inst->name() + "_ru_end",
+                                        loop_start_sr_method_, inner_seq);
 
     // Repeat the inner loop.
     seq.add(

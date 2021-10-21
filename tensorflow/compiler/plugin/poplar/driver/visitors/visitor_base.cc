@@ -90,10 +90,15 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
     resources_.stochastic_rounding_enabled = new_stochastic_rounding_enabled;
   }
 
-  const auto new_sr_method = poplar_backend_config.stochastic_rounding_method();
-  poplar::program::Sequence seq({}, debug_name_and_id);
-  if (MaybeChangeStochasticRoundingMethod(inst, new_sr_method, seq)) {
-    TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
+  if (allow_seed_changes_) {
+    const auto new_sr_method =
+        poplar_backend_config.stochastic_rounding_method();
+    poplar::program::Sequence seq({}, debug_name_and_id);
+
+    if (MaybeChangeStochasticRoundingMethod(resources_, inst->name(),
+                                            new_sr_method, seq)) {
+      TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
+    }
   }
 
   return Status::OK();
@@ -454,53 +459,6 @@ poplar::program::Sequence BaseVisitor::GetRawSequence() const {
     }
   }
   return result;
-}
-
-bool BaseVisitor::MaybeChangeStochasticRoundingMethod(
-    const HloInstruction* inst, const StochasticRoundingMethod& method,
-    poplar::program::Sequence& seq) {
-  bool seq_changed = false;
-  if (AllowSeedChanges()) {
-    const poplar::DebugNameAndId debug_name_and_id{"changeSRMethod_" +
-                                                   inst->name()};
-    auto& prng_seed_state = resources_.prng_seed_state;
-    if (prng_seed_state.ChangeStochasticRoundingMethod(method, seq,
-                                                       debug_name_and_id)) {
-      VLOG(3) << "Changing SR method to "
-              << StochasticRoundingMethod_Name(
-                     prng_seed_state.GetStochasticRoundingMethod())
-              << " for instruction '" << inst->name() << "'";
-
-      seq_changed = true;
-    }
-
-    if (resources_.enable_prng_seed_consistency_checks) {
-      // We don't assert against prng_seed_state.GetStochasticRoundingMethod()
-      // as this would add checks for instructions with a SR type of
-      // StochasticRoundingMethod_Any, which are hard to get right as they're
-      // often reordered.
-      AssertStochasticRoundingMethod(GetMasterGraph(resources_), method, seq,
-                                     inst->name());
-      seq_changed = true;
-    }
-  }
-
-  return seq_changed;
-}
-
-void BaseVisitor::MaybeSetStochasticRoundingMethod(
-    const StochasticRoundingMethod& method) {
-  if (AllowSeedChanges()) {
-    resources_.prng_seed_state.SetStochasticRoundingMethod(method);
-  }
-}
-
-StochasticRoundingMethod BaseVisitor::GetStochasticRoundingMethod() const {
-  return resources_.prng_seed_state.GetStochasticRoundingMethod();
-}
-
-bool BaseVisitor::AllowSeedChanges() const {
-  return allow_seed_changes_ && resources_.stochastic_rounding_enabled;
 }
 
 poplar::program::Sequence BaseVisitor::GetSequence(
