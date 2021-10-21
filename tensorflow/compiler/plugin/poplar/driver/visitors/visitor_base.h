@@ -204,7 +204,6 @@ class BaseVisitor : public DfsHloVisitor {
   TensorMap tensor_map;
 
   bool has_infeed_ = false;
-  bool stochastic_rounding_enabled_;
 
   const poplar::DebugNameAndId dnai_;
 

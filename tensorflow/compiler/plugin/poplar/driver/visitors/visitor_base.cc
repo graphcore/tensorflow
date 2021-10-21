@@ -80,13 +80,14 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
           "instruction '",
           inst->name(), "'");
   }
-  if (new_stochastic_rounding_enabled != stochastic_rounding_enabled_) {
+  if (new_stochastic_rounding_enabled !=
+      resources_.stochastic_rounding_enabled) {
     poplar::program::Sequence seq({}, debug_name_and_id);
     poplar::setStochasticRounding(GetGraph(resources_, inst), seq,
                                   new_stochastic_rounding_enabled,
                                   {debug_name_and_id, "Preprocess"});
     TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
-    stochastic_rounding_enabled_ = new_stochastic_rounding_enabled;
+    resources_.stochastic_rounding_enabled = new_stochastic_rounding_enabled;
   }
 
   const auto new_sr_method = poplar_backend_config.stochastic_rounding_method();
@@ -104,9 +105,6 @@ BaseVisitor::BaseVisitor(CompilerResources& resources,
       dnai_(debug_name_and_id),
       execution_counters_(resources, debug_name_and_id),
       allow_seed_changes_(resources.enable_experimental_prng_stability) {
-  stochastic_rounding_enabled_ =
-      resources_.global_floating_point_behaviour.esr();
-
   // Push the execution counters onto the stack.
   resources_.execution_counter_scopes.push(&execution_counters_);
 }
@@ -502,7 +500,7 @@ StochasticRoundingMethod BaseVisitor::GetStochasticRoundingMethod() const {
 }
 
 bool BaseVisitor::AllowSeedChanges() const {
-  return allow_seed_changes_ && stochastic_rounding_enabled_;
+  return allow_seed_changes_ && resources_.stochastic_rounding_enabled;
 }
 
 poplar::program::Sequence BaseVisitor::GetSequence(

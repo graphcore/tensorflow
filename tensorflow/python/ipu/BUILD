@@ -696,6 +696,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/compiler/xla:xla_data_proto_py",
     ],
+    tags = ["hw_poplar_test"],
 )
 
 tf_py_test(
