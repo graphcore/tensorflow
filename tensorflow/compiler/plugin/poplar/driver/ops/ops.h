@@ -290,11 +290,6 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
     DeferredArgRBVectors& deferred_inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Program> CreateZeroPadOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output, TensorMap& tensor_map,
-    const poplar::DebugNameAndId& debug_name_and_id);
-
 StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
