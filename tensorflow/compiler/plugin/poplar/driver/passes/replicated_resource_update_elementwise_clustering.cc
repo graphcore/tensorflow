@@ -39,6 +39,19 @@ bool IsParameter(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kParameter;
 }
 
+StatusOr<CollectiveOperator> GetAllReduceCollectiveOp(
+    const HloInstruction* inst) {
+  if (IsAllReduceAdd(inst)) {
+    return CollectiveOperator::COLLECTIVE_OP_ADD;
+  } else if (IsAllReduceMean(inst)) {
+    return CollectiveOperator::COLLECTIVE_OP_MEAN;
+  } else {
+    return tensorflow::errors::InvalidArgument(
+        "Unsupported all reduce instruction, expected computation to match ADD "
+        "or MEAN");
+  }
+}
+
 StatusOr<Shape> GetNewShape(const ElementwiseCluster& cluster,
                             HloInstruction* inst) {
   if (IsScalar(inst) ||
@@ -171,10 +184,13 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
   const Shape flat_shape =
       ShapeUtil::MakeShape(cluster_input_type, {cluster.GetClusterSize()});
 
+  const auto status_or_collective_op = GetAllReduceCollectiveOp(cluster_input);
+
   // Lower the all reduce into the cluster if all its users will be in the
   // cluster too.
-  const bool lower_all_reduce =
-      IsGlobalAllReduce(cluster_input) && cluster.AllUsersIn(cluster_input);
+  const bool lower_all_reduce = IsGlobalAllReduce(cluster_input) &&
+                                cluster.AllUsersIn(cluster_input) &&
+                                status_or_collective_op.ok();
 
   if (lower_all_reduce) {
     HloInstruction* input = cluster_input->mutable_operand(0);
@@ -196,7 +212,7 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
         builder->AddInstruction(CreateCollectiveReorderInstruction(parameter));
 
     HloInstruction* scatter = builder->AddInstruction(CreateReduceScatter(
-        in_comp_shape, {scatter_input}, CollectiveOperator::COLLECTIVE_OP_ADD,
+        in_comp_shape, {scatter_input}, status_or_collective_op.ValueOrDie(),
         PoplarReplicaGroups::Consecutive(partition_replication_factor_)));
 
     if (partition_replication_factor_ == global_replication_factor_) {
