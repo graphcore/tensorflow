@@ -170,7 +170,7 @@ StatusOr<bool> InterIpuCopyInserter::Run(HloModule* module) {
         for (auto user = range.first; user != range.second; ++user) {
           auto* u = user->second.first;
           auto o = user->second.second;
-          u->ReplaceOperandWith(o, new_inst);
+          TF_RETURN_IF_ERROR(u->ReplaceOperandWith(o, new_inst));
         }
       }
     }
