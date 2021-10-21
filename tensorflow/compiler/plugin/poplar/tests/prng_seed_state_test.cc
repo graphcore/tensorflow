@@ -508,7 +508,33 @@ ENTRY e {
   ROOT end = f32[] add(loop_count, loop_count), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
 }
 )"};
+static const HloTestCase while_loop = {"while_loop", R"(
+HloModule test
+body {
+  p_body = (s32[],s32[]) parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  p_body.0 = s32[] get-tuple-element(p_body), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  const = s32[] constant(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  add = s32[] add(p_body.0, const), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  p_body.1 = s32[] get-tuple-element(p_body), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT root = (s32[],s32[]) tuple(add, p_body.1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
 
+condition {
+  p_cond = (s32[],s32[]) parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  const = s32[] constant(10), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  const_1 = s32[] constant(10), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  repeat_init = (s32[],s32[]) tuple(const_0, const_1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  while = (s32[],s32[]) while(repeat_init), condition=condition, body=body, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  while_0 = s32[] get-tuple-element(while), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+	ROOT result = s32[] add(while_0, const_1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+}
+)"};
 TEST_P(PrngSeedConsistencyTest, Check) {
   auto& graph = *(resources_->main_graph);
 
@@ -539,7 +565,8 @@ TEST_P(PrngSeedConsistencyTest, Check) {
 
 INSTANTIATE_TEST_SUITE_P(PrngSeedHlo, PrngSeedConsistencyTest,
                          ::testing::Values(simple_repeat,
-                                           repeat_with_resource_update),
+                                           repeat_with_resource_update,
+                                           while_loop),
                          HloTestCaseName);
 
 }  // namespace

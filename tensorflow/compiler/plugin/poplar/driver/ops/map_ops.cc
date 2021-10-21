@@ -240,6 +240,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(
   // Note that the visitor explicitly doesn't allocate all the input tensors for
   // the conditional computation in order to allow the body to visitor to create
   // the tensors.
+  const auto condition_start_method = GetStochasticRoundingMethod(res);
   DeferredVisitor condition_visitor(res, inputs, {debug_name_and_id, "Cond"},
                                     /*allocate_all_input_tensors*/ false);
   const HloComputation* condition_comp = inst->while_condition();
@@ -251,6 +252,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(
     TF_RETURN_IF_ERROR(
         condition_comp->AcceptOrdered(&condition_visitor, order));
   }
+  const auto condition_end_method = GetStochasticRoundingMethod(res);
 
   // Create an inplace visitor for the loop body.
   InplaceDeferredVisitor body_visitor(
@@ -331,9 +333,19 @@ StatusOr<poplar::program::Program> CreateWhileOp(
   poplar::program::Sequence body_seq({}, {debug_name_and_id, "body"});
   {
     body_seq.add(body_visitor.GetSequence(/*copy_execution_counters*/ false));
+    // After each loop iteration the condition is run again, so we need to make
+    // sure that we're using SR method for the condition before it's executed.
+    MaybeChangeStochasticRoundingMethod(res, inst->name() + "_iter_end",
+                                        condition_start_method, body_seq);
+
     // Increase the local execution counters at the end of each iteration.
     body_seq.add(body_counters.IncrementLiveCounters());
   }
+
+  // We always run the condition block after the while body, so the actual SR
+  // method that will be active at the end loop will be the one from the
+  // condition block. Update the SR method to reflect that.
+  MaybeSetStochasticRoundingMethod(res, condition_end_method);
 
   // Create the while loop.
   main_seq.add(poplar::program::RepeatWhileTrue(cond_seq, predicate, body_seq,

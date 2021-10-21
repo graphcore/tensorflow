@@ -121,6 +121,18 @@ poplar::OptionFlags GetReplicatedCollectiveOptions(
 StatusOr<gcl::CommGroup> ToGclCommGroup(PoplarReplicaGroups replica_groups,
                                         const CompilerResources& res);
 
+// Wrappers for the equivalent PrngSeedState calls that check if prng stability
+// functionality is enabled before calling through.
+bool MaybeChangeStochasticRoundingMethod(CompilerResources& res,
+                                         const std::string& inst_name,
+                                         const StochasticRoundingMethod& method,
+                                         poplar::program::Sequence& seq);
+
+void MaybeSetStochasticRoundingMethod(CompilerResources& res,
+                                      const StochasticRoundingMethod& method);
+StochasticRoundingMethod GetStochasticRoundingMethod(
+    const CompilerResources& res);
+
 /* Optimization tests */
 
 bool IsPoplibsPool(const HloInstruction*, const HloComputation*);

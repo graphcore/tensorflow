@@ -46,6 +46,36 @@ using ::absl::StrCat;
 
 namespace xla {
 namespace poplarplugin {
+namespace {
+
+Status SetIpuShape(ipu::TensorInfo& info, const xla::Shape& xla_shape) {
+  ipu::DataType type;
+  switch (xla_shape.element_type()) {
+    case xla::S32:
+      type = ipu::DataType::S32;
+      break;
+    case xla::F32:
+      type = ipu::DataType::F32;
+      break;
+    case xla::PrimitiveType::F16:
+      type = ipu::DataType::F16;
+      break;
+    default:
+      return xla::InvalidArgument("PrimitiveType not supported");
+  }
+  std::vector<int64_t> dimensions;
+  for (auto dim : xla_shape.dimensions()) {
+    dimensions.push_back(dim);
+  }
+  info.SetShape(ipu::TensorShape(dimensions, type));
+  return Status::OK();
+}
+
+bool AllowSeedChanges(const CompilerResources& res) {
+  return res.enable_experimental_prng_stability &&
+         res.stochastic_rounding_enabled;
+}
+}  // namespace
 
 poplar::Graph& GetMasterGraph(CompilerResources& res) {
   return *res.main_graph;
@@ -323,6 +353,50 @@ StatusOr<gcl::CommGroup> ToGclCommGroup(PoplarReplicaGroups replica_groups,
   LOG(FATAL) << "Unknown replica group type";
 }
 
+bool MaybeChangeStochasticRoundingMethod(CompilerResources& res,
+                                         const std::string& inst_name,
+                                         const StochasticRoundingMethod& method,
+                                         poplar::program::Sequence& seq) {
+  bool seq_changed = false;
+  if (AllowSeedChanges(res)) {
+    const poplar::DebugNameAndId debug_name_and_id{"changeSRMethod_" +
+                                                   inst_name};
+    auto& prng_seed_state = res.prng_seed_state;
+    if (prng_seed_state.ChangeStochasticRoundingMethod(method, seq,
+                                                       debug_name_and_id)) {
+      VLOG(3) << "Changing SR method to "
+              << StochasticRoundingMethod_Name(
+                     prng_seed_state.GetStochasticRoundingMethod())
+              << " for instruction '" << inst_name << "'";
+      seq_changed = true;
+    }
+
+    if (res.enable_prng_seed_consistency_checks) {
+      // We don't assert against prng_seed_state.GetStochasticRoundingMethod()
+      // as this would add checks for instructions with a SR type of
+      // StochasticRoundingMethod_Any, which are hard to get right as they're
+      // often reordered.
+      AssertStochasticRoundingMethod(GetMasterGraph(res), method, seq,
+                                     inst_name);
+      seq_changed = true;
+    }
+  }
+
+  return seq_changed;
+}
+
+void MaybeSetStochasticRoundingMethod(CompilerResources& res,
+                                      const StochasticRoundingMethod& method) {
+  if (AllowSeedChanges(res)) {
+    res.prng_seed_state.SetStochasticRoundingMethod(method);
+  }
+}
+
+StochasticRoundingMethod GetStochasticRoundingMethod(
+    const CompilerResources& res) {
+  return res.prng_seed_state.GetStochasticRoundingMethod();
+}
+
 StatusOr<poplar::OptionFlags> GetConvolutionOptionsForInst(
     const HloInstruction* inst, CompilerResources& res) {
   TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
@@ -557,33 +631,6 @@ std::string UnmangleInputName(std::string name) {
   }
   return name;
 }
-
-namespace {
-
-Status SetIpuShape(ipu::TensorInfo& info, const xla::Shape& xla_shape) {
-  ipu::DataType type;
-  switch (xla_shape.element_type()) {
-    case xla::S32:
-      type = ipu::DataType::S32;
-      break;
-    case xla::F32:
-      type = ipu::DataType::F32;
-      break;
-    case xla::PrimitiveType::F16:
-      type = ipu::DataType::F16;
-      break;
-    default:
-      return xla::InvalidArgument("PrimitiveType not supported");
-  }
-  std::vector<int64_t> dimensions;
-  for (auto dim : xla_shape.dimensions()) {
-    dimensions.push_back(dim);
-  }
-  info.SetShape(ipu::TensorShape(dimensions, type));
-  return Status::OK();
-}
-
-}  // namespace
 
 StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const InputOutputAliasingMap& io_map,
