@@ -17,14 +17,19 @@ Summary operations for IPUs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.core.framework import summary_pb2
-from tensorflow.python.framework import ops
-from tensorflow.python.summary.summary import tensor_summary
+from tensorflow.python.util import deprecation
 
 
+@deprecation.deprecated(
+    None,
+    "ipu_compile_summary is deprecated and will be removed in a future release."
+    " Use the PopVision suite of analysis tools to profile IPU programs.")
 def ipu_compile_summary(name, op_list, collections=None):
-  """Create an IPU compiler summary operation.
+  """DEPRECATED. Create an IPU compiler summary operation.
+
+  This function is deprecated and is no longer functional. It will be removed
+  in a future release. Use the PopVision suite of analysis tools to profile IPU
+  programs.
 
   Args:
     name: A name for the summary.
@@ -36,23 +41,7 @@ def ipu_compile_summary(name, op_list, collections=None):
     The new summary operation
 
   """
-
-  if not isinstance(op_list, list):
-    op_list = [op_list]
-
-  with ops.device("cpu"):
-    with ops.control_dependencies(op_list):
-
-      reports = gen_ipu_ops.ipu_event_trace()
-
-      summary_metadata = summary_pb2.SummaryMetadata(
-          plugin_data=summary_pb2.SummaryMetadata.PluginData(
-              plugin_name="ipu"))
-
-      t_summary = tensor_summary(name='ipu_trace',
-                                 tensor=reports,
-                                 summary_metadata=summary_metadata,
-                                 collections=collections,
-                                 display_name=name)
-
-  return t_summary
+  raise NotImplementedError(
+      "ipu_compile_summary is deprecated, is no longer functional and will be"
+      " removed in a future release. Use the PopVision suite of analysis tools"
+      " to profile IPU programs.")

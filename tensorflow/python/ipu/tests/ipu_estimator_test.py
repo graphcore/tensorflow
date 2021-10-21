@@ -490,58 +490,6 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertEqual(estimator_variables[k][0],
                        warm_started_estimator_variables[k][0])
 
-  def testCompileSummary(self):
-    def my_model_fn(features, labels, mode):
-      self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
-
-      with variable_scope.variable_scope("vs", use_resource=True):
-        predictions = layers.Dense(units=1)(features)
-
-      loss = losses.mean_squared_error(labels=labels, predictions=predictions)
-      optimizer = gradient_descent.GradientDescentOptimizer(0.1)
-      train_op = optimizer.minimize(loss)
-
-      return model_fn_lib.EstimatorSpec(mode=mode,
-                                        loss=loss,
-                                        train_op=train_op)
-
-    def my_input_fn():
-      dataset = dataset_ops.Dataset.from_tensor_slices(
-          _create_regression_dataset(num_samples=1000, num_features=5))
-      dataset = dataset.batch(batch_size=2, drop_remainder=True).repeat()
-      return dataset
-
-    ipu_options = IPUConfig()
-    ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
-    ipu_options.auto_select_ipus = 1
-
-    ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                             ipu_options=ipu_options,
-                                             compile_summary=True)
-
-    run_config = ipu_run_config.RunConfig(ipu_run_config=ipu_config,
-                                          log_step_count_steps=1)
-
-    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
-                                           config=run_config)
-
-    estimator.train(input_fn=my_input_fn, steps=4)
-
-    event_file = glob.glob(estimator.model_dir + "/event*")
-    self.assertTrue(len(event_file) == 1)
-    compile_for_ipu_count = 0
-    for summary in summary_iterator.summary_iterator(event_file[0]):
-      for val in summary.summary.value:
-        if val.tag == "ipu_trace":
-          for evt_str in val.tensor.string_val:
-            evt = IpuTraceEvent.FromString(evt_str)
-
-            if evt.type == IpuTraceEvent.COMPILE_END and \
-                evt.compile_end.tensor_map:
-              compile_for_ipu_count += 1
-
-    self.assertEqual(compile_for_ipu_count, 1)
-
   def testEventDecode(self):
     class EventTraceHook(session_run_hook.SessionRunHook):
       def __init__(self, report_json):
@@ -581,8 +529,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     cfg.ipu_model.compile_ipu_code = True
 
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                             ipu_options=cfg,
-                                             compile_summary=True)
+                                             ipu_options=cfg)
 
     run_config = ipu_run_config.RunConfig(ipu_run_config=ipu_config,
                                           log_step_count_steps=1)
@@ -1010,34 +957,29 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                 "configuration requires more than one device"):
       ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                   num_replicas=3,
-                                  ipu_options=None,
-                                  compile_summary=True)
+                                  ipu_options=None)
 
     with self.assertRaisesRegex(ValueError,
                                 "configuration requires more than one device"):
       ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                   num_shards=2,
-                                  ipu_options=None,
-                                  compile_summary=True)
+                                  ipu_options=None)
 
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_replicas=1,
-                                             ipu_options=None,
-                                             compile_summary=True)
+                                             ipu_options=None)
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_shards=1,
-                                             ipu_options=None,
-                                             compile_summary=True)
+                                             ipu_options=None)
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
     ipu_options = IPUConfig()
     ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     ipu_options.auto_select_ipus = 1
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                             ipu_options=ipu_options,
-                                             compile_summary=True)
+                                             ipu_options=ipu_options)
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
     with self.assertRaisesRegex(ValueError, "`IpuOptions` configured with"):
@@ -1045,8 +987,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
       ipu_options.auto_select_ipus = 3
       ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                               ipu_options=ipu_options,
-                                               compile_summary=True)
+                                               ipu_options=ipu_options)
 
     with self.assertRaisesRegex(
         ValueError, r"`IPURunConfig` configured with 4 devices "
@@ -1057,8 +998,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       ipu_options.auto_select_ipus = 3
       ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                                num_replicas=4,
-                                               ipu_options=ipu_options,
-                                               compile_summary=True)
+                                               ipu_options=ipu_options)
 
     with self.assertRaisesRegex(
         ValueError, r"`IPURunConfig` configured with 4 devices "
@@ -1070,7 +1010,6 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                                num_replicas=4,
                                                ipu_options=ipu_options,
-                                               compile_summary=True,
                                                ordinal=1)
 
     ipu_options = IPUConfig()
@@ -1079,7 +1018,6 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_replicas=4,
                                              ipu_options=ipu_options,
-                                             compile_summary=True,
                                              ordinal=1)
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
@@ -1088,8 +1026,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ipu_options.auto_select_ipus = 4
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_replicas=4,
-                                             ipu_options=ipu_options,
-                                             compile_summary=True)
+                                             ipu_options=ipu_options)
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
     ipu_options = IPUConfig()
@@ -1098,8 +1035,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_replicas=2,
                                              num_shards=2,
-                                             ipu_options=ipu_options,
-                                             compile_summary=True)
+                                             ipu_options=ipu_options)
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
     ipu_options = IPUConfig()
@@ -1107,8 +1043,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ipu_options.select_ipus = [0, 1, 2, 3]
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_shards=4,
-                                             ipu_options=ipu_options,
-                                             compile_summary=True)
+                                             ipu_options=ipu_options)
 
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
@@ -1118,8 +1053,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_replicas=2,
                                              num_shards=2,
-                                             ipu_options=ipu_options,
-                                             compile_summary=True)
+                                             ipu_options=ipu_options)
 
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
@@ -1129,8 +1063,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_replicas=1,
                                              num_shards=1,
-                                             ipu_options=ipu_options,
-                                             compile_summary=True)
+                                             ipu_options=ipu_options)
 
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 

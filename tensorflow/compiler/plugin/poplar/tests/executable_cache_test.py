@@ -297,14 +297,12 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       cfg.auto_select_ipus = 1
 
       ipu_config = ipu.ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                                   ipu_options=cfg,
-                                                   compile_summary=True)
+                                                   ipu_options=cfg)
 
       run_config = ipu.ipu_run_config.RunConfig(ipu_run_config=ipu_config)
       estimator = ipu.ipu_estimator.IPUEstimator(model_fn=my_model_fn,
                                                  config=run_config)
 
-      log_dir = estimator.model_dir
       self.assert_num_reports(report_helper, 0)
 
       # Compile the training graph
