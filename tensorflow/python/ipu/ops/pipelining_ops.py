@@ -781,8 +781,10 @@ def pipeline(computational_stages,
 
   # TODO(T18660) interleaved schedule does not support multiple stages on the
   # same IPU during training.
-  if pipeline_schedule == PipelineSchedule.Interleaved and len(
-      device_mapping) != len(set(device_mapping)) and optimizer_function:
+  flat_device_mapping = _to_flat_list(device_mapping)
+  if pipeline_schedule == PipelineSchedule.Interleaved and \
+      optimizer_function and \
+      len(flat_device_mapping) != len(set(flat_device_mapping)):
     raise NotImplementedError(
         "The pipelining schedule 'Interleaved' does not currently support "
         "multiple pipeline stages on the same device for training graphs. "
