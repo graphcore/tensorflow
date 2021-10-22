@@ -1,5 +1,5 @@
 IPU embedded application runtime
--------------------
+--------------------------------
 
 The embedded application runtime allows you to run a compiled TensorFlow
 executable as part of a TensorFlow graph. This enables embedding the executable
@@ -136,3 +136,46 @@ This example creates a very simple IPU program that doubles the input tensor.
 .. literalinclude:: embedded_application_runtime_example.py
   :language: python
   :linenos:
+
+.. _ea_runtime_error_handling:
+
+Error Handling
+~~~~~~~~~~~~~~
+
+.. note::
+
+  This section only applies to the execution using the IPU embedded application
+  runtime. If you are using the XLA/Poplar runtime see
+  :ref:`xla_runtime_error_handling`.
+
+Runtime errors
+..............
+
+These errors and exceptions occur when running a Poplar program. The full list
+of all the exceptions and their meanings can be found in the Poplar
+documentation in the `Exceptions <https://docs.graphcore.ai/projects/poplar-api/page/poplar/execution/exceptions.html>`__
+section of the Poplar API reference manual.
+
+These runtime errors are handled in the following manner:
+
+* ``application_runtime_error`` - a ``tensorflow.errors.InternalError`` error
+  is raised. The error message contains the reason why the error occurred. An
+  IPU reset will be performed before the next execution. All requests which have
+  already been enqueued before the exception occurred will return the error. Any
+  new requests will be processed after the IPU reset is complete.
+* ``recoverable_runtime_error`` with a recovery action ``poplar::RecoveryAction::IPU_RESET`` - a ``tensorflow.errors.InternalError`` error
+  is raised. The error message contains the reason why the error occurred. An
+  IPU reset will be performed before the next execution. All requests which have
+  already been enqueued before the exception occurred will return the error. Any
+  new requests will be processed after the IPU reset is complete.
+* Unknown runtime errors - a ``tensorflow.errors.Unknown``  error
+  is raised. The error message might contain the reason why the error occurred.
+  When these errors occur manual intervention is required before the system is
+  operational again. The IPU will not be reset and all requests will return the
+  error.
+* All other runtime errors - a ``tensorflow.errors.InternalError`` error
+  is raised. The error message might contain the reason why the error occurred.
+  When these errors occur manual intervention might be required before the
+  system is operational again. The error message might contain a required
+  recovery action. The IPU will not be reset and all requests will return the 
+  error.

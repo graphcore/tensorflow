@@ -852,6 +852,66 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
           r"excepted state.*"):
         sess.run(result)
 
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_reset_engine(self):
+    # The dataset for feeding the graphs.
+    ds = dataset_ops.Dataset.from_tensors(constant_op.constant(1.0, shape=[1]))
+    ds = ds.repeat()
+
+    # The host side queues.
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def body(x):
+      return outfeed_queue.enqueue(12.0 / x)
+
+    # Wrap in a loop.
+    def my_net():
+      r = loops.repeat(16, body, [], infeed_queue)
+      return r
+
+    def exception_executable(tmp_dir):
+      poplar_exec_filepath = os.path.join(tmp_dir.name,
+                                          "application.poplar_exec")
+
+      cfg = config.IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.floating_point_behaviour.div0 = True
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
+
+      # Compile the application.
+      compile_op = application_compile_op.experimental_application_compile_op(
+          my_net, output_path=poplar_exec_filepath)
+      with sl.Session() as sess:
+        sess.run(compile_op)
+      config.reset_ipu_configuration()
+
+      return poplar_exec_filepath
+
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    poplar_exec_filepath = exception_executable(tmp_dir_obj)
+
+    engine_name = f'engine_{self.id()}'
+    ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
+                                                  engine_name)
+    input_data = array_ops.placeholder(np.float32, shape=[1])
+    result = embedded_runtime.embedded_runtime_call([input_data], ctx)
+
+    with sl.Session() as sess:
+      # Second to last execution will fail, the last execution should pass.
+      inputs = [1.0] * 3 + [0.0, 1.0]
+      failures = [False] * 3 + [True, False]
+      for val, should_fail in zip(inputs, failures):
+        failed = False
+        try:
+          x = sess.run(result, {input_data: [val]})
+          self.assertEqual(x, [12.0])
+        except:  # pylint: disable=bare-except
+          failed = True
+        self.assertEqual(failed, should_fail)
+
 
 if __name__ == "__main__":
   googletest.main()

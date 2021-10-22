@@ -392,8 +392,16 @@ have been targeted at the Poplar device. For example:
   # Creates a session with log_device_placement set to True.
   sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 
+.. _xla_runtime_error_handling:
+
 Error Handling
 ~~~~~~~~~~~~~~
+
+.. note::
+
+  This section only applies to the execution using the XLA/Poplar runtime. If
+  you are using the IPU embedded application runtime see
+  :ref:`ea_runtime_error_handling`.
 
 The error and exception handling by TensorFlow is divided into two categories:
 
@@ -428,6 +436,10 @@ These runtime errors are handled in the following manner:
 * ``recoverable_runtime_error`` with a recovery action ``poplar::RecoveryAction::IPU_RESET`` - a ``tensorflow.errors.InternalError`` error
   is raised. The error message contains the reason why the error occurred. An
   IPU reset will be performed before the next execution of a Poplar program.
+* Unknown runtime errors - a ``tensorflow.errors.Unknown``  error
+  is raised. The error message might contain the reason why the error occurred.
+  When these errors occur manual intervention is required before the system is
+  operational again.
 * All other runtime errors - a ``tensorflow.errors.InternalError`` error
   is raised. The error message might contain the reason why the error occurred.
   When these errors occur manual intervention might be required before the
