@@ -53,8 +53,6 @@ class InplaceFinder : public HloModulePass {
   std::multimap<HloInstruction*, InplaceRoute, HloPtrComparator> routes;
 
   InplaceRoute current_route;
-
-  InplaceWorkList worklist_;
 };
 
 }  // namespace poplarplugin

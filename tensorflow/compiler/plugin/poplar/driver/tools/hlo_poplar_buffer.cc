@@ -288,6 +288,12 @@ bool HloPoplarBufferSet::AssignUnionOf(
   return false;
 }
 
+void HloPoplarBufferSet::AddNewBufferUse(BufferUseKind use) {
+  if (use > this->use_kind_) {
+    use_kind_ = use;
+  }
+}
+
 bool HloPoplarBufferSet::operator==(const HloPoplarBufferSet& other) const {
   if (use_kind_ != other.use_kind_ ||
       buffers_.size() != other.buffers_.size()) {
