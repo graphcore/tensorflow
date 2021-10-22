@@ -94,6 +94,7 @@ using PoplarExecutableBinaryFile =
     xla::poplarplugin::PoplarExecutableBinaryFile;
 
 using Tracepoint = xla::poplarplugin::TensorflowPoplarPluginTracepoint;
+using TensorVector = std::vector<tensorflow::Tensor>;
 
 namespace tensorflow {
 namespace {
@@ -403,6 +404,7 @@ class CommunicationManager {
           // Report failure back to the user.
           if (!status.ok()) {
             Abort(status);
+            InitiateExit();
           }
         }
       } else {
@@ -531,9 +533,11 @@ class CommunicationManager {
 
     input_queues_.clear();
     output_queues_.clear();
-
-    InitiateExit();
   }
+
+  std::recursive_mutex& GetIOMutex() { return io_mutex_; }
+
+  void ResetStatus() { status_ = Status::OK(); }
 
   void InitializeDummyInputs() {
     for (auto& it : io_config_.GetInfeeds()) {
@@ -651,7 +655,56 @@ class EngineResource {
 
   IOConfig& GetIOConfig() { return GetCommunicationManager().GetIOConfig(); }
 
-  Status StartEngine(OpInputList& input_list) {
+  Status StartEngineAndConnectStreams(bool& reset_engine) {
+    TENSORFLOW_TRACEPOINT();
+    {
+      // Prevent any new requests from being inserted whilst the engine is being
+      // setup.
+      std::unique_lock<std::recursive_mutex> lk(
+          communication_manager_.GetIOMutex());
+
+      {
+        Tracepoint trace("engine_.load(device_)");
+        try {
+          engine_.load(device_);
+        } catch (std::exception& e) {
+          return xla::poplarplugin::PoplarExceptionToTensorflowStatus(
+              "[Load engine]", e, reset_engine);
+        }
+      }
+
+      TF_RETURN_IF_ERROR(ConnectStreams());
+      communication_manager_.InitializeDummyInputs();
+
+      VLOG(2) << "Engine loop starting.";
+      {
+        Tracepoint trace("engine_.run(0)");
+        try {
+          engine_.run(0);
+        } catch (std::exception& e) {
+          return xla::poplarplugin::PoplarExceptionToTensorflowStatus(
+              "[Host to device]", e, reset_engine);
+        }
+      }
+      communication_manager_.ResetStatus();
+    }
+    return Status::OK();
+  }
+
+  Status EngineLoop(bool& reset_engine) {
+    TENSORFLOW_TRACEPOINT();
+    do {
+      try {
+        engine_.run(1);
+      } catch (std::exception& e) {
+        return xla::poplarplugin::PoplarExceptionToTensorflowStatus(
+            "[Execute engine]", e, reset_engine);
+      }
+    } while (!communication_manager_.Exiting());
+    return Status::OK();
+  }
+
+  Status StartEngine(TensorVector&& input_tensors) {
     TENSORFLOW_TRACEPOINT();
     VLOG(2) << "Starting engine execution for " << engine_name_;
 
@@ -659,71 +712,49 @@ class EngineResource {
       return errors::Internal("Engine thread already exists for engine ",
                               engine_name_);
     }
-
-    // Get the status from the connection of streams.
-    Status connect_streams_status;
+    input_tensors_ = std::move(input_tensors);
 
     execute_thread_.reset(tensorflow::Env::Default()->StartThread(
-        tensorflow::ThreadOptions(), engine_name_ + "_execute_thread",
-        [&connect_streams_status, &input_list, this] {
-          {
-            Tracepoint trace("engine_.load(device_)");
-            try {
-              engine_.load(device_);
-            } catch (std::exception& e) {
-              auto status =
-                  xla::poplarplugin::PoplarExceptionToTensorflowStatus(
-                      "[Load engine]", e, /* recoverable_reset = */ false);
-              communication_manager_.Abort(status);
-              return;
-            }
-          }
+        tensorflow::ThreadOptions(), engine_name_ + "_execute_thread", [this] {
+          Status runtime_status = Status::OK();
+          bool reset_engine = false;
+          while (!communication_manager_.Exiting()) {
+            {
+              // Prevent any new requests from being inserted whilst the engine
+              // is being setup.
+              std::unique_lock<std::recursive_mutex> lk(
+                  communication_manager_.GetIOMutex());
 
-          auto status = ConnectStreams(input_list);
-          connect_streams_status = status;
-          connect_streams_notification_.Notify();
-          if (!status.ok()) {
-            return;
-          }
+              // If the previous iteration of this loop was not ok abort all
+              // existing requests.
+              if (!runtime_status.ok()) {
+                communication_manager_.Abort(runtime_status);
+                // If the exception raised only requires an engine reset, then
+                // continue, otherwise we can't recover.
+                if (!reset_engine) {
+                  communication_manager_.InitiateExit();
+                  return;
+                }
+              }
 
-          VLOG(2) << "Engine loop starting.";
-          {
-            Tracepoint trace("engine_.run(0)");
-            try {
-              engine_.run(0);
-            } catch (std::exception& e) {
-              auto status =
-                  xla::poplarplugin::PoplarExceptionToTensorflowStatus(
-                      "[Host to device]", e, /* recoverable_reset = */ false);
-              communication_manager_.Abort(status);
-              return;
-            }
-          }
+              runtime_status = StartEngineAndConnectStreams(reset_engine);
+              if (!runtime_status.ok()) {
+                continue;
+              }
 
-          do {
-            Tracepoint trace("engine_.run(1)");
-            try {
-              engine_.run(1);
-            } catch (std::exception& e) {
-              auto status =
-                  xla::poplarplugin::PoplarExceptionToTensorflowStatus(
-                      "[Execute engine]", e, /* recoverable_reset = */ false);
-              communication_manager_.Abort(status);
-              return;
+              reset_engine = false;
+              runtime_status = Status::OK();
             }
-          } while (!communication_manager_.Exiting());
+            runtime_status = EngineLoop(reset_engine);
+          }
         }));
 
-    // Wait for streams to be connected.
-    connect_streams_notification_.WaitForNotification();
-    communication_manager_.InitializeDummyInputs();
-
-    return connect_streams_status;
+    return Status::OK();
   }
 
   // Populates the values for buffers which are not streamed every run
   // operation.
-  Status PopulateAndConnectInputBuffers(OpInputList& input_list) {
+  Status PopulateAndConnectInputBuffers() {
     TENSORFLOW_TRACEPOINT();
     VLOG(2) << "Populating the input buffers.";
     // TODO(T41137): The assumption here is that the inputs are passed in the
@@ -733,7 +764,7 @@ class EngineResource {
     for (auto& input_pair : io_config.GetInputs()) {
       auto input = input_pair.first;
       auto& io_item = input_pair.second;
-      tensorflow::Tensor t = input_list[io_item.argument];
+      tensorflow::Tensor& t = input_tensors_.at(io_item.argument);
       if (io_item.shape != t.shape()) {
         return errors::FailedPrecondition(
             "Input tensor shape ", t.shape().DebugString(), " for input ",
@@ -750,7 +781,7 @@ class EngineResource {
     return Status::OK();
   }
 
-  Status ConnectStreams(OpInputList& input_list) {
+  Status ConnectStreams() {
     TENSORFLOW_TRACEPOINT();
     VLOG(2) << "Connecting streams";
 
@@ -765,7 +796,7 @@ class EngineResource {
     });
 
     // Handle the inputs which are only copied at the beginning.
-    TF_RETURN_IF_ERROR(PopulateAndConnectInputBuffers(input_list));
+    TF_RETURN_IF_ERROR(PopulateAndConnectInputBuffers());
 
     // Connect streamed inputs.
     for (auto& infeed_pair : io_config.GetInfeeds()) {
@@ -807,15 +838,13 @@ class EngineResource {
   CommunicationManager communication_manager_;
   std::map<int64, std::vector<unsigned char>> input_buffers_;
 
-  // Make sure all Poplar/engine operations are performed in the same thread.
-  // This ensures that the streams are connected and input values copied before
-  // the start op finishes.
-  absl::Notification connect_streams_notification_;
-
   // Thread which keeps running the engine until the communication manager is
   // asked to exit.
   // Note that the destructor blocks until the thread completes.
   std::unique_ptr<tensorflow::Thread> execute_thread_;
+
+  // Storage of the input tensors used by program 0.
+  TensorVector input_tensors_;
 };
 
 // A singleton class which owns the engines and associated resources for the
@@ -846,11 +875,23 @@ class EngineManager {
   // doesn't exist, then it creates it.
   Status CreateEngine(const std::string& engine_name,
                       const std::string& executable_filename,
-                      std::size_t timeout_us, OpInputList& input_list) {
+                      std::size_t timeout_us, const OpInputList& input_list) {
     TENSORFLOW_TRACEPOINT();
     std::unique_lock<std::recursive_mutex> lk(engine_resource_map_mutex_);
     if (EngineExists(engine_name)) {
       return Status::OK();
+    }
+
+    // Copy the input tensors to an internal storage incase the engine needs
+    // restarting.
+    TensorVector input_tensors(input_list.size());
+    for (int64 i = 0; i != input_list.size(); ++i) {
+      tensorflow::Tensor input = input_list[i];
+      tensorflow::Tensor copy(input.dtype(), input.shape());
+      tensorflow::StringPiece from = input.tensor_data();
+      tensorflow::StringPiece to = copy.tensor_data();
+      memcpy(const_cast<char*>(to.data()), from.data(), from.size());
+      input_tensors[i] = copy;
     }
 
     VLOG(2) << "Creating an engine.";
@@ -893,7 +934,7 @@ class EngineManager {
         engine_name, timeout_us, std::move(executable), std::move(device),
         proto);
 
-    TF_RETURN_IF_ERROR(engine_resource->StartEngine(input_list));
+    TF_RETURN_IF_ERROR(engine_resource->StartEngine(std::move(input_tensors)));
 
     // Only insert the engine into the map if it's successfully started.
     engine_resource_map_.insert_or_assign(engine_name,
