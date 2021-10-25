@@ -139,7 +139,7 @@ bool PrngSeedState::ChangeStochasticRoundingMethod(
   return false;
 }
 
-void AssertStochasticRoundingMethod(poplar::Graph& graph,
+bool AssertStochasticRoundingMethod(poplar::Graph& graph,
                                     const StochasticRoundingMethod& method,
                                     poplar::program::Sequence& seq,
                                     const std::string& inst_name) {
@@ -179,7 +179,11 @@ void AssertStochasticRoundingMethod(poplar::Graph& graph,
         seq.add(poplar::program::AbortOnCondition(all_equal, message));
       }
     }
+
+    return true;
   }
+
+  return false;
 }
 
 }  // namespace poplarplugin

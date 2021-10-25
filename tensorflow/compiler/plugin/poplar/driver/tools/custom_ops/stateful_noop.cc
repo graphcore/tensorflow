@@ -69,5 +69,8 @@ std::unique_ptr<HloInstruction> CreateStatefulNoop() {
   return absl::make_unique<HloStatefulNoop>();
 }
 
+static HloPoplarInstructionFactory stateful_noop_factory(
+    PoplarOp::StatefulNoop,
+    [](HloCustomCallInstruction* inst) { return CreateStatefulNoop(); });
 }  // namespace poplarplugin
 }  // namespace xla

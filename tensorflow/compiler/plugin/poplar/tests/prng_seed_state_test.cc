@@ -24,6 +24,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
+#include "tensorflow/core/lib/core/status_test_util.h"
 
 #include <poplar/CSRFunctions.hpp>
 #include <poplar/RandomSeed.hpp>
@@ -49,11 +50,11 @@ struct PrngSeedTest : HloPoplarTestBase {
 
   void SetUpOrSkip(bool& skip) {
     TF_ASSERT_OK_AND_ASSIGN(auto ipu_count, GetMaxIpuCount());
-    const bool enough_hw = ipu_count >= replication_factor_;
+    const bool enough_hw = ipu_count >= device_count_;
     if (!enough_hw) {
       skip = true;
       GTEST_SKIP() << "Skipping PrngSeedStateTests. They need to run with "
-                   << replication_factor_ << " IPUs but only " << ipu_count
+                   << device_count_ << " IPUs but only " << ipu_count
                    << "available.";
     } else {
       TF_ASSERT_OK_AND_ASSIGN(device_,
@@ -261,6 +262,8 @@ struct PrngSeedStateShardedTest : PrngSeedTest {
   void SetUp() override {
     // tile_count_ of 0 means use the native number of tiles.
     tile_count_ = 0;
+    // Since these tests use sharding we need 4 devices
+    // to make sure we get 2 ipus.
     device_count_ = 4;
     replication_factor_ = 2;
 
@@ -381,6 +384,11 @@ TEST_F(PrngSeedStateShardedTest, TaskParallelism) {
 struct PrngSeedConsistencyTest : PrngSeedTest,
                                  ::testing::WithParamInterface<HloTestCase> {
   void SetUp() override {
+    // Some of the tests use sharding as well, so we need 4 devices
+    // to make sure we get 2 ipus.
+    device_count_ = 4;
+    replication_factor_ = 2;
+
     // Force enable synthetic data so that we don't have to setup any
     // infeed/outfeeds. Seeds are uneffected since we're setting those up
     // ourselves as part of the test.
@@ -413,8 +421,19 @@ struct PrngSeedConsistencyTest : PrngSeedTest,
       resources_->module_call_graph = CallGraph::Build(module_.get());
       resources_->partition_replication_factor = replication_factor_;
       resources_->replication_factor = replication_factor_;
-      resources_->main_graph = std::move(graph_);
 
+      // Setup virtual graphs for sharding.
+      const poplar::Target& target = graph_->getTarget();
+      const auto num_ipus = target.getNumIPUs();
+      for (unsigned ipu = 0; ipu < num_ipus; ++ipu) {
+        poplar::Graph ipu_graph = graph_->createVirtualGraph(
+            ipu * tile_count_, (ipu + 1) * tile_count_);
+        resources_->shard_io_graphs.emplace_back(
+            ipu_graph.createVirtualGraph(0));
+        resources_->shard_compute_graphs.emplace_back(std::move(ipu_graph));
+      }
+
+      resources_->main_graph = std::move(graph_);
       graph_ = nullptr;
     }
   }
@@ -525,7 +544,6 @@ condition {
   const = s32[] constant(10), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   ROOT result = pred[] compare(p_cond.0, const), direction=LT, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
 }
-
 ENTRY entry {
   const_0 = s32[] constant(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   const_1 = s32[] constant(10), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
@@ -533,6 +551,297 @@ ENTRY entry {
   while = (s32[],s32[]) while(repeat_init), condition=condition, body=body, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   while_0 = s32[] get-tuple-element(while), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
 	ROOT result = s32[] add(while_0, const_1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+}
+)"};
+static const HloTestCase pipeline_loop = {"pipeline_loop", R"(
+HloModule test
+stage_0_fwd {
+  x = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  constant = f32[] constant(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  differing0 = f32[1,4,4,2] rng(constant, constant), distribution=rng_uniform, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(x, differing0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+}
+
+stage_1_fwd {
+  x = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2]) tuple(x), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+pipeline {
+  pipeline_input0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_input0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=0}
+  pipeline_stage_0_i1 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+
+  pipeline_input1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_input1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=1}
+  pipeline_stage_1_i0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+
+  gradient_accumulation_count = s32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2], s32[]) tuple(pipeline_stage_1_i0, pipeline_stage_0_i1, gradient_accumulation_count), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+ENTRY entry {
+  input0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  input1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  gradient_accumulation_count = s32[] constant(8), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT call = (f32[1,4,4,2], f32[1,4,4,2], s32[]) call(input0, input1, gradient_accumulation_count), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipeline_config\":{\"repeatCount\":\"2\", \"gradient_accumulation_index\":\"2\"}}, \"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+)"};
+static const HloTestCase pipeline_with_resource_update = {
+    "pipeline_with_resource_update", R"(
+HloModule test
+stage_0_fwd {
+  in0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(in0, in1, in2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+stage_1_fwd {
+  in1 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in3 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(in1, in2, in3), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+stage_1_bwd {
+  in1_grad = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2_grad = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in1_grad, in2_grad), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+stage_0_bwd {
+  in0_grad = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1_grad = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in0_grad, in1_grad), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+resource_update {
+  arg0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  arg1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  arg2 = f32[1,4,4,2] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  arg3 = f32[] parameter(3), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  bcast = f32[1,4,4,2] broadcast(arg3), dimensions={}, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  new_arg0 = f32[1,4,4,2] add(arg0, bcast), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  new_arg1 = f32[1,4,4,2] add(arg1, bcast), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  new_arg2 = f32[1,4,4,2] add(arg2, bcast), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(new_arg0, new_arg1, new_arg2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+pipeline {
+  after-all = token[] after-all(), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  infeed = (f32[1,4,4,2], token[]) infeed(after-all), infeed_config="140121807314576", backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in0 = f32[1,4,4,2] get-tuple-element(infeed), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in3 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0 = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(in1, in0, in3), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=0}
+  stage_0_0 = f32[1,4,4,2] get-tuple-element(stage_0), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0_1 = f32[1,4,4,2] get-tuple-element(stage_0), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0_2 = f32[] get-tuple-element(stage_0), index=2, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1 = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(stage_0_0, in2, stage_0_2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=1}
+  stage_1_1 = f32[1,4,4,2] get-tuple-element(stage_1), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1_2 = f32[1,4,4,2] get-tuple-element(stage_1), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1_3 = f32[] get-tuple-element(stage_1), index=2, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_1, stage_1_2), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=1}
+  stage_1_bwd_1 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1_bwd_2 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_bwd_1, stage_0_0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=0}
+  stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2, stage_1_3), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+
+  gradient_accumulation_count = s32[] parameter(3), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[], s32[]) tuple(gte0, gte1, in3, gradient_accumulation_count), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+ENTRY entry {
+  in0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  gradient_accumulation_count = s32[] constant(8), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT call = (f32[1,4,4,2], f32[1,4,4,2], f32[], s32[]) call(in0, in1, in2, gradient_accumulation_count), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipeline_config\":{\"repeatCount\":\"2\", \"gradient_accumulation_index\":\"3\"}}, \"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+)"};
+static const HloTestCase pipeline_with_reuse_recomputation = {
+    "pipeline_with_reuse_recomputation", R"(
+HloModule test
+stage_0_fwd {
+  in0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  out0 = f32[1,4,4,2] add(in0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  out1 = f32[1,4,4,2] add(out0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(out0, out1, in2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+stage_0_fwd_recomp {
+  in0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  out0 = f32[1,4,4,2] add(in0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  out1 = f32[1,4,4,2] add(out0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(out0, out1, in2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+stage_1_fwd {
+  in1 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in3 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(in1, in2, in3), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+stage_1_bwd {
+  in1_grad = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2_grad = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in1_grad, in2_grad), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+stage_0_bwd {
+  in0_grad = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1_grad = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in0_grad, in1_grad), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+resource_update {
+  arg0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  arg1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  arg2 = f32[1,4,4,2] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  arg3 = f32[] parameter(3), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  bcast = f32[1,4,4,2] broadcast(arg3), dimensions={}, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  new_arg0 = f32[1,4,4,2] add(arg0, bcast), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  new_arg1 = f32[1,4,4,2] add(arg1, bcast), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  new_arg2 = f32[1,4,4,2] add(arg2, bcast), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(new_arg0, new_arg1, new_arg2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+pipeline {
+  after-all = token[] after-all(), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  infeed = (f32[1,4,4,2], token[]) infeed(after-all), infeed_config="140121807314576", backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in0 = f32[1,4,4,2] get-tuple-element(infeed), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in3 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0 = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(in1, in0, in3), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=0}
+  stage_0_0 = f32[1,4,4,2] get-tuple-element(stage_0), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0_1 = f32[1,4,4,2] get-tuple-element(stage_0), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0_2 = f32[] get-tuple-element(stage_0), index=2, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1 = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(stage_0_0, in2, stage_0_2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=1}
+  stage_1_1 = f32[1,4,4,2] get-tuple-element(stage_1), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1_2 = f32[1,4,4,2] get-tuple-element(stage_1), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1_3 = f32[] get-tuple-element(stage_1), index=2, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_1, stage_1_2), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=1}
+  stage_1_bwd_1 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1_bwd_2 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0_recomp = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(in1, in0, in3), to_apply=stage_0_fwd_recomp, backend_config="{\"callConfig\":{\"type\":\"PipelineStageRecomputation\",\"pipelineStageConfig\":{\"stageId\":\"0\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=0}
+  stage_0_0_recomp = f32[1,4,4,2] get-tuple-element(stage_0_recomp), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_bwd_1, stage_0_0_recomp), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=0}
+  stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2, stage_1_3), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+
+  gradient_accumulation_count = s32[] parameter(3), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[], s32[]) tuple(gte0, gte1, in3, gradient_accumulation_count), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+ENTRY entry {
+  in0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  gradient_accumulation_count = s32[] constant(8), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT call = (f32[1,4,4,2], f32[1,4,4,2], f32[], s32[]) call(in0, in1, in2, gradient_accumulation_count), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipeline_config\":{\"repeatCount\":\"2\", \"gradient_accumulation_index\":\"3\"}}}"
+}
+)"};
+static const HloTestCase pipeline_with_revisit_recomputation = {
+    "pipeline_with_revisit_recomputation", R"(
+HloModule test
+stage_0_fwd {
+  in0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  out0 = f32[1,4,4,2] add(in0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  out1 = f32[1,4,4,2] add(out0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(out0, out1, in2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+stage_0_fwd_recomp {
+  in0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in3 = f32[1,4,4,2] parameter(3), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  out0 = f32[1,4,4,2] add(in3, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(in3, out0, in2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+stage_1_fwd {
+  in1 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in3 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(in1, in2, in3), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+stage_1_bwd {
+  in1_grad = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2_grad = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in1_grad, in2_grad), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+stage_0_bwd {
+  in0_grad = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1_grad = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in0_grad, in1_grad), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+resource_update {
+  arg0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  arg1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  arg2 = f32[1,4,4,2] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  arg3 = f32[] parameter(3), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  bcast = f32[1,4,4,2] broadcast(arg3), dimensions={}, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  new_arg0 = f32[1,4,4,2] add(arg0, bcast), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  new_arg1 = f32[1,4,4,2] add(arg1, bcast), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  new_arg2 = f32[1,4,4,2] add(arg2, bcast), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(new_arg0, new_arg1, new_arg2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+pipeline {
+  after-all = token[] after-all(), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  infeed = (f32[1,4,4,2], token[]) infeed(after-all), infeed_config="140121807314576", backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in0 = f32[1,4,4,2] get-tuple-element(infeed), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in3 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0 = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(in1, in0, in3), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=0}
+  stage_0_0 = f32[1,4,4,2] get-tuple-element(stage_0), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0_1 = f32[1,4,4,2] get-tuple-element(stage_0), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0_2 = f32[] get-tuple-element(stage_0), index=2, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1 = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(stage_0_0, in2, stage_0_2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=1}
+  stage_1_1 = f32[1,4,4,2] get-tuple-element(stage_1), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1_2 = f32[1,4,4,2] get-tuple-element(stage_1), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1_3 = f32[] get-tuple-element(stage_1), index=2, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_1, stage_1_2), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=1}
+  stage_1_bwd_1 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_1_bwd_2 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0_recomp = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(in1, in0, in3, stage_0_0), to_apply=stage_0_fwd_recomp, backend_config="{\"callConfig\":{\"type\":\"PipelineStageRecomputation\",\"pipelineStageConfig\":{\"stageId\":\"0\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=0}
+  stage_0_0_recomp = f32[1,4,4,2] get-tuple-element(stage_0_recomp), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  stage_0_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_bwd_1, stage_0_0_recomp), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}},\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}", sharding={maximal device=0}
+  stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2, stage_1_3), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+
+  gradient_accumulation_count = s32[] parameter(3), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[], s32[]) tuple(gte0, gte1, in3, gradient_accumulation_count), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+}
+
+ENTRY entry {
+  in0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  in2 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  gradient_accumulation_count = s32[] constant(8), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT call = (f32[1,4,4,2], f32[1,4,4,2], f32[], s32[]) call(in0, in1, in2, gradient_accumulation_count), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipeline_config\":{\"repeatCount\":\"2\", \"gradient_accumulation_index\":\"3\"}}}"
 }
 )"};
 TEST_P(PrngSeedConsistencyTest, Check) {
@@ -553,7 +862,7 @@ TEST_P(PrngSeedConsistencyTest, Check) {
   auto entry = module_->entry_computation();
   auto order = module_->schedule().sequence(entry).instructions();
   EntryVisitor visitor(*resources_, entry);
-  entry->AcceptOrdered(&visitor, order);
+  TF_ASSERT_OK(entry->AcceptOrdered(&visitor, order));
 
   seq.add(resources_->preamble_sequence);
   seq.add(visitor.GetSequenceAndInitializeCounters());
@@ -566,7 +875,10 @@ TEST_P(PrngSeedConsistencyTest, Check) {
 INSTANTIATE_TEST_SUITE_P(PrngSeedHlo, PrngSeedConsistencyTest,
                          ::testing::Values(simple_repeat,
                                            repeat_with_resource_update,
-                                           while_loop),
+                                           while_loop, pipeline_loop,
+                                           pipeline_with_resource_update,
+                                           pipeline_with_reuse_recomputation,
+                                           pipeline_with_revisit_recomputation),
                          HloTestCaseName);
 
 }  // namespace

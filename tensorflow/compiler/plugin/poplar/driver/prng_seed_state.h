@@ -82,7 +82,8 @@ class PrngSeedState {
 // Debug utility for checking whether the state of the seed matches the given
 // StochasticRoundingMethod, terminating poplar program execution if not. Note
 // that using this comes with a large overhead.
-void AssertStochasticRoundingMethod(poplar::Graph& graph,
+// Returns whether the given sequence is updated.
+bool AssertStochasticRoundingMethod(poplar::Graph& graph,
                                     const StochasticRoundingMethod& method,
                                     poplar::program::Sequence& seq,
                                     const std::string& inst_name = "");

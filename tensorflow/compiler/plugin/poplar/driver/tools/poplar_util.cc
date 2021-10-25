@@ -376,9 +376,8 @@ bool MaybeChangeStochasticRoundingMethod(CompilerResources& res,
       // as this would add checks for instructions with a SR type of
       // StochasticRoundingMethod_Any, which are hard to get right as they're
       // often reordered.
-      AssertStochasticRoundingMethod(GetMasterGraph(res), method, seq,
-                                     inst_name);
-      seq_changed = true;
+      seq_changed |= AssertStochasticRoundingMethod(GetMasterGraph(res), method,
+                                                    seq, inst_name);
     }
   }
 
