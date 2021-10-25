@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <utility>
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -213,6 +214,11 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   StatusOr<poplar::program::Sequence> CreatePipelineStageRecomputationOp(
       const HloInstruction* inst,
       const poplar::DebugNameAndId& debug_name_and_id);
+
+  // Track different SR methods to keep prng seeds consistent as the
+  // pipeline gets executed.
+  StochasticRoundingMethod pipeline_start_sr_method_;
+  std::vector<StochasticRoundingMethod> stage_end_sr_methods;
 };
 
 #undef HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED

@@ -567,7 +567,9 @@ PipelineVisitor::PipelineVisitor(
       stage_ipu_mapping_(stage_ipu_mapping),
       inst_stage_mapping_(inst_stage_mapping),
       stages_with_recomputation_(stages_with_recomputation),
-      num_backward_stages_(num_backward_stages) {
+      num_backward_stages_(num_backward_stages),
+      pipeline_start_sr_method_(GetStochasticRoundingMethod(res)),
+      stage_end_sr_methods(stage_count, StochasticRoundingMethod_Undefined) {
   EnterVariableScope();
 }
 
@@ -976,6 +978,12 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
     for (size_t i = 0; i < pipeline_outputs.size(); i++) {
       TF_CHECK_OK(AddOutput(tensor_map, inst, i, pipeline_outputs[i]));
     }
+
+    // Restore the SR method that was set when first visiting the stage
+    // so subsequent calls to MaybeChangeStochasticRoundingMethod produce the
+    // same effect. Don't need to do this when doing a full revisit as the
+    // the SR mode normally gets set while visiting.
+    MaybeSetStochasticRoundingMethod(resources_, stage_end_sr_methods[stage]);
   }
   return seq;
 }
@@ -983,14 +991,24 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
 Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
   HloComputation* comp = hlo->to_apply();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(hlo);
+  const std::string sr_change_name = hlo->name() + "_end";
+
   if (IsResourceUpdate(hlo)) {
     TF_ASSIGN_OR_RETURN(
         DeferredArgRBVectors inputs,
         GetInputsForDeferredRBInstruction(hlo, /*preserve_aliasing*/ true));
+
+    // Similar to pipeline stages we always do resource update relative to the
+    // starting sr method, since all the pipeline stages do this too then we
+    // don't have to worry about how the two get scheduled together.
+    MaybeSetStochasticRoundingMethod(resources_, pipeline_start_sr_method_);
     TF_ASSIGN_OR_RETURN(
         poplar::program::Sequence seq,
         CreateResourceUpdateOp(resources_, hlo, inputs, hlo->shape(),
                                tensor_map, debug_name_and_id));
+    MaybeChangeStochasticRoundingMethod(resources_, sr_change_name,
+                                        pipeline_start_sr_method_, seq);
+
     resource_update_.add(seq);
   } else {
     TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
@@ -998,14 +1016,27 @@ Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
     VLOG(1) << "Processing " << hlo->name() << " : " << comp->name()
             << " as a pipeline stage";
 
+    // To increase utilisation pipeline stages may be executed in a non-linear
+    // way, instead of keeping track of this order and changing seeds
+    // accordingly we always start/end a pipeline stage at the starting sr
+    // method. This way we don't have to know about any scheduling specifics.
+    MaybeSetStochasticRoundingMethod(resources_, pipeline_start_sr_method_);
+
     if (IsPipelineStageOrBackwardOp(hlo)) {
       TF_ASSIGN_OR_RETURN(poplar::program::Sequence seq,
                           CreatePipelineStageOp(hlo, debug_name_and_id));
+      stage_end_sr_methods[stage] = GetStochasticRoundingMethod(resources_);
+      MaybeChangeStochasticRoundingMethod(resources_, sr_change_name,
+                                          pipeline_start_sr_method_, seq);
+
       program_sequences_[stage].add(seq);
     } else if (IsPipelineStageRecomputation(hlo)) {
       TF_ASSIGN_OR_RETURN(
           poplar::program::Sequence seq,
           CreatePipelineStageRecomputationOp(hlo, debug_name_and_id));
+      MaybeChangeStochasticRoundingMethod(resources_, sr_change_name,
+                                          pipeline_start_sr_method_, seq);
+
       recomputation_sequences_[stage].add(seq);
     } else {
       return HandleNotImplemented(hlo);

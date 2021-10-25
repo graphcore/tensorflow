@@ -18,6 +18,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -39,6 +40,18 @@ Shape CollectInputAndOutputShapes(const HloInstruction* inst) {
 }
 
 StatusOr<bool> NeedsSpecificSeedType(const HloInstruction* inst) {
+  // Custom poplar instructions which don't need a specific seed.
+  const std::vector<PoplarOp> non_compute_poplar_ops = {
+      PoplarOp::Assert,      PoplarOp::ExecutionCounter, PoplarOp::CopyInto,
+      PoplarOp::Fifo,        PoplarOp::InterTilesetCopy, PoplarOp::IpuInterCopy,
+      PoplarOp::StatefulNoop};
+  const bool skippable = absl::c_any_of(
+      non_compute_poplar_ops,
+      [&](PoplarOp op) { return IsPoplarInstruction(op, inst); });
+  if (skippable) {
+    return false;
+  }
+
   // Instruction types that dont require a specific seed.
   switch (inst->opcode()) {
     // We don't need to worry about seeds for these instruction types since
@@ -286,7 +299,11 @@ StatusOr<StochasticRoundingMethod>
 AddStochasticRoundingOptions::GetStochasticRoundingMethod(
     const HloInstruction* inst) const {
   // Switching seeds is not free, we can save some time by not switching seeds
-  // for instructions which won't be effected by it.
+  // for instructions which won't be effected by it. Additionally it makes it
+  // easier to manage the seed state since it's offten tuples/gtes and other
+  // 'structural' instructions that get reordered during lowering, which
+  // otherwise would require explicit handling to makesure the seed was valid
+  // afterwards.
   TF_ASSIGN_OR_RETURN(bool needs_sepecific_seed, NeedsSpecificSeedType(inst));
   if (needs_sepecific_seed) {
     return IsInstructionReplicaIdentical(inst)

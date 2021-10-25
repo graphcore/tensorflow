@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
@@ -363,6 +364,23 @@ ENTRY test {
  ROOT root = f16[1,2] call(value), to_apply=func
 }
 )"};
+// Similarly none of these poplar instructions do any compute so it shouldn't
+// matter what seed they use.
+static const HloTestCase simple_no_compute_poplar = {"simple_no_compute_poplar",
+                                                     R"(
+HloModule test
+
+ENTRY test {
+ stateful-noop = () custom-call(), custom_call_target="StatefulNoop", custom_call_has_side_effect=true
+ param = f16[] parameter(0)
+ constant = f16[] constant(2)
+ fifo = f16[] custom-call(param), custom_call_target="Fifo", backend_config="{\"offload\":0, \"depth\":2}"
+ tuple = (f16[], f16[]) tuple(fifo, constant)
+ value = f16[] get-tuple-element(tuple), index=1
+ ROOT copy = f16[] custom-call(value), custom_call_target="IpuInterCopy"
+}
+)"};
+
 // It doesn't matter what seed this uses since it's not using f16 types.
 static const HloTestCase simple_compute_non_f16 = {"simple_compute_non_f16", R"(
 HloModule test
@@ -378,6 +396,9 @@ ENTRY test {
 )"};
 TEST_P(AnySeedTest, StochasticRoundingMethod) {
   using ::testing::Each;
+
+  CustomOpReplacer custom_op_replacer;
+  custom_op_replacer.Run(hlo_module_);
 
   AddStochasticRoundingOptions add_stochastic_rounding_options(
       StochasticRounding_On);
@@ -434,6 +455,7 @@ TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingAllReduce) {
 
 INSTANTIATE_TEST_SUITE_P(AddStochasticRoundingOptionsHLO, AnySeedTest,
                          ::testing::Values(simple_no_compute,
+                                           simple_no_compute_poplar,
                                            simple_compute_non_f16),
                          HloTestCaseName);
 

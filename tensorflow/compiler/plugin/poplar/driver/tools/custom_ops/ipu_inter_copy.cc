@@ -68,5 +68,9 @@ std::unique_ptr<HloInstruction> CreateIpuInterCopy(
   return absl::make_unique<HloIpuInterCopy>(operands);
 }
 
+static HloPoplarInstructionFactory ipu_inter_copy_factory(
+    PoplarOp::IpuInterCopy, [](HloCustomCallInstruction* inst) {
+      return CreateIpuInterCopy(inst->operands());
+    });
 }  // namespace poplarplugin
 }  // namespace xla
