@@ -550,7 +550,36 @@ ENTRY entry {
   repeat_init = (s32[],s32[]) tuple(const_0, const_1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
   while = (s32[],s32[]) while(repeat_init), condition=condition, body=body, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   while_0 = s32[] get-tuple-element(while), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-	ROOT result = s32[] add(while_0, const_1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  ROOT result = s32[] add(while_0, const_1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+}
+)"};
+static const HloTestCase conditional_statement = {"conditional_statement", R"(
+HloModule test
+branchA {
+  x = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  increment = f32[] constant(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT add = f32[] add(x, increment), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+}
+
+branchB {
+  x = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  increment = f32[] constant(-1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT add = f32[] add(x, increment), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
+}
+
+branchC {
+  x = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  increment = f32[] constant(10), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT add = f32[] add(x, increment), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+}
+
+ENTRY test {
+  index = s32[] constant(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  branchA_param = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  branchB_param = f32[] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  branchC_param = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  conditional = f32[] conditional(index, branchA_param, branchB_param, branchC_param), branch_computations={branchA, branchB, branchC}, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
+  ROOT result = f32[] add(branchA_param, conditional), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
 }
 )"};
 static const HloTestCase pipeline_loop = {"pipeline_loop", R"(
@@ -878,7 +907,8 @@ INSTANTIATE_TEST_SUITE_P(PrngSeedHlo, PrngSeedConsistencyTest,
                                            while_loop, pipeline_loop,
                                            pipeline_with_resource_update,
                                            pipeline_with_reuse_recomputation,
-                                           pipeline_with_revisit_recomputation),
+                                           pipeline_with_revisit_recomputation,
+                                           conditional_statement),
                          HloTestCaseName);
 
 }  // namespace

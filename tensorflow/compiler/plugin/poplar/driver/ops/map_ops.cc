@@ -944,22 +944,34 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
                                    inst->name().c_str());
   }
 
+  auto conditional_start_sr_method = GetStochasticRoundingMethod(res);
+  std::vector<StochasticRoundingMethod> bodies_end_sr_methods;
+
   std::vector<std::shared_ptr<DeferredVisitor>> bodies(n_branches);
   const auto& comps = inst->called_computations();
 
   // Compile each branch into a sequence
   for (auto b = 0; b < n_branches; b++) {
+    // The seed changes of the branch that gets executed should be relative to
+    // the start of the conditional.
+    MaybeSetStochasticRoundingMethod(res, conditional_start_sr_method);
+
     CHECK_EQ(deferred_inputs[b + 1].size(),
              CountShapes(inst->operand(b + 1)->shape()));
     DeferredArgRBVectors body_inputs = {deferred_inputs[b + 1]};
     TF_ASSIGN_OR_RETURN(bodies[b],
                         res.subcomputation_cache.GetOrCompileSubcomputation(
                             res, body_inputs, comps[b], true));
+    bodies_end_sr_methods.push_back(GetStochasticRoundingMethod(res));
 
     // Make sure any deferred inputs to the instruction are pushed up.
     TF_RETURN_IF_ERROR(bodies[b]->PropagateDeferredAllocationsOperand(
         inst, b + 1, 0, body_inputs[0], debug_name_and_id));
   }
+  // We need a SR method that seed changes after this conditional should be
+  // relative to, since the branches could end on different methods. For this we
+  // choose the SR method of the last branch and make all branches end on that.
+  auto conditional_end_method = bodies_end_sr_methods.back();
 
   TensorOrRemoteBufferVectors inputs =
       GetAllInstructionInputs(res, inst, seq, tensor_map, debug_name_and_id);
@@ -1012,6 +1024,13 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
 
     // Add the actual body.
     seqs[b].add(bodies[b]->GetSequence());
+
+    // Make sure all branches end on the same SR method.
+    MaybeSetStochasticRoundingMethod(res, bodies_end_sr_methods[b]);
+    const std::string change_name =
+        absl::StrCat(inst->name(), "_body", std::to_string(b), "_end");
+    MaybeChangeStochasticRoundingMethod(res, change_name,
+                                        conditional_end_method, seqs[b]);
 
     // Add output copies
     for (unsigned int i = 0; i < output_count; i++) {
