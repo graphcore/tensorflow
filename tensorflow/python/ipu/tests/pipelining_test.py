@@ -2570,12 +2570,12 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     def stage2a(x, _):
       with variable_scope.variable_scope("stage2a", use_resource=True):
-        x = block("b", 2, 64, 1, x)
+        x = block("b", 2, 64, 2, x)
         return x
 
     def stage2b(x, label):
       with variable_scope.variable_scope("stage2b", use_resource=True):
-        x = block("b", 2, 64, 1, x)
+        x = block("b", 2, 64, 2, x)
         return x, label
 
     def stage3(xa, xb, label):
