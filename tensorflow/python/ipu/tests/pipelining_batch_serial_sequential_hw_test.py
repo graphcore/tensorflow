@@ -228,7 +228,7 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
         [stage1, stage2, stage3, stage4, stage5],
-        inputs_fn, [10.01],
+        inputs_fn, [],
         repeat_count,
         pipeline_depth,
         dataset_fn,

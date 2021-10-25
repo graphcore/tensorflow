@@ -14,6 +14,7 @@
 # =============================================================================
 
 import math
+import numpy as np
 import pva
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -263,12 +264,22 @@ class PipelineTester(object):
       process_count=None,
       process_index=None):
 
+    use_constant = number_of_io_tiles != 0
+
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       dataset = dataset_fn()
       inputs = inputs_fn()
       infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+      with ops.device('cpu'):
+        acc_counter = array_ops.placeholder(np.int32, shape=[])
+
+      assert len(inputs) == len(input_values)
+      if not use_constant:
+        inputs.append(acc_counter)
+        input_values.append(gradient_accumulation_count)
 
       def opt_fn(loss):
         global_replication_factor = replication_factor * (process_count or 1)
@@ -284,12 +295,15 @@ class PipelineTester(object):
         with variable_scope.variable_scope("ipu",
                                            use_resource=True,
                                            reuse=False):
+          p_inputs = args if use_constant else args[0:-1]
+          counter = gradient_accumulation_count if use_constant else args[-1]
+
           return pipelining_ops.pipeline(
               stages,
-              gradient_accumulation_count,
+              counter,
               repeat_count=repeat_count,
               batch_serialization_iterations=batch_serialization_iterations,
-              inputs=args,
+              inputs=p_inputs,
               optimizer_function=optimizer_function,
               infeed_queue=infeed_queue,
               outfeed_queue=outfeed_queue,
@@ -347,6 +361,7 @@ class PipelineTester(object):
       session.run(variables.global_variables_initializer())
       session.run(infeed_queue.initializer)
       report_json.reset()
+
       session.run(compiled_model_pipeline,
                   feed_dict=dict(zip(inputs, input_values)))
       out = session.run(outfeed_op)
@@ -504,5 +519,6 @@ class PipelineTester(object):
         replicated_optimizer_state_sharding[1],
         minimum_remote_tensor_size,
         return_vars=True)
+
     test_wrapper.assertAllClose(sharded_losses, pipeline_losses)
     test_wrapper.assertAllClose(sharded_vars, pipeline_vars)

@@ -204,10 +204,10 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
     def stage3(x):
       return x
 
-    def my_net(c):
+    def my_net(c, count):
       return pipelining_ops.pipeline(
           [stage1, stage2, stage3],
-          12,
+          count,
           inputs=[c],
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
@@ -215,12 +215,13 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
           pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
 
     with ops.device('cpu'):
+      count = array_ops.placeholder(np.int32, shape=[])
       c = array_ops.placeholder(np.float32, shape=[])
 
     with tu.ipu_session() as sess:
 
       with ops.device("/device:IPU:0"):
-        r = ipu_compiler.compile(my_net, inputs=[c])
+        r = ipu_compiler.compile(my_net, inputs=[c, count])
 
       cfg = IPUConfig()
       cfg.auto_select_ipus = 4
@@ -236,7 +237,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
       report_json.reset()
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
-      sess.run(r, {c: 10.01})
+      sess.run(r, {c: 10.01, count: 12})
       losses_pipeline = sess.run(outfeed_op)
       self.assertAllClose(losses_pipeline, [[
           410.01, 730.01, 650.01, 570.01, 890.01, 410.01, 730.01, 650.01,
@@ -793,7 +794,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4, stage5],
-        inputs_fn, [10.01],
+        inputs_fn, [],
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
@@ -861,7 +862,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4, stage5],
-        inputs_fn, [10.01],
+        inputs_fn, [],
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
@@ -937,7 +938,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4, stage5],
-        inputs_fn, [10.01],
+        inputs_fn, [],
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,

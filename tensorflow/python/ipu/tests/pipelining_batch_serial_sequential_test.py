@@ -405,7 +405,7 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4, stage5],
-        inputs_fn, [10.01],
+        inputs_fn, [],
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
@@ -473,7 +473,7 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4, stage5],
-        inputs_fn, [10.01],
+        inputs_fn, [],
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
@@ -549,7 +549,7 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4, stage5],
-        inputs_fn, [10.01],
+        inputs_fn, [],
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
