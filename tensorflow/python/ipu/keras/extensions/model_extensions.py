@@ -17,6 +17,7 @@ IPU specific Keras Model extensions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 import copy
+import enum
 import math
 import sys
 import threading
@@ -26,6 +27,7 @@ import libpvti
 from collections import OrderedDict
 from functools import partial
 
+from tensorflow.python.eager import context
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import device as tf_device
 from tensorflow.python.ipu import ipu_outfeed_queue
@@ -68,6 +70,37 @@ class _NormalizedKerasOptimizerWrapper(  # pylint: disable=abstract-method
       grad = grad * array_ops.constant(1.0 / self._normalization_factor,
                                        dtype=grad.dtype)
     return grad, var
+
+
+class _Mode(enum.Enum):
+  FIT = 1
+  EVALUATE = 2
+  PREDICT = 3
+
+
+class _OutfeedManager:
+  """Class for re-using outfeeds.
+
+  Re-using outfeeds for different execution modes means that the internal
+  tf.function does not need to be retraced."""
+  def __init__(self):
+    self._outfeeds = dict()
+
+  def get_outfeed(self, mode):
+    """Returns the outfeed queue to use for the particular mode."""
+    if not mode in self._outfeeds:
+      self._outfeeds[mode] = ipu_outfeed_queue.IPUOutfeedQueue()
+    return self._outfeeds[mode]
+
+  def reset(self):
+    for outfeed in self._outfeeds.values():
+      # Delete the outfeed queue.
+      with context.eager_mode():
+        outfeed.deleter  # pylint: disable=pointless-statement
+    self._outfeeds = dict()
+
+  def __del__(self):
+    self.reset()
 
 
 class _PollingThread(threading.Thread):
@@ -250,6 +283,7 @@ class ModelExtension(base_layer.KerasExtension):
     self._compiled_pipeline_train_iterations = None
     self._compiled_pipeline_test_iterations = None
     self._compiled_pipeline_predict_iterations = None
+    self._outfeed_manager = _OutfeedManager()
 
   def _log_steps_per_execution_warning(self, steps_per_execution,
                                        steps_per_execution_per_replica):
@@ -1118,6 +1152,7 @@ class ModelExtension(base_layer.KerasExtension):
                     max_queue_size=10,
                     workers=1,
                     use_multiprocessing=False):
+    mode = _Mode.FIT
     base_layer.keras_api_gauge.get_cell('fit').set(True)
     # Legacy graph support is contained in `training_v1.Model`.
     version_utils.disallow_legacy_graph('Model', 'fit')
@@ -1182,7 +1217,8 @@ class ModelExtension(base_layer.KerasExtension):
 
       original_steps_per_execution_value = \
           data_handler.steps_per_execution_value
-      outfeed = ipu_outfeed_queue.ScopedIPUOutfeedQueue()
+      outfeed = self._outfeed_manager.get_outfeed(mode)  # pylint:disable=unused-variable
+
       for epoch, iterator in data_handler.enumerate_epochs():
         inferred_steps = data_handler.inferred_steps
         steps_per_execution_value = data_handler.steps_per_execution_value
@@ -1319,6 +1355,11 @@ class ModelExtension(base_layer.KerasExtension):
       if getattr(self, '_eval_data_handler', None) is not None:
         del self._eval_data_handler
         del self._fit_frame
+
+      # Delete the outfeed queue.
+      with context.eager_mode():
+        outfeed.deleter  # pylint: disable=pointless-statement
+
       callbacks.on_train_end(logs=training_logs)
       return self.history
 
@@ -1337,7 +1378,7 @@ class ModelExtension(base_layer.KerasExtension):
                          workers=1,
                          use_multiprocessing=False,
                          return_dict=False):
-
+    mode = _Mode.EVALUATE
     base_layer.keras_api_gauge.get_cell('evaluate').set(True)
     version_utils.disallow_legacy_graph('Model', 'evaluate')
     self._assert_compile_was_called()
@@ -1389,7 +1430,8 @@ class ModelExtension(base_layer.KerasExtension):
 
       original_steps_per_execution_value = \
           data_handler.steps_per_execution_value
-      outfeed = ipu_outfeed_queue.ScopedIPUOutfeedQueue()
+      outfeed = self._outfeed_manager.get_outfeed(mode)  # pylint:disable=unused-variable
+
       for _, iterator in data_handler.enumerate_epochs():  # Single epoch.
         inferred_steps = data_handler.inferred_steps
         steps_per_execution_value = data_handler.steps_per_execution_value
@@ -1463,6 +1505,11 @@ class ModelExtension(base_layer.KerasExtension):
         logs = outfeed_thread.get_result()
 
       logs = tf_utils.to_numpy_or_python_type(logs)
+
+      # Delete the outfeed queue.
+      with context.eager_mode():
+        outfeed.deleter  # pylint: disable=pointless-statement
+
       callbacks.on_test_end(logs=logs)
 
       if return_dict:
@@ -1491,6 +1538,7 @@ class ModelExtension(base_layer.KerasExtension):
                         max_queue_size=10,
                         workers=1,
                         use_multiprocessing=False):
+    mode = _Mode.PREDICT
     base_layer.keras_api_gauge.get_cell('predict').set(True)
     version_utils.disallow_legacy_graph('Model', 'predict')
     self._check_call_args('predict')
@@ -1533,7 +1581,8 @@ class ModelExtension(base_layer.KerasExtension):
 
       original_steps_per_execution_value = \
           data_handler.steps_per_execution_value
-      outfeed = ipu_outfeed_queue.ScopedIPUOutfeedQueue()
+      outfeed = self._outfeed_manager.get_outfeed(mode)  # pylint:disable=unused-variable
+
       for _, iterator in data_handler.enumerate_epochs():  # Single epoch.
         inferred_steps = data_handler.inferred_steps
         steps_per_execution_value = data_handler.steps_per_execution_value
@@ -1605,6 +1654,11 @@ class ModelExtension(base_layer.KerasExtension):
 
       if batch_outputs is None:
         raise ValueError('Expect x to be a non-empty array or dataset.')
+
+      # Delete the outfeed queue.
+      with context.eager_mode():
+        outfeed.deleter  # pylint: disable=pointless-statement
+
       callbacks.on_predict_end()
     all_outputs = nest.map_structure_up_to(batch_outputs,
                                            training_module.concat, outputs)

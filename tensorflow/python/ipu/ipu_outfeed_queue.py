@@ -576,10 +576,35 @@ class ScopedIPUOutfeedQueue(IPUOutfeedQueue):
           "ScopedIPUOutfeedQueue can only be created in eager mode")
 
     super().__init__(outfeed_mode=outfeed_mode, device_ordinal=device_ordinal)
+    # Destruction of this object when the queue goes out of scope will trigger
+    # the deletion.
+    self._deleter = _IPUOutfeedQueueDeleter(self._feed_name,
+                                            self._device_ordinal)
+
+
+class _IPUOutfeedQueueDeleter:
+  """An object which cleans up an iterator.
+
+  An alternative to defining a __del__ method on an object. Even if the parent
+  object is part of a reference cycle, the cycle will be collectable.
+  """
+
+  __slots__ = ["_feed_name", "_device_ordinal", "_eager_mode"]
+
+  def __init__(self, feed_name, device_ordinal):
+    self._feed_name = feed_name
+    self._device_ordinal = device_ordinal
+    self._eager_mode = context.executing_eagerly()
 
   def __del__(self):
-    with context.eager_mode():
-      gen_pop_datastream_ops.ipu_delete_outfeed(
-          feed_id=self._feed_name,
-          device_ordinal=self._device_ordinal,
-          asynchronous=True)
+    # Make sure the resource is deleted in the same mode as it was created in.
+    if self._eager_mode:
+      with context.eager_mode():
+        gen_pop_datastream_ops.ipu_delete_outfeed(
+            feed_id=self._feed_name,
+            device_ordinal=self._device_ordinal,
+            asynchronous=True)
+    else:
+      with context.graph_mode():
+        gen_pop_datastream_ops.ipu_delete_outfeed(
+            feed_id=self._feed_name, device_ordinal=self._device_ordinal)
