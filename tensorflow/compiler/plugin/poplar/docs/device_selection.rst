@@ -365,6 +365,8 @@ some help for each option. The available options are described below:
     - Add a global synchronisation point at the start of each replica's main
       Poplar program. This can be used to force each replica to not execute
       until all replicas have started.
+  * - :samp:`--disable_poplar_version_check`
+    - If set, the Poplar version check will be disabled.
 
 Multiple options can be specified at the same time by concatenating them like command line
 switches, for example: ``TF_POPLAR_FLAGS=--executable_cache_path=/tmp/cache --log_cycle_count=123``.
