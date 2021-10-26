@@ -30,6 +30,7 @@ from functools import partial
 from tensorflow.python.eager import context
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import device as tf_device
+from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.ops import pipelining_ops
@@ -76,6 +77,43 @@ class _Mode(enum.Enum):
   FIT = 1
   EVALUATE = 2
   PREDICT = 3
+
+
+class _InfeedManager:
+  """Class for re-using infeed names.
+
+  Re-using infeed names for different execution modes means that the internal
+  tf.function does not need to be retraced."""
+  def __init__(self):
+    self._infeed_names = dict()
+    self._infeeds = dict()
+
+  def get_infeed(self, mode, dataset):
+    kwargs = dict()
+    if not mode in self._infeed_names:
+      self._infeed_names[mode] = ipu_infeed_queue._generate_unique_name()  # pylint: disable=protected-access
+
+    # Re-use the infeed name.
+    kwargs[ipu_infeed_queue._internal_id] = self._infeed_names[mode]  # pylint: disable=pointless-statement,protected-access
+
+    # De-register the existing infeed.
+    if mode in self._infeeds:
+      with context.eager_mode():
+        self._infeeds[mode]._infeed_queue.deleter  # pylint: disable=pointless-statement,protected-access
+
+    # Create a new infeed.
+    self._infeeds[mode] = ipu_infeed_queue.IPUIterator(dataset, **kwargs)
+    return self._infeeds[mode]
+
+  def reset(self):
+    self._infeed_names = dict()
+    for infeed in self._infeeds.values():
+      with context.eager_mode():
+        infeed._infeed_queue.deleter  # pylint: disable=pointless-statement,protected-access
+    self._infeeds = dict()
+
+  def __del__(self):
+    self.reset()
 
 
 class _OutfeedManager:
@@ -284,6 +322,7 @@ class ModelExtension(base_layer.KerasExtension):
     self._compiled_pipeline_test_iterations = None
     self._compiled_pipeline_predict_iterations = None
     self._outfeed_manager = _OutfeedManager()
+    self._infeed_manager = _InfeedManager()
 
   def _log_steps_per_execution_warning(self, steps_per_execution,
                                        steps_per_execution_per_replica):
@@ -1219,7 +1258,8 @@ class ModelExtension(base_layer.KerasExtension):
           data_handler.steps_per_execution_value
       outfeed = self._outfeed_manager.get_outfeed(mode)  # pylint:disable=unused-variable
 
-      for epoch, iterator in data_handler.enumerate_epochs():
+      for epoch, iterator in data_handler.enumerate_epochs_with_reuse(
+          self._infeed_manager, mode):
         inferred_steps = data_handler.inferred_steps
         steps_per_execution_value = data_handler.steps_per_execution_value
         steps_per_execution_per_replica = \
@@ -1432,7 +1472,9 @@ class ModelExtension(base_layer.KerasExtension):
           data_handler.steps_per_execution_value
       outfeed = self._outfeed_manager.get_outfeed(mode)  # pylint:disable=unused-variable
 
-      for _, iterator in data_handler.enumerate_epochs():  # Single epoch.
+      # Single epoch.
+      for _, iterator in data_handler.enumerate_epochs_with_reuse(
+          self._infeed_manager, mode):
         inferred_steps = data_handler.inferred_steps
         steps_per_execution_value = data_handler.steps_per_execution_value
         steps_per_execution_per_replica = \
@@ -1583,7 +1625,9 @@ class ModelExtension(base_layer.KerasExtension):
           data_handler.steps_per_execution_value
       outfeed = self._outfeed_manager.get_outfeed(mode)  # pylint:disable=unused-variable
 
-      for _, iterator in data_handler.enumerate_epochs():  # Single epoch.
+      # Single epoch.
+      for _, iterator in data_handler.enumerate_epochs_with_reuse(
+          self._infeed_manager, mode):
         inferred_steps = data_handler.inferred_steps
         steps_per_execution_value = data_handler.steps_per_execution_value
         steps_per_execution_per_replica = \

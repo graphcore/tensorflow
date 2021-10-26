@@ -34,6 +34,7 @@ from tensorflow.python.framework import type_spec
 
 _uid_counter = 0
 _uid_lock = threading.Lock()
+_internal_id = "_internal_id"
 
 
 def _generate_unique_name():
@@ -122,7 +123,8 @@ class IPUInfeedQueue:
       device_ordinal=None,
       replication_factor=1,  # pylint: disable=unused-argument
       data_to_prefetch=1,  # pylint: disable=unused-argument
-      prefetch_depth=None):
+      prefetch_depth=None,
+      **kwargs):
     """Creates an IPUInfeedQueue object.
 
     Args:
@@ -190,7 +192,8 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       self._dataset = self._dataset._apply_options()  # pylint: disable=protected-access
 
       # ID used for differentiating between datasets.
-      self._id = _generate_unique_name()
+      self._id = kwargs[
+          _internal_id] if _internal_id in kwargs else _generate_unique_name()
 
       try:
         ds_variant = self._dataset._variant_tensor  # pylint: disable=protected-access
@@ -398,7 +401,11 @@ class IPUIterator(iterator_ops.OwnedIterator):
   The elements from iterator can only be accessed inside of tf.functions for
   maximum performance.
   """
-  def __init__(self, dataset=None, infeed_spec=None, element_spec=None):
+  def __init__(self,
+               dataset=None,
+               infeed_spec=None,
+               element_spec=None,
+               **kwargs):
     """Creates a new iterator from the given dataset.
 
     If `dataset` is not specified, the iterator will be created from the given
@@ -411,6 +418,7 @@ class IPUIterator(iterator_ops.OwnedIterator):
       infeed_spec: IPUInfeedQueue `TypeSpec` the iterator from.
       element_spec: A nested structure of `TypeSpec` objects that
         represents the type specification of elements of the iterator.
+      **kwargs: Arguments passed to the `IPUInfeedQueue`.
 
     Raises:
       ValueError: If `dataset` is not provided and either `infeed_spec` or
@@ -436,12 +444,12 @@ class IPUIterator(iterator_ops.OwnedIterator):
     else:
       if (infeed_spec is not None or element_spec is not None):
         raise ValueError(error_message)
-      self._create_iterator(dataset)
+      self._create_iterator(dataset, **kwargs)
 
     self._infeed_spec = self._infeed_queue._type_spec  # pylint: disable=protected-access
 
-  def _create_iterator(self, dataset):
-    self._infeed_queue = IPUInfeedQueue(dataset)
+  def _create_iterator(self, dataset, **kwargs):  # pylint: disable=arguments-differ
+    self._infeed_queue = IPUInfeedQueue(dataset, **kwargs)
     # Run the initializer.
     self._infeed_queue.initializer  # pylint: disable=pointless-statement
 
@@ -560,7 +568,11 @@ class IPUOwnedIterator(IPUIterator):
   The elements from iterator can only be accessed inside of tf.functions for
   maximum performance.
   """
-  def __init__(self, dataset=None, infeed_spec=None, element_spec=None):
+  def __init__(self,
+               dataset=None,
+               infeed_spec=None,
+               element_spec=None,
+               **kwargs):
     """Creates a new iterator from the given dataset.
 
     If `dataset` is not specified, the iterator will be created from the given
@@ -573,20 +585,20 @@ class IPUOwnedIterator(IPUIterator):
       infeed_spec: IPUInfeedQueue `TypeSpec` the iterator from.
       element_spec: A nested structure of `TypeSpec` objects that
         represents the type specification of elements of the iterator.
+      **kwargs: Arguments passed to the `IPUInfeedQueue`.
 
     Raises:
       ValueError: If `dataset` is not provided and either `infeed_spec` or
         `element_spec` is not provided. Or `dataset` is provided and either
         `infeed_spec` and `element_spec` is provided.
     """
-    # Call the grandparent class skipping OwnedIterator as the specs are
-    # different.
     super().__init__(dataset=dataset,
                      infeed_spec=infeed_spec,
-                     element_spec=element_spec)
+                     element_spec=element_spec,
+                     **kwargs)
 
-  def _create_iterator(self, dataset):
-    super()._create_iterator(dataset)
+  def _create_iterator(self, dataset, **kwargs):
+    super()._create_iterator(dataset, **kwargs)
 
     # Create a deleter which gets called when the dataset/infeed owning instance
     # of the iterator goes out of scope.
