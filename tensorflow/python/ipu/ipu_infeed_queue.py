@@ -386,17 +386,14 @@ class _IPUInfeedQueueSpec(type_spec.TypeSpec):
                                value.device_ordinal, value.prefetch_depth)
 
 
-class IPUOwnedIterator(iterator_ops.OwnedIterator):
+class IPUIterator(iterator_ops.OwnedIterator):
   """An IPU specific iterator producing tf.Tensor objects from a
   tf.data.Dataset.
 
-  The iterator resource created through `IPUOwnedIterator` is owned by the
-  Python object and the life time of the underlying resource is tied to the life
-  time of the `IPUOwnedIterator` object. This makes `IPUOwnedIterator`
-  appropriate for use inside of tf.functions.
-
   This iterator should be initially constructed in eager mode in order to make
   sure that the dataset is constructed on a compatible device.
+
+  Note that the infeed queue is not deleted.
 
   The elements from iterator can only be accessed inside of tf.functions for
   maximum performance.
@@ -454,11 +451,6 @@ class IPUOwnedIterator(iterator_ops.OwnedIterator):
     self._flat_output_shapes = structure.get_flat_tensor_shapes(
         self._element_spec)
 
-    # Create a deleter which gets called when the dataset/infeed owning instance
-    # of the iterator goes out of scope.
-    self._deleter = _IPUOwnedIteratorDeleter(
-        self._infeed_queue._id, self._infeed_queue._device_ordinal)  # pylint: disable=protected-access
-
   def __iter__(self):
     return self
 
@@ -478,7 +470,7 @@ class IPUOwnedIterator(iterator_ops.OwnedIterator):
 
   @property
   def _type_spec(self):
-    return _IPUOwnedIteratorSpec(self.infeed_spec, self.element_spec)
+    return _IPUIteratorSpec(self.infeed_spec, self.element_spec)
 
   def __next__(self):
     try:
@@ -553,12 +545,65 @@ class IPUOwnedIterator(iterator_ops.OwnedIterator):
         'IPU Dataset iterator is not currently saveable.')
 
 
-# pylint: disable=abstract-method
-class _IPUOwnedIteratorSpec(type_spec.TypeSpec):
-  """Type specification for `IPUOwnedIterator`.
+class IPUOwnedIterator(IPUIterator):
+  """An IPU specific iterator producing tf.Tensor objects from a
+  tf.data.Dataset.
 
-  For instance, `_IPUOwnedIteratorSpec` can be used to define a tf.function that
-  takes `IPUOwnedIterator` as an input argument:
+  The iterator resource created through `IPUOwnedIterator` is owned by the
+  Python object and the life time of the underlying resource is tied to the life
+  time of the `IPUOwnedIterator` object. This makes `IPUOwnedIterator`
+  appropriate for use inside of tf.functions.
+
+  This iterator should be initially constructed in eager mode in order to make
+  sure that the dataset is constructed on a compatible device.
+
+  The elements from iterator can only be accessed inside of tf.functions for
+  maximum performance.
+  """
+  def __init__(self, dataset=None, infeed_spec=None, element_spec=None):
+    """Creates a new iterator from the given dataset.
+
+    If `dataset` is not specified, the iterator will be created from the given
+    infeed spec and element structure. In particular, the alternative for
+    constructing the iterator is used when the iterator is reconstructed from
+    it `CompositeTensor` representation.
+
+    Args:
+      dataset: A `tf.data.Dataset` object.
+      infeed_spec: IPUInfeedQueue `TypeSpec` the iterator from.
+      element_spec: A nested structure of `TypeSpec` objects that
+        represents the type specification of elements of the iterator.
+
+    Raises:
+      ValueError: If `dataset` is not provided and either `infeed_spec` or
+        `element_spec` is not provided. Or `dataset` is provided and either
+        `infeed_spec` and `element_spec` is provided.
+    """
+    # Call the grandparent class skipping OwnedIterator as the specs are
+    # different.
+    super().__init__(dataset=dataset,
+                     infeed_spec=infeed_spec,
+                     element_spec=element_spec)
+
+  def _create_iterator(self, dataset):
+    super()._create_iterator(dataset)
+
+    # Create a deleter which gets called when the dataset/infeed owning instance
+    # of the iterator goes out of scope.
+    self._deleter = _IPUOwnedIteratorDeleter(
+        self._infeed_queue._id, self._infeed_queue._device_ordinal)  # pylint: disable=protected-access
+
+  @property
+  def _type_spec(self):
+    return _IPUOwnedIteratorSpec(self.infeed_spec, self.element_spec)
+
+
+# pylint: disable=abstract-method
+class _IPUIteratorSpec(type_spec.TypeSpec):
+  """Type specification for `IPUIterator`.
+
+  For instance, `_IPUIteratorSpec` can be used to define a tf.function that
+  takes `IPUIterator` as an input argument:
 
   >>> @tf.function(experimental_compile=True)
   ... def square(iterator):
@@ -578,7 +623,7 @@ class _IPUOwnedIteratorSpec(type_spec.TypeSpec):
 
   @property
   def value_type(self):
-    return IPUOwnedIterator
+    return IPUIterator
 
   def _serialize(self):
     return (self._infeed_spec, self._element_spec)
@@ -590,6 +635,37 @@ class _IPUOwnedIteratorSpec(type_spec.TypeSpec):
   def _to_components(self, value):
     del value
     return tuple()
+
+  def _from_components(self, components):
+    del components
+    return IPUIterator(infeed_spec=self._infeed_spec,
+                       element_spec=self._element_spec)
+
+  @staticmethod
+  def from_value(value):
+    return _IPUIteratorSpec(  # pylint: disable=protected-access
+        value._infeed_spec, value.element_spec)  # pylint: disable=protected-access
+
+
+# pylint: disable=abstract-method
+class _IPUOwnedIteratorSpec(_IPUIteratorSpec):
+  """Type specification for `IPUOwnedIterator`.
+
+  For instance, `_IPUOwnedIteratorSpec` can be used to define a tf.function that
+  takes `IPUOwnedIterator` as an input argument:
+
+  >>> @tf.function(experimental_compile=True)
+  ... def square(iterator):
+  ...   x = iterator.get_next()
+  ...   return x * x
+  >>> dataset = tf.data.Dataset.from_tensors(5)
+  >>> iterator = iter(dataset)
+  >>> print(square(iterator))
+  tf.Tensor(25, shape=(), dtype=int32)
+  """
+  @property
+  def value_type(self):
+    return IPUOwnedIterator
 
   def _from_components(self, components):
     del components

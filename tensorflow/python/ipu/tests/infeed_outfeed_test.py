@@ -1557,6 +1557,33 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       results = outfeed_queue.dequeue()
       self.assertEqual(len(results), 10)
 
+  @test_util.run_v2_only
+  def testIPUIterator(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.ipu_model.tiles_per_ipu = 4
+    cfg.configure_ipu_system()
+
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
+    dataset = tu.create_single_increasing_dataset(10, shape=[1])
+
+    with strategy.scope():
+
+      @def_function.function(experimental_compile=True)
+      def my_net(num_iterations, iterator):
+        x = constant_op.constant(1, dtype=np.int32, shape=[1])
+        for _ in math_ops.range(num_iterations):
+          outfeed_queue.enqueue(next(iterator) + x)
+          x += 1
+
+      num_iterations = 5
+      infeed = ipu.ipu_infeed_queue.IPUIterator(dataset=dataset)
+      strategy.run(my_net, args=(num_iterations, infeed))
+      self.assertAllEqual([[[1]], [[3]], [[5]], [[7]], [[9]]],
+                          outfeed_queue.dequeue())
+      infeed._infeed_queue.deleter  # pylint: disable=pointless-statement,protected-access
+
 
 class IPUOutfeedIteratorTest(test_util.TensorFlowTestCase,
                              parameterized.TestCase):
