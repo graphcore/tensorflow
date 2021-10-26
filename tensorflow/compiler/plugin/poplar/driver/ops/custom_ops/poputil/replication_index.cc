@@ -44,7 +44,6 @@ class ReplicationIndexOp : public PoplarOpDef {
     // TensorFlow requires slices to be signed integers, we therefore type cast
     // to int32.
     auto output = graph.addReplicationIndexConstant();
-    output = output.reinterpret(poplar::INT);
     graph.setTileMapping(output, 0);
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
@@ -52,7 +51,7 @@ class ReplicationIndexOp : public PoplarOpDef {
     return poplar::program::Sequence({}, debug_info);
   }
 };
-REGISTER_POPLAR_OP(ReplicationIndex, ReplicationIndexOp);
+REGISTER_HLO_OP(kReplicaId, ReplicationIndexOp);
 
 }  // namespace
 }  // namespace poplarplugin

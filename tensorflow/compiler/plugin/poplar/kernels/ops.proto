@@ -40,7 +40,7 @@ enum PoplarOp {
   RemapDeduce = 36;
   GRULayerBwd = 37;
   GRULayerFwd = 38;
-  ReplicationIndex = 39;
+  // retired = 39;
   CodeletExpressionOp = 40;
   StatefulNoop = 41;
   CalcGfloatParams = 42;

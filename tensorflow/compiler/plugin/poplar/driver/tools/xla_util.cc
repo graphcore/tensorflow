@@ -49,11 +49,9 @@ xla::XlaOp CombineHashes(xla::XlaOp from, xla::XlaOp to) {
 
 xla::XlaOp HashSeedWithReplicaIndex(xla::XlaOp seed) {
   xla::XlaBuilder* builder = seed.builder();
-  xla::XlaOp replica_index =
-      xla::CustomCall(builder, PoplarOp_Name(PoplarOp::ReplicationIndex), {},
-                      ShapeUtil::MakeShape(xla::S32, {}), "");
-
-  return CombineHashes(seed, replica_index);
+  xla::XlaOp replica_index = xla::ReplicaId(builder);
+  xla::XlaOp casted = xla::BitcastConvertType(replica_index, S32);
+  return CombineHashes(seed, casted);
 }
 
 }  // namespace poplarplugin
