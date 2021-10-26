@@ -127,6 +127,9 @@ class PoplarXlaFlags {
   // every HLO pass.
   bool enable_hlo_verifier = false;
 
+  // If set, the Poplar version check will be disabled.
+  bool disable_poplar_version_check = false;
+
   // Stores all the values as a string.
   std::string as_string = "";
 

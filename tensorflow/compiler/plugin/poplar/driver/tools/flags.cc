@@ -134,6 +134,8 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
       {"enable_hlo_verifier",
        "Whether to run the HLO verifier as an invariant checker before and "
        "after every HLO pass."},
+      {"disable_poplar_version_check",
+       "If set, the Poplar version check will be disabled."},
       {"allow_nans", "will allow NaNs."}};
   return flag_usage;
 }
@@ -179,6 +181,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(ipu_model_tiles)
     ADD_FLAG(sync_replica_start)
     ADD_FLAG(enable_hlo_verifier)
+    ADD_FLAG(disable_poplar_version_check)
 
     // Deprecated flags.
     ADD_DEPRECATED_FLAG(dump_text_reports_to_stdio)
@@ -252,11 +255,12 @@ PoplarXlaFlags::PoplarXlaFlags() {
   }
 
   // Hash all the flags which affect the graph generation and compilation only.
-  hlo_hash = hash_util::hash(use_synthetic_data, raw_synthetic_data_categories,
-                             synthetic_data_initializer, use_ipu_model,
-                             while_loop_brute_force_max_trip_count,
-                             fallback_scheduler, allow_nans, log_cycle_count,
-                             sync_replica_start, ipu_model_tiles);
+  hlo_hash =
+      hash_util::hash(use_synthetic_data, raw_synthetic_data_categories,
+                      synthetic_data_initializer, use_ipu_model,
+                      while_loop_brute_force_max_trip_count, fallback_scheduler,
+                      allow_nans, log_cycle_count, sync_replica_start,
+                      ipu_model_tiles, disable_poplar_version_check);
 }
 
 void PoplarXlaFlags::ReloadFlagsForTesting() {

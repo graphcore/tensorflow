@@ -41,6 +41,27 @@ cc_library(
     ],
 )
 
+# Rules for generating a binary with the Poplar package hash in it.
+cc_binary(
+    name = "poplar_version_generator",
+    srcs = ["poplar_version_generator.cc"],
+    deps = [
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
+)
+
+genrule(
+    name = "generate_poplar_version",
+    outs = ["driver/poplar_version.cc"],
+    cmd = "./$(location :poplar_version_generator) > $@",
+    tools = [":poplar_version_generator"],
+)
+
+cc_library(
+    name = "poplar_version",
+    srcs = [":generate_poplar_version"],
+)
+
 # Rule for generating the custom codelet example
 genrule(
     name = "custom_codelet_example",
@@ -834,6 +855,7 @@ cc_library(
         "driver/poplar_platform.h",
         "driver/poplar_platform_id.h",
         "driver/poplar_transfer_manager.h",
+        "driver/poplar_version.h",
         "driver/prng_seed_state.h",
         "driver/tensor.h",
         "driver/tools/attributes_utils.h",
@@ -885,6 +907,7 @@ cc_library(
         ":option_flag_cc_impl",
         ":pipeline_config_cc_impl",
         ":popef_util",
+        ":poplar_version",
         ":tf_graph_sources",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/xla:xla_headers_lib",
