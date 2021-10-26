@@ -48,11 +48,9 @@ class ReplicationIndexOp : public XlaOpKernel, IpuOpKernel {
   void Compile(XlaOpKernelContext* ctx) override {
     xla::XlaBuilder* b = ctx->builder();
 
-    xla::XlaOp output = xla::CustomCall(
-        b, PoplarOp_Name(PoplarOp::ReplicationIndex), {},
-        xla::ShapeUtil::MakeShape(xla::S32, {}), attribute_map_.Serialise());
-
-    ctx->SetOutput(0, output);
+    xla::XlaOp replica_index = xla::ReplicaId(b);
+    xla::XlaOp casted = xla::BitcastConvertType(replica_index, xla::S32);
+    ctx->SetOutput(0, casted);
   }
 
  private:

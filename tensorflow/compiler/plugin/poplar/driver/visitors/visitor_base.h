@@ -100,6 +100,7 @@ class BaseVisitor : public DfsHloVisitor {
   HANDLE_AS_HLO_OP(HandleSelect)
   HANDLE_AS_HLO_OP(HandleCompare)
   HANDLE_AS_HLO_OP(HandleRng)
+  HANDLE_AS_HLO_OP(HandleReplicaId)
 
   /*
    * Operations not processed by this visitor.
@@ -137,7 +138,6 @@ class BaseVisitor : public DfsHloVisitor {
   UNIMPLEMENTED(HandleCollectivePermute)
   UNIMPLEMENTED(HandleConcatenate)
   UNIMPLEMENTED(HandleGetDimensionSize)
-  UNIMPLEMENTED(HandleReplicaId)
   UNIMPLEMENTED(HandleTriangularSolve)
   UNIMPLEMENTED(HandleCholesky)
   UNIMPLEMENTED(HandlePartitionId)
