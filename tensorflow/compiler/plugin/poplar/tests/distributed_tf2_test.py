@@ -372,23 +372,18 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
       def run_eval_step_keras(x, y):
         scores = model_keras.evaluate(x,
                                       y,
-                                      batch_size=8,
                                       steps=popdist.getNumTotalReplicas())
 
         return scores
 
-      # TODO(T47443) The `8 *` will be removed later, but it depends on a fix
-      # for T47443.
       x_keras_eval = tf.constant(
           tf.cast(
-              np.repeat(input_sample,
-                        8 * popdist.getNumTotalReplicas(),
-                        axis=0), tf.float32))
+              np.repeat(input_sample, popdist.getNumTotalReplicas(), axis=0),
+              tf.float32))
       y_keras_eval = tf.constant(
           tf.cast(
-              np.repeat(output_sample,
-                        8 * popdist.getNumTotalReplicas(),
-                        axis=0), tf.float32))
+              np.repeat(output_sample, popdist.getNumTotalReplicas(), axis=0),
+              tf.float32))
 
       with tf.device("/device:IPU:0"):
         val_loss_final_tf = run_eval_step_tf(x_tf, y_tf)
