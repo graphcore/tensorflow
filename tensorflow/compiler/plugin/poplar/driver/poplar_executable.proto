@@ -126,4 +126,6 @@ message PoplarExecutableProto {
   string tf_git_version = 15;
 
   repeated CollectiveBalancedHostRearrangement collective_balanced_host_rearrangements = 16;
+
+  string poplar_package_hash = 17;
 };

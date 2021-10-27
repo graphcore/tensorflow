@@ -42,6 +42,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_allocator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_iterator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/io_thread.h"
@@ -904,6 +905,26 @@ class EngineManager {
     VerifyExecutable(proto);
 
     // Check the versions.
+    xla::poplarplugin::CheckPoplarPackageHash();
+    const std::string poplar_package_hash = std::string(poplar::packageHash());
+    if (proto.poplar_package_hash() != poplar_package_hash) {
+      const std::string message = absl::StrCat(
+          "Poplar package mismatch: The executable was compiled against "
+          "Poplar package ",
+          proto.poplar_package_hash(),
+          ", however the current Poplar package is ", poplar_package_hash,
+          ". ");
+      if (xla::poplarplugin::PoplarXlaFlags::Get()
+              .disable_poplar_version_check) {
+        LOG(INFO) << message
+                  << "This check has been manually disabled and this might "
+                     "lead to unexpected issues.";
+      } else {
+        return errors::InvalidArgument(
+            message, "Please make sure to use the correct Poplar version.");
+      }
+    }
+
     if (proto.tf_major_version() != TF_MAJOR_VERSION ||
         proto.tf_minor_version() != TF_MINOR_VERSION) {
       return errors::InvalidArgument(

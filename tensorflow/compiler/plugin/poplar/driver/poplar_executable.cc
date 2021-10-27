@@ -109,6 +109,7 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
   info.tf_major_version = proto.tf_major_version();
   info.tf_minor_version = proto.tf_minor_version();
   info.tf_git_version = proto.tf_git_version();
+  info.poplar_package_hash = proto.poplar_package_hash();
 
   info.replication_factor = proto.replication_factor();
 
@@ -212,6 +213,7 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
   proto.set_tf_major_version(info.tf_major_version);
   proto.set_tf_minor_version(info.tf_minor_version);
   proto.set_tf_git_version(info.tf_git_version);
+  proto.set_poplar_package_hash(info.poplar_package_hash);
 
   proto.set_replication_factor(info.replication_factor);
 
