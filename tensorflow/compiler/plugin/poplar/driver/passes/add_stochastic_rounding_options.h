@@ -46,9 +46,6 @@ class AddStochasticRoundingOptions : public HloModulePass {
   StatusOr<StochasticRoundingMethod> GetStochasticRoundingMethod(
       const HloInstruction* inst) const;
 
-  StatusOr<bool> ConfigureDeterministicWorkersOption(
-      HloInstruction* inst) const;
-
   StochasticRoundingBehaviour default_stochastic_rounding_behaviour_;
   bool enable_experimental_prng_stability_;
 };

@@ -75,23 +75,6 @@ MATCHER_P(HasStochasticRoundingMethod, state, "") {
 
   return false;
 }
-MATCHER_P(HasDeterministicWorker, state, "") {
-  auto* inst = arg;
-
-  PoplarBackendConfig backend_cfg;
-  if (GetBackendConfig(backend_cfg, result_listener, inst)) {
-    auto deterministic_workers = backend_cfg.deterministic_workers();
-
-    *result_listener << "instruction '" << inst->name()
-                     << "' has deterministic workers set to "
-                     << ThreeState_Name(deterministic_workers) << " expected "
-                     << ThreeState_Name(state);
-
-    return deterministic_workers == state;
-  }
-
-  return false;
-}
 
 const char* simple_hlo = R"(
 HloModule test
@@ -236,34 +219,14 @@ TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingOff) {
               Each(HasStochasticRounding(THREESTATE_OFF)));
 }
 
-TEST_F(AddStochasticRoundingOptionsTest, SettingDeterministicWorkers) {
-  using ::testing::Each;
-
-  ASSERT_TRUE(SetUpHloModule(simple_hlo));
-
-  AddStochasticRoundingOptions add_stochastic_rounding_options(
-      default_stochastic_rounding_);
-
-  TF_ASSERT_OK_AND_ASSIGN(bool modified,
-                          add_stochastic_rounding_options.Run(hlo_module_));
-  ASSERT_TRUE(modified);
-
-  // Deterministic workers should only be enabled for replica
-  // identical instructions, and left as undefined otherwise.
-  ASSERT_THAT(ReplicaIdenticalModuleInstructions(),
-              Each(HasDeterministicWorker(THREESTATE_ON)));
-  ASSERT_THAT(ReplicaDifferingModuleInstructions(),
-              Each(HasDeterministicWorker(THREESTATE_UNDEFINED)));
-}
-
 const char* poplar_fusion_hlo = R"(
 HloModule test
 
 _pop_op_arithmetic_expression {
-  param0 = s32[4] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_UNDEFINED\", \"deterministic_workers\":\"THREESTATE_ON\"}"
-  add0 = s32[4] add(param0, param0), backend_config="{\"stochastic_rounding\":\"THREESTATE_UNDEFINED\", \"deterministic_workers\":\"THREESTATE_ON\"}"
-  param1 = s32[4] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_UNDEFINED\", \"deterministic_workers\":\"THREESTATE_ON\"}"
-  ROOT add1 = s32[4] add(add0, param1), backend_config="{\"stochastic_rounding\":\"THREESTATE_UNDEFINED\", \"deterministic_workers\":\"THREESTATE_ON\"}"
+  param0 = s32[4] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_UNDEFINED\"}"
+  add0 = s32[4] add(param0, param0), backend_config="{\"stochastic_rounding\":\"THREESTATE_UNDEFINED\"}"
+  param1 = s32[4] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_UNDEFINED\"}"
+  ROOT add1 = s32[4] add(add0, param1), backend_config="{\"stochastic_rounding\":\"THREESTATE_UNDEFINED\"}"
 }
 
 ENTRY test {
@@ -289,9 +252,6 @@ TEST_F(AddStochasticRoundingOptionsTest, SettingOptionsForPoplarFusions) {
   // (which defaults to THREESTATE_OFF).
   ASSERT_THAT(AllModuleInstructions(),
               Each(HasStochasticRounding(THREESTATE_ON)));
-  // Undefined since none of the instructions are replica identical.
-  ASSERT_THAT(AllModuleInstructions(),
-              Each(HasDeterministicWorker(THREESTATE_UNDEFINED)));
 }
 
 const char* f16_to_f32_hlo = R"(

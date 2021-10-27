@@ -212,10 +212,6 @@ StatusOr<bool> AddStochasticRoundingOptions::Run(HloModule* module) {
       TF_ASSIGN_OR_RETURN(bool added_option,
                           ConfigureStochasticRoundingOption(inst));
       modified |= added_option;
-
-      TF_ASSIGN_OR_RETURN(added_option,
-                          ConfigureDeterministicWorkersOption(inst));
-      modified |= added_option;
     }
   }
 
@@ -312,21 +308,6 @@ AddStochasticRoundingOptions::GetStochasticRoundingMethod(
   }
 
   return StochasticRoundingMethod_Any;
-}
-
-StatusOr<bool>
-AddStochasticRoundingOptions::ConfigureDeterministicWorkersOption(
-    HloInstruction* inst) const {
-  const ThreeState deterministic_workers = IsInstructionReplicaIdentical(inst)
-                                               ? THREESTATE_ON
-                                               : THREESTATE_UNDEFINED;
-
-  TF_ASSIGN_OR_RETURN(auto backend_config,
-                      inst->backend_config<PoplarBackendConfig>());
-  backend_config.set_deterministic_workers(deterministic_workers);
-  TF_RETURN_IF_ERROR(inst->set_backend_config(backend_config));
-
-  return true;
 }
 
 }  // namespace poplarplugin
