@@ -231,10 +231,6 @@ message PoplarBackendConfig {
   // a value thats identical across replicas.
   bool is_replica_identical = 12;
 
-  // TF config option for setting the Poplar `deterministicWorkers`
-  // option.
-  ThreeState deterministic_workers = 13;
-
   // Tag for controlling how we perform SR.
-  StochasticRoundingMethod stochastic_rounding_method = 14;
+  StochasticRoundingMethod stochastic_rounding_method = 13;
 };
