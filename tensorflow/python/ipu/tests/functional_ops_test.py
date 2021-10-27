@@ -45,7 +45,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with tu.ipu_session() as sess:
@@ -110,7 +110,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with tu.ipu_session() as sess:
@@ -190,7 +190,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with tu.ipu_session() as sess:
@@ -287,7 +287,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.scheduling.algorithm = SchedulingAlgorithm.POST_ORDER
     cfg.configure_ipu_system()
 
@@ -380,7 +380,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with tu.ipu_session() as sess:
@@ -430,7 +430,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with tu.ipu_session() as sess:
@@ -473,7 +473,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with tu.ipu_session() as sess:
@@ -604,7 +604,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with tu.ipu_session() as sess:

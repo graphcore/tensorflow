@@ -214,7 +214,7 @@ class OneHotTopK(xla_test.XLATestCase):
   def testTopK(self):
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     def doTestTopK(self, dtype):
@@ -255,7 +255,7 @@ class OneHotTopK(xla_test.XLATestCase):
   def testInTopK(self):
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with self.session() as sess:

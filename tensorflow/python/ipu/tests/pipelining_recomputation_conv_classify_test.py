@@ -51,7 +51,7 @@ class PipeliningRecomputationConvClassifyTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.auto_select_ipus = 4
     cfg.allow_recompute = True
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 
@@ -120,7 +120,7 @@ class PipeliningRecomputationConvClassifyTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.auto_select_ipus = 4
     cfg.allow_recompute = True
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 

@@ -236,9 +236,11 @@ class PipelineTester(object):
 
       outfeed_op = outfeed_queue.dequeue()
 
+      # Execution profiles of code with dynamic control flow are not supported on real HW
+      profiling = utils.running_on_ipu_model()
+
       cfg = IPUConfig()
-      if utils.running_on_ipu_model():
-        tu.enable_ipu_events(cfg)
+      cfg._profiling.enable_ipu_events = profiling  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
       if number_of_io_tiles > 0:
@@ -353,7 +355,7 @@ class PipelineTester(object):
         cfg.io_tiles.place_ops_on_io_tiles = True
 
       if profiling:
-        tu.enable_ipu_events(cfg)
+        cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
         report_helper = tu.ReportHelper()
         report_helper.set_autoreport_options(cfg)
 

@@ -225,7 +225,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
       cfg.auto_select_ipus = 4
       cfg.ipu_model.tiles_per_ipu = 1472
       cfg.ipu_model.compile_ipu_code = False
-      tu.enable_ipu_events(cfg)
+      cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
       cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
@@ -298,7 +298,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
       cfg.auto_select_ipus = 4
       cfg.ipu_model.tiles_per_ipu = 1472
       cfg.ipu_model.compile_ipu_code = False
-      tu.enable_ipu_events(cfg)
+      cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
       cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
@@ -366,7 +366,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
       cfg = IPUConfig()
       cfg.auto_select_ipus = 4
       cfg.ipu_model.tiles_per_ipu = 1472
-      tu.enable_ipu_events(cfg)
+      cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
       cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 

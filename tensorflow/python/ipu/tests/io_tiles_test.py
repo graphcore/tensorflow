@@ -65,7 +65,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
 
     cfg.io_tiles.num_io_tiles = num_io_tiles
     cfg.io_tiles.place_ops_on_io_tiles = True
@@ -146,7 +146,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
     cfg = IPUConfig()
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
 
@@ -208,7 +208,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
     cfg = IPUConfig()
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
     cfg.io_tiles.num_io_tiles = num_io_tiles
@@ -264,7 +264,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
     cfg = IPUConfig()
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
     cfg.io_tiles.num_io_tiles = num_io_tiles
@@ -330,7 +330,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       compiled_net = ipu_compiler.compile(my_net, inputs=[a])
 
     cfg = IPUConfig()
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
     cfg.io_tiles.num_io_tiles = num_io_tiles

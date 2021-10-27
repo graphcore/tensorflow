@@ -570,7 +570,7 @@ class IPUModelModelTest(test.TestCase):
   def testFitWithLearningRateDecay(self):
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = 1
     cfg.configure_ipu_system()
 
@@ -601,7 +601,7 @@ class IPUModelModelTest(test.TestCase):
   def testFitWithExponentialDecayLearningRateSchedule(self):
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = 1
     cfg.configure_ipu_system()
 
@@ -633,7 +633,7 @@ class IPUModelModelTest(test.TestCase):
   def testFitWithPiecewiseConstantDecayLearningRateSchedule(self):
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = 1
     cfg.configure_ipu_system()
 

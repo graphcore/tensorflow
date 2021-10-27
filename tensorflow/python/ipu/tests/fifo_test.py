@@ -130,7 +130,7 @@ class FifoTest(test_util.TensorFlowTestCase):
     config = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(config, output_execution_profile=True)
-    tu.enable_ipu_events(config)
+    config._profiling.enable_ipu_events = True  # pylint: disable=protected-access
 
     config.auto_select_ipus = 2
     config.ipu_model.tiles_per_ipu = 16

@@ -44,7 +44,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -85,7 +85,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -132,7 +132,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -173,7 +173,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -215,7 +215,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.scheduling.algorithm = SchedulingAlgorithm.POST_ORDER
     cfg.configure_ipu_system()
 
@@ -277,7 +277,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.scheduling.algorithm = SchedulingAlgorithm.POST_ORDER
     cfg.configure_ipu_system()
 

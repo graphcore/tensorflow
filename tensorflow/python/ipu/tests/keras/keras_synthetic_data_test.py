@@ -135,7 +135,7 @@ class KerasSyntheticDataTest(test.TestCase):
       strategy = ipu.ipu_strategy.IPUStrategy()
       with strategy.scope():
         cfg = IPUConfig()
-        tu.enable_ipu_events(cfg)
+        cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
         cfg.auto_select_ipus = 1
         cfg.configure_ipu_system()
 

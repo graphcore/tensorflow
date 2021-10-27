@@ -47,7 +47,7 @@ class IoTilesHWTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg, output_execution_profile=True)
-    tu.enable_ipu_events(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
 
     if use_io_tiles:
       cfg.io_tiles.num_io_tiles = num_io_tiles
