@@ -1,10 +1,6 @@
 Targeting the IPU from TensorFlow 1
 ===================================
 
-.. gcdoc::
-    :verb-borders:
-    :public:
-
 .. toctree::
     :maxdepth: 4
     :numbered: 3
