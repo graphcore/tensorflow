@@ -96,7 +96,7 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
     # Check that we get all classifications for a simple conv
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 
@@ -141,7 +141,7 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
     # Check that we get all classifications for a small resnet correct
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 
@@ -186,7 +186,7 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
     # Check that we get all classifications for a simple conv
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 
@@ -232,7 +232,7 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
     # Check that we get all classifications for a simple conv
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.optimizations.math.dot_strength = False
     cfg.configure_ipu_system()
 

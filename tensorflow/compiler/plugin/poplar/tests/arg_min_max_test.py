@@ -22,6 +22,7 @@ from absl.testing import parameterized
 import numpy as np
 from test_utils import ReportJSON
 
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import dtypes
@@ -49,7 +50,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxBasic(self, dtype):
     cfg = IPUConfig()
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
@@ -123,7 +124,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
   @parameterized.named_parameters(*TESTCASES)
   def testArgMinBasic(self, dtype):
     cfg = IPUConfig()
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
@@ -198,7 +199,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxNegativeDim(self, dtype):
     cfg = IPUConfig()
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
@@ -226,7 +227,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxVector(self, dtype):
     cfg = IPUConfig()
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 

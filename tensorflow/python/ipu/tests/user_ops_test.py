@@ -96,7 +96,7 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
   def testUserOpWithAllocate(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with tu.ipu_session() as sess:

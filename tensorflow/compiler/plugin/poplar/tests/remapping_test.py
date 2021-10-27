@@ -19,8 +19,8 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -32,7 +32,7 @@ class MappingTest(xla_test.XLATestCase):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = 1472
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -50,7 +50,7 @@ class MappingTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       report_json.reset()
 
       i_h = np.arange(0, 8)
@@ -76,7 +76,7 @@ class MappingTest(xla_test.XLATestCase):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = 1472
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -94,7 +94,7 @@ class MappingTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       report_json.reset()
 
       i_h = np.arange(2, 10)

@@ -920,3 +920,23 @@ def skip_if_not_enough_ipus(self, num_ipus):
   if num_available_ipus < num_ipus:
     self.skipTest(f"Requested {num_ipus} IPUs, but only "
                   f"{num_available_ipus} are available.")
+
+
+def enable_ipu_events(ipu_config):
+  """
+  INTERNAL ONLY.
+
+  Internal wrapper which enables IPU events on an IPUConfig by modifying the
+  IPUConfig's _create_protobuf function to turn them on.
+  """
+  orig_create_protobuf = ipu_config._create_protobuf  # pylint: disable=protected-access
+
+  def _create_protobuf_wrapper():
+    pb = orig_create_protobuf()
+    pb.profiling.enable_ipu_trace_events = True
+    pb.profiling.enable_compilation_trace = True
+    pb.profiling.enable_io_trace = True
+    return pb
+
+  # Use the default __setattr__ as IPUConfig's __setattr__ is overridden.
+  object.__setattr__(ipu_config, '_create_protobuf', _create_protobuf_wrapper)

@@ -19,8 +19,8 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -30,7 +30,7 @@ from tensorflow.python.platform import googletest
 class MappingTest(xla_test.XLATestCase):
   def testGather(self):
     cfg = ipu.utils.IPUConfig()
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
@@ -47,7 +47,7 @@ class MappingTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       report_json.reset()
 
       i_h = np.arange(0, 3 * 256, 3)
@@ -70,7 +70,7 @@ class MappingTest(xla_test.XLATestCase):
 
   def testMappingJson(self):
     cfg = ipu.utils.IPUConfig()
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.auto_select_ipus = 1
     cfg.ipu_model.tiles_per_ipu = 1472
     cfg.ipu_model.compile_ipu_code = True
@@ -93,7 +93,7 @@ class MappingTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[a, b, c])
 
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       report_json.reset()
 
       fd = {a: 1.0, b: np.ones([8192]), c: np.ones([512])}
@@ -152,7 +152,7 @@ class MappingTest(xla_test.XLATestCase):
 
   def testInplaceReadWrite(self):
     cfg = ipu.utils.IPUConfig()
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
@@ -171,7 +171,7 @@ class MappingTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[x, y, a])
 
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       report_json.reset()
 
       i_x = np.full(100, 1)
