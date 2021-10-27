@@ -266,7 +266,7 @@ class IPUSequentialPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testFitWithLearningRateDecay(self):
     cfg = IPUConfig()
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.ipu_model.tiles_per_ipu = 8
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
@@ -296,7 +296,7 @@ class IPUSequentialPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testFitWithExponentialDecayLearningRateSchedule(self):
     cfg = IPUConfig()
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.ipu_model.tiles_per_ipu = 8
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
@@ -327,7 +327,7 @@ class IPUSequentialPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testFitWithPiecewiseConstantDecayLearningRateSchedule(self):
     cfg = IPUConfig()
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.ipu_model.tiles_per_ipu = 8
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()

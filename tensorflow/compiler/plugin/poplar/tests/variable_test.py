@@ -534,7 +534,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
   def testVariablesRemainResident(self):
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -618,7 +618,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
   def testResourceCountsAreCorrect(self):
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -721,7 +721,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
   def testTuplesOfTuplesAreStreamed(self):
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -756,7 +756,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
   def testNonModifiedResourceIsNotOverwrittenInPlaceOp(self):
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     # This test verifies that if we have a resource varaible (w) which is marked

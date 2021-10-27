@@ -45,7 +45,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -94,7 +94,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -143,7 +143,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -195,7 +195,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -247,7 +247,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -304,7 +304,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -338,7 +338,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -369,7 +369,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -398,7 +398,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
   def testBatchNormalizeLayerFusedTrainingFp16(self):
     cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with self.session() as sess:
