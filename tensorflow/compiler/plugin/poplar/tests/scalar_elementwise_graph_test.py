@@ -130,7 +130,7 @@ class ScalarElementWiseGraphTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     def conv(x, ksize, stride, filters_out):

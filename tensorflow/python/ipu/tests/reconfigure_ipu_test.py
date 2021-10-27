@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.framework import test_util
-
 from tensorflow.python.framework import errors
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import constant_op
@@ -26,13 +26,13 @@ class IPUReconfigureTest(test_util.TensorFlowTestCase):
   @classmethod
   def setUpClass(cls):
     cls.first_cfg = ipu.config.IPUConfig()
-    cls.first_cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cls.first_cfg.auto_select_ipus = [1, 1]
     cls.first_cfg.ipu_model.compile_ipu_code = True
+    tu.enable_ipu_events(cls.first_cfg)
 
     cls.second_cfg = ipu.config.IPUConfig()
-    cls.second_cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cls.second_cfg.auto_select_ipus = [1, 2, 1]
+    tu.enable_ipu_events(cls.second_cfg)
 
   def testChangingConfigWithoutResetRaises(self):
     self.first_cfg.configure_ipu_system()

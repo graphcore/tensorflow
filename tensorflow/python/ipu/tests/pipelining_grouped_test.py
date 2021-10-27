@@ -282,7 +282,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       cfg = IPUConfig()
       cfg.auto_select_ipus = 4
       cfg.ipu_model.tiles_per_ipu = 1472
-      cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+      tu.enable_ipu_events(cfg)
       cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
@@ -354,7 +354,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       cfg = IPUConfig()
       cfg.auto_select_ipus = 4
       cfg.ipu_model.tiles_per_ipu = 1472
-      cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+      tu.enable_ipu_events(cfg)
       cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
@@ -423,7 +423,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       cfg = IPUConfig()
       cfg.auto_select_ipus = 4
       cfg.ipu_model.tiles_per_ipu = 1472
-      cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+      tu.enable_ipu_events(cfg)
       cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 

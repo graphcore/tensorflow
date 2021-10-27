@@ -524,7 +524,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     report_json = tu.ReportJSON(self)
 
     cfg = IPUConfig()
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = True
 
@@ -976,7 +976,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
     ipu_options = IPUConfig()
-    ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(ipu_options)
     ipu_options.auto_select_ipus = 1
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              ipu_options=ipu_options)
@@ -984,7 +984,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with self.assertRaisesRegex(ValueError, "`IpuOptions` configured with"):
       ipu_options = IPUConfig()
-      ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+      tu.enable_ipu_events(ipu_options)
       ipu_options.auto_select_ipus = 3
       ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                                ipu_options=ipu_options)
@@ -994,7 +994,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         r"\(4 replicas times 1 shards\), "
         r"but `IpuOptions` configured with 3 devices"):
       ipu_options = IPUConfig()
-      ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+      tu.enable_ipu_events(ipu_options)
       ipu_options.auto_select_ipus = 3
       ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                                num_replicas=4,
@@ -1005,7 +1005,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         r"\(4 replicas times 1 shards\), "
         r"but `IpuOptions` configured with 1 devices"):
       ipu_options = IPUConfig()
-      ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+      tu.enable_ipu_events(ipu_options)
       ipu_options.auto_select_ipus = [4, 1]
       ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                                num_replicas=4,
@@ -1013,7 +1013,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                                ordinal=1)
 
     ipu_options = IPUConfig()
-    ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(ipu_options)
     ipu_options.auto_select_ipus = [2, 4]
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_replicas=4,
@@ -1022,7 +1022,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
     ipu_options = IPUConfig()
-    ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(ipu_options)
     ipu_options.auto_select_ipus = 4
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_replicas=4,
@@ -1030,7 +1030,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
     ipu_options = IPUConfig()
-    ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(ipu_options)
     ipu_options.auto_select_ipus = 4
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_replicas=2,
@@ -1039,7 +1039,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
     ipu_options = IPUConfig()
-    ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(ipu_options)
     ipu_options.select_ipus = [0, 1, 2, 3]
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_shards=4,
@@ -1048,7 +1048,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
     ipu_options = IPUConfig()
-    ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(ipu_options)
     ipu_options.select_ipus = [0, 1, 2, 3]
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_replicas=2,
@@ -1058,7 +1058,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
     ipu_options = IPUConfig()
-    ipu_options._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(ipu_options)
     ipu_options.select_ipus = [0]
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              num_replicas=1,

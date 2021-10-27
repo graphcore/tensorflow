@@ -64,7 +64,7 @@ class GclTest(test_util.TensorFlowTestCase):
     cfg.io_tiles.num_io_tiles = num_io_tiles
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.auto_select_ipus = 2
-    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    tu.enable_ipu_events(cfg)
     cfg.configure_ipu_system()
 
     with session.Session() as sess:

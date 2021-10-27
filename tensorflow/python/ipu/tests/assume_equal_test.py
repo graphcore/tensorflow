@@ -37,7 +37,6 @@ from tensorflow.python import keras
 
 def create_n_replica_ipu_config(ipu_count):
   cfg = IPUConfig()
-  cfg._profiling.enable_ipu_events = False  # pylint: disable=protected-access
   cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
   cfg.auto_select_ipus = ipu_count
   tu.add_hw_ci_connection_options(cfg)
