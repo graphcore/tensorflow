@@ -23,8 +23,8 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_version.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/public/version.h"
@@ -43,25 +43,9 @@ namespace xla {
 namespace poplarplugin {
 
 PoplarPlatform::PoplarPlatform() : name_("Poplar") {
-  const std::string compiled_package_hash(tf_compiled_poplar_package_hash());
-  const std::string runtime_package_hash(poplar::packageHash());
-  if (compiled_package_hash != runtime_package_hash) {
-    const std::string message = absl::StrCat(
-        "Poplar package mismatch: TensorFlow was compiled against Poplar "
-        "package ",
-        compiled_package_hash, ", however the current Poplar package is ",
-        runtime_package_hash, ". ");
-    if (PoplarXlaFlags::Get().disable_poplar_version_check) {
-      LOG(INFO) << message
-                << "This check has been manually disabled and this might "
-                   "lead to ABI issues.";
-    } else {
-      LOG(FATAL) << message
-                 << "Please make sure to use the correct Poplar version.";
-    }
-  }
+  CheckPoplarPackageHash();
   VLOG(tensorflow::INFO) << "Poplar version: " << poplar::versionString()
-                         << " Poplar package: " << runtime_package_hash;
+                         << " Poplar package: " << poplar::packageHash();
 }
 
 PoplarPlatform::~PoplarPlatform() {}

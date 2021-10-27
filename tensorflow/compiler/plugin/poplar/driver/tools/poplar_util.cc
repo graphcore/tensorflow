@@ -30,6 +30,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_version.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
@@ -995,5 +996,24 @@ bool HasIOTiles(CompilerResources& res) {
   return res.io_graph || !res.shard_io_graphs.empty();
 }
 
+void CheckPoplarPackageHash() {
+  const std::string compiled_package_hash(tf_compiled_poplar_package_hash());
+  const std::string runtime_package_hash(poplar::packageHash());
+  if (compiled_package_hash != runtime_package_hash) {
+    const std::string message = absl::StrCat(
+        "Poplar package mismatch: TensorFlow was compiled against Poplar "
+        "package ",
+        compiled_package_hash, ", however the current Poplar package is ",
+        runtime_package_hash, ". ");
+    if (PoplarXlaFlags::Get().disable_poplar_version_check) {
+      LOG(INFO) << message
+                << "This check has been manually disabled and this might "
+                   "lead to ABI issues.";
+    } else {
+      LOG(FATAL) << message
+                 << "Please make sure to use the correct Poplar version.";
+    }
+  }
+}
 }  // namespace poplarplugin
 }  // namespace xla

@@ -51,6 +51,7 @@ struct PoplarExecutableInfo {
   uint32 tf_major_version;
   uint32 tf_minor_version;
   std::string tf_git_version;
+  std::string poplar_package_hash;
   uint32 replication_factor;
   CanonicalInfeedInfos infeed_infos;
   CanonicalOutfeedInfos outfeed_infos;
