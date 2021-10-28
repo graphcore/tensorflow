@@ -108,6 +108,7 @@ enum StochasticRoundingMethod {
   StochasticRoundingMethod_DifferingSeeds = 1;
   StochasticRoundingMethod_IdenticalSeeds = 2;
   StochasticRoundingMethod_Any = 3;
+  StochasticRoundingMethod_None = 4;
 }
 
 // Backend specific HloInstruction config

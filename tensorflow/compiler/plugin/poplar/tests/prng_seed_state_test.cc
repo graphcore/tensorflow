@@ -191,7 +191,7 @@ TEST_F(PrngSeedStateTest, SetupDifferingSeed) {
   ASSERT_NE(replica1, replica2);
 }
 
-TEST_F(PrngSeedStateTest, SwichingDifferingSeed) {
+TEST_F(PrngSeedStateTest, SwitchingDifferingSeed) {
   auto prng_state = PrngSeedState::SetupSeeds(*graph_, identical_seed_,
                                               differing_seed_, seq_);
   prng_state.ChangeStochasticRoundingMethod(
@@ -256,6 +256,48 @@ TEST_F(PrngSeedStateTest, AssertSeed) {
   poplar::program::Sequence no_throw_seq(setup_seq);
   AssertStochasticRoundingMethod(*graph_, actual_sr_method, no_throw_seq);
   ASSERT_NO_THROW(RunFloatToHalfCast(no_throw_seq));
+}
+
+struct PrngSeedSRModeTest
+    : PrngSeedStateTest,
+      ::testing::WithParamInterface<StochasticRoundingMethod> {};
+
+TEST_P(PrngSeedSRModeTest, SwitchingSROff) {
+  graph_->setInitialValue<float>(input_, {0.1f, 0.1f, 0.1f, 0.1f, 0.1f});
+
+  auto prng_state = PrngSeedState::SetupSeeds(*graph_, identical_seed_,
+                                              differing_seed_, seq_);
+  prng_state.ChangeStochasticRoundingMethod(GetParam(), seq_);
+  prng_state.ChangeStochasticRoundingMethod(StochasticRoundingMethod_None,
+                                            seq_);
+
+  const auto replicas = RunFloatToHalfCast();
+  ASSERT_EQ(replicas.first, replicas.second)
+      << "Expected both replicas to produce the same values since we're not "
+         "using stochastic rounding.";
+
+  const auto unique_values =
+      std::set<float>(replicas.first.begin(), replicas.first.end());
+  ASSERT_EQ(unique_values.size(), 1)
+      << "Expected all elements to be cast to the same value since we're not "
+         "using stochastic rounding.";
+}
+
+TEST_P(PrngSeedSRModeTest, SwitchingSROn) {
+  graph_->setInitialValue<float>(input_, {0.1f, 0.1f, 0.1f, 0.1f, 0.1f});
+
+  auto prng_state = PrngSeedState::SetupSeeds(*graph_, identical_seed_,
+                                              differing_seed_, seq_);
+  prng_state.ChangeStochasticRoundingMethod(StochasticRoundingMethod_None,
+                                            seq_);
+  prng_state.ChangeStochasticRoundingMethod(GetParam(), seq_);
+
+  const auto replica_values = RunFloatToHalfCast().first;
+  const auto unique_values =
+      std::set<float>(replica_values.begin(), replica_values.end());
+  ASSERT_NE(unique_values.size(), 1)
+      << "Expected some elements to be cast to different values since we "
+         "should be using stochastic rounding.";
 }
 
 struct PrngSeedStateShardedTest : PrngSeedTest {
@@ -910,6 +952,14 @@ INSTANTIATE_TEST_SUITE_P(PrngSeedHlo, PrngSeedConsistencyTest,
                                            pipeline_with_revisit_recomputation,
                                            conditional_statement),
                          HloTestCaseName);
+
+INSTANTIATE_TEST_SUITE_P(
+    StochasticRoundingMethods, PrngSeedSRModeTest,
+    ::testing::Values(StochasticRoundingMethod_IdenticalSeeds,
+                      StochasticRoundingMethod_DifferingSeeds),
+    [](const ::testing::TestParamInfo<StochasticRoundingMethod>& info) {
+      return StochasticRoundingMethod_Name(info.param);
+    });
 
 }  // namespace
 }  // namespace poplarplugin

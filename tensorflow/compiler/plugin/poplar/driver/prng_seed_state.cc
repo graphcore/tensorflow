@@ -23,6 +23,7 @@ limitations under the License.
 #include "tensorflow/core/platform/logging.h"
 
 #include <gcl/Collectives.hpp>
+#include <poplar/CSRFunctions.hpp>
 #include <poplar/RandomSeed.hpp>
 #include <popops/AllTrue.hpp>
 #include <popops/ElementWise.hpp>
@@ -45,6 +46,18 @@ std::unique_ptr<poputil::graphfn::TensorFunction> CreateChangeHwSeedsFn(
         poplar::setHwSeeds(graph, args[0], seq,
                            {debug_name_and_id, "SetHwSeed"});
         return old_seeds;
+      },
+      /*inlined*/ false, debug_name_and_id);
+}
+
+std::unique_ptr<poputil::graphfn::VoidFunction> CreateSetSRModeFn(
+    poplar::Graph& graph, bool mode) {
+  poplar::DebugNameAndId debug_name_and_id{"SetSR"};
+  return absl::make_unique<poputil::graphfn::VoidFunction>(
+      graph, poputil::graphfn::Signature{},
+      [&graph, &mode, &debug_name_and_id](std::vector<poplar::Tensor>& args,
+                                          poplar::program::Sequence& seq) {
+        poplar::setStochasticRounding(graph, seq, mode, debug_name_and_id);
       },
       /*inlined*/ false, debug_name_and_id);
 }
@@ -91,6 +104,8 @@ PrngSeedState::PrngSeedState(poplar::Graph& graph,
                              poplar::Tensor& identical_hw_seed,
                              poplar::Tensor& differing_hw_seed)
     : change_hw_seeds_(CreateChangeHwSeedsFn(graph, identical_hw_seed)),
+      set_sr_off_(CreateSetSRModeFn(graph, false)),
+      set_sr_on_(CreateSetSRModeFn(graph, true)),
       identical_hw_seed_(identical_hw_seed),
       differing_hw_seed_(differing_hw_seed),
       stochastic_rounding_method_(initial_method) {}
@@ -114,9 +129,10 @@ bool PrngSeedState::ChangeStochasticRoundingMethod(
   CHECK(change_hw_seeds_);
   CHECK_NE(new_method, StochasticRoundingMethod_Undefined);
 
-  const bool change_seed = new_method != StochasticRoundingMethod_Any &&
-                           new_method != stochastic_rounding_method_;
-  if (change_seed) {
+  const auto old_method = stochastic_rounding_method_;
+  const bool change_method =
+      new_method != StochasticRoundingMethod_Any && new_method != old_method;
+  if (change_method) {
     // We do a poplar::program::Copy from the old seeds to avoid invalidating
     // differing_hw_seed_/identical_hw_seed_ if the given seq is not
     // executed, otherwise they can point at an uninitialized tensor.
@@ -124,12 +140,21 @@ bool PrngSeedState::ChangeStochasticRoundingMethod(
       std::vector<poplar::Tensor> args{identical_hw_seed_};
       auto old_seed = (*change_hw_seeds_)(args, seq, debug_name_and_id);
       seq.add(poplar::program::Copy(old_seed, differing_hw_seed_));
-    } else {
-      CHECK_EQ(new_method, StochasticRoundingMethod_DifferingSeeds);
-
+    } else if (old_method == StochasticRoundingMethod_IdenticalSeeds) {
+      CHECK(new_method == StochasticRoundingMethod_DifferingSeeds ||
+            new_method == StochasticRoundingMethod_None);
+      // Always use differing_hw_seed_ since we want identical_hw_seed_ to
+      // remain identical even when stochastic rounding is off.
       std::vector<poplar::Tensor> args{differing_hw_seed_};
       auto old_seed = (*change_hw_seeds_)(args, seq, debug_name_and_id);
       seq.add(poplar::program::Copy(old_seed, identical_hw_seed_));
+    }
+
+    std::vector<poplar::Tensor> empty_args;
+    if (new_method == StochasticRoundingMethod_None) {
+      (*set_sr_off_)(empty_args, seq, debug_name_and_id);
+    } else if (old_method == StochasticRoundingMethod_None) {
+      (*set_sr_on_)(empty_args, seq, debug_name_and_id);
     }
 
     stochastic_rounding_method_ = new_method;
@@ -143,7 +168,8 @@ bool AssertStochasticRoundingMethod(poplar::Graph& graph,
                                     const StochasticRoundingMethod& method,
                                     poplar::program::Sequence& seq,
                                     const std::string& inst_name) {
-  if (method != StochasticRoundingMethod_Any) {
+  if (method != StochasticRoundingMethod_Any &&
+      method != StochasticRoundingMethod_None) {
     // Verbose logging so it's clear when we're asserting and harder to
     // accidentially submit code with it enabled.
     LOG(INFO) << "AssertStochasticRoundingMethod "

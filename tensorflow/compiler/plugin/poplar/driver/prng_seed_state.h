@@ -71,6 +71,10 @@ class PrngSeedState {
                 poplar::Tensor& differing_hw_seed);
 
   std::unique_ptr<poputil::graphfn::TensorFunction> change_hw_seeds_;
+  // Using separate functions for on/off to reduce the size of the compute
+  // graph.
+  std::unique_ptr<poputil::graphfn::VoidFunction> set_sr_off_;
+  std::unique_ptr<poputil::graphfn::VoidFunction> set_sr_on_;
 
   poplar::Tensor identical_hw_seed_;
   poplar::Tensor differing_hw_seed_;
