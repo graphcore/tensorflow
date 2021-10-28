@@ -64,7 +64,8 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
                       inst->backend_config<PoplarBackendConfig>());
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   bool new_stochastic_rounding_enabled;
-  switch (poplar_backend_config.stochastic_rounding()) {
+  const auto stochastic_rounding = poplar_backend_config.stochastic_rounding();
+  switch (stochastic_rounding) {
     case THREESTATE_OFF:
       new_stochastic_rounding_enabled = false;
       break;
@@ -88,6 +89,10 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
                                   {debug_name_and_id, "Preprocess"});
     TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
     resources_.stochastic_rounding_enabled = new_stochastic_rounding_enabled;
+
+    VLOG(3) << "Changing stochastic rounding mode to "
+            << ThreeState_Name(stochastic_rounding) << " for inst '"
+            << inst->name() << "'";
   }
 
   if (allow_seed_changes_) {

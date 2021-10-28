@@ -442,7 +442,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   bool FloatingPointBehaviourFlagsSet() const {
     const IpuOptions::FloatingPointBehaviour& flags = FloatingPointBehaviour();
     const auto esr =
-        flags.esr() == StochasticRoundingBehaviour::StochasticRounding_On;
+        flags.esr() != StochasticRoundingBehaviour::StochasticRounding_Off;
     return flags.inv() || flags.div0() || flags.oflo() || esr || flags.nanoo();
   }
 
