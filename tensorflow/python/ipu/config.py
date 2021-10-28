@@ -1147,6 +1147,26 @@ class _ExperimentalConfig(_ConfigBase):
     super()._to_protobuf(pb)  # pylint: disable=protected-access
 
 
+class StochasticRoundingBehaviour(Enum):
+  """ Controls how stochastic rounding is performed.
+
+  `OFF` disables stochastic rounding.
+  `ON` enables stochastic rounding.
+  `REPLICA_IDENTICAL_ONLY` enables stochastic rounding for portions of the graph
+  which are identified as being replica identical - meaning that when executed
+  with replication they produce the same result on each replica.
+  """
+  @staticmethod
+  def from_bool(value):
+    return StochasticRoundingBehaviour.ON if value \
+      else StochasticRoundingBehaviour.OFF
+
+  OFF = config_pb2.StochasticRoundingBehaviour.Value("StochasticRounding_Off")
+  ON = config_pb2.StochasticRoundingBehaviour.Value("StochasticRounding_On")
+  REPLICA_IDENTICAL_ONLY = config_pb2.StochasticRoundingBehaviour.Value(
+      "StochasticRounding_ReplicaIdenticalOnly")
+
+
 class _FloatingPointBehaviourConfig(_ConfigBase):
   def __init__(self):
     """
@@ -1163,9 +1183,14 @@ class _FloatingPointBehaviourConfig(_ConfigBase):
     """
     self.oflo = False
     """
-    If True, stochastic rounding will be enabled.
+    A :py:class:`~tensorflow.python.ipu.config.StochasticRoundingBehaviour`.
+    If `StochasticRoundingBehaviour.OFF` (default) then stochastic rounding
+    will be disabled. Otherwise it's enabled with the semantics of the
+    particular option.
+    DEPRECATED: Enabling/disabling with bools.
     """
-    self.esr = False
+    self.esr: typing.Union[StochasticRoundingBehaviour,
+                           bool] = StochasticRoundingBehaviour.OFF
     """
     If True, Not-a-Number (NaN) on overflow mode will be enabled.
     """
@@ -1182,9 +1207,22 @@ class _FloatingPointBehaviourConfig(_ConfigBase):
     self.set_all = False
 
   def _to_protobuf(self, pb):
-    for opt in ['inv', 'div0', 'oflo', 'esr', 'nanoo']:
+    for opt in ['inv', 'div0', 'oflo', 'nanoo']:
       val = getattr(self, opt) if not self.set_all else True
       setattr(pb.floating_point_behaviour, opt, val)
+
+    if self.set_all:
+      pb.floating_point_behaviour.esr = StochasticRoundingBehaviour.ON.value
+    else:
+      if isinstance(self.esr, bool):
+        logging.warn(
+            "Deprecated use of setting floating_point_behaviour.esr with bool. "
+            "Please replace bool with appropriate StochasticRoundingBehaviour "
+            "value.")
+        esr = StochasticRoundingBehaviour.from_bool(self.esr)
+      else:
+        esr = self.esr
+      pb.floating_point_behaviour.esr = esr.value
 
 
 class _IOTilesConfig(_ConfigBase):
@@ -1825,8 +1863,8 @@ class IPUConfig(_ConfigBase):
       # IPUs in the second device.
       config.auto_select_ipus = [1, 2]
     """
-    self.auto_select_ipus: typing.Union[int, typing.List[int],
-                                        typing.Tuple[int, ...]] = []
+    self.auto_select_ipus: typing.Union[int, typing.List[int], typing.
+                                        Tuple[int, ...]] = []
     """
     Configure the IPUs to be used by the session.
 
@@ -1968,8 +2006,8 @@ class IPUConfig(_ConfigBase):
         # 0000:1a:00.0, 0000:1b:00.0, 0000:23:00.0, 0000:24:00.0.
         config.select_ipus = [0, 1, 2, 3]
     """
-    self.select_ipus: typing.Union[int, typing.List[int],
-                                   typing.Tuple[int, ...]] = []
+    self.select_ipus: typing.Union[int, typing.List[int], typing.
+                                   Tuple[int, ...]] = []
     """
     Sub-category containing configuration options that affect convolutions.
     """

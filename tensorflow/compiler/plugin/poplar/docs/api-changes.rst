@@ -4,7 +4,7 @@ API changes
 Release 2.4
 ~~~~~~~~~~~
 
-The following changes have been made to the TensorFlow API in the Poplar SDK version 2.3.
+The following changes have been made to the TensorFlow API in the Poplar SDK version 2.4.
 This may require you to change your code.
 
 Breaking changes
@@ -33,6 +33,12 @@ a `NotImplementedError`:
     - Passing a `IPURunConfig` with `compile_summary` set to `True` to an `IPUEstimator`
 
 
+Non-breaking changes
+____________________
+
+  - 'IPUConfig.floating_point_behaviour.esr' - Assigning a bool value is deprecated and
+    will not be supported in a future release. `ipu.config.StochasticRoundingBehaviour`
+    should be used instead.
 
 Release 2.3
 ~~~~~~~~~~~

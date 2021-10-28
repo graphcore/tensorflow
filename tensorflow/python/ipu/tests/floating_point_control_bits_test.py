@@ -27,17 +27,22 @@ from tensorflow.python.ops import math_ops
 @test_util.deprecated_graph_mode_only
 class TestFloatingPointControlBits(test_util.TensorFlowTestCase):
   @staticmethod
-  def _configure(invalid_operation=False,
-                 division_by_zero=False,
-                 overflow=False,
-                 stochastic_rounding=False,
-                 nan_overflow=False):
+  def _configure(
+      invalid_operation=False,
+      division_by_zero=False,
+      overflow=False,
+      stochastic_rounding=ipu.config.StochasticRoundingBehaviour.OFF,
+      nan_overflow=False,
+      experimental_prng_stability=False,
+      ipu_count=1):
     cfg = ipu.config.IPUConfig()
+    cfg.auto_select_ipus = ipu_count
     cfg.floating_point_behaviour.inv = invalid_operation
     cfg.floating_point_behaviour.div0 = division_by_zero
     cfg.floating_point_behaviour.oflo = overflow
     cfg.floating_point_behaviour.esr = stochastic_rounding
     cfg.floating_point_behaviour.nanoo = nan_overflow
+    cfg.experimental.enable_prng_stability = experimental_prng_stability
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
@@ -145,10 +150,24 @@ class TestFloatingPointControlBits(test_util.TensorFlowTestCase):
     self.assertEqual(hist[0], 0)
     self.assertEqual(hist[1], 4096)
 
+  @tu.test_uses_ipus(num_ipus=2)
+  @test_util.deprecated_graph_mode_only
+  def test_stochastic_rounding_replica_only(self):
+    self._configure(stochastic_rounding=ipu.config.StochasticRoundingBehaviour.
+                    REPLICA_IDENTICAL_ONLY,
+                    experimental_prng_stability=True,
+                    ipu_count=2)
+    hist = self._test_stochastic_rounding()
+    # Result should be same as  using StochasticRoundingBehaviour.ON since our graph
+    # and data are replica identical.
+    self.assertTrue(hist[0] > 0)
+    self.assertTrue(hist[1] > 0)
+
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_stochastic_rounding_enabled(self):
-    self._configure(stochastic_rounding=True)
+    self._configure(
+        stochastic_rounding=ipu.config.StochasticRoundingBehaviour.ON)
     hist = self._test_stochastic_rounding()
     self.assertTrue(hist[0] > 0)
     self.assertTrue(hist[1] > 0)
@@ -191,7 +210,8 @@ class TestFloatingPointControlBits(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_scoped_stochastic_rounding(self):
-    self._configure(stochastic_rounding=True)
+    self._configure(
+        stochastic_rounding=ipu.config.StochasticRoundingBehaviour.ON)
     results, outputs = self._test_scoped_stochastic_rounding()
     for i, (_, expected_stochastic_rounding) in enumerate(outputs.items()):
       hist = np.histogram(results[i], bins=2)[0]

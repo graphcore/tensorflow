@@ -664,7 +664,7 @@ void setFpBehaviour(poplar::Graph& graph,
                     poplar::program::Sequence& seq) {
   if (graph.getTarget().getTargetType() == poplar::TargetType::IPU) {
     const auto esr =
-        fp_control.esr() == StochasticRoundingBehaviour::StochasticRounding_On;
+        fp_control.esr() != StochasticRoundingBehaviour::StochasticRounding_Off;
     poplar::FloatingPointBehaviour fp_behaviour(
         fp_control.inv(), fp_control.div0(), fp_control.oflo(), esr,
         fp_control.nanoo());
