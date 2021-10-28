@@ -1758,6 +1758,17 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       return PoplarExceptionToTensorflowStatus("[Build graph]", e);
     }
 
+    // If we're using SR then enable deterministic workers to make sure
+    // seeds remain identical when running ops with identical inputs.
+    // Note we can only do this check after running EntryVisitor as it's only
+    // after running it that we know whether SR is used.
+    if (resources.enable_experimental_prng_stability &&
+        resources.stochastic_rounding_used) {
+      opt_flags.set("target.deterministicWorkers", "true");
+      VLOG(1) << "Enabling deterministicWorkers as stochastic rounding is used "
+                 "and experimentali prng stability is enabled.";
+    }
+
     poplar::program::Sequence main_program({}, {"MainProgram"});
 
     // Decide whether to synchronise all the replica's starting points.
