@@ -479,7 +479,6 @@ class ReportHelper():
         str(max_execution_reports),
     }
     cfg.compilation_poplar_options = options
-    cfg._profiling.auto_assign_report_subdirectories = True  # pylint: disable=protected-access
 
   def find_reports(self):
     """Finds and returns the paths to generated report files in order of

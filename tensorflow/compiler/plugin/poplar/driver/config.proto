@@ -293,13 +293,11 @@ message IpuOptions {
 
   double io_tile_available_memory_proportion = 42;
 
-  bool auto_assign_report_subdirectories = 43;
-
   // Options controlling the configuration of slice operations.
-  repeated PoplarOptionFlag slice_options = 44;
+  repeated PoplarOptionFlag slice_options = 43;
 
   // The maximum number of bytes to wait before scheduling a reduce-many
-  int64 max_reduce_many_buffer_size = 45;
+  int64 max_reduce_many_buffer_size = 44;
 
   message IpuAlgebraicSimplifierConfig {
     bool enable_fast_math = 1;
@@ -307,8 +305,8 @@ message IpuOptions {
     bool enable_dot_strength = 2;
   }
 
-  IpuAlgebraicSimplifierConfig algebraic_simplifier_config = 46;
+  IpuAlgebraicSimplifierConfig algebraic_simplifier_config = 45;
 
 	// Option for controlling whether experimental prng work is enabled
-  bool enable_experimental_prng_stability = 47;
+  bool enable_experimental_prng_stability = 46;
 };

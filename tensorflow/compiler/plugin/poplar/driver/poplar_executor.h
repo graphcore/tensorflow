@@ -375,10 +375,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return execution_options_;
   }
 
-  bool GetAutoAssignReportSubdirectories() const {
-    return current_config_.auto_assign_report_subdirectories();
-  }
-
   int64 GetMultiReplicaProcessIndex() const {
     return current_config_.multi_replica_process_index();
   }
