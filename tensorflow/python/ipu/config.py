@@ -1665,106 +1665,6 @@ class _OptimizationConfig(_ConfigBase):
     pb.enable_fast_math = self.enable_fast_math
 
 
-class _ProfilingConfig(_ConfigBase):
-  def __init__(self):
-    """
-    Enable compilation reports, and IPU trace events.
-    """
-    self.profiling = False
-    """
-    Enable IPU trace events without Poplar reports.
-    """
-    self.enable_ipu_events = False
-    """
-    Enable the Poplar textual report summary.
-    """
-    self.use_poplar_text_report = False
-    """
-    Enable the Poplar CBOR reports.
-    """
-    self.use_poplar_cbor_report = False
-    """
-    Include Poplar execution profiles in the execution events. Can only be
-    enabled if `profiling` is also enabled. If set, can be `True`, 'False`
-    or a member of the
-    :py:class:`~tensorflow.python.ipu.config.ExecutionProfileType` enumeration.
-    A `True` value corresponds to `ExecutionProfileType.DEVICE_PROFILE`.
-    """
-    self.profile_execution: typing.Union[
-        ExecutionProfileType, bool] = ExecutionProfileType.NO_PROFILE
-    """
-    Create the Poplar serialized graph and include in the IPU compilation trace
-    events.
-    """
-    self.enable_poplar_serialized_graph = False
-    """
-    Only produce an execution report on every Nth execution. 0 = One report
-    only.
-    """
-    self.report_every_nth_execution = 0
-    """
-    The maximum size of Poplar profiles to include in the profile events.
-    """
-    self.max_report_size = 0x10000000
-    """
-    When set, reports will be written to files in this directory, instead of
-    being written into the events.  The events will contain the full paths of
-    the report files.
-    """
-    self.report_directory = ""
-    """
-    A dictionary of Poplar option flags for the graph report generation.
-    """
-    self.graph_poplar_options = {}
-    """
-    A dictionary of Poplar option flags for the execution report generation.
-    """
-    self.execution_poplar_options = {}
-    """
-    This determines whether or not individual compiled clusters are
-    given their own sub-directories of the autoReport.directory by the
-    TensorFlow Poplar backend.
-    """
-    self.auto_assign_report_subdirectories = True
-
-  def _to_protobuf(self, pb):
-    if self.profiling and self.enable_ipu_events:
-      raise Exception(
-          f"{self._get_full_name('profiling')} and"
-          f" {self._get_full_name('enable_ipu_events')} cannot be used"
-          " together.")
-
-    profile_execution = self.profile_execution
-    if isinstance(profile_execution, (np.bool_, bool)):
-      if profile_execution:
-        profile_execution = ExecutionProfileType.DEVICE_PROFILE
-      else:
-        profile_execution = ExecutionProfileType.NO_PROFILE
-    if (profile_execution != ExecutionProfileType.NO_PROFILE
-        and not self.profiling):
-      raise Exception(f"{self._get_full_name('profiling')} is required when"
-                      f" {self._get_full_name('profile_execution')} is set")
-
-    pb.profiling.enable_ipu_trace_events = self.profiling or \
-        self.enable_ipu_events
-    pb.profiling.enable_compilation_trace = self.profiling or \
-        self.enable_ipu_events
-    pb.profiling.enable_io_trace = self.profiling or self.enable_ipu_events
-    pb.profiling.execution_trace_type = profile_execution.value
-    pb.profiling.enable_poplar_reports_text = self.use_poplar_text_report
-    pb.profiling.enable_poplar_reports_cbor = self.use_poplar_cbor_report
-    pb.profiling.enable_poplar_graph = self.enable_poplar_serialized_graph
-    pb.profiling.report_every_nth_execution = self.report_every_nth_execution
-    pb.profiling.max_report_size = self.max_report_size
-    pb.profiling.report_directory = self.report_directory
-    pb.auto_assign_report_subdirectories = \
-        self.auto_assign_report_subdirectories
-    _poplar_options_to_protobuf(self.graph_poplar_options,
-                                pb.profiling.graph_options)
-    _poplar_options_to_protobuf(self.execution_poplar_options,
-                                pb.profiling.execution_options)
-
-
 class _SchedulingConfig(_ConfigBase):
   def __init__(self):
     """
@@ -2065,10 +1965,6 @@ class IPUConfig(_ConfigBase):
     operations.
     """
     self.pooling = _PoolingConfig()
-    """
-    DEPRECATED: Profiling through the IPUConfig API is deprecated.
-    """
-    self._profiling = _ProfilingConfig()
     """
     Sub-category containing configuration options that affect the scheduling of
     operations in the graph during compilation.

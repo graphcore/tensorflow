@@ -1836,11 +1836,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       // non-empty string.
       // If set to an empty string the profile reports will be written to the
       // autoReport.directory.
-      std::string executable_debug_name = "";
-      if (poplar_executor->GetAutoAssignReportSubdirectories()) {
-        executable_debug_name =
-            poplar_executor->GetModuleReportDirectory(module->name());
-      }
+      std::string executable_debug_name =
+          poplar_executor->GetModuleReportDirectory(module->name());
 
       poplar::Executable exec =
           poplar::compileGraph(main_graph, progs, opt_flags, progress_logging,
