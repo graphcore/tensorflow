@@ -32,6 +32,7 @@ limitations under the License.
 #include <popnn/codelets.hpp>
 #include <popops/Cast.hpp>
 #include <popops/ElementWise.hpp>
+#include <popops/Reduce.hpp>
 #include <popops/codelets.hpp>
 #include <poprand/codelets.hpp>
 
@@ -256,6 +257,34 @@ TEST_F(PrngSeedStateTest, AssertSeed) {
   poplar::program::Sequence no_throw_seq(setup_seq);
   AssertStochasticRoundingMethod(*graph_, actual_sr_method, no_throw_seq);
   ASSERT_NO_THROW(RunFloatToHalfCast(no_throw_seq));
+}
+
+TEST_F(PrngSeedStateTest, DeterministicWorkers) {
+  auto reduce_input = graph_->addVariable(
+      poplar::HALF, {5}, poplar::VariableMappingMethod::LINEAR);
+  const std::vector<uint16_t> half_values = {1, 2, 3, 4, 5};
+  graph_->setInitialValueHalf(reduce_input, half_values);
+
+  auto prng_state = PrngSeedState::SetupSeeds(*graph_, identical_seed_,
+                                              differing_seed_, seq_);
+  prng_state.ChangeStochasticRoundingMethod(
+      StochasticRoundingMethod_IdenticalSeeds, seq_);
+
+  // Since the inputs to the reduce are replica identical we expect the seed to
+  // remain identical afterwards.
+  popops::reduce(*graph_, reduce_input, poplar::HALF, {0},
+                 popops::Operation::ADD, seq_);
+  AssertStochasticRoundingMethod(
+      *graph_, StochasticRoundingMethod_IdenticalSeeds, seq_, "popops::reduce");
+
+  // The above assertion fails intermittently without the deterministicWorkers
+  // option.
+  for (auto i = 0; i < 10; ++i) {
+    poplar::OptionFlags options({{"target.deterministicWorkers", "true"}});
+    poplar::Engine engine(*graph_, seq_, options);
+    engine.load(device_);
+    ASSERT_NO_THROW(engine.run(0));
+  }
 }
 
 struct PrngSeedSRModeTest

@@ -247,7 +247,7 @@ StatusOr<bool> AddStochasticRoundingOptions::ConfigureStochasticRoundingOption(
   VLOG(3) << "Setting SR to " << ThreeState_Name(stochastic_rounding)
           << " for instruction '" << inst->name() << "'";
 
-  if (stochastic_rounding != StochasticRounding_Off) {
+  if (stochastic_rounding != THREESTATE_OFF) {
     TF_ASSIGN_OR_RETURN(StochasticRoundingMethod stochastic_rounding_method,
                         GetStochasticRoundingMethod(inst));
     backend_config.set_stochastic_rounding_method(stochastic_rounding_method);
