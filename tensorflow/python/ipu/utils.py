@@ -1483,8 +1483,10 @@ def export_inputs_to_file(inputs, output_filename, feed_dict):
   """
 
   with ops.device("cpu"), session_lib.Session() as sess:
-    sess.run(dataset_extractor.export_variables(inputs, output_filename),
-             feed_dict)
+    names = [i.name for i in inputs]
+    sess.run(
+        dataset_extractor.export_variables(inputs, names, output_filename),
+        feed_dict)
 
 
 def use_synthetic_data_for(synthetic_data_category):
