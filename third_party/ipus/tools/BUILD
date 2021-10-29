@@ -54,8 +54,8 @@ genrule(
                     ;;
                 *.h|*.hpp)
                     dst=$${dst/*jsoncpp_git/$$dst_headers}
-                    dst=$${dst/*popsec\/include/$$dst_headers}
-                    dst=$${dst/*include\/ipu/$$dst_headers\/ipu}
+                    dst=$${dst/*popsec\\/include/$$dst_headers}
+                    dst=$${dst/*include\\/ipu/$$dst_headers\\/ipu}
                     mkdir -p `dirname $$dst`
                     ;;
                 *)
