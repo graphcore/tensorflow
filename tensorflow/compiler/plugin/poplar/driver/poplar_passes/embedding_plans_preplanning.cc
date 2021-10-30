@@ -14,30 +14,91 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/embedding_plans_preplanning.h"
 
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
+#include <poplar/OptionFlags.hpp>
 #include <poplar/Target.hpp>
 #include <popops/DynamicSlice.hpp>
 
 namespace xla {
 namespace poplarplugin {
 namespace {
-// Helper struct for storing the slice plan and the associated lookups.
-struct SlicePlanHelper {
-  const popops::SlicePlan* slice_plan;
-  std::vector<std::size_t> lookups;
+
+// Describes the type of slice plan that should be used.
+enum class PlanType {
+  // Slice plan only used when all operations are multi slices.
+  kSliceOnly,
+  // Slice plan only used when all operations are multi updates.
+  kUpdateOnly,
+  // Slice plan only used when all operations are multi update adds.
+  kUpdateAddOnly,
+  // Slice plan only used when all operations are either multi slice or multi
+  // update.
+  kSliceAndUpdate,
+  // Slice plan only used when all operations are either multi slice or multi
+  // update adds.
+  kSliceAndUpdateAdd,
 };
 
 using InputToSliceUsersMap =
-    absl::flat_hash_map<const HloInstruction*,
-                        std::vector<const HloInstruction*>>;
+    ConstHloInstructionMap<std::vector<const HloInstruction*>>;
 
-using SlicePlanMap =
-    absl::flat_hash_map<const HloInstruction*, SlicePlanHelper>;
+bool IsMultiSlice(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::MultiSlice)(inst);
+}
+
+bool IsMultiUpdate(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::MultiUpdate)(inst);
+}
+
+bool IsMultiUpdateAdd(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst);
+}
+
+bool IsSliceOnlyPlan(const std::vector<const HloInstruction*> insts) {
+  return absl::c_all_of(insts, IsMultiSlice);
+}
+
+bool IsUpdateOnlyPlan(const std::vector<const HloInstruction*> insts) {
+  return absl::c_all_of(insts, IsMultiUpdate);
+}
+
+bool IsUpdateAddOnlyPlan(const std::vector<const HloInstruction*> insts) {
+  return absl::c_all_of(insts, IsMultiUpdateAdd);
+}
+
+bool IsSliceAndUpdatePlan(const std::vector<const HloInstruction*> insts) {
+  return absl::c_all_of(insts, [](const HloInstruction* inst) -> bool {
+    return IsMultiSlice(inst) || IsMultiUpdate(inst);
+  });
+}
+
+bool IsSliceAndUpdateAddPlan(const std::vector<const HloInstruction*> insts) {
+  return absl::c_all_of(insts, [](const HloInstruction* inst) -> bool {
+    return IsMultiSlice(inst) || IsMultiUpdateAdd(inst);
+  });
+}
+
+StatusOr<bool> AllOptionsMatch(const std::vector<const HloInstruction*> insts,
+                               CompilerResources& res) {
+  CHECK(insts.size());
+  TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
+                      GetSliceOptionsForInst(insts[0], res));
+  for (auto inst : insts) {
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags inst_opts,
+                        GetSliceOptionsForInst(inst, res));
+    if (!(opts == inst_opts)) {
+      return false;
+    }
+  }
+  return true;
+}
 
 // Given the slice instructions, get all the slice sizes.
 const std::vector<std::size_t> GetLookUps(
@@ -61,79 +122,135 @@ std::size_t GetNumLookUps(const std::vector<std::size_t>& lookups) {
   return absl::c_accumulate(lookups, std::size_t(0), std::plus<std::size_t>());
 }
 
-// Get slice plans.
-StatusOr<SlicePlanMap> GetSlicePlans(const InputToSliceUsersMap& user_map,
-                                     CompilerResources& res,
-                                     const SlicePlanMap& existing_plans = {}) {
-  SlicePlanMap result;
-  for (auto& pair : user_map) {
-    const HloInstruction* operand = pair.first;
-    const std::vector<const HloInstruction*> slices = pair.second;
-    const std::vector<std::size_t> lookups = GetLookUps(slices);
-
-    // Use an existing plan iff there is a plan for the current operand and the
-    // total number of lookups matches.
-    const bool use_existing_plan =
-        existing_plans.contains(operand) &&
-        GetNumLookUps(existing_plans.at(operand).lookups) ==
-            GetNumLookUps(lookups);
-    if (use_existing_plan) {
-      // Use an existing plan.
-      result[operand] = existing_plans.at(operand);
-    } else {
-      // Create a new plan.
-      const Shape operand_shape = operand->shape();
-
-      TF_ASSIGN_OR_RETURN(poplar::Type data_type,
-                          PoplarDataType(operand_shape));
-      const int64 input_size = operand_shape.dimensions(0);
-      const int64 output_size = operand_shape.dimensions(1);
-
-      // Get all the shards for operand/slices.
-      absl::flat_hash_set<int64> shards;
-      if (operand->has_sharding()) {
-        // If there is sharding, we expect it to be unique.
-        auto get_shard = [](const HloInstruction* inst) {
-          return inst->sharding().GetUniqueDevice();
-        };
-        shards.insert(get_shard(operand));
-        absl::c_transform(slices, std::inserter(shards, shards.begin()),
-                          [&get_shard](const HloInstruction* inst) {
-                            return get_shard(inst);
-                          });
-      }
-
-      // Plan in the master graph if this is used across multiple graph.
-      poplar::Graph& graph =
-          shards.size() > 1 ? GetMasterGraph(res) : GetGraph(res, operand);
-
-      TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
-                          GetSliceOptionsForInst(operand, res));
-
-      res.slice_plans.push_back(popops::embedding::plan(
-          graph, data_type, input_size, output_size, lookups, opts));
-      result[operand] = {&res.slice_plans.back(), lookups};
+poplar::OptionFlags PopulateWithOptionsForPlan(
+    const PlanType& plan_type, const poplar::OptionFlags& opts) {
+  poplar::OptionFlags new_opts = opts;
+  switch (plan_type) {
+    case PlanType::kSliceOnly: {
+      new_opts.set("usedForSlice", "true");
+      new_opts.set("usedForUpdate", "false");
+      break;
     }
+    case PlanType::kUpdateOnly: {
+      new_opts.set("usedForSlice", "false");
+      new_opts.set("usedForUpdate", "true");
+      new_opts.set("operationForUpdate", "none");
+      break;
+    }
+    case PlanType::kUpdateAddOnly: {
+      new_opts.set("usedForSlice", "false");
+      new_opts.set("usedForUpdate", "true");
+      new_opts.set("operationForUpdate", "add");
+      break;
+    }
+    case PlanType::kSliceAndUpdate: {
+      new_opts.set("usedForSlice", "true");
+      new_opts.set("usedForUpdate", "true");
+      new_opts.set("operationForUpdate", "none");
+      break;
+    }
+    case PlanType::kSliceAndUpdateAdd: {
+      new_opts.set("usedForSlice", "true");
+      new_opts.set("usedForUpdate", "true");
+      new_opts.set("operationForUpdate", "add");
+      break;
+    }
+    default: { LOG(FATAL) << "Unknown PlanType"; }
   }
-  return result;
+
+  return new_opts;
 }
 
-Status PopulateWithPlans(const InputToSliceUsersMap& user_map,
-                         const SlicePlanMap& plans, CompilerResources& res) {
+Status AddPlan(const PlanType& plan_type,
+               const std::vector<std::size_t>& lookups,
+               const HloInstruction* operand,
+               const std::vector<const HloInstruction*>& insts,
+               CompilerResources& res) {
+  // Get the type information for the plan.
+  const Shape operand_shape = operand->shape();
+  TF_ASSIGN_OR_RETURN(poplar::Type data_type, PoplarDataType(operand_shape));
+  const int64 input_size = operand_shape.dimensions(0);
+  const int64 output_size = operand_shape.dimensions(1);
+
+  // Get the options.
+  TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
+                      GetSliceOptionsForInst(insts[0], res));
+  opts = PopulateWithOptionsForPlan(plan_type, opts);
+
+  // Get all the shards for operand/insts.
+  absl::flat_hash_set<int64> shards;
+  if (operand->has_sharding()) {
+    // If there is sharding, we expect it to be unique.
+    auto get_shard = [](const HloInstruction* inst) {
+      return inst->sharding().GetUniqueDevice();
+    };
+    shards.insert(get_shard(operand));
+    absl::c_transform(
+        insts, std::inserter(shards, shards.begin()),
+        [&get_shard](const HloInstruction* inst) { return get_shard(inst); });
+  }
+
+  // Plan in the master graph if this is used across multiple graph.
+  poplar::Graph& graph =
+      shards.size() > 1 ? GetMasterGraph(res) : GetGraph(res, operand);
+
+  // Add the plan.
+  res.slice_plans.push_back(popops::embedding::plan(
+      graph, data_type, input_size, output_size, lookups, opts));
+
+  for (const HloInstruction* inst : insts) {
+    // Map the plan to the instruction in the original module.
+    const HloInstruction* original_inst =
+        res.annotations.flattened_inst_map_bwd.at(inst);
+    res.slice_plan_mappings[original_inst] = &res.slice_plans.back();
+  }
+
+  return Status::OK();
+}
+
+Status PopulatePlans(const InputToSliceUsersMap& user_map,
+                     CompilerResources& res) {
   for (auto& pair : user_map) {
     const HloInstruction* operand = pair.first;
-    const std::vector<const HloInstruction*> slices = pair.second;
-    auto itr = plans.find(operand);
-    if (itr == plans.end()) {
-      return InternalErrorStrCat("Failed to create a slice plan for ",
-                                 operand->ToString(), ".");
-    }
-    const popops::SlicePlan* slice_plan = itr->second.slice_plan;
-    for (const HloInstruction* slice : slices) {
-      // Map the plan to the instruction in the original module.
-      const HloInstruction* original_slice =
-          res.annotations.flattened_inst_map_bwd.at(slice);
-      res.slice_plan_mappings[original_slice] = slice_plan;
+    const std::vector<const HloInstruction*> slice_ops = pair.second;
+    const std::vector<std::size_t> lookups = GetLookUps(slice_ops);
+    // Only share a plan if the options match.
+    TF_ASSIGN_OR_RETURN(const bool options_match,
+                        AllOptionsMatch(slice_ops, res));
+
+    if (IsSliceOnlyPlan(slice_ops) && options_match) {
+      TF_RETURN_IF_ERROR(AddPlan(/*plan_type=*/PlanType::kSliceOnly, lookups,
+                                 operand, slice_ops, res));
+    } else if (IsUpdateOnlyPlan(slice_ops) && options_match) {
+      TF_RETURN_IF_ERROR(AddPlan(/*plan_type=*/PlanType::kUpdateOnly, lookups,
+                                 operand, slice_ops, res));
+    } else if (IsUpdateAddOnlyPlan(slice_ops) && options_match) {
+      TF_RETURN_IF_ERROR(AddPlan(/*plan_type=*/PlanType::kUpdateAddOnly,
+                                 lookups, operand, slice_ops, res));
+    } else if (IsSliceAndUpdatePlan(slice_ops) && options_match) {
+      TF_RETURN_IF_ERROR(AddPlan(/*plan_type=*/PlanType::kSliceAndUpdate,
+                                 lookups, operand, slice_ops, res));
+    } else if (IsSliceAndUpdateAddPlan(slice_ops) && options_match) {
+      TF_RETURN_IF_ERROR(AddPlan(/*plan_type=*/PlanType::kSliceAndUpdateAdd,
+                                 lookups, operand, slice_ops, res));
+    } else {
+      // Unsupported mix - make a plan for each instruction.
+      for (int64 i = 0; i != slice_ops.size(); ++i) {
+        const HloInstruction* inst = slice_ops[i];
+        const std::size_t lookup = lookups[i];
+
+        PlanType plan_type;
+        if (IsMultiSlice(inst)) {
+          plan_type = PlanType::kSliceOnly;
+        } else if (IsMultiUpdate(inst)) {
+          plan_type = PlanType::kUpdateOnly;
+        } else {
+          CHECK(IsMultiUpdateAdd(inst));
+          plan_type = PlanType::kUpdateAddOnly;
+        }
+        TF_RETURN_IF_ERROR(AddPlan(plan_type, /*lookups=*/{lookup}, operand,
+                                   /*insts=*/{inst}, res));
+      }
     }
   }
   return Status::OK();
@@ -150,14 +267,14 @@ Status PopulateWithPlans(const InputToSliceUsersMap& user_map,
  * - A list of the number of offsets used by all the slice / updates calls made
  * on a given input.
  *
- * This visitor works in two stages:
- * (1) Walk through the flattened_module to find all the calls to multiSlice /
- * multiUpdate / multiUpdateAdd. For each of these calls iterate through its
- * operands and collect the data needed to create its slice plan. Identify and
- * keep track of which HloInstructions should share a SlicePlan. (2) Create all
- * the SlicePlans and populate the slice_plans and slice_plan_mappings in
- * CompilerResources in order to be later able to retrieve the SlicePlan
- * associated to a given HloInstruction during lowering.
+ * This pass works in the following way:
+ * 1. In the flattened_module find all calls to multiSlice /
+ * multiUpdate / multiUpdateAdd which share the lookup operand (operand idx 0).
+ * 2. For each group of instructions find whether they can be categorized into
+ * PlanType as a group (see the enum description), if not, create a slice plan
+ * for each instruction.
+ * 3. Translate the instructions back into the module to make sure each
+ * instruction has a plan.
  */
 StatusOr<bool> EmbeddingPlansPreplanning::Run(HloModule* module) {
   VLOG(2) << "Preplanning embedding operations.";
@@ -166,46 +283,16 @@ StatusOr<bool> EmbeddingPlansPreplanning::Run(HloModule* module) {
   HloComputation* entry_computation =
       resources_.annotations.flattened_module->entry_computation();
 
-  InputToSliceUsersMap multi_slices;
-  InputToSliceUsersMap multi_update_adds;
-  InputToSliceUsersMap multi_updates;
+  InputToSliceUsersMap slice_ops;
 
   for (const HloInstruction* inst :
        entry_computation->MakeInstructionPostOrder()) {
-    if (IsPoplarInstruction(PoplarOp::MultiSlice)(inst)) {
-      multi_slices[inst->operand(0)].push_back(inst);
-    } else if (IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst)) {
-      multi_update_adds[inst->operand(0)].push_back(inst);
-    } else if (IsPoplarInstruction(PoplarOp::MultiUpdate)(inst)) {
-      // Note that HloMultiUpdateAddInstruction inherits from
-      // HloMultiUpdateInstruction, so we need to handle it first.
-      multi_updates[inst->operand(0)].push_back(inst);
+    if (IsMultiSliceOrUpdate(inst)) {
+      slice_ops[inst->operand(0)].push_back(inst);
     }
   }
 
-  // Populate the multi slices.
-  TF_ASSIGN_OR_RETURN(SlicePlanMap multi_slice_plans,
-                      GetSlicePlans(multi_slices, resources_));
-
-  // Populate multi update add slice plans and try to reuse the
-  // multi_slice_plans.
-  TF_ASSIGN_OR_RETURN(
-      SlicePlanMap multi_update_add_plans,
-      GetSlicePlans(multi_update_adds, resources_, multi_slice_plans));
-
-  // Same as above, but for multi-update.
-  TF_ASSIGN_OR_RETURN(
-      SlicePlanMap multi_update_plans,
-      GetSlicePlans(multi_updates, resources_, multi_slice_plans));
-
-  // Populate the slice plans in the CompilerResources.
-  TF_RETURN_IF_ERROR(
-      PopulateWithPlans(multi_slices, multi_slice_plans, resources_));
-  TF_RETURN_IF_ERROR(
-      PopulateWithPlans(multi_update_adds, multi_update_add_plans, resources_));
-  TF_RETURN_IF_ERROR(
-      PopulateWithPlans(multi_updates, multi_update_plans, resources_));
-
+  TF_RETURN_IF_ERROR(PopulatePlans(slice_ops, resources_));
   return false;
 }
 

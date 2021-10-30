@@ -474,6 +474,36 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       expected_out = np.flip(fd[updates], axis=0) * scale
       self.assertAllClose(out, expected_out)
 
+  @tu.skip_on_hw
+  @test_util.deprecated_graph_mode_only
+  def testSimplifyScatter(self):
+    with self.session() as sess:
+      with ops.device('cpu'):
+        indices = array_ops.placeholder(np.int32, [4, 1], name="indices")
+        updates = array_ops.placeholder(np.int32, [4], name="updates")
+
+      def model(indices, updates):
+        return array_ops.tensor_scatter_update(
+            array_ops.ones([21128], np.int32), indices, updates)
+
+      with ops.device("/device:IPU:0"):
+        result, = ipu.ipu_compiler.compile(model, inputs=[indices, updates])
+
+      indices_vals = [[1], [2], [3], [4]]
+      updates_vals = [9, 10, 11, 12]
+      fd = {
+          indices: indices_vals,
+          updates: updates_vals,
+      }
+
+      out = sess.run(result, feed_dict=fd)
+
+      expected = np.ones([21128])
+      for idx, val in zip(indices_vals, updates_vals):
+        expected[idx[0]] = val
+
+      self.assertAllEqual(out, expected)
+
 
 if __name__ == "__main__":
   googletest.main()

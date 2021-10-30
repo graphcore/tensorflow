@@ -26,7 +26,7 @@ class HloModule;
 namespace poplarplugin {
 
 /**
- * Find all the tensors that will require a SlicePlan at creation.
+ * Creates all the slice plans for all slicing operations.
  */
 class EmbeddingPlansPreplanning : public HloModulePass {
  public:
