@@ -223,7 +223,7 @@ ENTRY main {
   EXPECT_EQ(plan1, plan3);
 }
 
-TEST_F(SlicePlanTest, DontShareSliceAndUpdateAddPlan) {
+TEST_F(SlicePlanTest, ShareMultipleSlicesAndUpdate) {
   const string& hlo_string = R"(
 HloModule main
 
@@ -260,7 +260,7 @@ ENTRY main {
   TF_ASSERT_OK_AND_ASSIGN(auto plan2, GetSlicePlan(*resources, slice2));
   TF_ASSERT_OK_AND_ASSIGN(auto plan3, GetSlicePlan(*resources, update));
   EXPECT_EQ(plan1, plan2);
-  EXPECT_NE(plan1, plan3);
+  EXPECT_EQ(plan1, plan3);
 }
 
 TEST_F(SlicePlanTest, ShareSliceAndUpdatePlan) {
@@ -297,7 +297,7 @@ ENTRY main {
   EXPECT_EQ(plan1, plan2);
 }
 
-TEST_F(SlicePlanTest, ShareMultipleSliceAndUpdatePlan) {
+TEST_F(SlicePlanTest, ShareMultipleSliceAndUpdatePlan2) {
   const string& hlo_string = R"(
 HloModule main
 
@@ -337,7 +337,7 @@ ENTRY main {
   EXPECT_EQ(plan1, plan2);
 }
 
-TEST_F(SlicePlanTest, DontShareSliceAndUpdatePlan) {
+TEST_F(SlicePlanTest, ShareMultipleSliceAndUpdatePlan3) {
   const string& hlo_string = R"(
 HloModule main
 
@@ -373,7 +373,48 @@ ENTRY main {
   TF_ASSERT_OK_AND_ASSIGN(auto plan2, GetSlicePlan(*resources, slice2));
   TF_ASSERT_OK_AND_ASSIGN(auto plan3, GetSlicePlan(*resources, update));
   EXPECT_EQ(plan1, plan2);
+  EXPECT_EQ(plan1, plan3);
+}
+
+TEST_F(SlicePlanTest, DontSharePlans) {
+  const string& hlo_string = R"(
+HloModule main
+
+ENTRY main {
+  input = f32[100,16] parameter(0)
+  offsets = s32[24,1] parameter(1)
+  slice1 = f32[24,16] custom-call(input, offsets), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
+  one = f32[] constant(1)
+  big_one1 = f32[24,16] broadcast(one), dimensions={}
+  slice_modified = f32[24,16] add(slice1, big_one1)
+  update1 = f32[100,16] custom-call(input, offsets, slice_modified), custom_call_target="MultiUpdate", backend_config="{\"indices_are_sorted\":false}\n"
+  lr = f32[] constant(-0.1)
+  update2 = f32[100,16] custom-call(input, offsets, slice_modified, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
+  ROOT t = (f32[24,16], f32[12,16], f32[100,16]) tuple(slice1, update1, update2)
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), false);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  TF_EXPECT_OK(
+      EmbeddingPlansPreplanning(*resources).Run(module.get()).status());
+  auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  auto root = entry_computation->root_instruction();
+  auto slice1 = root->operand(0);
+  auto slice2 = root->operand(1);
+  auto update = root->operand(2);
+  // All plans are different because multiple op types are used.
+  TF_ASSERT_OK_AND_ASSIGN(auto plan1, GetSlicePlan(*resources, slice1));
+  TF_ASSERT_OK_AND_ASSIGN(auto plan2, GetSlicePlan(*resources, slice2));
+  TF_ASSERT_OK_AND_ASSIGN(auto plan3, GetSlicePlan(*resources, update));
+  EXPECT_NE(plan1, plan2);
   EXPECT_NE(plan1, plan3);
+  EXPECT_NE(plan2, plan3);
 }
 
 }  // namespace
