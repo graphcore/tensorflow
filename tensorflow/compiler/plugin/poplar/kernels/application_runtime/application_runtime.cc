@@ -523,6 +523,7 @@ class CommunicationManager {
 
   void Abort(Status status) {
     TENSORFLOW_TRACEPOINT();
+    VLOG(1) << "Communication manager aborting: " << status;
     std::unique_lock<std::recursive_mutex> lk(io_mutex_);
     status_ = status;
 
