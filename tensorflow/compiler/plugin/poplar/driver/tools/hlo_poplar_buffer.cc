@@ -270,12 +270,7 @@ bool HloPoplarBufferSet::AssignUnionOf(
   HloPoplarBufferSet union_set(use_kind);
   for (const HloPoplarBufferSet* buffer_set : buffer_sets) {
     BufferUseKind buffer_set_use_kind = buffer_set->GetUseKind();
-    // Out of all buffer uses, pick up the highest usage kind.
-    // For instance, readonly op can't change the fact that buffer was
-    // modified before.
-    if (buffer_set_use_kind > union_set.use_kind_) {
-      union_set.use_kind_ = buffer_set_use_kind;
-    }
+    union_set.AddNewBufferUse(buffer_set_use_kind);
     for (const HloPoplarBuffer* buffer : buffer_set->buffers()) {
       union_set.buffers_.push_back(buffer);
     }
@@ -286,6 +281,15 @@ bool HloPoplarBufferSet::AssignUnionOf(
     return true;
   }
   return false;
+}
+
+void HloPoplarBufferSet::AddNewBufferUse(BufferUseKind use) {
+  // Out of all buffer uses, pick up the highest usage kind.
+  // For instance, readonly op can't change the fact that buffer was
+  // modified before.
+  if (use > this->use_kind_) {
+    use_kind_ = use;
+  }
 }
 
 bool HloPoplarBufferSet::operator==(const HloPoplarBufferSet& other) const {
