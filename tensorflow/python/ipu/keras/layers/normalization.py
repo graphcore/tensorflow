@@ -118,19 +118,19 @@ class GroupNormalization(ipu_layer.IPULayer):
                        '(channel axis 1) and NHWC (channel axis -1).')
     params_shape = [self.channels]
 
-    if self.center:
-      self.beta = self.add_weight("beta",
-                                  dtype=self.dtype,
-                                  initializer=self.beta_initializer,
-                                  shape=params_shape,
-                                  trainable=self.trainable)
-
     if self.scale:
       self.gamma = self.add_weight("gamma",
                                    dtype=self.dtype,
                                    initializer=self.gamma_initializer,
                                    shape=params_shape,
                                    trainable=self.trainable)
+
+    if self.center:
+      self.beta = self.add_weight("beta",
+                                  dtype=self.dtype,
+                                  initializer=self.beta_initializer,
+                                  shape=params_shape,
+                                  trainable=self.trainable)
 
     self.built = True
 

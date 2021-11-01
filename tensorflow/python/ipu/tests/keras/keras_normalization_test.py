@@ -59,6 +59,15 @@ def keras_upstream_layer(x, training=True, **kwargs):
   return impl(x, training)
 
 
+def keras_layer_copy_weights(input_shape, **kwargs):
+  layer = ipu.layers.LayerNormalization(**kwargs)
+  upstream_layer = keras.layers.LayerNormalization(**kwargs)
+  layer.build(input_shape)
+  upstream_layer.build(input_shape)
+  layer.set_weights(upstream_layer.get_weights())
+  return (layer.beta, layer.gamma, upstream_layer.beta, upstream_layer.gamma)
+
+
 def keras_group(x, training=True, **kwargs):
   layer = ipu.layers.GroupNormalization(**kwargs)
   layer.build(x.shape)
@@ -314,6 +323,14 @@ class LayerTest(test.TestCase):
     self.doComparisonTest(input_shape, axis=[2])
     # Specify axes with negative values.
     self.doComparisonTest(input_shape, axis=[-1])
+
+  def testCopyWeightsFromUpstreamLayer(self):
+    input_shape = (10, 10, 30)
+    axis = (-1)
+    layer_beta, layer_gamma, upstream_layer_beta, upstream_layer_gamma = \
+      keras_layer_copy_weights(input_shape, axis=axis)
+    self.assertAllEqual(layer_beta, upstream_layer_beta)
+    self.assertAllEqual(layer_gamma, upstream_layer_gamma)
 
   def testDtype(self):
     layer = ipu.layers.LayerNormalization()
