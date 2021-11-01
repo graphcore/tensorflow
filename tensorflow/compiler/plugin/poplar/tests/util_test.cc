@@ -133,7 +133,7 @@ ENTRY e {
     EXPECT_TRUE(unused_or.ok());
     auto unused = unused_or.ValueOrDie();
     EXPECT_THAT(unused.size(), 1);
-    EXPECT_TRUE(unused.contains(1));
+    EXPECT_TRUE(ContainsKey(unused, 1));
   }
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");
@@ -194,10 +194,10 @@ ENTRY e {
     auto duplicate = duplicate_or.ValueOrDie();
     EXPECT_THAT(duplicate.size(), 2);
     EXPECT_THAT(duplicate[0].size(), 2);
-    EXPECT_TRUE(duplicate[0].contains(4));
-    EXPECT_TRUE(duplicate[0].contains(5));
+    EXPECT_TRUE(ContainsKey(duplicate[0], 4));
+    EXPECT_TRUE(ContainsKey(duplicate[0], 5));
     EXPECT_THAT(duplicate[1].size(), 1);
-    EXPECT_TRUE(duplicate[1].contains(3));
+    EXPECT_TRUE(ContainsKey(duplicate[1], 3));
   }
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");
@@ -258,7 +258,7 @@ ENTRY e {
     auto duplicate = duplicate_or.ValueOrDie();
     EXPECT_THAT(duplicate.size(), 1);
     EXPECT_THAT(duplicate[0].size(), 1);
-    EXPECT_TRUE(duplicate[0].contains(2));
+    EXPECT_TRUE(ContainsKey(duplicate[0], 2));
   }
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");

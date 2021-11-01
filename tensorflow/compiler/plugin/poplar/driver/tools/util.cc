@@ -984,10 +984,10 @@ StatusOr<HloInstruction*> CloneComputationSubtree(HloInstruction* root,
 }
 
 namespace {
-StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
-GetDuplicateOperands(const HloInstruction* inst) {
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicateOperands(
+    const HloInstruction* inst) {
   absl::flat_hash_map<const HloInstruction*, int64> first_occurrence;
-  absl::flat_hash_map<int64, absl::flat_hash_set<int64>> duplicate_operands;
+  std::map<int64, std::set<int64>> duplicate_operands;
   // Go through all the operands in order. First time we see it, add to
   // first_occurrence when we first saw it, next time we see it add it to the
   // duplicate operands.
@@ -1004,19 +1004,19 @@ GetDuplicateOperands(const HloInstruction* inst) {
 }
 }  // anonymous namespace
 
-StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
-GetDuplicateCallOutputs(const HloInstruction* call) {
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallOutputs(
+    const HloInstruction* call) {
   return GetDuplicateOperands(call->to_apply()->root_instruction());
 }
 
-StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
-GetDuplicateCallInputs(const HloInstruction* call) {
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallInputs(
+    const HloInstruction* call) {
   return GetDuplicateOperands(call);
 }
 
-StatusOr<absl::flat_hash_set<int64>> GetUnusedCallOutputIndices(
+StatusOr<std::set<int64>> GetUnusedCallOutputIndices(
     const HloInstruction* call) {
-  absl::flat_hash_set<int64> unused_outputs;
+  std::set<int64> unused_outputs;
   if (call->parent()->root_instruction() != call) {
     for (int64 i = 0; i != ShapeUtil::TupleElementCount(call->shape()); ++i) {
       unused_outputs.insert(i);
@@ -1029,10 +1029,10 @@ StatusOr<absl::flat_hash_set<int64>> GetUnusedCallOutputIndices(
   return unused_outputs;
 }
 
-StatusOr<absl::flat_hash_set<int64>> GetUnusedParametersInCall(
+StatusOr<std::set<int64>> GetUnusedParametersInCall(
     const HloInstruction* stage) {
   const HloComputation* stage_computation = stage->to_apply();
-  absl::flat_hash_set<int64> unused_params;
+  std::set<int64> unused_params;
   for (int64 param_number = 0;
        param_number != stage_computation->num_parameters(); ++param_number) {
     const HloInstruction* parameter =
@@ -1044,8 +1044,8 @@ StatusOr<absl::flat_hash_set<int64>> GetUnusedParametersInCall(
   return unused_params;
 }
 
-Status RemoveOutputsFromCall(
-    HloInstruction* call, const absl::flat_hash_set<int64>& outputs_to_remove) {
+Status RemoveOutputsFromCall(HloInstruction* call,
+                             const std::set<int64>& outputs_to_remove) {
   // Nothing to remove.
   if (outputs_to_remove.empty()) {
     return Status::OK();
@@ -1058,8 +1058,7 @@ Status RemoveOutputsFromCall(
           << " from " << call->ToString();
 
   // Get all the GTEs.
-  absl::flat_hash_map<int64, absl::flat_hash_set<HloInstruction*>>
-      tuple_index_to_gte;
+  absl::flat_hash_map<int64, HloInstructionSet> tuple_index_to_gte;
   for (HloInstruction* user : call->users()) {
     CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
     tuple_index_to_gte[user->tuple_index()].insert(user);
@@ -1069,7 +1068,7 @@ Status RemoveOutputsFromCall(
   std::vector<HloInstruction*> new_outputs;
   new_outputs.reserve(num_outputs_old - outputs_to_remove.size());
   for (int64 output_idx = 0; output_idx != num_outputs_old; ++output_idx) {
-    if (outputs_to_remove.contains(output_idx)) {
+    if (ContainsKey(outputs_to_remove, output_idx)) {
       // Sanity check that this output has no users.
       CHECK(tuple_index_to_gte[output_idx].empty());
     } else {
@@ -1169,8 +1168,7 @@ StatusOr<HloInstruction*> ReplaceCallWith(
 }
 
 StatusOr<HloInstruction*> RemoveParametersFromCall(
-    HloInstruction* call,
-    const absl::flat_hash_set<int64>& parameters_to_remove) {
+    HloInstruction* call, const std::set<int64>& parameters_to_remove) {
   // Nothing to remove.
   if (parameters_to_remove.empty()) {
     return call;
@@ -1197,7 +1195,7 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
        ++param_number) {
     HloInstruction* old_parameter =
         call_computation->parameter_instruction(param_number);
-    if (parameters_to_remove.contains(param_number)) {
+    if (ContainsKey(parameters_to_remove, param_number)) {
       // Sanity check that the parameter we are removing has no users.
       CHECK_EQ(old_parameter->user_count(), 0);
     } else {
