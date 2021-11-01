@@ -137,7 +137,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
       analysis_->SetInstructionBufferSetOutput(inst, indexed_shape.index,
                                                buffer_set);
 
-      VLOG(3) << "Forwarding buffer set " << buffer_set << " from "
+      VLOG(2) << "Forwarding buffer set " << buffer_set << " from "
               << input_position << " to " << output_position;
     }
     return Status::OK();
@@ -173,7 +173,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
           analysis_->GetBufferSet(operand, inplace_description.operand_index());
       const BufferUseKind kind = inplace_description.kind();
 
-      VLOG(3) << "Forwarding buffer set " << operand_buffer_set << " from "
+      VLOG(2) << "Forwarding buffer set " << operand_buffer_set << " from "
               << operand->ToString() << " (" << BufferUseKind_Name(kind)
               << ") to " << inst->ToString();
 
@@ -221,7 +221,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
           analysis_->GetBufferSet(operand, use_description.operand_index());
       const BufferUseKind kind = use_description.kind();
 
-      VLOG(3) << "Forwarding buffer set " << operand_buffer_set << " from "
+      VLOG(2) << "Forwarding buffer set " << operand_buffer_set << " from "
               << operand->ToString() << " (" << BufferUseKind_Name(kind)
               << ") to " << inst->ToString();
 
@@ -269,7 +269,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
         const HloInstruction* operand = inst->operand(0);
         const auto& instruction_set =
             analysis_->GetInstructionBufferSet(operand);
-        VLOG(3) << "Forwarding instruction buffer set " << instruction_set
+        VLOG(2) << "Forwarding instruction buffer set " << instruction_set
                 << " from " << operand->ToString() << " to "
                 << inst->ToString();
         analysis_->SetInstructionBufferSet(inst, instruction_set);
@@ -298,7 +298,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
         num_inplace_operands =
             num_modified_remote_buffers + num_unmodified_remote_buffers;
         num_inplace_outputs = num_modified_remote_buffers;
-        VLOG(3) << "Function with " << num_modified_remote_buffers
+        VLOG(2) << "Function with " << num_modified_remote_buffers
                 << " modified remote buffers, " << num_unmodified_remote_buffers
                 << " unmodified remote buffers and " << num_inplace_operands
                 << " inplace operands.";
@@ -387,7 +387,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
       TF_RETURN_IF_ERROR(body_comp->Accept(&visitor));
     }
 
-    VLOG(3) << "Forwarding instruction buffer set " << instruction_set
+    VLOG(2) << "Forwarding instruction buffer set " << instruction_set
             << " from " << operand->ToString() << " to " << inst->ToString();
     analysis_->SetInstructionBufferSet(inst, instruction_set);
     return Status::OK();
@@ -553,7 +553,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
     // Get the output buffers.
     auto& root_set = analysis_->GetInstructionBufferSet(root);
 
-    VLOG(3) << "Forwarding instruction buffer set " << root_set << " from "
+    VLOG(2) << "Forwarding instruction buffer set " << root_set << " from "
             << root->ToString() << " to " << inst->ToString();
     analysis_->SetInstructionBufferSet(inst, root_set);
     return Status::OK();
@@ -574,7 +574,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
     HloPoplarBufferSet buffer_set;
     buffer_set.AssignUnionOf(buffer_sets, use_kind);
 
-    VLOG(3) << "Setting a union of buffer sets " << buffer_set << " to "
+    VLOG(2) << "Setting a union of buffer sets " << buffer_set << " to "
             << inst->ToString();
 
     analysis_->SetInstructionBufferSetOutput(inst, ShapeIndex{}, buffer_set);
@@ -609,10 +609,9 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
         }
         const HloPoplarPosition output_position{inst, output_index};
 
-        HloPoplarBufferSet buffer_set = analysis_->GetBufferSet(input_position);
-        buffer_set.AddNewBufferUse(kind);
+        const auto& buffer_set = analysis_->GetBufferSet(input_position);
 
-        VLOG(3) << "Forwarding buffer set " << buffer_set << " from "
+        VLOG(2) << "Forwarding buffer set " << buffer_set << " from "
                 << input_position << " to " << output_position;
 
         analysis_->SetInstructionBufferSetOutput(inst, output_index,
@@ -640,9 +639,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
     }
 
     // Simply forward the buffer set.
-    HloPoplarBufferSet buffer_set = analysis_->GetBufferSet(operand_0);
-    buffer_set.AddNewBufferUse(kind);  // either set, or update
-
+    const auto& buffer_set = analysis_->GetBufferSet(operand_0);
     analysis_->SetInstructionBufferSetOutput(inst, ShapeIndex{}, buffer_set);
 
     VLOG(3) << "Forwarding buffer set " << buffer_set << " from "

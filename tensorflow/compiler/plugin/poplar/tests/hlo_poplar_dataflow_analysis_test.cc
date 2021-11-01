@@ -581,19 +581,12 @@ ENTRY main {
   EXPECT_FALSE(analysis->BufferIsDefinedAt(b_p0, ShapeIndex{1}));
   EXPECT_FALSE(analysis->BufferIsDefinedAt(b_p0, ShapeIndex{2}));
 
-  EXPECT_EQ(analysis->GetBufferSet(b_p0, ShapeIndex{0}).buffers(),
-            analysis->GetBufferSet(b_t0, ShapeIndex{0}).buffers());
-  EXPECT_EQ(analysis->GetBufferSet(b_p0, ShapeIndex{1}).buffers(),
-            analysis->GetBufferSet(b_t0, ShapeIndex{1}).buffers());
-  EXPECT_EQ(analysis->GetBufferSet(b_p0, ShapeIndex{1}).buffers(),
-            analysis->GetBufferSet(b_t0, ShapeIndex{2}).buffers());
-
-  EXPECT_EQ(analysis->GetBufferSet(b_t0, ShapeIndex{0}).GetUseKind(),
-            BufferUseKind::USE_ALIAS_READ_ONLY);
-  EXPECT_EQ(analysis->GetBufferSet(b_t0, ShapeIndex{1}).GetUseKind(),
-            BufferUseKind::USE_ALIAS_READ_ONLY);
-  EXPECT_EQ(analysis->GetBufferSet(b_t0, ShapeIndex{2}).GetUseKind(),
-            BufferUseKind::USE_ALIAS_READ_WRITE);
+  EXPECT_EQ(analysis->GetBufferSet(b_p0, ShapeIndex{0}),
+            analysis->GetBufferSet(b_t0, ShapeIndex{0}));
+  EXPECT_EQ(analysis->GetBufferSet(b_p0, ShapeIndex{1}),
+            analysis->GetBufferSet(b_t0, ShapeIndex{1}));
+  EXPECT_EQ(analysis->GetBufferSet(b_p0, ShapeIndex{1}),
+            analysis->GetBufferSet(b_t0, ShapeIndex{2}));
 
   EXPECT_NE(analysis->GetInstructionBufferSet(c_p0),
             analysis->GetInstructionBufferSet(arg0));
@@ -751,18 +744,6 @@ ENTRY main {
   EXPECT_EQ(arg0_buffer, analysis->GetUniqueBufferAt(arg0_store));
 }
 
-auto buffers_equal = [](const InstructionPoplarBufferSet& A,
-                        const InstructionPoplarBufferSet& B) {
-  bool equal = true;
-  A.GetBufferSets().ForEachElement(
-      [&](const ShapeIndex& index, const HloPoplarBufferSet& data) {
-        if (data.buffers() != B.GetBufferSets().element(index).buffers()) {
-          equal = false;
-        }
-      });
-  return equal;
-};
-
 TEST_F(HloPoplarDataflowAnalysisTest, TestRepeatLoop1) {
   std::string hlo = R"(
 HloModule top
@@ -816,12 +797,10 @@ ENTRY top {
   instruction_set.SetOutputBufferSet(ShapeIndex{0}, c0_buffer_set);
   instruction_set.SetOutputBufferSet(ShapeIndex{1}, arg0_buffer_set);
 
-  EXPECT_TRUE(buffers_equal(analysis->GetInstructionBufferSet(arg_tuple),
-                            instruction_set));
-  EXPECT_TRUE(buffers_equal(analysis->GetInstructionBufferSet(body_arg_tuple),
-                            instruction_set));
-  EXPECT_TRUE(
-      buffers_equal(analysis->GetInstructionBufferSet(loop), instruction_set));
+  EXPECT_THAT(analysis->GetInstructionBufferSet(arg_tuple), instruction_set);
+  EXPECT_THAT(analysis->GetInstructionBufferSet(body_arg_tuple),
+              instruction_set);
+  EXPECT_THAT(analysis->GetInstructionBufferSet(loop), instruction_set);
 }
 
 TEST_F(HloPoplarDataflowAnalysisTest, TestRepeatLoop2) {
@@ -878,8 +857,7 @@ ENTRY top {
   InstructionPoplarBufferSet instruction_set(loop->shape());
   instruction_set.SetOutputBufferSet(ShapeIndex{0}, c0_buffer_set);
   instruction_set.SetOutputBufferSet(ShapeIndex{1}, arg0_buffer_set);
-  EXPECT_TRUE(
-      buffers_equal(analysis->GetInstructionBufferSet(loop), instruction_set));
+  EXPECT_THAT(analysis->GetInstructionBufferSet(loop), instruction_set);
 }
 
 }  // namespace

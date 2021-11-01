@@ -272,9 +272,6 @@ class HloPoplarBufferSet {
   // Returns aggregated use kind
   BufferUseKind GetUseKind() const { return use_kind_; }
 
-  // Adds a new use of the buffer
-  void AddNewBufferUse(BufferUseKind use);
-
   // Add a buffer to the current set - returns true iff a buffer was added.
   bool AddBuffer(const HloPoplarBuffer* buffer);
 
@@ -328,10 +325,6 @@ class InstructionPoplarBufferSet {
   bool operator!=(const InstructionPoplarBufferSet& other) const;
 
   std::string ToString() const;
-
-  const ShapeTree<HloPoplarBufferSet>& GetBufferSets() const {
-    return buffer_sets_;
-  }
 
  private:
   const Shape shape_;
