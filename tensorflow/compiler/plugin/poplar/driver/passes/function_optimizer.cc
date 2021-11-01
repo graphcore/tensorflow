@@ -116,7 +116,7 @@ StatusOr<bool> RemoveOutputInputParameters(HloInstruction* function) {
 
   if (gtes.size()) {
     // Remove these parameter outputs if the function is still there.
-    absl::flat_hash_set<int64> outputs_to_remove;
+    std::set<int64> outputs_to_remove;
     for (const InputOutputInfo& info : input_output_parameters) {
       outputs_to_remove.insert(info.output_index);
     }

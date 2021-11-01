@@ -478,7 +478,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
                         AddInstructionsToPipelineStage(stage, ordered_lowering,
                                                        parameters_to_replace));
     // Check that after lowering the parameters are now unused.
-    TF_ASSIGN_OR_RETURN(absl::flat_hash_set<int64> unused_parameters,
+    TF_ASSIGN_OR_RETURN(auto unused_parameters,
                         GetUnusedParametersInCall(stage));
     bool lowered_all_params =
         parameters_to_replace.size() <= unused_parameters.size() &&
@@ -741,7 +741,7 @@ StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs(
 
   TF_ASSIGN_OR_RETURN(auto analysis,
                       PipelineDataflowAnalysis::GetAnalysis(stages_));
-  absl::flat_hash_set<int64> unused_op_indices;
+  std::set<int64> unused_op_indices;
   // Go through all the operands and lower the ones which need lowering.
   for (int64 op_idx = 0; op_idx != resource_update->operand_count(); ++op_idx) {
     HloInstruction* operand = resource_update->mutable_operand(op_idx);
