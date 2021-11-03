@@ -355,7 +355,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   static StatusOr<std::size_t> AttachToPoplarDevice(
       absl::Span<const poplar::Device> device_list, int32 ordinal,
       bool wait_for_device);
-  void DetachFromPoplarDevice();
+  Status DetachFromPoplarDevice();
 
   bool PoplarDeviceIsAttached() const;
   bool HasPoplarTarget() const;
@@ -639,7 +639,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   // Cleanup function called before the IPU device configurations are
   // reset.
-  void Reset();
+  Status Reset();
 
   void AboutToFreeEngine(poplar::Engine* engine);
 

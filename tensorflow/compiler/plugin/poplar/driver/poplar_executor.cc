@@ -1726,15 +1726,21 @@ Status PoplarExecutor::AttachToPoplarDevice() {
   return Status::OK();
 }
 
-void PoplarExecutor::DetachFromPoplarDevice() {
+Status PoplarExecutor::DetachFromPoplarDevice() {
   std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
   if (PoplarDeviceIsAttached()) {
     VLOG(1) << "Detaching from " << GetDeviceTargetName() << " ordinal "
             << ordinal_;
 
-    ipu_.Device().detach();
+    try {
+      ipu_.Device().detach();
+    } catch (const std::exception& e) {
+      return PoplarExceptionToTensorflowStatus("[Detach Device]", e);
+    }
     ipu_.ClearDevice();
   }
+
+  return Status::OK();
 }
 
 Status PoplarExecutor::CreatePoplarTarget() {
@@ -1902,7 +1908,7 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
         PoplarXlaFlags::Get().use_ipu_model) {
       // If there is no config associated to the open device then it is a CPU
       // device: dettach from it and initialize a Poplar device instead.
-      DetachFromPoplarDevice();
+      TF_RETURN_IF_ERROR(DetachFromPoplarDevice());
     } else {
       VLOG(1) << "Poplar device: type " << GetDeviceTargetName() << " ordinal "
               << ordinal_ << " is already configured: staying attached to it.";
@@ -3187,12 +3193,12 @@ void PoplarExecutor::PostProcessStreamedVariablesDeviceToHost() {
   }
 }
 
-void PoplarExecutor::Reset() {
+Status PoplarExecutor::Reset() {
   std::lock_guard<std::recursive_mutex> lock(ipu_.Mutex());
 
   AboutToFreeEngine(current_engine_);
   StopIOThreads();
-  DetachFromPoplarDevice();
+  TF_RETURN_IF_ERROR(DetachFromPoplarDevice());
   GetAndResetExecutorStatus();
 
   // Note that we don't reset the IO feeds as that would require the
@@ -3201,6 +3207,8 @@ void PoplarExecutor::Reset() {
   ResetConfiguration();
   ResetReports();
   ResetHandles();
+
+  return Status::OK();
 }
 
 void PoplarExecutor::ResetOptionFlags() {
