@@ -229,7 +229,7 @@ Status PoplarPlatform::ResetExecutors() {
 
     auto* poplar_executor =
         static_cast<PoplarExecutor*>(executor->implementation());
-    poplar_executor->Reset();
+    TF_RETURN_IF_ERROR(poplar_executor->Reset());
   }
 
   return Status::OK();
