@@ -14,7 +14,6 @@
 # ==============================================================================
 """Tests for IPU Norm layers."""
 
-
 import numpy as np
 
 from tensorflow.python.framework import test_util
@@ -47,14 +46,31 @@ def keras_layer(instance, x_val, training=True, **kwargs):
     sess.run(variables.global_variables_initializer())
     return sess.run(output, {x: x_val})
 
+
 def keras_upstream_layer(x, training=True, **kwargs):
   with ops.device('/device:IPU:0'):
     x = array_ops.placeholder(x_val.dtype, x_val.shape)
-    output = keras.layers.LayerNormalization(**kwargs)(inputs=x, training=training)
+    output = keras.layers.LayerNormalization(**kwargs)(inputs=x,
+                                                       training=training)
 
   with instance.test_session() as sess:
     sess.run(variables.global_variables_initializer())
     return sess.run(output, {x: x_val})
+
+
+def keras_layer_copy_weights(instance, input_shape, **kwargs):
+  with ops.device('/device:IPU:0'):
+    layer = ipu.layers.LayerNormalization(**kwargs)
+    upstream_layer = keras.layers.LayerNormalization(**kwargs)
+    layer.build(input_shape)
+    upstream_layer.build(input_shape)
+    layer.set_weights(upstream_layer.get_weights())
+
+  with instance.test_session() as sess:
+    sess.run(variables.global_variables_initializer())
+    return sess.run(
+        (layer.beta, layer.gamma, upstream_layer.beta, upstream_layer.gamma))
+
 
 def keras_group(instance, x_val, training=True, **kwargs):
   with ops.device('/device:IPU:0'):
@@ -225,11 +241,11 @@ class LayerTest(test.TestCase):
 
     inputs = np.random.rand(*input_shape).astype(dataType) * sigma + mu
     result = keras_layer(self,
-                            inputs,
-                            center=False,
-                            scale=False,
-                            axis=axis,
-                            training=True)
+                         inputs,
+                         center=False,
+                         scale=False,
+                         axis=axis,
+                         training=True)
     # Make sure that there are no NaNs
     self.assertFalse(np.isnan(result).any())
 
@@ -284,7 +300,7 @@ class LayerTest(test.TestCase):
 
   def doComparisonTest(self, input_shape, axis):
     inputs = np.random.rand(*input_shape).astype(dataType) + 0.1
-    result = keras_layer(inputs, axis=axis)
+    result = keras_layer(self, inputs, axis=axis)
     result_upstream = keras_upstream_layer(inputs, axis=axis)
     self.assertAllClose(result, result_upstream, rtol=1e-3)
 
@@ -303,6 +319,15 @@ class LayerTest(test.TestCase):
     self.doComparisonTest(input_shape, axis=[2])
     # Specify axes with negative values.
     self.doComparisonTest(input_shape, axis=[-1])
+
+  def testCopyWeightsFromUpstreamLayer(self):
+    input_shape = (10, 10, 30)
+    axis = (-1)
+    # Build upstream layer and copy its weights to the ipu layer.
+    layer_beta, layer_gamma, upstream_layer_beta, upstream_layer_gamma = \
+      keras_layer_copy_weights(self, input_shape, axis=axis)
+    self.assertAllEqual(layer_beta, upstream_layer_beta)
+    self.assertAllEqual(layer_gamma, upstream_layer_gamma)
 
 
 class InstanceTest(test.TestCase):
