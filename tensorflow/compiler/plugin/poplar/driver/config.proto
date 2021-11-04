@@ -309,4 +309,7 @@ message IpuOptions {
 
 	// Option for controlling whether experimental prng work is enabled
   bool enable_experimental_prng_stability = 46;
+
+  // The maximum number of bytes to wait before scheduling an all-gather
+  int64 max_all_gather_buffer_size = 47;
 };

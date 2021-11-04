@@ -23,6 +23,7 @@ limitations under the License.
 #include "absl/types/optional.h"
 #include "google/protobuf/util/message_differencer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recv_from_host.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_many.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_scatter.h"
@@ -30,11 +31,13 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_replica_groups.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_instructions.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -668,6 +671,92 @@ class ReduceManyColocatorHelper : public InstructionColocatorHelper {
   }
 };
 
+// A colocator to combine several AllGather instructions into a single
+// instruction.
+class AllGatherColocatorHelper : public InstructionColocatorHelper {
+ public:
+  AllGatherColocatorHelper()
+      : InstructionColocatorHelper(
+            /*requires_matching_element_types=*/true) {}
+
+  bool CanColocate(const HloInstruction* inst) const override {
+    return IsPoplarInstruction(PoplarOp::AllGather)(inst);
+  }
+
+  bool CanColocateExtra(const HloInstruction* a,
+                        const HloInstruction* b) const override {
+    auto a_rg =
+        Cast<HloPoplarAllGatherInstruction>(a)->GetPoplarReplicaGroups();
+    auto b_rg =
+        Cast<HloPoplarAllGatherInstruction>(b)->GetPoplarReplicaGroups();
+
+    return a_rg == b_rg;
+  }
+
+  int64 GetColocateBufferSize(
+      const CompilerInformation& information) const override {
+    return information.max_all_gather_buffer_size;
+  }
+
+  StatusOr<std::vector<HloInstruction*>> CombineAndReplaceColocatedInstructions(
+      std::vector<HloInstruction*> to_combine) const override {
+    const uint64 cluster_size = to_combine.size();
+    CHECK_GT(cluster_size, 0);
+    if (cluster_size == 1) {
+      return to_combine;
+    }
+
+    auto* first_all_gather = to_combine.front();
+    HloComputation* comp = first_all_gather->parent();
+
+    std::vector<Shape> new_shapes;
+    std::vector<HloInstruction*> new_operands;
+    new_shapes.reserve(cluster_size);
+    new_operands.reserve(cluster_size);
+    for (HloInstruction* old_all_gather : to_combine) {
+      CHECK_EQ(old_all_gather->operand_count(), 1);
+      new_shapes.push_back(old_all_gather->shape());
+      new_operands.push_back(old_all_gather->mutable_operand(0));
+    }
+
+    const auto new_shape = ShapeUtil::MakeTupleShape(new_shapes);
+    PoplarReplicaGroups new_replica_groups =
+        Cast<HloPoplarAllGatherInstruction>(first_all_gather)
+            ->GetPoplarReplicaGroups();
+
+    // Add the new instruction.
+    HloInstruction* new_all_gather = comp->AddInstruction(
+        CreatePoplarAllGather(new_operands, new_shape, new_replica_groups));
+
+    // Copy the sharding information if there was any.
+    if (first_all_gather->has_sharding()) {
+      new_all_gather->set_sharding(first_all_gather->sharding());
+    }
+
+    std::vector<HloInstruction*> result(cluster_size + 1);
+    result[0] = new_all_gather;
+
+    for (uint64 i = 0; i != cluster_size; ++i) {
+      HloInstruction* old_all_gather = to_combine[i];
+      // Add a GTE to unpack the new_inst result.
+      TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                          MakeGetTupleElementHlo(new_all_gather, i));
+      // Mark it as inplace.
+      MakeUsedInplace(gte);
+      result[i + 1] = gte;
+      TF_RETURN_IF_ERROR(
+          new_all_gather->CopyAllControlDepsFrom(old_all_gather));
+      TF_RETURN_IF_ERROR(old_all_gather->DropAllControlDeps());
+      TF_RETURN_IF_ERROR(old_all_gather->ReplaceAllUsesWith(gte));
+      // This will do safety checks like confirming that there are no
+      // users of the old AllGather instructions.
+      TF_RETURN_IF_ERROR(comp->RemoveInstruction(old_all_gather));
+    }
+
+    return result;
+  }
+};
+
 }  // namespace
 
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(InterIpuCopyColocatorHelper)
@@ -678,6 +767,7 @@ REGISTER_INSTRUCTION_COLLOCATOR_HELPER(
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(
     StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper)
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(ReduceManyColocatorHelper)
+REGISTER_INSTRUCTION_COLLOCATOR_HELPER(AllGatherColocatorHelper)
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(SendToHostColocatorHelper)
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(RecvFromHostColocatorHelper)
 

@@ -1591,6 +1591,12 @@ class _OptimizationConfig(_ConfigBase):
     """
     self.maximum_reduce_many_buffer_size = 0
     """
+    The maximum size (in bytes) a cluster of all gather operations can reach
+    before it is scheduled. These clusters are lowered to popops AllGather
+    operations.
+    """
+    self.maximum_all_gather_buffer_size = 0
+    """
     The minimum size (in bytes) a tensor must be in order to be considered for
     being stored in remote memory.
     """
@@ -1653,6 +1659,7 @@ class _OptimizationConfig(_ConfigBase):
         self.maximum_cross_replica_sum_buffer_size
     pb.max_reduce_scatter_buffer_size = self.maximum_reduce_scatter_buffer_size
     pb.max_reduce_many_buffer_size = self.maximum_reduce_many_buffer_size
+    pb.max_all_gather_buffer_size = self.maximum_all_gather_buffer_size
     pb.max_inter_ipu_copies_buffer_size = \
         self.maximum_inter_ipu_copies_buffer_size
     pb.max_send_recv_cluster_size = self.maximum_send_recv_cluster_size
@@ -1763,8 +1770,8 @@ class IPUConfig(_ConfigBase):
       # IPUs in the second device.
       config.auto_select_ipus = [1, 2]
     """
-    self.auto_select_ipus: typing.Union[int, typing.List[int], typing.
-                                        Tuple[int, ...]] = []
+    self.auto_select_ipus: typing.Union[int, typing.List[int],
+                                        typing.Tuple[int, ...]] = []
     """
     Configure the IPUs to be used by the session.
 
@@ -1906,8 +1913,8 @@ class IPUConfig(_ConfigBase):
         # 0000:1a:00.0, 0000:1b:00.0, 0000:23:00.0, 0000:24:00.0.
         config.select_ipus = [0, 1, 2, 3]
     """
-    self.select_ipus: typing.Union[int, typing.List[int], typing.
-                                   Tuple[int, ...]] = []
+    self.select_ipus: typing.Union[int, typing.List[int],
+                                   typing.Tuple[int, ...]] = []
     """
     Sub-category containing configuration options that affect convolutions.
     """

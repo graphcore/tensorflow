@@ -104,10 +104,9 @@ class TestConfig(ipu.config._ConfigBase):
     """
     This is an attribute with a very advanced type hint
     """
-    self.attr6: typing.Tuple[typing.List[typing.Union[float, typing.
-                                                      Tuple[str]]], ...] = ([
-                                                          1.0
-                                                      ],)
+    self.attr6: typing.Tuple[typing.List[typing.Union[float,
+                                                      typing.Tuple[str]]],
+                             ...] = ([1.0],)
     """
     This is the docstring for the nested1 category
     """
@@ -1062,6 +1061,14 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
     cfg.optimizations.maximum_reduce_many_buffer_size = 1024768
     pb = cfg._create_protobuf()
     self.assertEqual(pb.max_reduce_many_buffer_size, 1024768)
+
+  def testOptimizationsMaximumGatherBufferSize(self):
+    cfg = ipu.config.IPUConfig()
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.max_all_gather_buffer_size, 0)
+    cfg.optimizations.maximum_all_gather_buffer_size = 1024768
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.max_all_gather_buffer_size, 1024768)
 
   def testOptimizationsMaximumSendRecvClusterSize(self):
     cfg = ipu.config.IPUConfig()

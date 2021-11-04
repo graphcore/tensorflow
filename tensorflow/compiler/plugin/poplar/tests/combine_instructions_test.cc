@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/combine_instructions.h"
 
 #include <algorithm>
+#include <iterator>
 #include <poplar/DeviceManager.hpp>
 #include <poplar/IPUModel.hpp>
 #include <poplin/codelets.hpp>
@@ -35,6 +36,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/sync_list_scheduler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recv_from_host.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/send_to_host.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
@@ -1345,6 +1347,164 @@ add {
   // All of the fp16 kernels should be fused in one and all of the floating
   // point 32 in another, so there should only be two.
   ASSERT_EQ(absl::c_count_if(seq, pred), 2);
+}
+
+class CombineInstructionsAllGatherTest : public HloPoplarTestBase {
+  void SetUp() override {
+    HloModuleConfig config;
+    config.set_replica_count(_replication_factor);
+    config.set_debug_options(GetDebugOptionsForTest());
+
+    TF_ASSERT_OK_AND_ASSIGN(_module,
+                            ParseAndReturnVerifiedModule(_hlo_string, config));
+    EXPECT_TRUE(CustomOpReplacer().Run(_module.get()).ValueOrDie());
+  }
+
+  const std::string _hlo_string = R"hlo(
+HloModule top
+
+entry {
+  arg0 = f32[10] parameter(0)
+  arg1 = f32[10] parameter(1)
+  arg2 = f32[10] parameter(2)
+  r0 = f32[4,10] custom-call(arg0), custom_call_target="AllGather",
+    backend_config="{\"replica_group_size\":0}"
+  r1 = f32[4,10] custom-call(arg1), custom_call_target="AllGather",
+    backend_config="{\"replica_group_size\":0}"
+  r2 = f32[4,10] custom-call(arg2), custom_call_target="AllGather",
+    backend_config="{\"replica_group_size\":0}"
+  r3 = f32[2,10] custom-call(arg0), custom_call_target="AllGather",
+    backend_config="{\"replica_group_size\":2}"
+  r4 = f32[2,10] custom-call(arg1), custom_call_target="AllGather",
+    backend_config="{\"replica_group_size\":2}"
+  r5 = f32[2,10] custom-call(arg2), custom_call_target="AllGather",
+    backend_config="{\"replica_group_size\":2}"
+  r6 = f32[4,10] custom-call(arg0), custom_call_target="AllGather",
+    backend_config="{\"replica_group_size\":4}"
+  r7 = f32[4,10] custom-call(arg1), custom_call_target="AllGather",
+    backend_config="{\"replica_group_size\":4}"
+  r8 = f32[4,10] custom-call(arg2), custom_call_target="AllGather",
+    backend_config="{\"replica_group_size\":4}"
+  ROOT %tuple = (f32[4,10], f32[4,10], f32[4,10], f32[2,10], f32[2,10], f32[2,10], f32[4,10],
+    f32[4,10], f32[4,10]) tuple(r0, r1, r2, r3, r4, r5, r6, r7, r8)
+}
+  )hlo";
+
+ protected:
+  const int _replication_factor = 4;
+  const int _num_output_tuple_elements = 9;
+  const int _num_replicas = _replication_factor > 0 ? _replication_factor : 1;
+  const int _output_size = _num_replicas * 4 * 10;
+
+  std::unique_ptr<VerifiedHloModule> _module;
+
+  void ScheduleInstructions() {
+    uint64 node_size = 4 * 512;  // float32 * 512.
+    // Scheduling is required to run the combiner.
+    HloMemoryScheduler scheduler(
+        [](const BufferValue& buffer) {
+          return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+        },
+        ComputationSchedulerToModuleScheduler(
+            IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+                CompilerInformation().set_max_all_gather_buffer_size(
+                    2 * node_size)))));  // 2 nodes out of the 3 in the graph.
+    EXPECT_TRUE(scheduler.Run(_module.get()).ValueOrDie());
+  }
+};
+
+TEST_F(CombineInstructionsAllGatherTest, TestCombineAllGather) {
+  auto* entry = _module->entry_computation();
+
+  // Ensure we got 9 AllGather instructions.
+  ASSERT_EQ(absl::c_count_if(entry->instructions(),
+                             IsPoplarInstruction(PoplarOp::AllGather)),
+            9);
+
+  ScheduleInstructions();
+  EXPECT_TRUE(CombineInstructions().Run(_module.get()).ValueOrDie());
+
+  // Ensure we have the nine GTE instructions inplace.
+  auto inplace_instructions = GetInplaceInstructions(_module.get());
+  EXPECT_EQ(inplace_instructions.size(), 9);
+  for (auto inplace_inst : inplace_instructions) {
+    EXPECT_EQ(inplace_inst->opcode(), HloOpcode::kGetTupleElement);
+    EXPECT_LT(inplace_inst->tuple_index(), 3);
+  }
+
+  // Three groups of three gathers should be each combined into a single
+  // PoplarAllGather.
+  std::vector<HloInstruction*> poplar_all_gather_insts;
+  auto instructions = _module->schedule().sequence(entry).instructions();
+  absl::c_copy_if(instructions, std::back_inserter(poplar_all_gather_insts),
+                  IsPoplarInstruction(PoplarOp::AllGather));
+  ASSERT_EQ(poplar_all_gather_insts.size(), 3);
+}
+
+TEST_F(CombineInstructionsAllGatherTest, TestCombineAllGatherOutputsIdentical) {
+  // Ensure this test runs on hardware.
+  TF_ASSERT_OK_AND_ASSIGN(auto tf_ipu_count, GetMaxIpuCount());
+  if (_replication_factor > tf_ipu_count) {
+    GTEST_SKIP() << "Skipping test, replication factor " << _replication_factor
+                 << ", max ipu: " << tf_ipu_count;
+    return;
+  }
+
+  // Acquire our device.
+  TF_ASSERT_OK_AND_ASSIGN(poplar::Device device,
+                          CreateIpuDevice(_replication_factor));
+
+  ScheduleInstructions();
+
+  // Clone the scheduled original module before we combine the instructions so
+  // we can compare the module with instructions combined and the module
+  // without.
+  auto original_module = _module->Clone();
+
+  EXPECT_TRUE(CombineInstructions().Run(_module.get()).ValueOrDie());
+
+  auto run_module = [&](HloModule* module) -> std::vector<std::vector<float>> {
+    auto resources = GetMockResources(device, module, _replication_factor);
+    auto engine = Compile(*resources, module).ConsumeValueOrDie();
+
+    // Check that only one computations have been compiled – entry.
+    CHECK_EQ(resources->tensor_maps.size(), 1);
+
+    // Load program onto device.
+    engine.load(device);
+
+    std::vector<float> inputs = {0.f, 1.f, 2.f, 3.f, 4.f,
+                                 5.f, 6.f, 7.f, 8.f, 9.f};
+    engine.connectStream("0.0", inputs.data(), inputs.data() + inputs.size());
+    engine.connectStream("1.0", inputs.data(), inputs.data() + inputs.size());
+    engine.connectStream("2.0", inputs.data(), inputs.data() + inputs.size());
+
+    // Get the values back.
+    std::vector<std::vector<float>> outputs;
+    for (int64 i = 0; i < _num_output_tuple_elements; ++i) {
+      outputs.emplace_back(_output_size);
+      std::stringstream label;
+      label << "out_" << i << ".0";
+      engine.connectStream(label.str(), outputs[i].data(),
+                           outputs[i].data() + outputs[i].size());
+    }
+
+    // Run the program.
+    engine.run(0);
+
+    return outputs;
+  };
+
+  auto new_module_ptr = static_cast<HloModule*>(_module.get());
+  auto outputs_new = run_module(new_module_ptr);
+  auto outputs_original = run_module(original_module.get());
+
+  ASSERT_EQ(outputs_original.size(), outputs_new.size());
+  for (int i = 0; i < outputs_original.size(); i++) {
+    for (int j = 0; j < outputs_original[i].size(); j++) {
+      ASSERT_EQ(outputs_original[i][j], outputs_new[i][j]);
+    }
+  }
 }
 
 }  // namespace

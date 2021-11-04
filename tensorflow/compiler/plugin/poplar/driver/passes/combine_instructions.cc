@@ -95,7 +95,7 @@ CombineInstructions::CombineInstructionsInComputation(
   // [a,b,c|r,r,r,r,r|d,e,f,g,r,r,r]
   auto region_begin =
       std::find_if(instructions.begin(), instructions.end(), has_colocator);
-  // Then find the next instruction which can't be colocated with the begining.
+  // Then find the next instruction which can't be colocated with the beginning.
   const auto can_not_colocate = [&](HloInstruction* inst) {
     return !CanColocate(*region_begin, inst);
   };
@@ -142,6 +142,17 @@ CombineInstructions::CombineInstructionsInComputation(
     region_end = instructions.insert(insert_itr, replacements.begin(),
                                      replacements.end()) +
                  replacements.size();
+
+    // If a region of one instruction is identified, that instruction has a
+    // colocator, but cannot colocate or cannot colocate with itself, then
+    // there will be an infinite loop, as neither the beginning or end of
+    // the region will move, because no replacements have been made.
+    // Therefore, extend the next search region to move the region along.
+    if (replacements.empty()) {
+      region_end++;
+    }
+
+    CHECK(region_begin != region_end);
 
     // Find the next region of consecutive colocated instructions
     //               v end   v beg

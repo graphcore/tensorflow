@@ -22,7 +22,7 @@ REGISTER_OP("IpuAllGather")
     .Input("input: dtype")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32, int32}")
-    .Attr("replication_factor:int")
+    .Attr("replication_factor: int")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       shape_inference::ShapeHandle output;
 
@@ -41,8 +41,8 @@ REGISTER_OP("IpuAllToAll")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32, int32}")
     .Attr("split_dimension: int")
-    .Attr("concat_dimension:int")
-    .Attr("number_of_replicas:int")
+    .Attr("concat_dimension: int")
+    .Attr("number_of_replicas: int")
     .SetShapeFn(shape_inference::UnchangedShape);
 
 }  // namespace tensorflow

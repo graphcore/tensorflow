@@ -554,6 +554,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.max_reduce_many_buffer_size();
   }
 
+  int64 GetMaxAllGatherBufferSize() const {
+    return current_config_.max_all_gather_buffer_size();
+  }
+
   int64 GetMaxSchedulerLookaheadDepth() const {
     return std::max<int64>(1, current_config_.max_scheduler_lookahead_depth());
   }
