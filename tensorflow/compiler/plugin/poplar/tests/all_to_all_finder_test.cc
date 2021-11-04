@@ -15,10 +15,12 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/all_to_all_finder.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/all_reduce_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/xla/service/hlo_pass_fix.h"
 
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 
@@ -268,6 +270,9 @@ ENTRY main {
 
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+
+  EXPECT_TRUE(AllReduceSimplifier(4).Run(module).ValueOrDie());
+
   AllToAllFinder ataf(annotations, 4);
   EXPECT_TRUE(ataf.Run(module).ValueOrDie());
 
@@ -334,6 +339,9 @@ ENTRY main {
 
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+
+  EXPECT_TRUE(AllReduceSimplifier(4).Run(module).ValueOrDie());
+
   AllToAllFinder ataf(annotations, 4);
   EXPECT_TRUE(ataf.Run(module).ValueOrDie());
 

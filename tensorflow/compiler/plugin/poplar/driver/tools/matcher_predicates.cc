@@ -460,17 +460,8 @@ bool IsAllReduceMean(const HloInstruction* inst) {
   }
 
   const HloInstruction* root = inst->to_apply()->root_instruction();
-  if (!Match(root, m::Add(m::Parameter(0),
-                          m::Op().WithOpcode(HloOpcode::kCustomCall)))) {
-    return false;
-  }
-
-  auto root_op1 = Cast<HloCustomCallInstruction>(root->operand(1));
-  if (!IsPoplarInstruction(PoplarOp::ReplicationNormalise)(root_op1)) {
-    return false;
-  }
-
-  return true;
+  return Match(root, m::Add(m::Parameter(0),
+                            m::Divide(m::Parameter(1), m::ConstantScalar())));
 }
 
 }  // namespace poplarplugin

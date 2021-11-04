@@ -215,6 +215,7 @@ cc_library(
         "driver/invariant_passes/no_control_deps_checker.cc",
         "driver/invariant_passes/resource_update_checker.cc",
         "driver/passes/add_stochastic_rounding_options.cc",
+        "driver/passes/all_reduce_simplifier.cc",
         "driver/passes/all_to_all_finder.cc",
         "driver/passes/allocation_finder.cc",
         "driver/passes/add_block_recompute.cc",
@@ -423,6 +424,7 @@ cc_library(
         "driver/invariant_passes/resource_update_checker.h",
         "driver/passes/add_block_recompute.h",
         "driver/passes/add_stochastic_rounding_options.h",
+        "driver/passes/all_reduce_simplifier.h",
         "driver/passes/all_to_all_finder.h",
         "driver/passes/allocation_finder.h",
         "driver/passes/apply_recompute_suggestion.h",
@@ -1668,6 +1670,20 @@ xla_test(
 xla_test(
     name = "poplar_algebraic_simplifier_test",
     srcs = ["tests/poplar_algebraic_simplifier_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "all_reduce_simplifier_test",
+    srcs = ["tests/all_reduce_simplifier_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [

@@ -55,6 +55,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/add_block_recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/add_stochastic_rounding_options.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/all_reduce_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/all_to_all_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/apply_recompute_suggestion.h"
@@ -1440,6 +1441,9 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       if (poplar_executor->EnableMatmulCombiner()) {
         pipeline.AddPass<MatmulCombiner>(resources.annotations);
       }
+      pipeline.AddPass<AllReduceSimplifier>(
+          resources.replication_factor);  // This must be after all calls to
+                                          // PoplarAlgebraicSimplifier
       pipeline.AddPass<SerializeGradientAccumulation>();
       pipeline.AddPass<SliceOptimizer>(resources.annotations);
       pipeline.AddPass<FuseOpsLate>(resources.annotations);
