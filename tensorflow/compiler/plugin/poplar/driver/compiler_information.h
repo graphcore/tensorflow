@@ -32,6 +32,8 @@ struct CompilerInformation {
 
   int64 max_reduce_many_buffer_size = 0;
 
+  int64 max_all_gather_buffer_size = 0;
+
   int64 max_send_recv_cluster_size = 0;
 
   int64 max_scheduler_lookahead_depth = 1;
@@ -57,6 +59,11 @@ struct CompilerInformation {
 
   CompilerInformation& set_max_reduce_many_buffer_size(int64 val) {
     max_reduce_many_buffer_size = val;
+    return *this;
+  }
+
+  CompilerInformation& set_max_all_gather_buffer_size(int64 val) {
+    max_all_gather_buffer_size = val;
     return *this;
   }
 

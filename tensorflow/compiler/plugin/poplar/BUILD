@@ -2105,10 +2105,11 @@ xla_test(
 
 xla_test(
     name = "combine_instructions_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/combine_instructions_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    tags = ["hw_poplar_test"],
     deps = [
         ":optimizers",
         ":poplar_test_base",

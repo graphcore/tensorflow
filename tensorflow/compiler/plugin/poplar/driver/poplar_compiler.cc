@@ -1273,6 +1273,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
               poplar_executor->GetMaxInterIpuCopyBufferSize())
           .set_max_reduce_many_buffer_size(
               poplar_executor->GetMaxReduceManyBufferSize())
+          .set_max_all_gather_buffer_size(
+              poplar_executor->GetMaxAllGatherBufferSize())
           .set_max_send_recv_cluster_size(
               poplar_executor->GetMaxSendRecvClusterSize())
           .set_max_scheduler_lookahead_depth(
@@ -1583,7 +1585,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       if (resources.information.max_all_reduce_buffer_size > 0 ||
           resources.information.max_inter_ipu_copies_buffer_size > 0 ||
           resources.information.max_send_recv_cluster_size > 0 ||
-          resources.information.max_reduce_many_buffer_size > 0) {
+          resources.information.max_reduce_many_buffer_size > 0 ||
+          resources.information.max_all_gather_buffer_size > 0) {
         pipeline.AddPass<IpuScheduler>(
             SizeFunction,
             CreateClusteringMemoryScheduler(resources.information));
