@@ -63,10 +63,11 @@ INSTANTIATE_TEST_SUITE_P(AllReduceSimplifierTestCases, AllReduceSimplifierTest,
                          ::testing::Values(AllReduceSimplifierTestSpec{F16},
                                            AllReduceSimplifierTestSpec{F32},
                                            AllReduceSimplifierTestSpec{U8},
+                                           AllReduceSimplifierTestSpec{U16},
                                            AllReduceSimplifierTestSpec{U32},
+                                           AllReduceSimplifierTestSpec{S8},
+                                           AllReduceSimplifierTestSpec{S16},
                                            AllReduceSimplifierTestSpec{S32}));
-// Other data types have been disabled due to missing data types in
-// the implementation of Literal::GetIntegralAsS64() in TF1
 
 string ReplaceParams(absl::string_view s,
                      const AllReduceSimplifierTestSpec& spec) {
