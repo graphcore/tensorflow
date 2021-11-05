@@ -1943,11 +1943,10 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "prng_stability_models_keras_test",
-    size = "medium",
+    name = "prng_stability_models_test",
+    size = "large",
     srcs = [
-        "tests/prng_stability_models_keras_test.py",
-        "tests/test_optimizer.py",
+        "tests/prng_stability_models_test.py",
     ],
     tags = ["hw_poplar_test"],
     deps = [
@@ -1955,22 +1954,6 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras",
-        "//third_party/py/numpy",
-    ],
-)
-
-tf_py_test(
-    name = "prng_stability_models_test",
-    size = "large",
-    srcs = [
-        "tests/prng_stability_models_test.py",
-        "tests/test_optimizer.py",
-    ],
-    tags = ["hw_poplar_test"],
-    deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
         "//third_party/py/numpy",
     ],
 )
@@ -2139,7 +2122,6 @@ test_suite(
         "popops_cross_replica_mean_test",
         "popops_cross_replica_sum_test",
         "poprun_replica_partitioning_test",
-        "prng_stability_models_keras_test",
         "prng_stability_models_test",
         "random_constant_matmul_test",
         "random_number_generation_test",
