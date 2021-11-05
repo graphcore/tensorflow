@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
@@ -101,6 +102,36 @@ std::unique_ptr<HloComputation> CreateSumReduction(const Shape& shape,
 
   auto* add = builder.AddInstruction(
       HloInstruction::CreateBinary(shape, HloOpcode::kAdd, lhs, rhs));
+
+  return builder.Build(add);
+}
+
+StatusOr<std::unique_ptr<HloComputation>> CreateMeanReduction(
+    const Shape& shape, const std::string& name,
+    const float rhs_divisor = 1.0f) {
+  HloComputation::Builder builder(name);
+
+  auto* lhs =
+      builder.AddInstruction(HloInstruction::CreateParameter(0, shape, "lhs"));
+
+  auto* rhs =
+      builder.AddInstruction(HloInstruction::CreateParameter(1, shape, "rhs"));
+
+  HloInstruction* scaled_rhs;
+  if (rhs_divisor == 1.0f) {
+    scaled_rhs = rhs;
+  } else {
+    TF_ASSIGN_OR_RETURN(Literal literal,
+                        LiteralUtil::CreateR0(rhs_divisor)
+                            .Convert(rhs->shape().element_type()));
+    auto* divisor = builder.AddInstruction(
+        HloInstruction::CreateConstant(std::move(literal)));
+    scaled_rhs = builder.AddInstruction(
+        HloInstruction::CreateBinary(shape, HloOpcode::kDivide, rhs, divisor));
+  }
+
+  auto* add = builder.AddInstruction(
+      HloInstruction::CreateBinary(shape, HloOpcode::kAdd, lhs, scaled_rhs));
 
   return builder.Build(add);
 }
@@ -265,13 +296,31 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
     const auto orthogonal_groups =
         PoplarReplicaGroups::Orthogonal(orthogonal_group_size);
 
-    HloComputation* sum_reduction = context->module()->AddEmbeddedComputation(
-        CreateSumReduction(scatter->shape(), "sum-" + scatter->name()));
+    std::unique_ptr<HloComputation> reduce_comp;
+    if (IsAllReduceAdd(cluster_input)) {
+      reduce_comp =
+          CreateSumReduction(scatter->shape(), "sum-" + scatter->name());
+    } else if (IsAllReduceMean(cluster_input)) {
+      TF_ASSIGN_OR_RETURN(
+          reduce_comp,
+          CreateMeanReduction(
+              scatter->shape(), "mean-" + scatter->name(),
+              /* Number of partitions */
+              static_cast<float>(global_replication_factor_) /
+                  static_cast<float>(partition_replication_factor_)));
+    } else {
+      return tensorflow::errors::InvalidArgument(
+          "Unsupported all reduce instruction found for partitions, expected "
+          "computation to match ADD or MEAN");
+    }
+
+    HloComputation* reduction =
+        context->module()->AddEmbeddedComputation(std::move(reduce_comp));
 
     HloInstruction* all_reduce =
         builder->AddInstruction(HloInstruction::CreateAllReduce(
-            scatter->shape(), std::vector<HloInstruction*>{scatter},
-            sum_reduction, orthogonal_groups.ToXlaReplicaGroups(),
+            scatter->shape(), std::vector<HloInstruction*>{scatter}, reduction,
+            orthogonal_groups.ToXlaReplicaGroups(),
             /*channel_id=*/absl::nullopt));
 
     context->MapInstruction(cluster_input, all_reduce);
