@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 
+#include <utility>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
@@ -199,7 +200,7 @@ Status GenericGraphCache::ExecuteCached(
     auto void_func = poputil::graphfn::VoidFunction(graph, signature, func,
                                                     false, {debug_name_and_id});
     void_func(args, seq, {debug_name_and_id});
-    table_.insert({inst, std::move(void_func)});
+    table_.insert(std::make_pair(inst, std::move(void_func)));
   }
   return Status::OK();
 }
