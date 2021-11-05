@@ -59,7 +59,7 @@ HloPassPipeline GetMockPipeline(CompilerResources& resources) {
   HloPassPipeline pipeline("mock_pipeline");
   pipeline.AddPass<ModuleFlatten>(resources.annotations);
   pipeline.AddPass<CopyInserter>();
-  pipeline.AddPass<InplaceFinder>();
+  pipeline.AddPass<InplaceFinder>(resources.annotations);
   pipeline.AddPass<ShardingPass>();
   pipeline.AddPass<HloDCE>();
   pipeline.AddPass<ConvolutionClassifier>(resources.annotations);

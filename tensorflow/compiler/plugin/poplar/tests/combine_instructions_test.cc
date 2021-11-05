@@ -721,7 +721,8 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   auto* module = module_or_status.ValueOrDie().get();
 
   EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
-  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
+  CompilerAnnotations annotations(module);
+  EXPECT_TRUE(InplaceFinder(annotations).Run(module).ValueOrDie());
   EXPECT_TRUE(HostComputeBarrierInserter().Run(module).ValueOrDie());
 
   const int64 max_send_recv_cluster_size = 12;
@@ -1083,7 +1084,7 @@ add {
   EXPECT_EQ(entry->instruction_count(), 10);
 
   // Run the inplacer.
-  InplaceFinder inplace_finder;
+  InplaceFinder inplace_finder{annotations};
   EXPECT_TRUE(inplace_finder.Run(module).ValueOrDie());
 
   // Expect the gradient accumulations to be inplace.

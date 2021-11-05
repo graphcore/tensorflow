@@ -63,8 +63,8 @@ ENTRY c1 {
   auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -114,8 +114,8 @@ ENTRY c1 {
   auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   std::set<std::string> in_place_ops = {"p0_b",  "p1_b",   "p2_b", "u0_b",
@@ -151,8 +151,8 @@ ENTRY c1 {
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   auto* entry = module0->entry_computation();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annoations(module0);
+  InplaceFinder inplaceFinder{annoations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   std::set<std::string> in_place_ops = {"u0", "u1", "root", "i"};
@@ -216,8 +216,8 @@ TEST_F(HloInplaceDependencyTest, MultipleUpdateInPlacePeers) {
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   auto* entry = module0->entry_computation();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   std::set<std::string> either_in_place_ops = {"u0", "u1"};
@@ -276,8 +276,8 @@ TEST_F(HloInplaceDependencyTest, MultipleInplaceWithInterdependency) {
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   auto* entry = module0->entry_computation();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -334,8 +334,8 @@ TEST_F(HloInplaceDependencyTest, MultipleInplaceWithRightOrder) {
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   auto* entry = module0->entry_computation();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -392,8 +392,8 @@ TEST_F(HloInplaceDependencyTest, InplaceCorrectDependencies) {
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   auto* entry = module0->entry_computation();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
   auto inplace_instructions = GetInplaceInstructions(module0);
 
@@ -445,8 +445,8 @@ TEST_F(HloInplaceDependencyTest, InplaceInputOuputStreamedAndResourceVariable) {
   auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -476,8 +476,8 @@ TEST_F(HloInplaceDependencyTest, InplaceAddCopyForInplaceReadOnly) {
   auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
   auto inplace_instructions = GetInplaceInstructions(module0);
 
@@ -507,8 +507,8 @@ TEST_F(HloInplaceDependencyTest, InplaceDontAddCopyForInplaceReadOnly) {
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   auto* comp = module0->entry_computation();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
   auto inplace_instructions = GetInplaceInstructions(module0);
 
@@ -539,8 +539,8 @@ TEST_F(HloInplaceDependencyTest, InplaceElementwiseBinary) {
   auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -575,7 +575,7 @@ ENTRY c1 {
 
   FuseOpsIntoPoplarOps foipo(annotations);
   EXPECT_TRUE(foipo.Run(module0).ValueOrDie());
-  InplaceFinder inplaceFinder;
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   // Make sure that the only inplace instruction is a call to scaled add to.
@@ -614,7 +614,7 @@ ENTRY c1 {
 
   FuseOpsLate fol(annotations);
   EXPECT_TRUE(fol.Run(module0).ValueOrDie());
-  InplaceFinder inplaceFinder;
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -662,8 +662,8 @@ ENTRY entry {
       HloRunner::CreateModuleFromString(hlo, GetDebugOptionsForTest());
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -698,8 +698,7 @@ ENTRY c1 {
 
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module0).ValueOrDie());
-
-  InplaceFinder inplaceFinder;
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -727,8 +726,8 @@ ENTRY c1 {
   auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -762,8 +761,7 @@ ENTRY c1 {
 
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module0).ValueOrDie());
-
-  InplaceFinder inplaceFinder;
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -789,8 +787,8 @@ ENTRY c1 {
   auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -818,8 +816,8 @@ ENTRY c1 {
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   auto* comp = module0->entry_computation();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -864,8 +862,8 @@ ENTRY c1 {
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   auto* comp = module0->entry_computation();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
   auto inplace_instructions = GetInplaceInstructions(module0);
   EXPECT_THAT(inplace_instructions.size(), 8);
@@ -896,13 +894,14 @@ ENTRY c1 {
   auto* module0 = module.ValueOrDie().get();
 
   CompilerAnnotations annotations(module0);
-
-  InplaceFinder inplaceFinder;
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module0).ValueOrDie());
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
   EXPECT_THAT(inplace_instructions.size(), 1);
-  std::set<std::string> in_place_ops = {"c"};
+  std::set<std::string> in_place_ops = {"update-scalar-in-rows"};
   for (auto i : inplace_instructions) {
     EXPECT_TRUE(in_place_ops.count(i->name()));
   }
@@ -934,7 +933,7 @@ ENTRY c1 {
 
   CompilerAnnotations annotations(module0);
 
-  InplaceFinder inplaceFinder;
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -962,8 +961,8 @@ ENTRY c1 {
   auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -996,8 +995,8 @@ ENTRY c1 {
   auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
-
-  InplaceFinder inplaceFinder;
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
@@ -1029,9 +1028,9 @@ ENTRY c1 {
   auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
-
-  InplaceFinder inplace_finder;
-  EXPECT_TRUE(inplace_finder.Run(module0).ValueOrDie());
+  CompilerAnnotations annotations(module0);
+  InplaceFinder inplaceFinder{annotations};
+  EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(module0);
   EXPECT_THAT(inplace_instructions.size(), 2);
@@ -1096,7 +1095,8 @@ ENTRY entry {
   auto entry = module0->entry_computation();
   EXPECT_TRUE(IsRepeatLoop(entry->root_instruction()));
   EnableLoopAliasAnalysis(entry->root_instruction());
-  EXPECT_TRUE(InplaceFinder().Run(module0).ValueOrDie());
+  EXPECT_TRUE(
+      InplaceFinder(CompilerAnnotations(module0)).Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(entry);
   EXPECT_THAT(inplace_instructions.size(), 1);
@@ -1149,7 +1149,8 @@ ENTRY entry {
   auto entry = module0->entry_computation();
   EXPECT_TRUE(IsRepeatLoop(entry->root_instruction()));
   EnableLoopAliasAnalysis(entry->root_instruction());
-  EXPECT_TRUE(InplaceFinder().Run(module0).ValueOrDie());
+  EXPECT_TRUE(
+      InplaceFinder(CompilerAnnotations(module0)).Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(entry);
   EXPECT_THAT(inplace_instructions.size(), 1);

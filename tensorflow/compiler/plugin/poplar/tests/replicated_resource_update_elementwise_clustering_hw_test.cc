@@ -153,8 +153,7 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
     TF_ASSERT_OK_AND_ASSIGN(bool outlined,
                             OutlineRemoteBuffers().Run(module.get()));
     EXPECT_EQ(outlined, cluster);
-
-    EXPECT_TRUE(InplaceFinder().Run(module.get()).ok());
+    EXPECT_TRUE(InplaceFinder(annotations).Run(module.get()).ok());
     EXPECT_TRUE(RemoteBufferMerger(resources->annotations, THREESTATE_ON)
                     .Run(module.get())
                     .ok());

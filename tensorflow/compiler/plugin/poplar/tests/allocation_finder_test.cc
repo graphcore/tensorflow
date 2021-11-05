@@ -2847,7 +2847,7 @@ ENTRY top {
 
   CompilerAnnotations annotations(module0);
 
-  InplaceFinder inplace_finder;
+  InplaceFinder inplace_finder(annotations);
   ASSERT_TRUE(inplace_finder.Run(module0).ValueOrDie());
 
   AllocationFinder finder(annotations);
@@ -2927,7 +2927,7 @@ HloModule top
 
   CompilerAnnotations annotations(module0);
 
-  InplaceFinder inplace_finder;
+  InplaceFinder inplace_finder(annotations);
   EXPECT_TRUE(inplace_finder.Run(module0).ValueOrDie());
 
   AllocationFinder finder(annotations);
@@ -3001,7 +3001,7 @@ HloModule top
 
   CompilerAnnotations annotations(module0);
 
-  InplaceFinder inplace_finder;
+  InplaceFinder inplace_finder(annotations);
   EXPECT_TRUE(inplace_finder.Run(module0).ValueOrDie());
 
   AllocationFinder finder(annotations);
@@ -3075,7 +3075,7 @@ ENTRY top {
 
   CompilerAnnotations annotations(module0);
 
-  InplaceFinder inplace_finder;
+  InplaceFinder inplace_finder(annotations);
   EXPECT_TRUE(inplace_finder.Run(module0).ValueOrDie());
 
   AllocationFinder finder(annotations);
@@ -3150,7 +3150,7 @@ ENTRY top {
   const auto* ip2 = custom_op->operand(2);
   const auto* arg0 = ip0->operand(0);
 
-  InplaceFinder inplace_finder;
+  InplaceFinder inplace_finder(annotations);
   EXPECT_TRUE(inplace_finder.Run(module0).ValueOrDie());
 
   ForwardAllocation fwd_finder(annotations);
@@ -3217,7 +3217,7 @@ ENTRY top {
   const auto* ip2 = custom_op->operand(2);
   const auto* arg0 = ip0->operand(0);
 
-  InplaceFinder inplace_finder;
+  InplaceFinder inplace_finder(annotations);
   EXPECT_TRUE(inplace_finder.Run(module0).ValueOrDie());
 
   ForwardAllocation fwd_finder(annotations);
@@ -3278,7 +3278,7 @@ ENTRY top {
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module0).ValueOrDie());
 
-  InplaceFinder inplace_finder;
+  InplaceFinder inplace_finder(annotations);
   EXPECT_TRUE(inplace_finder.Run(module0).ValueOrDie());
 
   ForwardAllocation fwd_finder(annotations);

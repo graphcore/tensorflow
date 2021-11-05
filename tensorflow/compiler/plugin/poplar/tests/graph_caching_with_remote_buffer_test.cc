@@ -161,7 +161,8 @@ ENTRY main {
   }
 
   EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
-  EXPECT_TRUE(InplaceFinder().Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(
+      InplaceFinder(resources->annotations).Run(module.get()).ValueOrDie());
   EXPECT_TRUE(RemoteBufferMerger(resources->annotations, THREESTATE_ON)
                   .Run(module.get())
                   .ValueOrDie());

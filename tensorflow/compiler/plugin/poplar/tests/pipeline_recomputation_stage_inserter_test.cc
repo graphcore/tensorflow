@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation_stage_inserter.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
@@ -940,8 +942,8 @@ ENTRY e {
   PipelineFIFOInserter inserter(false);
   TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
-
-  InplaceFinder inplace_finder;
+  CompilerAnnotations annotations(module.get());
+  InplaceFinder inplace_finder(annotations);
   TF_ASSERT_OK_AND_ASSIGN(changed, inplace_finder.Run(module.get()));
   EXPECT_TRUE(changed);
 
@@ -970,7 +972,7 @@ HloModule top
 stage_0_fwd {
   in0 = f32[1,4,4,2] parameter(0)
   in1 = f32[1,4,4,2] parameter(1)
-  recv = f32[1,4,4,2] custom-call(), custom_call_target="RecvFromHost", custom_call_has_side_effect=true, sharding={maximal device=0}
+  recv = f32[1,4,4,2] custom-call(), custom_call_target="CustomOp", custom_call_has_side_effect=true, sharding={maximal device=0}
   add = f32[1,4,4,2] add(recv, in1), backend_config="{\"isInplace\":true}"
   ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in0, add), backend_config="{\"isInplace\":true}"
 }
@@ -1032,15 +1034,19 @@ ENTRY e {
   auto config = GetModuleConfigForTest();
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
+
   ShardingPass sharding;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, sharding.Run(module.get()));
   EXPECT_TRUE(changed);
 
+  CustomOpReplacer custom_op_replacer;
+  custom_op_replacer.Run(module.get());
+
   PipelineFIFOInserter inserter(false);
   TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
-
-  InplaceFinder inplace_finder;
+  CompilerAnnotations annotations(module.get());
+  InplaceFinder inplace_finder(annotations);
   TF_ASSERT_OK_AND_ASSIGN(changed, inplace_finder.Run(module.get()));
   EXPECT_TRUE(changed);
 
@@ -1059,6 +1065,7 @@ ENTRY e {
 
   // Check the FIFO for in place parameter.
   fifo = stages.recomputation.at(0)->operand(1);
+
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(fifo));
   // Not used inplace by the recomputation stage therefore no control
   // dependencies;
@@ -1066,6 +1073,7 @@ ENTRY e {
 
   // Check the FIFO for statetful op.
   fifo = stages.recomputation.at(0)->operand(2);
+
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(fifo));
   EXPECT_THAT(fifo->control_successors().size(), 0);
 
@@ -1146,9 +1154,9 @@ HloModule top
 stage_0_fwd {
   in0 = f32[1,4,4,2] parameter(0)
   in1 = f32[1,4,4,2] parameter(1)
-  recv = f32[1,4,4,2] custom-call(), custom_call_target="RecvFromHost", custom_call_has_side_effect=true, sharding={maximal device=0}
+  recv = f32[1,4,4,2] custom-call(), custom_call_target="RecvFromHost", custom_call_has_side_effect=true, sharding={maximal device=0},  backend_config="{\"rendezvous_key\":\"recv1_key\"}", metadata={op_type="XlaHostCompute" op_name="host_compute"}
   add = f32[1,4,4,2] add(recv, in1), backend_config="{\"isInplace\":true}"
-  print-tensor = token[] custom-call(f32[1,4,4,2] add), custom_call_target="PrintTensor", custom_call_has_side_effect=true
+  print-tensor = token[] custom-call(f32[1,4,4,2] add), custom_call_target="PrintTensor", custom_call_has_side_effect=true, backend_config="{}"
   ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in0, in1), backend_config="{\"isInplace\":true}"
 }
 
@@ -1209,6 +1217,10 @@ ENTRY e {
   auto config = GetModuleConfigForTest();
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module.get()).ValueOrDie());
+
   ShardingPass sharding;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, sharding.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -1216,8 +1228,8 @@ ENTRY e {
   PipelineFIFOInserter inserter(false);
   TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
-
-  InplaceFinder inplace_finder;
+  CompilerAnnotations annotations(module.get());
+  InplaceFinder inplace_finder(annotations);
   TF_ASSERT_OK_AND_ASSIGN(changed, inplace_finder.Run(module.get()));
   EXPECT_TRUE(changed);
 
@@ -1245,9 +1257,9 @@ stage_0_fwd {
   in0 = f32[1,4,4,2] parameter(0)
   in1 = f32[1,4,4,2] parameter(1)
   in2 = opaque[] parameter(2)
-  recv = f32[1,4,4,2] custom-call(), custom_call_target="RecvFromHost", custom_call_has_side_effect=true, sharding={maximal device=0}
+  recv = f32[1,4,4,2] custom-call(), custom_call_target="RecvFromHost", custom_call_has_side_effect=true, sharding={maximal device=0}, backend_config="{\"rendezvous_key\":\"recv1_key\"}", metadata={op_type="XlaHostCompute" op_name="host_compute"}
   add = f32[1,4,4,2] add(recv, in1), backend_config="{\"isInplace\":true}"
-  print-tensor = token[] custom-call(f32[1,4,4,2] add), custom_call_target="PrintTensor", custom_call_has_side_effect=true
+  print-tensor = token[] custom-call(f32[1,4,4,2] add), custom_call_target="PrintTensor", custom_call_has_side_effect=true, backend_config="{}"
   ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in0, in1), backend_config="{\"isInplace\":true}"
 }
 
@@ -1310,6 +1322,10 @@ ENTRY e {
   auto config = GetModuleConfigForTest();
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module.get()).ValueOrDie());
+
   ShardingPass sharding;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, sharding.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -1317,8 +1333,8 @@ ENTRY e {
   PipelineFIFOInserter inserter(false);
   TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
-
-  InplaceFinder inplace_finder;
+  CompilerAnnotations annotations(module.get());
+  InplaceFinder inplace_finder(annotations);
   TF_ASSERT_OK_AND_ASSIGN(changed, inplace_finder.Run(module.get()));
   EXPECT_TRUE(changed);
 

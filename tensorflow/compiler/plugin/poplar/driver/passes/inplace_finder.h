@@ -43,18 +43,14 @@ using InplaceRoute = std::vector<HloInstruction*>;
  */
 class InplaceFinder : public HloModulePass {
  public:
+  explicit InplaceFinder(const CompilerAnnotations& annotations)
+      : annotations(annotations) {}
   absl::string_view name() const override { return "inplace-finder"; }
 
   StatusOr<bool> Run(HloModule* module) override;
 
  private:
-  void RouteFinder(HloInstruction* inst, const std::vector<int64>&);
-
-  std::multimap<HloInstruction*, InplaceRoute, HloPtrComparator> routes;
-
-  InplaceRoute current_route;
-
-  InplaceWorkList worklist_;
+  const CompilerAnnotations& annotations;
 };
 
 }  // namespace poplarplugin

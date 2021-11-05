@@ -12,9 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <memory>
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_dataflow_analysis.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -38,192 +40,124 @@ using InplaceCandidates =
     std::map<InplacePriority, std::vector<HloInstruction*>>;
 }  // namespace
 
-void InplaceFinder::RouteFinder(HloInstruction* inst,
-                                const std::vector<int64>& stack) {
-  std::vector<int64> new_stack;
-  bool tuple_stack_modified = false;
+static bool IsInplaceCandidate(HloInstruction* instruction,
+                               const HloPoplarDataflowAnalysis& dataflow) {
+  // if any of the outputs could be inplaced consider instruction as a candidate
+  const auto& instruction_set = dataflow.GetInstructionBufferSet(instruction);
+  const auto& buffer_sets = instruction_set.GetBufferSets();
+  bool result = false;
+  buffer_sets.ForEachElement(
+      [&](const ShapeIndex& index, const HloPoplarBufferSet& data) {
+        result |= (data.GetUseKind() > BufferUseKind::USE_NO_ALIAS);
+      });
+  return result;
+}
 
-  switch (inst->opcode()) {
-    case HloOpcode::kParameter: {
-      if (inst->shape().IsTuple()) {
-        new_stack = stack;
-        tuple_stack_modified = true;
-        new_stack.push_back(-1);
-      }
-      break;
+static std::vector<HloInstruction*> FindAllCandidates(
+    HloComputation* computation, const HloPoplarDataflowAnalysis& dataflow) {
+  std::vector<HloInstruction*> result;
+  result.reserve(computation->instruction_count());
+  for (HloInstruction* instruction : computation->MakeInstructionPostOrder()) {
+    if (IsInplaceCandidate(instruction, dataflow)) {
+      result.emplace_back(instruction);
     }
-    case HloOpcode::kDynamicUpdateSlice: {
-      if (inst->operand(0) != current_route.back()) {
-        return;
-      }
-      break;
-    }
-    case HloOpcode::kAddDependency: {
-      if (inst->operand(0) != current_route.back()) {
-        return;
-      }
-      break;
-    }
-    case HloOpcode::kCustomCall: {
-      if (IsAnyScaledInplace(inst)) {
+  }
+  return result;
+}
+
+static std::map<HloInstructionType, InplaceCandidates> FindInplaceCandidates(
+    HloComputation* comp, const HloPoplarDataflowAnalysis& dataflow) {
+  std::vector<HloInstruction*> candidates = FindAllCandidates(comp, dataflow);
+
+  std::map<HloInstructionType, InplaceCandidates> inplace_candidates;
+
+  InplaceCandidates& inplace_gte_candidates =
+      inplace_candidates[HloInstructionType::kInplaceGetTupleElement];
+  InplaceCandidates& inplace_read_write_candidates =
+      inplace_candidates[HloInstructionType::kInplaceReadWrite];
+  InplaceCandidates& inplace_read_only_candidates =
+      inplace_candidates[HloInstructionType::kInplaceReadOnly];
+
+  auto AddToQueue = [&](HloInstruction* inst, InplacePriority priority) {
+    auto inst_description = GetInplaceDescription(inst);
+    switch (inst_description.GetType()) {
+      case HloInstructionType::kInplaceGetTupleElement: {
+        inplace_gte_candidates[priority].push_back(inst);
         break;
       }
-      return;
-    }
-    case HloOpcode::kFusion:
-      if (IsPopOpsFusion(inst, "conv_scaled_inplace")) {
-        // This is always acceptable on a variable update inplace route
+      case HloInstructionType::kInplaceReadWrite: {
+        inplace_read_write_candidates[priority].push_back(inst);
         break;
       }
-    // Fall through since inplace subgraphs have to pass all the same
-    // criteria
-    case HloOpcode::kAdd:
-    case HloOpcode::kSubtract:
-    case HloOpcode::kMultiply: {
-      // Operation must be part of an TF core update
-      const OpMetadata& md(inst->metadata());
-      const std::string& tf_op(md.op_type());
-      if (!(tf_op == "AssignAddVariableOp" || tf_op == "AssignSubVariableOp" ||
-            tf_op == "ResourceApplyGradientDescent" ||
-            tf_op == "ResourceApplyMomentum" ||
-            tf_op == "ResourceApplyAdagrad" ||
-            tf_op == "ResourceApplyRMSProp")) {
-        return;
+      case HloInstructionType::kInplaceReadOnly: {
+        inplace_read_only_candidates[priority].push_back(inst);
+        break;
       }
-      if (inst->operand(0) != current_route.back()) {
-        return;
-      }
-      if (!ShapeUtil::Equal(inst->operand(0)->shape(), inst->shape())) {
-        return;
-      }
-      break;
+      default:
+        break;
     }
-    case HloOpcode::kTuple: {
-      new_stack = stack;
-      tuple_stack_modified = true;
-      new_stack.push_back(inst->operand_index(current_route.back()));
-      break;
+  };
+
+  // For each route in map mark inplace ops as high priority inplace
+  // candidates.
+  for (auto& inst : candidates) {
+    switch (inst->opcode()) {
+      case HloOpcode::kAdd:
+      case HloOpcode::kFusion:
+      case HloOpcode::kDynamicUpdateSlice:
+      case HloOpcode::kMultiply:
+      case HloOpcode::kSubtract:
+      case HloOpcode::kAddDependency:
+      case HloOpcode::kGetTupleElement: {
+        AddToQueue(inst, InplacePriority::kHigh);
+        break;
+      }
+      default:
+        break;
     }
-    case HloOpcode::kGetTupleElement: {
-      if (!stack.empty()) {
-        if (inst->tuple_index() == stack.back() || stack.back() == -1) {
-          new_stack = stack;
-          tuple_stack_modified = true;
-          new_stack.pop_back();
+  }
+
+  // Get all possible remaining inplace instructions.
+  // Give medium priority to outlined poplibs calls.
+  for (auto* inst : comp->MakeInstructionPostOrder()) {
+    if (inst->parent()->root_instruction() == inst) {
+      AddToQueue(inst, InplacePriority::kHigh);
+    } else {
+      switch (inst->opcode()) {
+        case HloOpcode::kCustomCall:
+        case HloOpcode::kFusion: {
+          AddToQueue(inst, InplacePriority::kMedium);
+          break;
+        }
+        default: {
+          AddToQueue(inst, InplacePriority::kLow);
           break;
         }
       }
-      return;
-    }
-    default:
-      return;
-  }
-  current_route.push_back(inst);
-
-  if (inst->user_count() == 0) {
-    routes.insert(std::make_pair(current_route[0], current_route));
-  } else {
-    for (auto& user : inst->users()) {
-      RouteFinder(user, tuple_stack_modified ? new_stack : stack);
     }
   }
-
-  current_route.pop_back();
+  return inplace_candidates;
 }
 
 StatusOr<bool> InplaceFinder::Run(HloModule* module) {
+  TF_ASSIGN_OR_RETURN(auto dataflow,
+                      HloPoplarDataflowAnalysis::Run(module, annotations));
   bool changed = false;
   for (auto* comp : module->MakeComputationPostOrder()) {
     if (IsPopOpsFusion(comp)) {
       continue;
     }
 
+    absl::flat_hash_set<HloInstruction*> converted;
+    InplaceWorkList worklist;
     // The reachability map is used for adding and finding control dependencies
     // in order to allow for inplace ops to be executed after other instructions
     // which are using the inplace input.
     std::unique_ptr<HloReachabilityMap> reachability_map =
         HloReachabilityMap::Build(comp);
-
-    // For each input
-    const auto& params = comp->parameter_instructions();
-    for (auto& p : params) {
-      current_route.clear();
-      RouteFinder(p, {});
-    }
-
-    std::map<HloInstructionType, InplaceCandidates> inplace_candidates;
-
-    InplaceCandidates& inplace_gte_candidates =
-        inplace_candidates[HloInstructionType::kInplaceGetTupleElement];
-    InplaceCandidates& inplace_read_write_candidates =
-        inplace_candidates[HloInstructionType::kInplaceReadWrite];
-    InplaceCandidates& inplace_read_only_candidates =
-        inplace_candidates[HloInstructionType::kInplaceReadOnly];
-
-    auto AddToQueue = [&](HloInstruction* inst, InplacePriority priority) {
-      auto inst_description = GetInplaceDescription(inst);
-      switch (inst_description.GetType()) {
-        case HloInstructionType::kInplaceGetTupleElement: {
-          inplace_gte_candidates[priority].push_back(inst);
-          break;
-        }
-        case HloInstructionType::kInplaceReadWrite: {
-          inplace_read_write_candidates[priority].push_back(inst);
-          break;
-        }
-        case HloInstructionType::kInplaceReadOnly: {
-          inplace_read_only_candidates[priority].push_back(inst);
-          break;
-        }
-        default:
-          break;
-      }
-    };
-
-    // For each route in map mark inplace ops as high priority inplace
-    // candidates.
-    for (auto& r : routes) {
-      for (auto& inst : r.second) {
-        switch (inst->opcode()) {
-          case HloOpcode::kAdd:
-          case HloOpcode::kFusion:
-          case HloOpcode::kDynamicUpdateSlice:
-          case HloOpcode::kMultiply:
-          case HloOpcode::kSubtract:
-          case HloOpcode::kAddDependency:
-          case HloOpcode::kGetTupleElement: {
-            AddToQueue(inst, InplacePriority::kHigh);
-            break;
-          }
-          default:
-            break;
-        }
-      }
-    }
-
-    // Get all possible remaining inplace instructions.
-    // Give medium priority to outlined poplibs calls.
-    for (auto* inst : comp->MakeInstructionPostOrder()) {
-      if (inst->parent()->root_instruction() == inst) {
-        AddToQueue(inst, InplacePriority::kHigh);
-      } else {
-        switch (inst->opcode()) {
-          case HloOpcode::kCustomCall:
-          case HloOpcode::kFusion: {
-            AddToQueue(inst, InplacePriority::kMedium);
-            break;
-          }
-          default: {
-            AddToQueue(inst, InplacePriority::kLow);
-            break;
-          }
-        }
-      }
-    }
-
-    absl::flat_hash_set<HloInstruction*> converted;
     // Because we are using a map, we first inplace GTEs, then Read/Write and
     // then Read-Only.
+    const auto inplace_candidates = FindInplaceCandidates(comp, *dataflow);
     for (auto type_candidates_pair : inplace_candidates) {
       auto& inplace_candidates_queues = type_candidates_pair.second;
       // Because we are using a map, all the candidate queues are sorted from
@@ -234,7 +168,7 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
         for (auto* inst : inplace_instruction_candidates) {
           if (!converted.contains(inst) &&
               HloPoplarInplaceDescription::ConvertToInplace(
-                  inst, reachability_map.get(), worklist_)) {
+                  inst, reachability_map.get(), worklist)) {
             converted.insert(inst);
             changed = true;
             VLOG(1) << "Inplacing " << inst->ToString();
@@ -242,8 +176,6 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
         }
       }
     }
-    routes.clear();
-    current_route.clear();
   }
 
   return changed;
