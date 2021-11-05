@@ -1557,7 +1557,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           "with inplace information");
       pipeline.AddInvariantChecker<ResourceUpdateChecker>();
 
-      pipeline.AddPass<InplaceFinder>();
+      pipeline.AddPass<InplaceFinder>(resources.annotations);
       pipeline.AddPass<ExpressionOutliner>();
       pipeline.AddPass<PipelineCopyInserter>();
       pipeline.AddPass<RepeatLoopCopyInserter>();

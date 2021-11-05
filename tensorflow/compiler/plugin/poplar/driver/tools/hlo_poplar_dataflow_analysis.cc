@@ -208,7 +208,13 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
 
   Status HandleCustomCall(HloInstruction* inst) override {
     if (!IsPoplibsHloCustomOp(inst)) {
-      return DefaultAction(inst);
+      if (HloPoplarInstructionFactory::IsCreatable(
+              Cast<HloCustomCallInstruction>(inst))) {
+        return FailedPrecondition("Run custom op replacer before pass");
+      }
+      // Can't tell what a generic custom call is up (I think) to so assume
+      // not in place
+      return HandleNotInplace(inst);
     }
 
     InstructionPoplarBufferSet instruction_set(inst->shape());
@@ -523,6 +529,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
   HANDLE_AS_NOT_INPLACE(HandleReducePrecision);
   HANDLE_AS_NOT_INPLACE(HandleReduceWindow);
   HANDLE_AS_NOT_INPLACE(HandleRng);
+  HANDLE_AS_NOT_INPLACE(HandleReplicaId);
   HANDLE_AS_NOT_INPLACE(HandleSelectAndScatter);
   HANDLE_AS_NOT_INPLACE(HandleTriangularSolve);
   HANDLE_AS_NOT_INPLACE(HandleTupleSelect);

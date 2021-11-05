@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
@@ -940,7 +941,8 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  InplaceFinder inplace_finder;
+  CompilerAnnotations annotations{module.get()};
+  InplaceFinder inplace_finder(annotations);
   TF_ASSERT_OK_AND_ASSIGN(changed, inplace_finder.Run(module.get()));
   EXPECT_TRUE(changed);
 

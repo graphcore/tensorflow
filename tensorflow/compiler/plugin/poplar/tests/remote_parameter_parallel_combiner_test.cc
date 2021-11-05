@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <algorithm>
 
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/combine_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
@@ -253,7 +254,8 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
 
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
-  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
+  CompilerAnnotations annotations(module);
+  EXPECT_TRUE(InplaceFinder(annotations).Run(module).ValueOrDie());
 
   ASSERT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
@@ -329,7 +331,8 @@ ENTRY %top {
 
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
-  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
+  CompilerAnnotations annotations(module);
+  EXPECT_TRUE(InplaceFinder(annotations).Run(module).ValueOrDie());
 
   ASSERT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
@@ -430,7 +433,8 @@ ENTRY top {
 
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
-  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
+  CompilerAnnotations annotations(module);
+  EXPECT_TRUE(InplaceFinder(annotations).Run(module).ValueOrDie());
 
   ASSERT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
@@ -536,7 +540,8 @@ ENTRY top {
   auto* module = module_or_status.ValueOrDie().get();
 
   EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
-  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
+  CompilerAnnotations annotations(module);
+  EXPECT_TRUE(InplaceFinder(annotations).Run(module).ValueOrDie());
 
   ASSERT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
@@ -671,7 +676,7 @@ ENTRY e {
 
   CompilerAnnotations annotations(module);
 
-  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
+  EXPECT_TRUE(InplaceFinder(annotations).Run(module).ValueOrDie());
   ASSERT_TRUE(RemoteParameterParallelCombiner().Run(module).ValueOrDie());
   EXPECT_TRUE(AllocationFinder(annotations).Run(module).ValueOrDie());
   EXPECT_TRUE(ForwardAllocation(annotations).Run(module).ValueOrDie());

@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
@@ -65,7 +66,7 @@ HloPassPipeline GetMockPipeline(CompilerResources& resources) {
   HloPassPipeline pipeline("mock_pipeline");
   pipeline.AddPass<CustomOpReplacer>();
   pipeline.AddPass<ModuleFlatten>(resources.annotations);
-  pipeline.AddPass<InplaceFinder>();
+  pipeline.AddPass<InplaceFinder>(resources.annotations);
   pipeline.AddPass<ShardingPass>();
   pipeline.AddPass<HloDCE>();
   pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
