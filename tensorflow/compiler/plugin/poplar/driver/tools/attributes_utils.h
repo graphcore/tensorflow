@@ -33,7 +33,8 @@ struct AttrKey {
   // we deliberately don't want explicit construction but cpplint will
   // warn
   explicit AttrKey(std::string key) : key(std::move(key)) {}
-  explicit AttrKey(int key) : key(FrontendAttributeId_Name(key)) {}
+  explicit AttrKey(int key)
+      : key(FrontendAttributeId_Name(static_cast<FrontendAttributeId>(key))) {}
 };
 
 struct AttrValue {
