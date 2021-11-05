@@ -1558,12 +1558,12 @@ tf_py_test(
     size = "large",
     srcs = [
         "tests/prng_stability_models_test.py",
-        "tests/test_optimizer.py",
     ],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras",
         "//third_party/py/numpy",
     ],
     tags = ["hw_poplar_test"],
