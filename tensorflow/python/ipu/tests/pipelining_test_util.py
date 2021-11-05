@@ -292,7 +292,8 @@ class PipelineTester(object):
       return_vars=False,
       ipu_id=None,
       process_count=None,
-      process_index=None):
+      process_index=None,
+      cross_replica_optimizer_cls=None):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -305,7 +306,10 @@ class PipelineTester(object):
       def opt_fn(tape, loss):
         global_replication_factor = replication_factor * (process_count or 1)
         if global_replication_factor > 1:
-          opt = cross_replica_optimizer.CrossReplicaOptimizer(optimizer)
+          if cross_replica_optimizer_cls is not None:
+            opt = cross_replica_optimizer_cls(optimizer)
+          else:
+            opt = cross_replica_optimizer.CrossReplicaOptimizer(optimizer)
         else:
           opt = optimizer
         return pipelining_ops.OptimizerFunctionOutput(opt, loss, tape=tape)
