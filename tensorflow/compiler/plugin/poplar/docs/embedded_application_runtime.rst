@@ -29,6 +29,7 @@ functions.
 
 Usage
 ~~~~~
+
 The IPU embedded application runtime relies on instances of the
 ``RuntimeContext`` class to coordinate the startup and calls to the Poplar
 engine. This object is created with a call to
@@ -50,6 +51,7 @@ function can be called. The context object ensures all appropriate metadata is
 passed, and control dependencies are created.
 
 .. code-block:: python
+
   ...
   results = embedded_runtime.embedded_runtime_call(
     call_inputs, context)
@@ -61,6 +63,7 @@ can outlive the TensorFlow session.
 
 Pipelining and I/O tiles
 ~~~~~~~~~~~~~~~~~~~~~~~~
+
 When running a pipelined application, or an application with I/O tiles, we must
 handle the additional layer of pipelining. This is a result of there being
 multiple batches of data resident in the device at the same time.
@@ -74,7 +77,7 @@ _________________
 
 To ensure the application isn't starved of data you can submit multiple
 batches of data in parallel in multiple threads. These will be enqueued and
-processed as early as possible by the device. 
+processed as early as possible by the device.
 
 When an application is pipelined, these parallel batches of data will overlap
 in time as they are processed by the devices. This improves the overall
@@ -96,9 +99,10 @@ utilisation of the devices and minimises the batch latency.
 
 Timeout
 _______
+
 When the application is pipelined or using I/O tiles, and data starvation might
 occur, the timeout option allows you to set an upperbound on the time the IPU
-will wait for data. 
+will wait for data.
 
 When TensorFlow receives a Poplar callback a timer is started. When the
 timer reaches the defined timeout, a "dummy" batch of data is passed to the
@@ -113,6 +117,7 @@ device. This unblocks any pending batches that are in the device.
 
 Engine restarts
 _______________
+
 The number of batches to process in an application is a compile-time decision.
 However, you might later deliver more batches at runtime than compiled for. If
 this happens, the Poplar engine will be restarted. A restart blocks enqueued
@@ -131,6 +136,7 @@ choose a value large enough to minimise this.
 
 Example
 ~~~~~~~~
+
 This example creates a very simple IPU program that doubles the input tensor.
 
 .. literalinclude:: embedded_application_runtime_example.py
@@ -149,7 +155,7 @@ Error Handling
   :ref:`xla_runtime_error_handling`.
 
 Runtime errors
-..............
+______________
 
 These errors and exceptions occur when running a Poplar program. The full list
 of all the exceptions and their meanings can be found in the Poplar
@@ -177,5 +183,5 @@ These runtime errors are handled in the following manner:
   is raised. The error message might contain the reason why the error occurred.
   When these errors occur manual intervention might be required before the
   system is operational again. The error message might contain a required
-  recovery action. The IPU will not be reset and all requests will return the 
+  recovery action. The IPU will not be reset and all requests will return the
   error.
