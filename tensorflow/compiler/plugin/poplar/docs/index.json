@@ -1,0 +1,86 @@
+[
+  {
+    "name" : "intro",
+    "order" : 0
+  },
+  {
+    "name" : "tutorial",
+    "order" : 0
+  },
+  {
+    "name" : "device_selection",
+    "order" : 0
+  },
+  {
+    "name" : "compiling",
+    "order" : 0
+  },
+  {
+    "name" : "perf_training",
+    "order" : 0
+  },
+  {
+    "name" : "ipu_io",
+    "order" : 0
+  },
+  {
+    "name" : "ipu_estimator_example",
+    "order" : 0
+  },
+  {
+    "name" : "ipu_pipeline_estimator_example",
+    "order" : 0
+  },
+  {
+    "name" : "distributed_training",
+    "order" : 0
+  },
+  {
+    "name" : "rand_and_fp",
+    "order" : 0
+  },
+  {
+    "name" : "poplar_ops",
+    "order" : 0
+  },
+  {
+    "name" : "functions",
+    "order" : 0
+  },
+  {
+    "name" : "custom_codelet",
+    "order" : 0
+  },
+  {
+    "name" : "host_embedding",
+    "order" : 0
+  },
+  {
+    "name" : "embedded_application_runtime",
+    "order" : 0
+  },
+  {
+    "name" : "logging",
+    "order" : 0
+  },
+  {
+    "name" : "api-changes",
+    "order" : 1000
+  },
+  {
+    "name" : "api",
+    "order" : 1000
+  },
+  {
+    "name" : "supported_ops",
+    "order" : 1000
+  },
+  {
+    "name" : "references",
+    "order" : 2000
+  },
+  {
+    "name" : "legal",
+    "order" : 2000
+  }
+]
