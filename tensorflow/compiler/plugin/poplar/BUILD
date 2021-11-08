@@ -1053,6 +1053,7 @@ cc_library(
         "kernels/poprand/categorical.cc",
         "kernels/poprand/dropout_xla.cc",
         "kernels/poprand/random.cc",
+        "kernels/poprand/random_ops.cc",
         "kernels/poputil/assert.cc",
         "kernels/poputil/assume_equal_across_replicas.cc",
         "kernels/poputil/codelet_expression.cc",
