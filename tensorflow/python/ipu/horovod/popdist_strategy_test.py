@@ -21,7 +21,7 @@ from tensorflow.python.distribute.reduce_util import ReduceOp
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import horovod as hvd
-from tensorflow.python.ipu.horovod import ipu_multi_replica_strategy
+from tensorflow.python.ipu.horovod import popdist_strategy
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUSyncOnReadVariable
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import variable_scope
@@ -39,7 +39,7 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
     hvd.shutdown()
 
   def test_update_ipu_config(self):
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+    strategy = popdist_strategy.PopDistStrategy()
     config = ipu.config.IPUConfig()
     strategy.update_ipu_config(config)
     self.assertEqual(
@@ -51,7 +51,7 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
 
   @test_util.deprecated_graph_mode_only
   def test_strategy(self):
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+    strategy = popdist_strategy.PopDistStrategy()
 
     with strategy.scope():
 
@@ -96,7 +96,7 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
 
   @test_util.deprecated_graph_mode_only
   def test_strategy_without_ipu_reduction(self):
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy(
+    strategy = popdist_strategy.PopDistStrategy(
         add_ipu_cross_replica_reductions=False)
 
     with strategy.scope():
@@ -120,7 +120,7 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
 
   @test_util.deprecated_graph_mode_only
   def test_strategy_with_sync_on_read_variable(self):
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+    strategy = popdist_strategy.PopDistStrategy()
 
     with strategy.scope():
 

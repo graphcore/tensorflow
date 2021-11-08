@@ -24,6 +24,7 @@ from tensorflow.python.ipu.horovod import Sum, Average, size, rank, allreduce as
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerExtended
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.training import server_lib
+from tensorflow.python.util import deprecation
 
 
 def _to_horovod_op(reduce_op):
@@ -40,7 +41,7 @@ def _is_current_device_ipu():
   return current_device.device_type == "IPU"
 
 
-class IPUMultiReplicaStrategy(distribute_lib.StrategyV1):
+class PopDistStrategy(distribute_lib.StrategyV1):
   """This is a distribution strategy for multi-replica distribution
   that uses compiled communications with GCL for reductions over IPU
   links and gateway links, while using Horovod for broadcasting of
@@ -60,8 +61,8 @@ class IPUMultiReplicaStrategy(distribute_lib.StrategyV1):
         server_lib.ClusterSpec({}))
 
     super().__init__(
-        IPUMultiReplicaExtended(self, cluster_resolver, ipu_device,
-                                add_ipu_cross_replica_reductions))
+        PopDistExtendedV1(self, cluster_resolver, ipu_device,
+                          add_ipu_cross_replica_reductions))
 
   def update_ipu_config(self, config):
     """Update the given IPU configuration with the multi-replica
@@ -77,7 +78,7 @@ class IPUMultiReplicaStrategy(distribute_lib.StrategyV1):
     config.experimental.multi_replica_distribution.process_index = rank()
 
 
-class IPUMultiReplicaExtended(IPUMultiWorkerExtended):
+class PopDistExtendedV1(IPUMultiWorkerExtended):
   def __init__(self, container_strategy, cluster_resolver, ipu_device,
                add_ipu_cross_replica_reductions):
     super().__init__(container_strategy,
@@ -124,3 +125,14 @@ class IPUMultiReplicaExtended(IPUMultiWorkerExtended):
           "Can only broadcast on CPU, but got device {}".format(device))
 
     return hvd_broadcast(initial_value, root_rank=0)
+
+
+# Export the alias for backwards compability.
+IPUMultiReplicaStrategy = deprecation.deprecated_alias(
+    deprecated_name="IPUMultiReplicaStrategy",
+    name="PopDistStrategy",
+    func_or_class=PopDistStrategy)
+IPUMultiReplicaStrategyV1 = deprecation.deprecated_alias(
+    deprecated_name="IPUMultiReplicaStrategyV1",
+    name="PopDistStrategy",
+    func_or_class=PopDistStrategy)

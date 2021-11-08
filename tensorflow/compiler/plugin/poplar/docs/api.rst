@@ -84,8 +84,8 @@ For example, this will not work:
 .. automodule:: tensorflow.python.ipu.horovod.ipu_horovod_strategy
   :members: IPUHorovodStrategy
 
-.. automodule:: tensorflow.python.ipu.horovod.ipu_multi_replica_strategy
-  :members: IPUMultiReplicaStrategy
+.. automodule:: tensorflow.python.ipu.horovod.popdist_strategy
+  :members: PopDistStrategy
 
 .. _datasets-api:
 

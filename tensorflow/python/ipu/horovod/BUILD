@@ -84,7 +84,7 @@ py_library(
         "__init__.py",
         "basics.py",
         "ipu_horovod_strategy.py",
-        "ipu_multi_replica_strategy.py",
+        "popdist_strategy.py",
     ],
     data = [
         ":horovod_plugin.so",
@@ -106,10 +106,10 @@ horovod_py_test(
 )
 
 horovod_py_test(
-    name = "ipu_multi_replica_strategy_test",
+    name = "popdist_strategy_test",
     size = "medium",
-    srcs = ["ipu_multi_replica_strategy_test.py"],
-    main = "ipu_multi_replica_strategy_test.py",
+    srcs = ["popdist_strategy_test.py"],
+    main = "popdist_strategy_test.py",
     num_processes = 2,
     deps = [
         "//tensorflow/python/ipu:ipu_lib",
@@ -120,6 +120,6 @@ test_suite(
     name = "horovod_test_suite",
     tests = [
         "horovod_test",
-        "ipu_multi_replica_strategy_test",
+        "popdist_strategy_test",
     ],
 )

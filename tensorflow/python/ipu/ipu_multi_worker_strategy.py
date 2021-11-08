@@ -31,6 +31,7 @@ from tensorflow.python.ops import collective_ops
 from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import tf_contextlib
+from tensorflow.python.util import deprecation
 
 
 class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
@@ -199,6 +200,8 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
           sess.run(train_op, {lr: 0.01})
           global_loss_val = sess.run(global_loss)
   """
+  @deprecation.deprecated(None, """IPUMultiWorkerStrategy will be deprecated in
+      favour of PopDistStrategy""")
   def __init__(self,
                cluster_resolver,
                ipu_device="/device:IPU:0",
