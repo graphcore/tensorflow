@@ -38,6 +38,12 @@ class Embedding(ipu_layer.IPULayer):
       i.e. maximum integer index + 1.
     output_dim: int >= 0. Dimension of the dense embedding.
     embeddings_initializer: Initializer for the `embeddings` matrix.
+    serialization_factor: If greater than 1, the embedding lookup will be
+        broken up into `serialization_factor` smaller lookups, serialized
+        along the 0th dimension. This option should not be used unless
+        the parameters of this layer is used by another layer. If this is
+        the case, then serialization can reduce the maximum memory at the
+        cost of extra computation.
 
   Input shape:
     2D tensor with shape: `(batch_size, input_length)`.
@@ -57,6 +63,7 @@ class Embedding(ipu_layer.IPULayer):
                embeddings_constraint=None,
                mask_zero=False,
                input_length=None,
+               serialization_factor=1,
                **kwargs):
 
     kwargs['autocast'] = False
@@ -65,6 +72,7 @@ class Embedding(ipu_layer.IPULayer):
     self.input_dim = input_dim
     self.output_dim = output_dim
     self.embeddings_initializer = initializers.get(embeddings_initializer)
+    self.serialization_factor = serialization_factor
 
     self._check_unsupported(embeddings_regularizer, 'embeddings_regularizer')
     self._check_unsupported(activity_regularizer, 'activity_regularizer')
@@ -96,9 +104,11 @@ class Embedding(ipu_layer.IPULayer):
         indices.
     """
     del training
-    return embedding_ops.embedding_lookup(self.embeddings,
-                                          ids=inputs,
-                                          name=self.name)
+    return embedding_ops.embedding_lookup(
+        self.embeddings,
+        ids=inputs,
+        name=self.name,
+        serialization_factor=self.serialization_factor)
 
   @tf_utils.shape_type_conversion
   def compute_output_shape(self, input_shape):
@@ -111,5 +121,7 @@ class Embedding(ipu_layer.IPULayer):
         'output_dim':
         self.output_dim,
         'embeddings_initializer':
-        initializers.serialize(self.embeddings_initializer)
+        initializers.serialize(self.embeddings_initializer),
+        'serialization_factor':
+        self.serialization_factor,
     }

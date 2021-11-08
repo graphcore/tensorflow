@@ -27,14 +27,15 @@ from tensorflow.python.platform import test
 dataType = np.float32
 
 
-def kerasIPUEmbeddingLookup(params, ids, name=None):
+def kerasIPUEmbeddingLookup(params, ids, name=None, serialization_factor=1):
   input_dim = params.shape[0]
   output_dim = params.shape[1]
   layer = ipu.layers.Embedding(
       input_dim=input_dim,
       output_dim=output_dim,
       embeddings_initializer=keras.initializers.constant(params),
-      name=name)
+      name=name,
+      serialization_factor=serialization_factor)
   layer.build(input_shape=ids.shape)
 
   @def_function.function
@@ -73,6 +74,16 @@ class IPUEmbeddingLookupTest(test.TestCase):
     paras = np.arange(25600, dtype=dataType).reshape([32, 200, 4])
     with self.assertRaisesRegexp(ValueError, r'The input shape should be a'):
       kerasIPUEmbeddingLookup(paras, ids, name="emb_test_4")
+
+  def testEmbeddingLookupSerialization(self):
+    ids = constant_op.constant([[1, 2, 3]])
+    paras = np.array([[10], [20], [80], [40]])
+    emb_lookup_tf = nn.embedding_lookup(paras, ids)
+    emb_lookup_ipu = kerasIPUEmbeddingLookup(paras,
+                                             ids,
+                                             name="emb_test_5",
+                                             serialization_factor=4)
+    self.assertAllClose(emb_lookup_tf, emb_lookup_ipu)
 
   @test_util.run_v2_only
   def testGetConfig(self):
