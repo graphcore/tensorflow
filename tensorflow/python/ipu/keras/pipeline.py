@@ -18,7 +18,6 @@ Keras Pipelined Model interfaces for IPU
 """
 
 from tensorflow.python.ipu.keras.extensions.functional_extensions import PipelineStage  # pylint: disable=unused-import
-from tensorflow.python.util import deprecation
 
 
 class PipelineSequential:
@@ -28,12 +27,6 @@ class PipelineSequential:
       "`tensorflow.python.ipu.ipu_strategy.IPUStrategy` and use the "
       "`set_pipeline_stage_assignment()` function instead. See the "
       "documentation for full details and examples.")
-
-
-SequentialPipelineModel = deprecation.deprecated_alias(
-    deprecated_name="SequentialPipelineModel",
-    name="PipelineSequential",
-    func_or_class=PipelineSequential)
 
 
 class PipelineModel:

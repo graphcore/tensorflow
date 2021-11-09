@@ -364,8 +364,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
       return dataset_ops.Dataset.from_tensor_slices(features).batch(
           batch_size=2, drop_remainder=True)
 
-    hook = ipu_session_run_hooks.IPULoggingTensorHook(every_n_iter=1,
-                                                      replication_factor=4)
+    hook = ipu_session_run_hooks.IPULoggingTensorHook(every_n_iter=1)
 
     def my_model_fn(features, mode):
       logging_op = hook.log({"features": features})

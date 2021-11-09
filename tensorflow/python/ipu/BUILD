@@ -789,23 +789,6 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "recompute_suggestion_test",
-    size = "large",
-    srcs = ["tests/recompute_suggestion_test.py"],
-    deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:control_flow_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_py_test(
     name = "infeed_outfeed_test",
     size = "large",
     srcs = ["tests/infeed_outfeed_test.py"],
@@ -2125,7 +2108,6 @@ test_suite(
         "prng_stability_models_test",
         "random_constant_matmul_test",
         "random_number_generation_test",
-        "recompute_suggestion_test",
         "reconfigure_ipu_test",
         "reductions_test",
         "replicated_graph_test",

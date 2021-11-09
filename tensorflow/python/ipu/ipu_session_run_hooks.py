@@ -25,7 +25,6 @@ from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import session_run_hook
 from tensorflow.python.training.basic_session_run_hooks import NeverTriggerTimer
 from tensorflow.python.training.basic_session_run_hooks import SecondOrStepTimer
-from tensorflow.python.util import deprecation
 
 
 class IPULoggingTensorHook(session_run_hook.SessionRunHook):
@@ -40,25 +39,12 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
 
   LoggingMode = ipu_outfeed_queue.IPUOutfeedMode
 
-  _feed_name_deprecated_instructions = """No change needed.
-  feed_name is now automatically generated."""
-  _replication_factor_deprecated_instructions = """No change needed.
-  replication_factor is now set automatically based on the model."""
-
-  @deprecation.deprecated_args(None, _feed_name_deprecated_instructions,
-                               "feed_name")
-  @deprecation.deprecated_args(None,
-                               _replication_factor_deprecated_instructions,
-                               "replication_factor")
-  def __init__(
-      self,
-      every_n_iter=None,
-      every_n_secs=None,
-      at_end=False,
-      formatter=None,
-      logging_mode=LoggingMode.LAST,
-      feed_name=None,  # pylint: disable=unused-argument
-      replication_factor=None):  # pylint: disable=unused-argument
+  def __init__(self,
+               every_n_iter=None,
+               every_n_secs=None,
+               at_end=False,
+               formatter=None,
+               logging_mode=LoggingMode.LAST):
     """Initializes the hook.
 
     Args:

@@ -39,7 +39,6 @@ from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.ipu.ops import embedding_ops as ipu_embedding_ops
-from tensorflow.python.util import deprecation
 
 
 def gelu(x, approximate=True, name=None):
@@ -540,109 +539,6 @@ def nce_loss(weights,
   # sampled_losses is batch_size x {true_loss, sampled_losses...}
   # We sum out true and sampled losses.
   return nn_impl._sum_rows(sampled_losses)  # pylint: disable=protected-access
-
-
-@deprecation.deprecated(
-    None, "Use ctc_loss_v2 for logits, or ctc_loss_with_log_probs for log "
-    "probabilities.")
-def ctc_loss(labels,
-             data,
-             label_length,
-             data_length,
-             blank_index,
-             out_dtype=None,
-             name=None):
-  """Calculates and returns CTC (Connectionist Temporal Classification) loss.
-
-  This op is designed and optimized for the IPU and cannot be used with other
-  systems.
-
-  Note: The TensorFlow op tf.nn.ctc_loss is not compatible with the IPU.
-
-  Args:
-    labels: The labels input [batch_size, max_label_length] tensor.
-    data: The data input [max_time, batch_size, num_classes] tensor.
-        The data is expected in the form of log probabilities.
-    label_length: A tensor of shape [batch_size] containing the number of
-        labels in each `labels` batch entry.
-    data_length: A tensor of shape [batch_size] containing the number of
-        timesteps in each `data` batch entry.
-    blank_index: The class index to use for the blank label.
-    out_dtype: The dtype of the loss tensor.
-        Cannot be float16 if the dtype of `data` is float32.
-        Default: the same dtype as `data`.
-    name: A name for this op. Defaults to "ctc_loss".
-
-  Returns:
-    A loss tensor of shape [batch_size].
-  """
-  if out_dtype is None:
-    out_dtype = data.dtype
-  elif data.dtype == dtypes.float32 and out_dtype == dtypes.float16:
-    raise ValueError(
-        "out_dtype cannot be float16 when dtype of data is float32.")
-
-  loss, _ = gen_popnn_ops.popnn_ctc_loss_with_log_probs(
-      data,
-      labels,
-      data_length,
-      label_length,
-      out_dtype=out_dtype,
-      blank_index=blank_index,
-      name=name)
-
-  return loss
-
-
-@deprecation.deprecated(
-    None, "Use ctc_loss_v2 for logits, or ctc_loss_with_log_probs for log "
-    "probabilities.")
-def ctc_loss_with_logits(labels,
-                         logits,
-                         label_length,
-                         logit_length,
-                         blank_index,
-                         out_dtype=None,
-                         name=None):
-  """Calculates and returns CTC (Connectionist Temporal Classification) loss.
-
-  This op is designed and optimized for the IPU and cannot be used with other
-  systems.
-
-  Note: The TensorFlow op tf.nn.ctc_loss is not compatible with the IPU.
-
-  Args:
-    labels: The labels input [batch_size, max_label_length] tensor.
-    logits: The data input [max_time, batch_size, num_classes] tensor.
-        The data is expected in the form of logits.
-    label_length: A tensor of shape [batch_size] containing the number of
-        labels in each `labels` batch entry.
-    logit_length: A tensor of shape [batch_size] containing the number of
-        timesteps in each `logits` batch entry.
-    blank_index: The class index to use for the blank label.
-    out_dtype: The dtype of the loss tensor (float16 or float32).
-        Cannot be float16 if the dtype of `logits` is float32.
-        Default: the same dtype as `logits`.
-    name: A name for this op. Defaults to "ctc_loss".
-
-  Returns:
-    A loss tensor of shape [batch_size].
-  """
-  if out_dtype is None:
-    out_dtype = logits.dtype
-  elif logits.dtype == dtypes.float32 and out_dtype == dtypes.float16:
-    raise ValueError(
-        "out_dtype cannot be float16 when dtype of logits is float32.")
-
-  loss, _ = gen_popnn_ops.popnn_ctc_loss_with_logits(logits,
-                                                     labels,
-                                                     logit_length,
-                                                     label_length,
-                                                     out_dtype=out_dtype,
-                                                     blank_index=blank_index,
-                                                     name=name)
-
-  return loss
 
 
 def ctc_loss_v2(labels,

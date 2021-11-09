@@ -30,7 +30,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.util import nest, deprecation
+from tensorflow.python.util import nest
 from tensorflow.python.util.compat import collections_abc
 
 _uid_counter = 0
@@ -76,29 +76,7 @@ class IPUOutfeedQueue(collections_abc.Iterable):
   operation will in this case return a single element.
 
   """
-
-  _replication_factor_deprecated_instructions = """No change needed.
-  replication_factor is now set automatically based on the model."""
-  _io_batch_size_deprecated_instructions = """Accumulate the results manually or
-  use accumulate_outfeed when using pipelining."""
-  _feed_name_deprecated_instructions = """No change needed.
-  feed_name is now automatically generated."""
-
-  @deprecation.deprecated_args(None,
-                               _replication_factor_deprecated_instructions,
-                               "replication_factor")
-  @deprecation.deprecated_args(None, _io_batch_size_deprecated_instructions,
-                               "io_batch_size")
-  @deprecation.deprecated_args(None, _feed_name_deprecated_instructions,
-                               "feed_name")
-  def __init__(
-      self,
-      feed_name=None,  # pylint: disable=unused-argument
-      outfeed_mode=None,
-      device_ordinal=None,
-      replication_factor=None,  # pylint: disable=unused-argument
-      io_batch_size=1,  # pylint: disable=unused-argument
-      buffer_depth=1):
+  def __init__(self, outfeed_mode=None, device_ordinal=None, buffer_depth=1):
     """Creates an IPUOutfeedQueue object.
 
     Args:
@@ -113,7 +91,7 @@ class IPUOutfeedQueue(collections_abc.Iterable):
 
     Raises:
       ValueError: if the types or values are incorrect
-      """
+    """
 
     # Default to all.
     self._outfeed_mode = outfeed_mode or IPUOutfeedMode.ALL

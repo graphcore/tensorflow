@@ -144,10 +144,6 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
 PoplarXlaFlags::PoplarXlaFlags() {
   // Struct for deprecated flags.
   struct DeprecatedFlags {
-    bool add_all_reduce_copies = false;
-    bool force_replicated_mode = false;
-    std::string save_oom_profiler = "";
-    bool dump_text_reports_to_stdio = false;
   };
 
   DeprecatedFlags deprecated_flags;
@@ -182,12 +178,6 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(sync_replica_start)
     ADD_FLAG(enable_hlo_verifier)
     ADD_FLAG(disable_poplar_version_check)
-
-    // Deprecated flags.
-    ADD_DEPRECATED_FLAG(dump_text_reports_to_stdio)
-    ADD_DEPRECATED_FLAG(add_all_reduce_copies)
-    ADD_DEPRECATED_FLAG(force_replicated_mode)
-    ADD_DEPRECATED_FLAG(save_oom_profiler)
 
 // clang-format on
 #undef ADD_FLAG
@@ -226,32 +216,6 @@ PoplarXlaFlags::PoplarXlaFlags() {
     LOG(FATAL) << "The flag \"synthetic_data_initializer\" can only be used "
                   "in combination with \"use_synthetic_data\" or "
                   "\"synthetic_data_categories\".";
-  }
-
-  if (deprecated_flags.add_all_reduce_copies) {
-    LOG(INFO)
-        << "The TensorFlow Poplar flag \"add_all_reduce_copies\" is "
-           "deprecated, has no effect and it will be removed in the future.";
-  }
-
-  if (deprecated_flags.force_replicated_mode) {
-    LOG(INFO)
-        << "The TensorFlow Poplar flag \"force_replicated_mode\" is "
-           "deprecated, has no effect and it will be removed in the future.";
-  }
-
-  if (!deprecated_flags.save_oom_profiler.empty()) {
-    LOG(INFO)
-        << "The TensorFlow Poplar flag \"save_oom_profiler\" is "
-           "deprecated, has no effect and it will be removed in the future. "
-           "Out of memory report will be saved in the report directory if "
-           "`profiling` is enabled and `report_directory` is set.";
-  }
-
-  if (deprecated_flags.dump_text_reports_to_stdio) {
-    LOG(INFO) << "The TensorFlow Poplar flag \"dump_text_reports_to_stdio\" is"
-                 " deprecated and it will be removed in the future. Use the"
-                 " PopVision Graph Analyser to manually inspect profiles.";
   }
 
   // Hash all the flags which affect the graph generation and compilation only.

@@ -435,9 +435,9 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       # IPU model
       predictions_layer_ipu = ipu.keras.layers.CTCPredictionsLayer(

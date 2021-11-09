@@ -28,7 +28,6 @@ from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import loops
-from tensorflow.python.util import deprecation
 from tensorflow.python.util import nest
 from tensorflow.python.framework import type_spec
 
@@ -104,25 +103,10 @@ class IPUInfeedQueue:
       result = sess.run(res)
 
   """
-  _replication_factor_deprecated_instructions = """No change needed.
-  replication_factor is now set automatically based on the model."""
-  _feed_name_deprecated_instructions = """No change needed.
-  feed_name is now automatically generated."""
-
-  @deprecation.deprecated_args(None,
-                               _replication_factor_deprecated_instructions,
-                               "replication_factor")
-  @deprecation.deprecated_args(None, "Use prefetch_depth instead.",
-                               "data_to_prefetch")
-  @deprecation.deprecated_args(None, _feed_name_deprecated_instructions,
-                               "feed_name")
   def __init__(
       self,
       dataset,
-      feed_name=None,  # pylint: disable=unused-argument
       device_ordinal=None,
-      replication_factor=1,  # pylint: disable=unused-argument
-      data_to_prefetch=1,  # pylint: disable=unused-argument
       prefetch_depth=None,
       **kwargs):
     """Creates an IPUInfeedQueue object.
@@ -485,53 +469,6 @@ class IPUIterator(iterator_ops.OwnedIterator):
       return self._next_internal()
     except errors.OutOfRangeError:
       raise StopIteration
-
-  @property
-  @deprecation.deprecated(
-      None, "Use `tf.compat.v1.data.get_output_classes(iterator)`.")
-  def output_classes(self):
-    """Returns the class of each component of an element of this iterator.
-
-    The expected values are `tf.Tensor` and `tf.sparse.SparseTensor`.
-
-    Returns:
-      A nested structure of Python `type` objects corresponding to each
-      component of an element of this dataset.
-    """
-    return nest.map_structure(
-        lambda component_spec: component_spec._to_legacy_output_classes(),  # pylint: disable=protected-access
-        self._element_spec)
-
-  @property
-  @deprecation.deprecated(
-      None, "Use `tf.compat.v1.data.get_output_shapes(iterator)`.")
-  def output_shapes(self):
-    """Returns the shape of each component of an element of this iterator.
-
-    Returns:
-      A nested structure of `tf.TensorShape` objects corresponding to each
-      component of an element of this dataset.
-    """
-    return nest.map_structure(
-        lambda component_spec: component_spec._to_legacy_output_shapes(),  # pylint: disable=protected-access
-        self._element_spec)
-
-  # pylint: disable=bad-continuation
-  @property
-  @deprecation.deprecated(None,
-                          "Use `tf.compat.v1.data.get_output_types(iterator)`."
-                          )
-  # pylint: enable=bad-continuation
-  def output_types(self):
-    """Returns the type of each component of an element of this iterator.
-
-    Returns:
-      A nested structure of `tf.DType` objects corresponding to each component
-      of an element of this dataset.
-    """
-    return nest.map_structure(
-        lambda component_spec: component_spec._to_legacy_output_types(),  # pylint: disable=protected-access
-        self._element_spec)
 
   @property
   def element_spec(self):

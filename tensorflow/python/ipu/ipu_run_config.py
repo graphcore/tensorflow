@@ -53,12 +53,11 @@ class IPURunConfig(
         counter is increased by `iterations_per_loop` for every `Session.run`.
         The number of weight updates can be less than the number of iterations
         if gradient accumulation is used.
-      ipu_options: An :py:class:`~tensorflow.python.ipu.utils.IPUConfig`, or an
-        `IpuOptions` configuration protobuf (deprecated), which you have
-        populated with your desired configuration options before creating this
-        IPURunConfig. The `IPUEstimator` will then configure the IPU system with
-        this `ipu_options` object when it builds your model.
-      compile_summary: DEPRECATED. Generate compilation summary.
+      ipu_options: An :py:class:`~tensorflow.python.ipu.utils.IPUConfig` which
+        you have populated with your desired configuration options before
+        creating this IPURunConfig. The `IPUEstimator` will then configure the
+        IPU system with this `ipu_options` object when it builds your model.
+      compile_summary: DEPRECATED. Generate compilation summary
       num_replicas: Number of replicated graphs (data parallelism)
       num_shards: Number of IPU devices on which the graph is sharded (model
         parallelism)
@@ -82,24 +81,16 @@ class IPURunConfig(
     num_configured_devices = 1
     if ipu_options is not None:
       if not isinstance(ipu_options, IPUConfig):
-        if not isinstance(ipu_options, IpuOptions):
-          raise TypeError("ipu_options must be an IPUConfig, or an IpuOptions"
-                          " configuration protobuf (deprecated).")
-        else:
-          logging.warn(
-              "Passing an IpuOptions configuration protobuf to IPURunConfig"
-              " is deprecated and will be removed in a future release. Use an"
-              " IPUConfig instance instead.")
-      else:
-        # Convert IPUConfig to IpuOptions
-        ipu_options = ipu_options._create_protobuf()
+        raise TypeError("ipu_options must be an IPUConfig instance.")
+      # Convert IPUConfig to IpuOptions
+      pb = ipu_options._create_protobuf()  # pylint: disable=protected-access
 
-      if ordinal >= len(ipu_options.device_config):
+      if ordinal >= len(pb.device_config):
         raise ValueError('Only {} device(s) available to choose from.'
                          ' You tried to pick a device at ordinal {}'.format(
-                             len(ipu_options.device_config), ordinal))
-      if ipu_options.device_config[ordinal].auto_count:
-        num_configured_devices = ipu_options.device_config[ordinal].auto_count
+                             len(pb.device_config), ordinal))
+      if pb.device_config[ordinal].auto_count:
+        num_configured_devices = pb.device_config[ordinal].auto_count
       else:
         # We're using cfg_index. Set equal for now and check later once the
         # device has been created
