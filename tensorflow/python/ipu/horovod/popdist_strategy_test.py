@@ -22,14 +22,14 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu import horovod as hvd
-from tensorflow.python.ipu.horovod import ipu_multi_replica_strategy
+from tensorflow.python.ipu.horovod import popdist_strategy
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUSyncOnReadVariable
 from tensorflow.python.ops import variables
 from tensorflow.python.ops.variable_scope import VariableAggregation, VariableSynchronization
 from tensorflow.python.platform import test
 
 
-class IPUMultiReplicaStrategyV1Test(test_util.TensorFlowTestCase):  # pylint: disable=abstract-method
+class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abstract-method
   @classmethod
   def setUpClass(cls):
     hvd.init()
@@ -39,7 +39,7 @@ class IPUMultiReplicaStrategyV1Test(test_util.TensorFlowTestCase):  # pylint: di
     hvd.shutdown()
 
   def test_update_ipu_config(self):
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategyV1()
+    strategy = popdist_strategy.PopDistStrategy()
     config = IPUConfig()
     strategy.update_ipu_config(config)
     self.assertEqual(
@@ -56,7 +56,7 @@ class IPUMultiReplicaStrategyV1Test(test_util.TensorFlowTestCase):  # pylint: di
 
     hvd.init()
 
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategyV1()
+    strategy = popdist_strategy.PopDistStrategy()
 
     with strategy.scope():
       v = variables.Variable(initial_value=hvd.rank() + 1, dtype=np.float32)
@@ -100,7 +100,7 @@ class IPUMultiReplicaStrategyV1Test(test_util.TensorFlowTestCase):  # pylint: di
 
     hvd.init()
 
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategyV1(
+    strategy = popdist_strategy.PopDistStrategy(
         add_ipu_cross_replica_reductions=False)
 
     with strategy.scope():
@@ -127,7 +127,7 @@ class IPUMultiReplicaStrategyV1Test(test_util.TensorFlowTestCase):  # pylint: di
 
     hvd.init()
 
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategyV1()
+    strategy = popdist_strategy.PopDistStrategy()
 
     with strategy.scope():
       w = variables.Variable(initial_value=float(hvd.rank() + 1),

@@ -32,6 +32,13 @@ a `NotImplementedError`:
     - The `compile_summary` argument to :py:class:`~tensorflow.python.ipu.ipu_run_config.IPURunConfig`
     - Passing a `IPURunConfig` with `compile_summary` set to `True` to an `IPUEstimator`
 
+Non-breaking changes
+____________________
+
+  - 'IPUMultiReplicaStrategy' has been renamed to 'PopDistStrategy'. Using 'IPUMultiReplicaStrategy'
+    will trigger a deprecation warning.
+  - 'IPUMultiWorkerStrategy' is in the process of being deprecated. Using 'IPUMultiWorkerStrategy'
+    will trigger a deprecation warning.
 
 Non-breaking changes
 ____________________

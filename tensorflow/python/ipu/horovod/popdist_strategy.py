@@ -12,24 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import popdist
+
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.distribute import device_util
 from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import reduce_util
 from tensorflow.python.distribute import values
 from tensorflow.python.distribute.cluster_resolver import \
-  cluster_resolver as cluster_resolver_lib
+    cluster_resolver as cluster_resolver_lib
 from tensorflow.python.framework import device as tf_device
 from tensorflow.python.ipu import keras_extensions
 from tensorflow.python.ipu.horovod import Sum, Average, size, rank, \
-  allreduce as hvd_allreduce, \
-  broadcast as hvd_broadcast
+    allreduce as hvd_allreduce, \
+    broadcast as hvd_broadcast
 from tensorflow.python.ipu.ipu_multi_worker_strategy import \
-  IPUMultiWorkerExtendedV1
+    IPUMultiWorkerExtendedV1
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.training import server_lib
-
-import popdist
+from tensorflow.python.util import deprecation
 
 
 def _to_horovod_op(reduce_op):
@@ -46,8 +47,8 @@ def _is_current_device_ipu():
   return current_device.device_type == "IPU"
 
 
-class IPUMultiReplicaStrategyV1(distribute_lib.StrategyV1,
-                                keras_extensions.KerasExtensions):
+class PopDistStrategy(distribute_lib.StrategyV1,
+                      keras_extensions.KerasExtensions):
   """This is a distribution strategy for multi-replica distribution
   that uses compiled communications with GCL for reductions over IPU
   links and gateway links, while using Horovod for broadcasting of
@@ -71,8 +72,8 @@ class IPUMultiReplicaStrategyV1(distribute_lib.StrategyV1,
         server_lib.ClusterSpec({}))
 
     super().__init__(
-        IPUMultiReplicaExtendedV1(self, cluster_resolver, ipu_device,
-                                  add_ipu_cross_replica_reductions))
+        PopDistExtendedV1(self, cluster_resolver, ipu_device,
+                          add_ipu_cross_replica_reductions))
     keras_extensions.KerasExtensions.__init__(self, enable_dataset_iterators,
                                               enable_keras_extensions)
 
@@ -90,7 +91,7 @@ class IPUMultiReplicaStrategyV1(distribute_lib.StrategyV1,
     config.experimental.multi_replica_distribution.process_index = rank()
 
 
-class IPUMultiReplicaExtendedV1(IPUMultiWorkerExtendedV1):
+class PopDistExtendedV1(IPUMultiWorkerExtendedV1):
   def __init__(self, container_strategy, cluster_resolver, ipu_device,
                add_ipu_cross_replica_reductions):
     super().__init__(container_strategy,
@@ -149,4 +150,11 @@ class IPUMultiReplicaExtendedV1(IPUMultiWorkerExtendedV1):
 
 
 # Export the alias for backwards compability.
-IPUMultiReplicaStrategy = IPUMultiReplicaStrategyV1
+IPUMultiReplicaStrategy = deprecation.deprecated_alias(
+    deprecated_name="IPUMultiReplicaStrategy",
+    name="PopDistStrategy",
+    func_or_class=PopDistStrategy)
+IPUMultiReplicaStrategyV1 = deprecation.deprecated_alias(
+    deprecated_name="IPUMultiReplicaStrategyV1",
+    name="PopDistStrategy",
+    func_or_class=PopDistStrategy)

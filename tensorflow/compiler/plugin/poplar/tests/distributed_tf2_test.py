@@ -23,7 +23,7 @@ import tensorflow as tf
 from tensorflow.python import ipu
 from tensorflow.python.client import session
 from tensorflow.python.framework import constant_op, test_util
-from tensorflow.python.ipu.horovod import ipu_multi_replica_strategy
+from tensorflow.python.ipu.horovod import popdist_strategy
 from tensorflow.python.ipu import horovod as hvd
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.platform import test
@@ -75,7 +75,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = \
-      tf.data.experimental.AutoShardPolicy.OFF
+        tf.data.experimental.AutoShardPolicy.OFF
     dataset = dataset.with_options(options)
 
     dataset = dataset.shard(num_shards=popdist.getNumInstances(),
@@ -118,14 +118,14 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
       self.assert_all_instances_not_equal(history.history['loss'])
       self.assert_all_instances_not_equal(layer.get_weights()[1])
 
-  def test_tf2_distributed_ipu_multi_replica_strategy(self):
+  def test_tf2_distributed_popdist_strategy(self):
     config = ipu.config.IPUConfig()
     popdist.tensorflow.set_ipu_config(config, ipus_per_replica=1)
     config.configure_ipu_system()
 
     hvd.init()
 
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+    strategy = popdist_strategy.PopDistStrategy()
 
     with strategy.scope():
       dataset = self.prepare_dataset()
@@ -162,7 +162,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
     hvd.init()
 
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+    strategy = popdist_strategy.PopDistStrategy()
 
     with strategy.scope():
       learning_rate = 0.5
@@ -208,7 +208,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
     hvd.init()
 
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+    strategy = popdist_strategy.PopDistStrategy()
 
     with strategy.scope():
       learning_rate = 0.5
@@ -276,7 +276,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
     hvd.init()
 
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+    strategy = popdist_strategy.PopDistStrategy()
 
     with strategy.scope():
       learning_rate = 0.01
@@ -419,7 +419,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
     hvd.init()
 
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+    strategy = popdist_strategy.PopDistStrategy()
 
     def initialize_model_with_seed():
       # Make sure we initialize the kernels in a reproducible manner, create
@@ -559,7 +559,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
     hvd.init()
 
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+    strategy = popdist_strategy.PopDistStrategy()
 
     with strategy.scope():
       dataset = tf.data.Dataset.from_tensor_slices(
@@ -593,9 +593,9 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
   def test_single_training_step_equal_tf1_and_keras(self):
     loss_tf1, gradients_tf1, losses_tf1, weights_tf1 =\
-      self.single_training_step_equal_tf1()
+        self.single_training_step_equal_tf1()
     loss_keras, gradients_keras, losses_keras, weights_keras =\
-      self.single_training_step_equal_keras()
+        self.single_training_step_equal_keras()
     np.testing.assert_equal(loss_tf1, loss_keras)
 
     # Assert that both models have identical losses (both reduced and non-

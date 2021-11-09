@@ -34,6 +34,7 @@ from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import tf_contextlib
+from tensorflow.python.util import deprecation
 
 
 class IPUMultiWorkerStrategyV1(distribute_lib.StrategyV1):
@@ -205,6 +206,8 @@ class IPUMultiWorkerStrategyV1(distribute_lib.StrategyV1):
 
   _collective_key_base = 0
 
+  @deprecation.deprecated(None, """IPUMultiWorkerStrategy will be deprecated in
+    favour of PopDistStrategy""")
   def __init__(self,
                cluster_resolver,
                ipu_device="/device:IPU:0",
