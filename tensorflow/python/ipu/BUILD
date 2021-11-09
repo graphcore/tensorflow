@@ -2015,6 +2015,24 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "rnn_test",
+    size = "medium",
+    srcs = ["tests/rnn_test.py"],
+    shard_count = 7,
+    deps = [
+        ":ipu_lib",
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -2118,6 +2136,7 @@ test_suite(
         "replication_all_to_all_test",
         "replication_grouped_collectives_test",
         "replication_normalise_test",
+        "rnn_test",
         "seed_control_test",
         "sequence_slice_test",
         "sharded_and_replicated_test",

@@ -273,6 +273,17 @@ class TestCaseExtensions(object):
         (",".join(in_report), "\n\t".join(
             cs.name for cs in report.compilation.computeSets)))
 
+  def assert_compute_sets_count(self, report, counters):
+    """Asserts that all matching compute sets counts."""
+    found_cs = {}
+    for expr in counters:
+      expr_re = '*' + expr + '*'
+      for cs in report.compilation.computeSets:
+        cs_name = cs.name
+        if fnmatch.fnmatch(cs_name, expr_re):
+          found_cs[expr] = found_cs.get(expr, 0) + 1
+    self.assertAllEqual(found_cs, counters)
+
   def assert_vertices_contain_list(self, report, ok):
     """Asserts that all the whitelist patterns match at least one vertex."""
     whitelist = ['*' + x + '*' for x in ok]
