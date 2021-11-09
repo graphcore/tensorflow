@@ -33,8 +33,6 @@ class PipelineStageVisitor : public InplaceDeferredVisitor {
                        const HloPoplarInplaceDescription& description,
                        const poplar::DebugNameAndId& debug_name_and_id);
 
-  bool TupleOutputsNeedToPreserveAliasing(const HloInstruction* inst) override;
-
   poplar::program::Sequence GetCachedSequence();
 
   // Returns whether the output needs a copy.

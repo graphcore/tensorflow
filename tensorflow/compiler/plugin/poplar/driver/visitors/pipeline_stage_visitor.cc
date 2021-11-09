@@ -38,12 +38,6 @@ PipelineStageVisitor::PipelineStageVisitor(
     const poplar::DebugNameAndId& debug_name_and_id)
     : InplaceDeferredVisitor(res, inputs, description, debug_name_and_id) {}
 
-bool PipelineStageVisitor::TupleOutputsNeedToPreserveAliasing(
-    const HloInstruction* inst) {
-  // We preserve aliasing when this is the output tuple.
-  return inst->parent()->root_instruction() == inst;
-}
-
 poplar::program::Sequence PipelineStageVisitor::GetCachedSequence() {
   if (!has_function_) {
     poplar::program::Sequence seq =
