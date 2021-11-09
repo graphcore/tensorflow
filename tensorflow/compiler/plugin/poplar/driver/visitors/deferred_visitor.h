@@ -338,12 +338,6 @@ class DeferredVisitor : public FullVisitor {
   // allocation.
   virtual Status HandleNonDeferredCustomCall(HloInstruction* inst);
 
-  // Indicate whether tuple inputs/outputs need to preserve aliasing in order to
-  // be parallel writable.
-  virtual bool TupleOutputsNeedToPreserveAliasing(const HloInstruction* inst) {
-    return false;
-  }
-
   // FinishScopedVisit which is aware of deferred allocations.
   virtual Status FinishDeferedAllocationVisit(HloInstruction* inst);
 

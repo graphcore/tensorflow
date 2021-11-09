@@ -752,9 +752,8 @@ DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst,
 Status DeferredVisitor::HandleDeferredAllocationTuple(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
-  const bool preserve_aliasing = TupleOutputsNeedToPreserveAliasing(inst);
-  TF_ASSIGN_OR_RETURN(
-      auto inputs, GetInputsForDeferredRBInstruction(inst, preserve_aliasing));
+  TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(
+                                       inst, /*preserve_aliasing=*/true));
 
   CHECK_EQ(inputs.size(), inst->operand_count());
 
