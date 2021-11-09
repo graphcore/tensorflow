@@ -124,7 +124,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     ok = [
         '__seed*',
         'host-exchange-local-copy-',
-        'Copy_',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
         'vs/Cast/convert.*/Cast',
@@ -170,7 +169,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Matches two convolutions
     ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Copy_',
+        '__seed*', 'host-exchange-local-copy-',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
         'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
