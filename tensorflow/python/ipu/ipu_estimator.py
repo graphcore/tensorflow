@@ -200,19 +200,17 @@ class IPUEstimatorSpec(
 
 class _IPUConfigureIPUSystemHook(session_run_hook.SessionRunHook):
   def __init__(self, config, host_device=_HOST_DEVICE):
-    if not isinstance(config.ipu_options, (IpuOptions, ipu_config.IPUConfig)):
-      raise Exception("`config.ipu_options` must be an IPUConfig or IpuOptions"
-                      " instance")
-    self._config = config.ipu_options
-    if isinstance(self._config, ipu_config.IPUConfig):
-      self._config = self._config._create_protobuf()  # pylint: disable=protected-access
+    if not isinstance(config.ipu_options, ipu_config.IPUConfig):
+      raise Exception("`config.ipu_options` must be an IPUConfig instance")
+    self._ipu_config = config.ipu_options
     self._run_config = config
     self._host_device = host_device
 
   def begin(self):
-    ipu_utils.configure_ipu_system(self._config, self._host_device)
+    self._ipu_config.configure_ipu_system(self._host_device)
 
-    if self._config.device_config[self._run_config.ordinal].cfg_index:
+    pb = self._ipu_config._create_protobuf()  # pylint: disable=protected-access
+    if pb.device_config[self._run_config.ordinal].cfg_index:
       num_configured_devices = ipu_utils.get_num_of_ipus_in_device(
           '/device:IPU:{}'.format(self._run_config.ordinal))
 
@@ -221,7 +219,7 @@ class _IPUConfigureIPUSystemHook(session_run_hook.SessionRunHook):
       if num_devices != num_configured_devices:
         raise ValueError('`IPURunConfig` configured with {} devices'
                          ' ({} num_replicas times {} num_shards),'
-                         ' but `IpuOptions` configured with {} devices'.format(
+                         ' but `IPUConfig` configured with {} devices'.format(
                              num_devices, self._run_config.num_replicas,
                              self._run_config.num_shards,
                              num_configured_devices))

@@ -21,7 +21,6 @@ from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.platform import tf_logging as logging
 
 from tensorflow.core.lib.core import error_codes_pb2  # pylint: disable=unused-import
-from tensorflow.python.util import deprecation
 
 from tensorflow.python.ipu import custom_ops
 
@@ -157,38 +156,6 @@ def print_tensor(input, name=""):
   """
 
   return gen_poputil_ops.ipu_print_tensor(input, tensor_name=name)
-
-
-@deprecation.deprecated(
-    None, "SuggestRecompute operation will be removed in release 2.2")
-def recompute(x, name=None):
-  """Suggest to the IPU backend to recompute the given tensor.
-
-  Args:
-    x: The tensor to recompute.
-    name: Optional op name.
-
-  Returns:
-    A tensor with the same values as x, possibly recomputed.
-  """
-
-  return gen_poputil_ops.ipu_suggest_recompute(x, name=name)
-
-
-@deprecation.deprecated(
-    None, "BlockRecompute operation will be removed in release 2.2")
-def block_recompute(x, name=None):
-  """Block the recomputation of the given tensor.
-
-  Args:
-    x: The tensor to block recompute.
-    name: Optional op name.
-
-  Returns:
-    A tensor with the same values as x.
-  """
-
-  return gen_poputil_ops.ipu_block_recompute(x, name=name)
 
 
 def get_current_iteration_counter(name=None):

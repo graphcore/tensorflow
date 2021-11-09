@@ -32,12 +32,97 @@ a `NotImplementedError`:
     - Passing a `IPURunConfig` with `compile_summary` set to `True` to an `IPUEstimator`
 
 
+Removal of deprecated members
+'''''''''''''''''''''''''''''
+
+The following have been removed, as they were deprecated in a previous release:
+
+  - The following ``TF_POPLAR_FLAGS``:
+
+    - ``dump_text_reports_to_stdio``
+    - ``add_all_reduce_copies``
+    - ``force_replicated_mode``
+    - ``save_oom_profiler``
+
+
+  - The following constructor arguments for :py:class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`:
+
+    - ``replication_factor``
+    - ``data_to_prefetch``
+    - ``feed_name``
+
+
+  - The following constructor arguments for :py:class:`~tensorflow.python.ipu.ipu_outfeed_queue.IPUOutfeedQueue`:
+
+    - ``replication_factor``
+    - ``io_batch_size``
+    - ``feed_name``
+
+
+  - The following constructor arguments for :py:class:`~tensorflow.python.ipu.ipu_session_run_hooks.IPULoggingTensorHook`:
+
+    - ``replication_factor``
+    - ``feed_name``
+
+
+  - The following functions from `tensorflow.python.ipu.utils`:
+
+    - ``create_ipu_config``
+    - ``set_serialization_options``
+    - ``set_optimization_options``
+    - ``set_norm_options``
+    - ``set_compilation_options``
+    - ``set_convolution_options``
+    - ``set_matmul_options``
+    - ``set_pooling_options``
+    - ``set_report_options``
+    - ``set_ipu_model_options``
+    - ``set_recomputation_options``
+    - ``set_floating_point_behaviour_options``
+    - ``set_io_tile_options``
+    - ``set_gcl_options``
+    - ``auto_select_ipus``
+    - ``select_ipus``
+    - ``set_ipu_connection_type``
+    - ``set_experimental_multi_replica_distribution_options``
+    - ``extract_compile_reports``
+    - ``extract_poplar_serialized_graphs``
+    - ``extract_execute_reports``
+
+
+  - The following functions from `tensorflow.python.ipu.ops.nn_ops`:
+
+    - ``ctc_loss``
+    - ``ctc_loss_with_logits``
+
+  - The following functions from `tensorflow.python.ipu.ops.internal_ops`:
+
+    - ``recompute``
+    - ``block_recompute``
+
+
+Additionally, the documentation section on profiling through the deprecated
+TensorFlow profiling APIs has been removed and an ``IpuOptions`` configuration
+protobuf can no longer be passed to the
+:py:class:`~tensorflow.python.ipu.ipu_run_config.IPURunConfig` constructor.
+
+
 Non-breaking changes
 ____________________
 
-  - 'IPUConfig.floating_point_behaviour.esr' - Assigning a bool value is deprecated and
-    will not be supported in a future release. `ipu.config.StochasticRoundingBehaviour`
-    should be used instead.
+  - The following functions from `tensorflow.python.ipu.utils` are now
+    considered internal-only tools and have correspondingly been moved to
+    `tensorflow.compiler.plugin.poplar.tests.test_utils`. They can still be
+    accessed from their previous location, but not in future releases:
+
+    - ``extract_all_events``
+    - ``extract_all_strings_from_event_trace``
+    - ``extract_all_types_from_event_trace``
+
+  - 'IPUConfig.floating_point_behaviour.esr' - Assigning a bool value is
+    deprecated and will not be supported in a future release.
+    :py:class:`~tensorflow.python.ipu.config.StochasticRoundingBehaviour` should
+    be used instead.
   - 'IPUMultiReplicaStrategy' has been renamed to 'PopDistStrategy'. Using 'IPUMultiReplicaStrategy'
     will trigger a deprecation warning.
   - 'IPUMultiWorkerStrategy' is in the process of being deprecated. Using 'IPUMultiWorkerStrategy'

@@ -102,9 +102,9 @@ class IPUHorovodStrategy(distribute_lib.StrategyV1):
       # divided by the global batch size above, we do a sum here):
       global_loss = strategy.reduce(ReduceOp.SUM, per_worker_loss)
 
-      config = ipu_utils.create_ipu_config()
-      config = ipu_utils.auto_select_ipus(config, num_ipus=2)
-      ipu_utils.configure_ipu_system(config)
+      config = ipu.config.IPUConfig()
+      config.auto_select_ipus = 2
+      config.configure_ipu_system()
       ipu_utils.move_variable_initialization_to_cpu()
 
       with session.Session() as sess:

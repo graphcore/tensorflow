@@ -5096,17 +5096,6 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
-    name = "logging_example_1",
-    size = "large",
-    srcs = ["docs/logging_example_1.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
     name = "perf_training_example",
     size = "large",
     srcs = ["docs/perf_training_example.py"],
@@ -5769,7 +5758,6 @@ test_suite(
         "function_example2",
         "ipu_estimator_example",
         "ipu_pipeline_estimator_example",
-        "logging_example_1",
         "outfeed_example",
         "perf_training_example",
         "pre_compile_example_runner",

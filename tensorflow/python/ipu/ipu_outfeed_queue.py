@@ -28,7 +28,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.platform import tf_logging as logging
-from tensorflow.python.util import nest, deprecation
+from tensorflow.python.util import nest
 
 _uid_counter = 0
 _uid_lock = threading.Lock()
@@ -73,29 +73,7 @@ class IPUOutfeedQueue:
   operation will in this case return a single element.
 
   """
-
-  _replication_factor_deprecated_instructions = """No change needed.
-  replication_factor is now set automatically based on the model."""
-  _io_batch_size_deprecated_instructions = """Accumulate the results manually or
-  use accumulate_outfeed when using pipelining."""
-  _feed_name_deprecated_instructions = """No change needed.
-  feed_name is now automatically generated."""
-
-  @deprecation.deprecated_args(None,
-                               _replication_factor_deprecated_instructions,
-                               "replication_factor")
-  @deprecation.deprecated_args(None, _io_batch_size_deprecated_instructions,
-                               "io_batch_size")
-  @deprecation.deprecated_args(None, _feed_name_deprecated_instructions,
-                               "feed_name")
-  def __init__(
-      self,
-      feed_name=None,  # pylint: disable=unused-argument
-      outfeed_mode=None,
-      device_ordinal=0,
-      replication_factor=None,  # pylint: disable=unused-argument
-      io_batch_size=1,  # pylint: disable=unused-argument
-      buffer_depth=1):
+  def __init__(self, outfeed_mode=None, device_ordinal=0, buffer_depth=1):
     """Creates an IPUOutfeedQueue object.
 
     Args:
@@ -107,7 +85,6 @@ class IPUOutfeedQueue:
           returned by the outfeed when the dequeue operation is run.
         device_ordinal: ordinal of the IPU device on which this queue will be
           used. By default the queue will be used on "/device/IPU:0".
-        io_batch_size: Deprecated.
         buffer_depth: The maximum number of elements Poplar can buffer in
           external memory before blocking the device.
 

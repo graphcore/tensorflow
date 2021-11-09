@@ -27,6 +27,7 @@ import os
 import pathlib
 import shutil
 import tempfile
+import time
 import numpy as np
 from pva import ProgramVisitor
 
@@ -936,3 +937,81 @@ def enable_ipu_events(ipu_config):
 
   # Use the default __setattr__ as IPUConfig's __setattr__ is overridden.
   object.__setattr__(ipu_config, '_create_protobuf', _create_protobuf_wrapper)
+
+
+def extract_all_strings_from_event_trace(events):
+  """Extract a concatenation of all data strings from an IPU event trace.
+
+  Args:
+    events: An array of IPU events as returned from the ``ipu_compile_summary``
+      operation.
+
+  Returns:
+    A string containing the concatenation of all of the data fields of the
+    events.
+
+  """
+  result = ""
+  for e in events:
+    evt = IpuTraceEvent.FromString(e)
+
+    result = result + ("-" * 70) + "\n=> @ " + \
+             time.strftime('%F %T %z', time.localtime(evt.timestamp)) + ": "
+
+    if evt.type == IpuTraceEvent.COMPILE_BEGIN:
+      evt_str = "Compile begin: " + \
+                evt.compile_begin.module_name.decode('utf-8') + "\n"
+    elif evt.type == IpuTraceEvent.COMPILE_END:
+      evt_str = "Compile end: " + \
+                evt.compile_end.module_name.decode('utf-8') + "\n" + \
+                "Duration: " + str(evt.compile_end.duration)
+    elif evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
+      evt_str = "Host->Device\n" + \
+                evt.data_transfer.data_transfer.decode('utf-8') + "\n"
+    elif evt.type == IpuTraceEvent.DEVICE_TO_HOST_TRANSFER:
+      evt_str = "Device->Host\n" + \
+                evt.data_transfer.data_transfer.decode('utf-8') + "\n"
+    elif evt.type == IpuTraceEvent.LOAD_ENGINE:
+      evt_str = "Load engine: " + \
+                evt.load_engine.module_name.decode('utf-8') + "\n"
+    elif evt.type == IpuTraceEvent.EXECUTE:
+      evt_str = "Execute: " + \
+                evt.execute.module_name.decode('utf-8')
+    else:
+      evt_str = "Unknown event"
+
+    result = result + evt_str + '\n'
+
+  return result
+
+
+def extract_all_types_from_event_trace(events):
+  """Return a list of the types of each event in an event trace tensor
+
+  Args:
+    events: A tensor containing a list of IPU events as protobuf strings
+
+  Returns:
+    A list containing the type of each event
+  """
+  result = []
+  for e in events:
+    evt = IpuTraceEvent.FromString(e)
+    result += [evt.type]
+  return result
+
+
+def extract_all_events(events):
+  """Extract a list containing each event as an event object
+
+  Args:
+    events: A tensor containing a list of IPU events as protobuf strings
+
+  Returns:
+    A list containing IpuTraceEvent objects
+  """
+  result = []
+  for e in events:
+    evt = IpuTraceEvent.FromString(e)
+    result += [evt]
+  return result

@@ -24,7 +24,6 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.data.util import structure
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import loops
-from tensorflow.python.util import deprecation
 
 _uid_counter = 0
 _uid_lock = threading.Lock()
@@ -97,26 +96,7 @@ class IPUInfeedQueue:
       result = sess.run(res)
 
   """
-  _replication_factor_deprecated_instructions = """No change needed.
-  replication_factor is now set automatically based on the model."""
-  _feed_name_deprecated_instructions = """No change needed.
-  feed_name is now automatically generated."""
-
-  @deprecation.deprecated_args(None,
-                               _replication_factor_deprecated_instructions,
-                               "replication_factor")
-  @deprecation.deprecated_args(None, "Use prefetch_depth instead.",
-                               "data_to_prefetch")
-  @deprecation.deprecated_args(None, _feed_name_deprecated_instructions,
-                               "feed_name")
-  def __init__(
-      self,
-      dataset,
-      feed_name=None,  # pylint: disable=unused-argument
-      device_ordinal=0,
-      replication_factor=1,  # pylint: disable=unused-argument
-      data_to_prefetch=1,  # pylint: disable=unused-argument
-      prefetch_depth=None):
+  def __init__(self, dataset, device_ordinal=0, prefetch_depth=None):
     """Creates an IPUInfeedQueue object.
 
     Args:
@@ -125,7 +105,6 @@ class IPUInfeedQueue:
         This dataset can no longer be used after creating this queue.
       device_ordinal: ordinal of the IPU device on which this queue will be
         used. By default the queue will be used on "/device/IPU:0".
-      data_to_prefetch: Deprecated.
       prefetch_depth: the number of elements Poplar will prefetch.
         The depth of the Poplar datastream buffer size which may be prefetched
         before being read by the device. By default the prefetch_depth size is

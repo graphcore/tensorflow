@@ -25,6 +25,7 @@ import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python import ipu
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn
 
@@ -57,10 +58,10 @@ class ArgTopK(xla_test.XLATestCase, parameterized.TestCase):
 
   def __configureIPU(self):
     if not self.configured:
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = ipu.config.IPUConfig()
+      cfg.ipu_model.compile_ipu_code = False
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
       self.configured = True
 
   @parameterized.named_parameters(*TESTCASES)
