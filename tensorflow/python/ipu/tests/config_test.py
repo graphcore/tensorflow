@@ -13,8 +13,12 @@
 # limitations under the License.
 # ==============================================================================
 import copy
+import enum
+import json
+import os
 import typing
 
+from absl.testing import parameterized
 from tensorflow.compat.v1 import disable_v2_behavior
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import \
     IpuDeviceConnectionType, IpuSelectionOrder, IpuExecutionProfileType, \
@@ -35,6 +39,7 @@ disable_v2_behavior()
 class TestConfigNested4(ipu.config._ConfigBase):
   def __init__(self):
     self.attr4 = False
+    self.attr7: TestEnum = TestEnum.APPLE
 
 
 class TestConfigNested3(ipu.config._ConfigBase):
@@ -66,6 +71,13 @@ class TestConfigNested2(ipu.config._ConfigBase):
   def _to_protobuf(self, pb):
     pb['nested2'] = [self.attr2]
     super()._to_protobuf(pb)
+
+
+class TestEnum(enum.Enum):
+  APPLE = 1
+  ORANGE = 2
+  BANANA = 3
+  PEAR = 5
 
 
 @ipu.config.deprecate_config_attribute(
@@ -118,7 +130,7 @@ class TestConfig(ipu.config._ConfigBase):
     super()._to_protobuf(pb)
 
 
-class ConfigBaseTest(test_util.TensorFlowTestCase):
+class ConfigBaseTest(test_util.TensorFlowTestCase, parameterized.TestCase):
   """
   Tests the basic mechanics of the ipu.config._ConfigBase class using a custom
   config.
@@ -546,6 +558,125 @@ class ConfigBaseTest(test_util.TensorFlowTestCase):
     config_copy = copy.deepcopy(test_config)
     self.assertFalse(test_config.attr0 is config_copy.attr0)
     self.assertFalse(test_config.nested1.attr1 is config_copy.nested1.attr1)
+
+  @parameterized.parameters([True, False])
+  def testToDictAndToJson(self, is_json):
+    test_config = TestConfig()
+    test_config.attr0 = 1234
+    test_config.nested1.attr1 = 5678
+
+    if is_json:
+      json_cfg = test_config.to_json()
+      attrs = json.loads(json_cfg)
+    else:
+      attrs = test_config.to_dict()
+
+    self.assertTrue("attr0" in attrs)
+    self.assertEqual(attrs["attr0"], 1234)
+    self.assertTrue("nested1.attr1" in attrs)
+    self.assertEqual(attrs["nested1.attr1"], 5678)
+
+  @parameterized.parameters([True, False])
+  def testFromDictAndFromJson(self, is_json):
+    attrs = {"attr0": 12, "nested1.attr1": 34, "nested1.nested2.attr2": 56}
+
+    test_config = TestConfig()
+    test_config.attr0 = 5
+    self.assertEqual(test_config.attr0, 5)
+    test_config.nested1.attr1 = 5
+    self.assertEqual(test_config.nested1.attr1, 5)
+    test_config.nested1.nested2.attr2 = 5
+    self.assertEqual(test_config.nested1.nested2.attr2, 5)
+
+    if is_json:
+      json_cfg = json.dumps(attrs)
+      test_config.from_json(json_cfg)
+    else:
+      test_config.from_dict(attrs)
+
+    self.assertEqual(test_config.attr0, 12)
+    self.assertEqual(test_config.nested1.attr1, 34)
+    self.assertEqual(test_config.nested1.nested2.attr2, 56)
+
+  @parameterized.parameters([True, False])
+  def testToDictAndToJsonOnEnums(self, is_json):
+    test_config = TestConfig()
+    test_config.attr0 = 12
+    test_config.nested1.attr1 = 3
+    test_config.nested1.nested2.attr2 = 5
+    test_config.nested1.nested2.nested4.attr7 = TestEnum.BANANA
+
+    if is_json:
+      json_cfg = test_config.to_json()
+      actual = json.loads(json_cfg)
+    else:
+      actual = test_config.to_dict()
+
+    self.assertEqual(actual["attr0"], 12)
+    self.assertIsInstance(actual["nested1.attr1"], int)
+    self.assertIs(actual["nested1.attr1"], 3)
+    self.assertEqual(actual["nested1.nested2.attr2"], 5)
+    self.assertEqual(actual["nested1.nested2.nested4.attr7"], 3)
+
+  @parameterized.parameters([True, False])
+  def testFromDictAndFromJsonOnEnums(self, is_json):
+    attrs = {
+        "attr0": 12,
+        "nested1.attr1": 2,
+        "nested1.nested2.attr2": 56,
+        "nested1.nested2.nested4.attr7": 2
+    }
+
+    test_config = TestConfig()
+    test_config.attr0 = 5
+    test_config.nested1.attr1 = 5
+    test_config.nested1.nested2.attr2 = 5
+
+    if is_json:
+      json_cfg = json.dumps(attrs)
+      test_config.from_json(json_cfg)
+    else:
+      test_config.from_dict(attrs)
+
+    self.assertEqual(test_config.attr0, 12)
+    self.assertIs(test_config.nested1.attr1, 2)
+    self.assertEqual(test_config.nested1.nested2.attr2, 56)
+    self.assertIsInstance(test_config.nested1.nested2.nested4.attr7, TestEnum)
+    self.assertEqual(test_config.nested1.nested2.nested4.attr7,
+                     TestEnum.ORANGE)
+
+  def testRepr(self):
+    expected = [
+        "  attr0 = 12", "  attr6 = ([1.0],)", "  nested1.attr1 = 34",
+        "  nested1.nested2.attr2 = 56",
+        "  nested1.nested2.nested4.attr4 = False",
+        "  nested1.nested2.nested4.attr7 = TestEnum.PEAR",
+        "  nested1.nested2.attr5 = 1", "  nested1.nested3.attr3 = 'test'",
+        "  nested1.nested3.attr0 = 1"
+    ]
+
+    test_config = TestConfig()
+    test_config.attr0 = 12
+    test_config.nested1.attr1 = 34
+    test_config.nested1.nested2.attr2 = 56
+    test_config.nested1.nested2.nested4.attr7 = TestEnum.PEAR
+
+    output = repr(test_config)
+    output_lines = output.split(os.linesep)
+
+    self.assertEqual(output_lines[0], "TestConfig:")
+    for line in expected:
+      self.assertIn(line, output_lines[1:])
+
+  def testUnionOfIntAndEnumFails(self):
+    with self.assertRaisesRegex(ValueError,
+                                "cannot have a Union of int and Enum"):
+
+      class BadConfig(ipu.config._ConfigBase):
+        def __init__(self):
+          self.bad_config_var: typing.Union[int, enum.Enum] = TestEnum.APPLE
+
+      _ = BadConfig()
 
 
 # pylint: enable=pointless-string-statement

@@ -23,6 +23,7 @@ import copy
 import difflib
 from enum import Enum
 import inspect
+import json
 import os
 import pydoc
 import typing
@@ -68,7 +69,7 @@ def _annotation_to_str(node):
   raise Exception(f"Unhandled {node} when converting type hint to string.")
 
 
-def _get_type_check_fn_from_AST_type_hints(node):
+def _get_type_check_fn_from_AST_type_hints(node, f_globals):
   """
   Function that parses the type hints in an AST AnnAssign node and converts them
   into a callable that checks the type of a value `v` against the type hints.
@@ -78,8 +79,7 @@ def _get_type_check_fn_from_AST_type_hints(node):
   T -> typing.Tuple
   U -> typing.Union
   t -> int | list | tuple | str | float | any python built-in type that can
-       be located by pydoc.locate() | any symbol that is available in globals()
-       when the returned function is called.
+       be located by pydoc.locate() | any symbol that is available in f_globals
 
   B -> S | S, B
   S = t | L | L[S] | T | T[B] | T[S, ...] | U[S, B]
@@ -94,33 +94,42 @@ def _get_type_check_fn_from_AST_type_hints(node):
   typing.Union[int, typing.List[int]]  # Accept either an int or a list of ints
   int  # Accept only integers
   ClassX  # Accept only 'ClassX' instances.
+  some.path.ClassX # Accept only 'ClassX' instances using a qualified path
+    within the caller's global context provided by `f_globals'.
 
   Essentially this function allows you to enforce simple type hints.
   """
   assert isinstance(node, ast.AnnAssign), "Only AnnAssign AST nodes allowed."
 
-  def check_type(typ):
+  def top_level_type(typ):
     # Strict type comparison over isinstance.
-    return lambda v: type(v) == typ  # pylint: disable=unidiomatic-typecheck
+    return lambda v: type(v) == typ, typ  # pylint: disable=unidiomatic-typecheck
 
   def is_typing_module_attr(node):
     return isinstance(node, ast.Attribute) and \
         isinstance(node.value, ast.Name) and node.value.id == "typing"
 
+  def get_attribute_full_path(node):
+    if isinstance(node, ast.Attribute):
+      return get_attribute_full_path(node.value) + "." + node.attr
+    elif isinstance(node, ast.Name):
+      return node.id
+    raise ValueError("node is not an ast.Attribute or ast.Name")
+
   def helper(node):
     # Handle "typing.List", "typing.Tuple"
     if is_typing_module_attr(node):
       if node.attr == "List":
-        return check_type(list)
+        return top_level_type(list)
       if node.attr == "Tuple":
-        return check_type(tuple)
+        return top_level_type(tuple)
       raise Exception(f"Unsupported 'typing' attribute {node.attr}")
 
     # Handle any arbitrary built-in e.g. 'int', or class/enum names.
     if isinstance(node, ast.Name):
       # Search for the variable in globals() at the time of execution. Failing
       # that, use pydoc to locate it.
-      return lambda v: type(v) == globals().get(node.id, pydoc.locate(node.id))  # pylint: disable=unidiomatic-typecheck
+      return top_level_type(f_globals.get(node.id, pydoc.locate(node.id)))
 
     # Subscripts, e.g. X[...]
     if isinstance(node, ast.Subscript):
@@ -130,37 +139,56 @@ def _get_type_check_fn_from_AST_type_hints(node):
         if lhs.attr == "Union":
           assert isinstance(node.slice, ast.Index)
           assert isinstance(node.slice.value, ast.Tuple)
-          type_fns = [helper(n) for n in node.slice.value.elts]
-          return lambda v: any(fn(v) for fn in type_fns)
+          types = [helper(n) for n in node.slice.value.elts]
+          type_tys = [ty for _, ty in types]
+          if int in type_tys and any([issubclass(Enum, ty)
+                                      for ty in type_tys]):
+            raise ValueError("cannot have a Union of int and Enum: " +
+                             "deserialising this attribute may be invalid")
+          type_fns = [fn for fn, _ in types]
+          return lambda v: any(fn(v) for fn in type_fns), None
         # e.g. Tuple[int, ...], check v elementwise for each type
         if lhs.attr == "Tuple":
-          check_tuple = check_type(tuple)
+          check_tuple = lambda v: isinstance(v, tuple)
           # single element Tuple: check the single element in v for type
           if isinstance(node.slice.value, ast.Name):
-            type_fn = helper(node.slice.value)
-            return lambda v: check_tuple(v) and len(v) == 1 and type_fn(v[0])
+            type_fn, _ = helper(node.slice.value)
+            return lambda v: check_tuple(v) and len(v) == 1 and type_fn(v[
+                0]), tuple
           # more than one element Tuple
           if isinstance(node.slice.value, ast.Tuple):
             # e.g. Tuple[int, ...], check each element in v for the same type
             if len(node.slice.value.elts) > 1 and isinstance(
                 node.slice.value.elts[1], ast.Ellipsis):
-              type_fn = helper(node.slice.value.elts[0])
-              return lambda v: check_tuple(v) and all([type_fn(e) for e in v])
+              type_fn, _ = helper(node.slice.value.elts[0])
+              return lambda v: check_tuple(v) and all([type_fn(e)
+                                                       for e in v]), tuple
             # e.g. Tuple[int, str], pair-wise (element, type) check
-            type_fns = [helper(n) for n in node.slice.value.elts]
+            type_fns = [
+                fn for fn, _ in [helper(n) for n in node.slice.value.elts]
+            ]
             return lambda v: check_tuple(v) and len(v) == len(
-                type_fns) and all([fn(e) for fn, e in zip(type_fns, v)])
+                type_fns) and all([fn(e) for fn, e in zip(type_fns, v)]), tuple
         # e.g. List[int], check each element in v for the same type
         if lhs.attr == "List":
           assert not isinstance(
               node.slice.value,
               ast.Tuple), "List with more than one type not allowed."
-          check_list = check_type(list)
-          type_fn = helper(node.slice.value)
-          return lambda v: check_list(v) and all([type_fn(e) for e in v])
+          check_list = lambda v: isinstance(v, list)
+          type_fn, _ = helper(node.slice.value)
+          return lambda v: check_list(v) and all([type_fn(e) for e in v]), list
         raise Exception(f"Unsupported 'typing' attribute {lhs.attr}")
       raise Exception(
           f"Only 'typing' module types can be subscripted in hints. {lhs}")
+
+    # See if we can resolve this type from the attribute path in the context of
+    # the caller, if the type is not a builtin, typing annotation, or addressed
+    # simply by name.
+    if isinstance(node, ast.Attribute):
+      attrib_path = get_attribute_full_path(node)
+      return top_level_type(
+          f_globals.get(attrib_path, pydoc.locate(attrib_path)))
+
     raise Exception(f"Unhandled AST node type in type hint {node}")
 
   return helper(node.annotation)
@@ -249,7 +277,7 @@ def _get_docstring_above_AST_node(filename, node):
   return "No description provided."
 
 
-def _get_assignment_type_and_checker(assign_node, rhs):
+def _get_assignment_type_and_checker(assign_node, rhs, f_globals):
   """
   Given an AST assignment node, get the type of the RHS of the assignment as
   a string and also build a function that will check a value against the type of
@@ -258,18 +286,22 @@ def _get_assignment_type_and_checker(assign_node, rhs):
   Args:
     assign_node: The AST node for the assignment.
     rhs: The right hand side (target) of the assignment as a Python value.
+    f_globals: The caller frame's globals, for searching for types within the
+      caller's global context.
   """
   # Find possible types...
   if isinstance(assign_node, ast.AnnAssign):
     # ...from Python's type hint annotations
-    check_type_fn = _get_type_check_fn_from_AST_type_hints(assign_node)
+    check_type_fn, attr_type = _get_type_check_fn_from_AST_type_hints(
+        assign_node, f_globals)
     # Reconstruct the type hint string from the AST node.
-    attr_type = _annotation_to_str(assign_node.annotation)
+    attr_type_str = _annotation_to_str(assign_node.annotation)
   else:
     # ...from the initial value
     check_type_fn = lambda value: type(value) == type(rhs)  # pylint: disable=unidiomatic-typecheck
-    attr_type = type(rhs).__name__
-  return attr_type, check_type_fn
+    attr_type = type(rhs)
+    attr_type_str = attr_type.__name__
+  return attr_type, attr_type_str, check_type_fn
 
 
 _FILENAME_SOURCE_INDEXES = {}
@@ -377,6 +409,7 @@ class AttributeMetadata:
                default=None,
                deprecated_msg=None,
                attr_type=None,
+               attr_type_str=None,
                check_type_fn=lambda v: True):
     """
     Encapsulates the metadata for an attribute in a nested _ConfigBase
@@ -398,7 +431,8 @@ class AttributeMetadata:
     self.__doc__ = inspect.cleandoc(doc)  # Normalize docstring indentation.
     self._deprecated = deprecated_msg is not None
     self._deprecated_msg = deprecated_msg
-    self._type = attr_type
+    self._type = attr_type_str
+    self._actual_type = attr_type
     self._default = default
 
     self._check_type_fn = check_type_fn
@@ -433,6 +467,10 @@ class AttributeMetadata:
     type or a type hint. Categories themselves do not have types.
     """
     return self._type
+
+  @property
+  def actual_type(self):
+    return self._actual_type
 
   @property
   def default(self):
@@ -724,7 +762,8 @@ class _ConfigBase(object):
 
     # Find type string and type checking function from AST node.
     assign_node = _get_assignment_node_from_call_frame(caller_frame)
-    attr_type, type_checker = _get_assignment_type_and_checker(assign_node, v)
+    attr_type, attr_type_str, type_checker = _get_assignment_type_and_checker(
+        assign_node, v, caller_frame.f_globals)
 
     # Find the docstring above the line of the assignment node.
     filename = caller_frame.f_code.co_filename
@@ -737,6 +776,7 @@ class _ConfigBase(object):
       self._nested_configs.append(k)
       default = None
       attr_type = None
+      attr_type_str = None
 
     self._user_attributes[k] = AttributeMetadata(full_name,
                                                  doc=docstring,
@@ -744,6 +784,7 @@ class _ConfigBase(object):
                                                  default=default,
                                                  deprecated_msg=deprecated_msg,
                                                  attr_type=attr_type,
+                                                 attr_type_str=attr_type_str,
                                                  check_type_fn=type_checker)
     object.__setattr__(self, k, v)
 
@@ -801,11 +842,58 @@ class _ConfigBase(object):
     for config_name in self._nested_configs:
       getattr(self, config_name)._to_protobuf(pb)  # pylint: disable=protected-access
 
-  def _create_protobuf(self):
-    """ Create an IpuOptions protobuf from this _ConfigBase """
-    pb = IpuOptions()
-    self._to_protobuf(pb)  # pylint: disable=protected-access
-    return pb
+  def to_dict(self):
+    """
+    Export the configuration stored within this configuration object to a dict.
+    """
+    dct = {}
+    # Iterate over the user-facing attributes and their metadata.
+    for name, metadata in self._user_attributes.items():
+      attr = getattr(self, name)
+      # Recurse into nested configs and save normal attributes.
+      if name in self._nested_configs:
+        dct.update(attr.to_dict())
+      else:
+        # Convert enums to ints.
+        attr = attr.value if isinstance(attr, Enum) else attr
+        dct[metadata.name] = attr
+    return dct
+
+  def from_dict(self, dct):
+    """
+    Restore configuration from a dict object.
+    """
+    # Iterate over the user-facing attributes and their metadata.
+    for name, metadata in self._user_attributes.items():
+      attr = getattr(self, name)
+      # Recurse into nested configs and restore normal attributes.
+      if name in self._nested_configs:
+        attr.from_dict(dct)
+      elif metadata.name in dct:
+        val = dct[metadata.name]
+        # Convert ints to enums, using a simple check to see if the default
+        # value was also an Enum.
+        typ = metadata.actual_type
+        val = attr.__class__(val) if typ is not None and issubclass(
+            typ, Enum) else val
+        if val != attr:
+          setattr(self, name, val)
+      else:
+        logging.warn(f"{metadata.name} didn't have a value: the existing value"
+                     "will be retained")
+
+  def to_json(self):
+    """
+    Export the configuration stored within this configuration object as a
+    string of JSON.
+    """
+    return json.dumps(self.to_dict())
+
+  def from_json(self, json_cfg):
+    """
+    Restore configuration from a string of JSON.
+    """
+    return self.from_dict(json.loads(json_cfg))
 
   def _finalize_base_config(self, _root_class=None, _parent_metadata=None):
     """
@@ -886,6 +974,23 @@ class _ConfigBase(object):
     for k, v in self.__dict__.items():
       new.__dict__[k] = copy.deepcopy(v, memo)
     return new
+
+  def __str__(self):
+    def build_line(name, metadata):
+      attr = getattr(self, name)
+      # Recurse into nested configs.
+      if name in self._nested_configs:
+        return str(attr)
+
+      val = attr if isinstance(attr, Enum) else repr(attr)
+      return f"{metadata.name} = {val}"
+
+    return os.linesep.join(
+        build_line(n, m) for n, m in self._user_attributes.items())
+
+  def __repr__(self):
+    indented = ["  " + line for line in str(self).split(os.linesep)]
+    return os.linesep.join([f"{self.__class__.__name__}:", *indented])
 
 
 def _poplar_options_to_protobuf(opts, pb_target):
@@ -1980,6 +2085,12 @@ class IPUConfig(_ConfigBase):
     # This only needs to be called in this base config, not nested configs. It
     # generates the docstring of this class and propagates deprecation.
     self._finalize_base_config()  # pylint: disable=protected-access
+
+  def _create_protobuf(self):
+    """ Create an IpuOptions protobuf from this IPUConfig """
+    pb = IpuOptions()
+    self._to_protobuf(pb)  # pylint: disable=protected-access
+    return pb
 
   def _to_protobuf(self, pb):
     # Only one of (auto_)select_ipus can be set.
