@@ -695,7 +695,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*', 'host-exchange-local-copy-', '[cC]opy_',
+        '__seed*', 'host-exchange-local-copy-',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'vs/conv2d/BiasAdd',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
         'vs/Relu/relu/Nonlinearity'

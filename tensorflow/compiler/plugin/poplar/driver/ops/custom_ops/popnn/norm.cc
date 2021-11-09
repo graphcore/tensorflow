@@ -147,24 +147,16 @@ poplar::Tensor ConvertVarianceToInvStdDev(
     poplar::Graph& graph, const poplar::Tensor& variance, const float epsilon,
     poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  poplar::Tensor inv_sd = graph.clone(variance, {debug_name_and_id});
-  seq.add(poplar::program::Copy(variance, inv_sd, false, {debug_name_and_id}));
-
-  popops::mapInPlace(graph, pe::VarianceToInvStdDev(pe::_1, pe::Const(epsilon)),
-                     {inv_sd}, seq, {debug_name_and_id, "VarToInvStdDev"});
-  return inv_sd;
+  return popops::map(graph, pe::VarianceToInvStdDev(pe::_1, pe::Const(epsilon)),
+                     {variance}, seq, {debug_name_and_id, "VarToInvStdDev"});
 }
 
 poplar::Tensor ConvertInvStdDevToVariance(
     poplar::Graph& graph, const poplar::Tensor& inv_sd, const float epsilon,
     poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  poplar::Tensor variance = graph.clone(inv_sd, {debug_name_and_id});
-  seq.add(poplar::program::Copy(inv_sd, variance, false, {debug_name_and_id}));
-
-  popops::mapInPlace(graph, pe::InvStdDevToVariance(pe::_1, pe::Const(epsilon)),
-                     {variance}, seq, {debug_name_and_id, "InvStdDevToVar"});
-  return variance;
+  return popops::map(graph, pe::InvStdDevToVariance(pe::_1, pe::Const(epsilon)),
+                     {inv_sd}, seq, {debug_name_and_id, "InvStdDevToVar"});
 }
 
 poplar::Tensor BatchNormalise(poplar::Graph& graph,
