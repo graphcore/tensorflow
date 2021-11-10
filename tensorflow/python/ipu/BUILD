@@ -643,6 +643,18 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "keras_feed_options_test",
+    size = "large",
+    srcs = ["tests/keras/keras_feed_options_test.py"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras",
+    ],
+)
+
+tf_py_test(
     name = "math_ops_test",
     size = "large",
     srcs = ["tests/math_ops_test.py"],
@@ -2079,6 +2091,7 @@ test_suite(
         "keras_effective_transformer_test",
         "keras_embedding_lookup_test",
         "keras_execution_parameters_test",
+        "keras_feed_options_test",
         "keras_functional_model_test",
         "keras_gradient_accumulation_test",
         "keras_model_replication_mnist_test",

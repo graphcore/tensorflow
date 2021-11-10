@@ -292,6 +292,38 @@ class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=a
                                       experimental_normalize_gradients,
                                       pipelining_kwargs)
 
+  def set_infeed_queue_options(self, **kwargs):
+    """Sets the options for all instances of `IPUInfeedQueue` generated
+    when executing the model.
+
+    When using `fit()`, `evalute()` and `predict()`, an instance of
+    :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue` is created
+    to efficiently feed data from the dataset to the device. Instances of
+    `IPUInfeedQueue` can be created with optional arguments, such as
+    `prefetch_depth`, which can increase the throughput of the model.
+
+    Args:
+      **kwargs: All keyword arguments are forwarded to
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`.
+    """
+    self._set_infeed_queue_options_impl(**kwargs)
+
+  def set_outfeed_queue_options(self, **kwargs):
+    """Sets the options for all instances of `IPUOutfeedQueue` generated
+    when executing the model.
+
+    When using `fit()`, `evalute()` and `predict()`, an instance of
+    :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUOutfeedQueue` is created
+    to efficiently feed data from the device to the host. Instances of
+    `IPUOutfeedQueue` can be created with optional arguments, such as
+    `buffer_depth`, which can increase the throughput of the model.
+
+    Args:
+      **kwargs: All keyword arguments are forwarded to
+        :class:`~tensorflow.python.ipu.ipu_outfeed_queue.IPUOutfeedQueue`.
+    """
+    self._set_outfeed_queue_options_impl(**kwargs)
+
   @trackable.no_automatic_dependency_tracking
   def _get_pipeline_post_order(self, input_shapes, input_dtypes):
     if not self._has_explicit_input_shape:

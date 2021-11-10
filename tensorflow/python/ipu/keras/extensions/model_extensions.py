@@ -88,8 +88,8 @@ class _InfeedManager:
     self._infeed_names = dict()
     self._infeeds = dict()
 
-  def get_infeed(self, mode, dataset):
-    kwargs = dict()
+  def get_infeed(self, mode, dataset, infeed_kwargs):
+    kwargs = dict(infeed_kwargs)
     if not mode in self._infeed_names:
       self._infeed_names[mode] = ipu_infeed_queue._generate_unique_name()  # pylint: disable=protected-access
 
@@ -124,10 +124,11 @@ class _OutfeedManager:
   def __init__(self):
     self._outfeeds = dict()
 
-  def get_outfeed(self, mode):
+  def get_outfeed(self, mode, outfeed_kwargs):
     """Returns the outfeed queue to use for the particular mode."""
     if not mode in self._outfeeds:
-      self._outfeeds[mode] = ipu_outfeed_queue.IPUOutfeedQueue()
+      self._outfeeds[mode] = ipu_outfeed_queue.IPUOutfeedQueue(
+          **outfeed_kwargs)
     return self._outfeeds[mode]
 
   def reset(self):
@@ -308,6 +309,8 @@ class ModelExtension(base_layer.KerasExtension):
     self._experimental_pipelining_normalize_gradients = None
     self._pipelining_kwargs = dict()
     self._asynchronous_callbacks = False
+    self._infeed_kwargs = dict()
+    self._outfeed_kwargs = dict()
 
     # Following values are runtime only.
     self._ipu_train_function = None
@@ -469,6 +472,8 @@ class ModelExtension(base_layer.KerasExtension):
       self._ipu_test_function = None
       self._ipu_predict_function = None
       self._replication_factor = None
+      self._outfeed_manager = _OutfeedManager()
+      self._infeed_manager = _InfeedManager()
 
   def _assert_weights_created_supported(self):
     return True
@@ -1118,6 +1123,34 @@ class ModelExtension(base_layer.KerasExtension):
     if reset_extension:
       self._reset_ipu_extension()
 
+  @trackable.no_automatic_dependency_tracking
+  def _set_infeed_queue_options_impl(self, **kwargs):
+    automatic_args = ["dataset", "infeed_spec", "element_spec"]
+    for automatic_arg in automatic_args:
+      if automatic_arg in kwargs:
+        raise ValueError("Found `{}` key in `kwargs`. This argument is "
+                         "automatically set by Keras.".format(automatic_arg))
+
+    invalid_args = [ipu_infeed_queue._internal_id]  # pylint: disable=protected-access
+    for invalid_arg in invalid_args:
+      if invalid_arg in kwargs:
+        raise ValueError("Found `{}` key in `kwargs`. This argument is "
+                         "not compatible with Keras.".format(invalid_arg))
+
+    self._infeed_kwargs = kwargs
+    self._reset_ipu_extension()
+
+  @trackable.no_automatic_dependency_tracking
+  def _set_outfeed_queue_options_impl(self, **kwargs):
+    invalid_args = ["outfeed_mode", "device_ordinal"]
+    for invalid_arg in invalid_args:
+      if invalid_arg in kwargs:
+        raise ValueError("Found `{}` key in `kwargs`. This argument is "
+                         "not compatible with Keras.".format(invalid_arg))
+
+    self._outfeed_kwargs = kwargs
+    self._reset_ipu_extension()
+
   def _get_base_config(self):
     """Returns any configuration required to serialize this base class."""
     config = dict()
@@ -1143,6 +1176,9 @@ class ModelExtension(base_layer.KerasExtension):
     config["pipelining_accumulate_outfeed"] = \
       self._pipelining_accumulate_outfeed
 
+    config["infeed_kwargs"] = self._infeed_kwargs
+    config["outfeed_kwargs"] = self._outfeed_kwargs
+
     if self._pipelining_kwargs:
       logging.info(
           "Calling get_config() on {} - "
@@ -1167,6 +1203,8 @@ class ModelExtension(base_layer.KerasExtension):
     self._experimental_pipelining_normalize_gradients = config.get(
         "experimental_pipelining_normalize_gradients", None)
     self._asynchronous_callbacks = config.get("asynchronous_callbacks", False)
+    self._infeed_kwargs = config.get("infeed_kwargs", dict())
+    self._outfeed_kwargs = config.get("outfeed_kwargs", dict())
 
   def _fit_supported(self, *args, **kwargs):  # pylint:disable=unused-argument
     return True
@@ -1256,10 +1294,10 @@ class ModelExtension(base_layer.KerasExtension):
 
       original_steps_per_execution_value = \
           data_handler.steps_per_execution_value
-      outfeed = self._outfeed_manager.get_outfeed(mode)  # pylint:disable=unused-variable
+      outfeed = self._outfeed_manager.get_outfeed(mode, self._outfeed_kwargs)  # pylint:disable=unused-variable
 
       for epoch, iterator in data_handler.enumerate_epochs_with_reuse(
-          self._infeed_manager, mode):
+          self._infeed_manager, mode, self._infeed_kwargs):
         inferred_steps = data_handler.inferred_steps
         steps_per_execution_value = data_handler.steps_per_execution_value
         steps_per_execution_per_replica = \
@@ -1470,11 +1508,11 @@ class ModelExtension(base_layer.KerasExtension):
 
       original_steps_per_execution_value = \
           data_handler.steps_per_execution_value
-      outfeed = self._outfeed_manager.get_outfeed(mode)  # pylint:disable=unused-variable
+      outfeed = self._outfeed_manager.get_outfeed(mode, self._outfeed_kwargs)  # pylint:disable=unused-variable
 
       # Single epoch.
       for _, iterator in data_handler.enumerate_epochs_with_reuse(
-          self._infeed_manager, mode):
+          self._infeed_manager, mode, self._infeed_kwargs):
         inferred_steps = data_handler.inferred_steps
         steps_per_execution_value = data_handler.steps_per_execution_value
         steps_per_execution_per_replica = \
@@ -1623,11 +1661,11 @@ class ModelExtension(base_layer.KerasExtension):
 
       original_steps_per_execution_value = \
           data_handler.steps_per_execution_value
-      outfeed = self._outfeed_manager.get_outfeed(mode)  # pylint:disable=unused-variable
+      outfeed = self._outfeed_manager.get_outfeed(mode, self._outfeed_kwargs)  # pylint:disable=unused-variable
 
       # Single epoch.
       for _, iterator in data_handler.enumerate_epochs_with_reuse(
-          self._infeed_manager, mode):
+          self._infeed_manager, mode, self._infeed_kwargs):
         inferred_steps = data_handler.inferred_steps
         steps_per_execution_value = data_handler.steps_per_execution_value
         steps_per_execution_per_replica = \

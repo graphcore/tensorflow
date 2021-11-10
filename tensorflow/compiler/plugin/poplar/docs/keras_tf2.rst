@@ -214,6 +214,35 @@ instance. Asynchronous callbacks can be enabled by invoking
 :py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_asynchronous_callbacks`
 with `True` on your ``Sequential`` or ``Functional`` Keras model.
 
+Configuring Infeeds and Outfeed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Keras models created inside of an ``IPUStrategy`` scope automatically create
+``IPUInfeedQueue`` and ``IPUOutfeedQueue`` data queues for efficiently feeding
+data to and from the IPU devices when using ``fit()``, ``evaluate()`` and
+``predict()``.
+
+Instances of ``IPUInfeedQueue`` and ``IPUOutfeedQueue`` can be created with
+optional arguments which can affect performance of the model.
+
+For configuring the ``IPUInfeedQueue`` use
+:py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_infeed_queue_options`
+on your ``Sequential`` or ``Functional`` Keras model.
+
+For configuring the ``IPUOutfeedQueue`` use
+:py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_outfeed_queue_options`
+on your ``Sequential`` or ``Functional`` Keras model.
+
+For example the ``prefetch_depth`` parameter of the ``IPUInfeedQueue`` and the
+``buffer_depth`` parameter of the ``IPUOutfeedQueue`` can be configured as
+follows:
+
+.. literalinclude:: keras_tf2_example10.py
+  :language: python
+  :linenos:
+  :emphasize-lines: 26-28
+
+
 Porting models from TensorFlow 2.1
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

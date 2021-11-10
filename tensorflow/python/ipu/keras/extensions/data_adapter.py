@@ -166,15 +166,16 @@ class IPUDataHandler(data_adapter.DataHandler):
             "steps per execution to ensure this requirement is met.".format(
                 self.inferred_steps, self._steps_per_execution_value))
 
-  def enumerate_epochs_with_reuse(self, manager, mode):  # pylint: disable=arguments-differ
+  def enumerate_epochs_with_reuse(self, manager, mode, infeed_kwargs):
     """Yields `(epoch, InfeedQueue)`."""
     with self._truncate_execution_to_epoch():
-      data_iterator = manager.get_infeed(mode, self._dataset)
+      data_iterator = manager.get_infeed(mode, self._dataset, infeed_kwargs)
       for epoch in range(self._initial_epoch, self._epochs):
         if self._insufficient_data:  # Set by `catch_stop_iteration`.
           break
         if self._adapter.should_recreate_iterator():
-          data_iterator = manager.get_infeed(mode, self._dataset)
+          data_iterator = manager.get_infeed(mode, self._dataset,
+                                             infeed_kwargs)
         yield epoch, data_iterator
         self._adapter.on_epoch_end()
 
