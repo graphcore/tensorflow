@@ -46,9 +46,14 @@ class AddStochasticRoundingOptions : public HloModulePass {
   StatusOr<StochasticRoundingMethod> GetStochasticRoundingMethod(
       const HloInstruction* inst) const;
 
+  bool ReplicaIdenticalOnlySR() const;
+
   StochasticRoundingBehaviour default_stochastic_rounding_behaviour_;
   bool enable_experimental_prng_stability_;
 };
+
+StochasticRoundingMethod DefaultStochasticRoundingMethod(
+    StochasticRoundingBehaviour mode);
 
 }  // namespace poplarplugin
 }  // namespace xla

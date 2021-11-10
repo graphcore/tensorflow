@@ -80,14 +80,15 @@ const char* simple_hlo = R"(
 HloModule test
 
 ENTRY test {
-  identical0 = f32[] parameter(0), backend_config="{\"is_replica_identical\":\"1\"}"
-  identical1 = f32[] constant(3), backend_config="{\"is_replica_identical\":\"1\"}"
+  identical0 = f16[] parameter(0), backend_config="{\"is_replica_identical\":\"1\"}"
+  identical1 = f16[] constant(3), backend_config="{\"is_replica_identical\":\"1\"}"
+  identical2 = f16[] add(identical0, identical1), backend_config="{\"is_replica_identical\":\"1\"}"
 
-  constant = f32[] constant(2), backend_config="{\"is_replica_identical\":\"1\"}"
-  differing0 = f32[] rng(constant, constant), distribution=rng_uniform, backend_config="{\"is_replica_identical\":\"0\"}"
-  differing1 = f32[] rng(constant, constant), distribution=rng_uniform, backend_config="{\"is_replica_identical\":\"0\"}"
+  constant = f16[] constant(2), backend_config="{\"is_replica_identical\":\"1\"}"
+  differing0 = f16[] rng(constant, constant), distribution=rng_uniform, backend_config="{\"is_replica_identical\":\"0\"}"
+  differing1 = f16[] rng(constant, constant), distribution=rng_uniform, backend_config="{\"is_replica_identical\":\"0\"}"
 
-  ROOT differing_root = (f32[], f32[]) tuple(identical0, differing0), backend_config="{\"is_replica_identical\":\"0\"}"
+  ROOT differing_root = (f16[], f16[]) tuple(identical2, differing0), backend_config="{\"is_replica_identical\":\"0\"}"
 }
 )";
 struct AddStochasticRoundingOptionsTest : HloTestFixture {
@@ -168,6 +169,7 @@ TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingDefault) {
 
 TEST_F(AddStochasticRoundingOptionsTest,
        SettingStochasticRoundingForReplicaIdentical) {
+  using ::testing::AnyOf;
   using ::testing::Each;
 
   ASSERT_TRUE(SetUpHloModule(simple_hlo));
@@ -181,10 +183,16 @@ TEST_F(AddStochasticRoundingOptionsTest,
                           add_stochastic_rounding_options.Run(hlo_module_));
   ASSERT_TRUE(modified);
 
-  ASSERT_THAT(ReplicaIdenticalModuleInstructions(),
-              Each(HasStochasticRounding(THREESTATE_ON)));
-  ASSERT_THAT(ReplicaDifferingModuleInstructions(),
-              Each(HasStochasticRounding(THREESTATE_OFF)));
+  ASSERT_THAT(
+      ReplicaDifferingModuleInstructions(),
+      Each(AnyOf(HasStochasticRoundingMethod(StochasticRoundingMethod_None),
+                 HasStochasticRoundingMethod(StochasticRoundingMethod_Any))));
+
+  ASSERT_THAT(
+      ReplicaIdenticalModuleInstructions(),
+      Each(AnyOf(
+          HasStochasticRoundingMethod(StochasticRoundingMethod_IdenticalSeeds),
+          HasStochasticRoundingMethod(StochasticRoundingMethod_Any))));
 }
 
 TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingOn) {
@@ -392,25 +400,15 @@ TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingAllReduce) {
   auto* all_reduce = FindInstruction(hlo_module_, "all_reduce");
   ASSERT_TRUE(all_reduce);
 
-  // Test that all-reduce instructions do not use stochastic rounding when using
-  // the ReplicaIdenticalOnly option.
+  // Test that all-reduce instructions do not use stochastic rounding.
   AddStochasticRoundingOptions
-      add_stochastic_rounding_options_replica_identical(
-          StochasticRounding_ReplicaIdenticalOnly);
+      add_stochastic_rounding_options_replica_identical(StochasticRounding_On);
   TF_ASSERT_OK_AND_ASSIGN(
       bool modified,
       add_stochastic_rounding_options_replica_identical.Run(hlo_module_));
   ASSERT_TRUE(modified);
-  ASSERT_THAT(all_reduce, HasStochasticRounding(THREESTATE_OFF));
-
-  // Now test that we can enable stochastic rounding for all-reduce
-  // when not using ReplicaIdenticalOnly
-  AddStochasticRoundingOptions add_stochastic_rounding_options(
-      StochasticRounding_On);
-  TF_ASSERT_OK_AND_ASSIGN(modified,
-                          add_stochastic_rounding_options.Run(hlo_module_));
-  ASSERT_TRUE(modified);
-  ASSERT_THAT(all_reduce, HasStochasticRounding(THREESTATE_ON));
+  ASSERT_THAT(all_reduce,
+              HasStochasticRoundingMethod(StochasticRoundingMethod_None));
 }
 
 INSTANTIATE_TEST_SUITE_P(AddStochasticRoundingOptionsHLO, AnySeedTest,

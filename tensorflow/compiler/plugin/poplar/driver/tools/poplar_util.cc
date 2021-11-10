@@ -373,12 +373,20 @@ bool MaybeChangeStochasticRoundingMethod(CompilerResources& res,
     }
 
     if (res.enable_prng_seed_consistency_checks) {
+      auto& master_graph = GetMasterGraph(res);
       // We don't assert against prng_seed_state.GetStochasticRoundingMethod()
       // as this would add checks for instructions with a SR type of
       // StochasticRoundingMethod_Any, which are hard to get right as they're
       // often reordered.
-      seq_changed |= AssertStochasticRoundingMethod(GetMasterGraph(res), method,
-                                                    seq, inst_name);
+      seq_changed |=
+          AssertStochasticRoundingMethod(master_graph, method, seq, inst_name);
+
+      if (method != StochasticRoundingMethod_Any) {
+        const bool expect_enabled =
+            method == StochasticRoundingMethod_None ? false : true;
+        AssertStochasticRoundingEnabled(master_graph, expect_enabled, seq,
+                                        inst_name);
+      }
     }
   }
 

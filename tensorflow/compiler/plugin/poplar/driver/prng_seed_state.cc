@@ -27,6 +27,7 @@ limitations under the License.
 #include <poplar/RandomSeed.hpp>
 #include <popops/AllTrue.hpp>
 #include <popops/ElementWise.hpp>
+#include <popops/Reduce.hpp>
 #include <poprand/RandomGen.hpp>
 
 namespace xla {
@@ -52,7 +53,8 @@ std::unique_ptr<poputil::graphfn::TensorFunction> CreateChangeHwSeedsFn(
 
 std::unique_ptr<poputil::graphfn::VoidFunction> CreateSetSRModeFn(
     poplar::Graph& graph, bool mode) {
-  poplar::DebugNameAndId debug_name_and_id{"SetSR"};
+  const std::string debug_name = mode ? "EnableSR" : "DisableSR";
+  poplar::DebugNameAndId debug_name_and_id{debug_name};
   return absl::make_unique<poputil::graphfn::VoidFunction>(
       graph, poputil::graphfn::Signature{},
       [&graph, &mode, &debug_name_and_id](std::vector<poplar::Tensor>& args,
@@ -210,6 +212,48 @@ bool AssertStochasticRoundingMethod(poplar::Graph& graph,
   }
 
   return false;
+}
+
+void AssertStochasticRoundingEnabled(poplar::Graph& graph, bool enabled,
+                                     poplar::program::Sequence& seq,
+                                     const std::string& inst_name) {
+  // Verbose logging so it's clear when we're asserting and harder to
+  // accidentially submit code with it enabled.
+  LOG(INFO) << "AssertStochasticRoundingEnabled " << enabled << " for "
+            << inst_name;
+
+  // Temp options to pass into getAndModifyFloatingPointBehaviour, their values
+  // dont really matter since they'll be reverted.
+  const poplar::FloatingPointBehaviour no_clear(false, false, false, false,
+                                                false);
+  const poplar::FloatingPointBehaviour temp_set(false, false, false, false,
+                                                false);
+  const auto old_fp = poplar::getAndModifyFloatingPointBehaviour(
+      graph, seq, no_clear, temp_set);
+
+  // We say SR is enabled if every tile has this bit mask.
+  const auto sr_enabled_value =
+      graph.getTarget().makeFpIctlValue(false, false, false, true, false);
+
+  auto tiles_sr_value =
+      popops::bitwiseAnd(graph, old_fp, sr_enabled_value, seq);
+  auto tiles_sr_enabled =
+      popops::eq(graph, tiles_sr_value, sr_enabled_value, seq);
+  auto all_tiles_sr_enabled = popops::reduce(
+      graph, tiles_sr_enabled, {0}, popops::Operation::LOGICAL_AND, seq);
+
+  if (enabled) {
+    auto all_tiles_sr_disabled =
+        popops::map(graph, popops::expr::UnaryOpType::LOGICAL_NOT,
+                    all_tiles_sr_enabled, seq);
+    seq.add(poplar::program::AbortOnCondition(
+        all_tiles_sr_disabled, "Expected SR to be enabled for " + inst_name));
+  } else {
+    seq.add(poplar::program::AbortOnCondition(
+        all_tiles_sr_enabled, "Expected SR to be disabled for " + inst_name));
+  }
+
+  poplar::setFloatingPointBehaviour(graph, seq, old_fp);
 }
 
 }  // namespace poplarplugin

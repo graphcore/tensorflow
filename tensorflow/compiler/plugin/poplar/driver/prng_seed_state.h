@@ -92,6 +92,13 @@ bool AssertStochasticRoundingMethod(poplar::Graph& graph,
                                     poplar::program::Sequence& seq,
                                     const std::string& inst_name = "");
 
+// Debug utility for checking whether stochastic rounding is enabled or not.
+// Terminates poplar program execution if the runtime state doesn't match
+// `enabled`.
+void AssertStochasticRoundingEnabled(poplar::Graph& graph, bool enabled,
+                                     poplar::program::Sequence& seq,
+                                     const std::string& inst_name = "");
+
 }  // namespace poplarplugin
 }  // namespace xla
 

@@ -230,16 +230,13 @@ StatusOr<bool> AddStochasticRoundingOptions::ConfigureStochasticRoundingOption(
   // that are replica identical.
   const bool use_default = stochastic_rounding == THREESTATE_UNDEFINED;
   if (use_default) {
-    if (enable_experimental_prng_stability_ &&
-        default_stochastic_rounding_behaviour_ ==
-            StochasticRounding_ReplicaIdenticalOnly) {
-      // We need to disable SR for allReduce since it has data dependencies
-      // that can cause the seed to diverge.
-      const bool is_all_reduce = inst->opcode() == HloOpcode::kAllReduce;
-      stochastic_rounding =
-          IsInstructionReplicaIdentical(inst) && !is_all_reduce
-              ? THREESTATE_ON
-              : THREESTATE_OFF;
+    if (ReplicaIdenticalOnlySR()) {
+      // In ReplicaIdenticalOnly mode we want SR for replica identical
+      // instructions, in order to support this functionality alongside the
+      // existing SR behaviour we always enable the SR backend option and
+      // instead use StochasticRoundingMethod_None to disable it for non replica
+      // identical instructions.
+      stochastic_rounding = THREESTATE_ON;
     } else {
       stochastic_rounding =
           default_stochastic_rounding_behaviour_ == StochasticRounding_On
@@ -294,6 +291,12 @@ AddStochasticRoundingOptions::ParseFrontendStochasticRoundingAttr(
 StatusOr<StochasticRoundingMethod>
 AddStochasticRoundingOptions::GetStochasticRoundingMethod(
     const HloInstruction* inst) const {
+  // We need to disable SR for allReduce since it has data dependencies
+  // that can cause the seed to diverge. Additionally when run with a non
+  // replica identical seed it can create non replica identical results.
+  if (inst->opcode() == HloOpcode::kAllReduce) {
+    return StochasticRoundingMethod_None;
+  }
   // Switching seeds is not free, we can save some time by not switching seeds
   // for instructions which won't be effected by it. Additionally it makes it
   // easier to manage the seed state since it's offten tuples/gtes and other
@@ -302,12 +305,35 @@ AddStochasticRoundingOptions::GetStochasticRoundingMethod(
   // afterwards.
   TF_ASSIGN_OR_RETURN(bool needs_sepecific_seed, NeedsSpecificSeedType(inst));
   if (needs_sepecific_seed) {
+    const auto default_method =
+        DefaultStochasticRoundingMethod(default_stochastic_rounding_behaviour_);
     return IsInstructionReplicaIdentical(inst)
                ? StochasticRoundingMethod_IdenticalSeeds
-               : StochasticRoundingMethod_DifferingSeeds;
+               : default_method;
   }
 
   return StochasticRoundingMethod_Any;
+}
+
+bool AddStochasticRoundingOptions::ReplicaIdenticalOnlySR() const {
+  return enable_experimental_prng_stability_ &&
+         default_stochastic_rounding_behaviour_ ==
+             StochasticRounding_ReplicaIdenticalOnly;
+}
+
+StochasticRoundingMethod DefaultStochasticRoundingMethod(
+    StochasticRoundingBehaviour mode) {
+  switch (mode) {
+    case StochasticRounding_On:
+      return StochasticRoundingMethod_DifferingSeeds;
+    case StochasticRounding_ReplicaIdenticalOnly:
+    case StochasticRounding_Off:
+      return StochasticRoundingMethod_None;
+    default:
+      LOG(FATAL) << "Got unexpected stochastic rounding mode.";
+  }
+
+  return StochasticRoundingMethod_Undefined;
 }
 
 }  // namespace poplarplugin
