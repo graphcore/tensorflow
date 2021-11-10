@@ -15,16 +15,19 @@ limitations under the License.
 
 #include <gtest/gtest.h>
 
+#include "absl/strings/substitute.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/prng_seed_state.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/add_stochastic_rounding_options.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
+#include "tensorflow/stream_executor/lib/statusor.h"
 
 #include <poplar/CSRFunctions.hpp>
 #include <poplar/RandomSeed.hpp>
@@ -451,9 +454,22 @@ TEST_F(PrngSeedStateShardedTest, TaskParallelism) {
          "produce different results across replicas.";
 }
 
-// Fixture for tests that need to execute lowered hlo on an IPU device.
-struct PrngSeedConsistencyTest : PrngSeedTest,
-                                 ::testing::WithParamInterface<HloTestCase> {
+// Fixture for tests that need to execute lowered hlo on an IPU device. Each hlo
+// module is run for each provided StochasticRoundingBehaviour.
+struct PrngSeedConsistencyTest
+    : PrngSeedTest,
+      ::testing::WithParamInterface<
+          std::tuple<HloTestCase, StochasticRoundingBehaviour>> {
+  static std::string TestName(
+      const ::testing::TestParamInfo<PrngSeedConsistencyTest::ParamType>&
+          info) {
+    const auto& test_name = std::get<0>(info.param).name;
+    const auto& sr_mode = std::get<1>(info.param);
+    const auto& sr_mode_name = StochasticRoundingBehaviour_Name(sr_mode);
+
+    return absl::StrCat(test_name, "_", sr_mode_name);
+  }
+
   void SetUp() override {
     // Some of the tests use sharding as well, so we need 4 devices
     // to make sure we get 2 ipus.
@@ -471,7 +487,17 @@ struct PrngSeedConsistencyTest : PrngSeedTest,
       auto config = GetModuleConfigForTest();
       config.set_replica_count(replication_factor_);
 
-      const auto& hlo_string = GetParam().hlo;
+      const auto& sr_mode = std::get<1>(GetParam());
+      default_sr_method_ = DefaultStochasticRoundingMethod(sr_mode);
+
+      // Apply default_sr_method_ to generate the actual Hlo we want to run.
+      // The intention with this is emulate the behaviour of running TF with
+      // StochasticRounding_On/StochasticRounding_ReplicaIdenticalOnly, where
+      // switching between the two only changes the SR method of non-replica
+      // identical instructions.
+      const auto& hlo_template = std::get<0>(GetParam()).hlo;
+      const auto hlo_string = absl::Substitute(
+          hlo_template, StochasticRoundingMethod_Name(default_sr_method_));
       TF_ASSERT_OK_AND_ASSIGN(module_,
                               ParseAndReturnVerifiedModule(hlo_string, config));
 
@@ -482,7 +508,7 @@ struct PrngSeedConsistencyTest : PrngSeedTest,
       scheduler.Run(module_.get());
 
       IpuOptions::FloatingPointBehaviour floating_point_behaviour;
-      floating_point_behaviour.set_esr(StochasticRounding_On);
+      floating_point_behaviour.set_esr(sr_mode);
 
       resources_ = CompilerResources::CreateTestDefault(
           module_.get(), /*enable_prng_seed_consistency_checks*/ true,
@@ -525,22 +551,14 @@ struct PrngSeedConsistencyTest : PrngSeedTest,
     PoplarXlaFlags::ReloadFlagsForTesting();
   }
 
-  void RunSequence(poplar::Graph& graph, poplar::program::Sequence& seq) {
-    poplar::Engine engine(graph, seq);
-    engine.load(device_);
-
-    const uint32_t differing_seed_vals[] = {1, 2, 3, 4};
-    engine.writeTensor("differing_seed", &differing_seed_vals[0],
-                       &differing_seed_vals[4]);
-
-    engine.run(0);
-  }
-
   std::unique_ptr<CompilerResources> resources_;
   std::unique_ptr<HloModule> module_;
 
   const char* poplar_flag_name = "TF_POPLAR_FLAGS";
   std::string original_poplar_flags_ = "";
+
+  StochasticRoundingMethod default_sr_method_ =
+      StochasticRoundingMethod_Undefined;
 };
 
 // The specific instruction types within the various functions aren't that
@@ -551,7 +569,7 @@ static const HloTestCase simple_repeat = {"simple_repeat", R"(
 HloModule test
 repeat {
   x = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  increment = f32[] constant(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  increment = f32[] constant(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
   ROOT count = f32[] add(x, increment), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
 }
 
@@ -573,7 +591,7 @@ reduce_add {
 resource_update {
   ru_arg0 = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   ru_arg1 = f32[] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  add0 = f32[] add(ru_arg0, ru_arg1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  add0 = f32[] add(ru_arg0, ru_arg1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
   ROOT t = (f32[],f32[]) tuple(add0, ru_arg1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   counter = s32[] constant(4), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   gac = () custom-call(s32[] counter), custom_call_target="GradientAccumulationCount", backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
@@ -581,11 +599,11 @@ resource_update {
 
 loop {
   param0 = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  param1 = f32[] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  param1 = f32[] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
   call_ru = (f32[],f32[]) call(param0, param1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}, \"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   gte0 = f32[] get-tuple-element(call_ru), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   gte1 = f32[] get-tuple-element(call_ru), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  add = f32[] add(gte1, gte0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  add = f32[] add(gte1, gte0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
   reduce = f32[] all-reduce(add), to_apply=reduce_add, replica_groups={}, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
   ROOT root = (f32[], f32[]) tuple(reduce, gte0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
 }
@@ -595,7 +613,7 @@ ENTRY e {
   weights1 = f32[] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   loop_call = (f32[], f32[]) call(weights0, weights1), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"8\"}}, \"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
   loop_count = f32[] get-tuple-element(loop_call), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  ROOT end = f32[] add(loop_count, loop_count), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  ROOT end = f32[] add(loop_count, loop_count), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
 }
 )"};
 static const HloTestCase while_loop = {"while_loop", R"(
@@ -604,7 +622,7 @@ body {
   p_body = (s32[],s32[]) parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   p_body.0 = s32[] get-tuple-element(p_body), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   const = s32[] constant(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  add = s32[] add(p_body.0, const), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  add = s32[] add(p_body.0, const), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
   p_body.1 = s32[] get-tuple-element(p_body), index=1, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   ROOT root = (s32[],s32[]) tuple(add, p_body.1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
 }
@@ -618,10 +636,10 @@ condition {
 ENTRY entry {
   const_0 = s32[] constant(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   const_1 = s32[] constant(10), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  repeat_init = (s32[],s32[]) tuple(const_0, const_1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  repeat_init = (s32[],s32[]) tuple(const_0, const_1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
   while = (s32[],s32[]) while(repeat_init), condition=condition, body=body, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   while_0 = s32[] get-tuple-element(while), index=0, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  ROOT result = s32[] add(while_0, const_1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  ROOT result = s32[] add(while_0, const_1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
 }
 )"};
 static const HloTestCase conditional_statement = {"conditional_statement", R"(
@@ -641,7 +659,7 @@ branchB {
 branchC {
   x = f32[] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   increment = f32[] constant(10), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  ROOT add = f32[] add(x, increment), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  ROOT add = f32[] add(x, increment), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
 }
 
 ENTRY test {
@@ -650,7 +668,7 @@ ENTRY test {
   branchB_param = f32[] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   branchC_param = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   conditional = f32[] conditional(index, branchA_param, branchB_param, branchC_param), branch_computations={branchA, branchB, branchC}, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  ROOT result = f32[] add(branchA_param, conditional), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  ROOT result = f32[] add(branchA_param, conditional), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
 }
 )"};
 static const HloTestCase pipeline_loop = {"pipeline_loop", R"(
@@ -658,7 +676,7 @@ HloModule test
 stage_0_fwd {
   x = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   constant = f32[] constant(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  differing0 = f32[1,4,4,2] rng(constant, constant), distribution=rng_uniform, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  differing0 = f32[1,4,4,2] rng(constant, constant), distribution=rng_uniform, backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
   ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(x, differing0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
 }
 
@@ -771,7 +789,7 @@ stage_0_fwd {
   in0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   in1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   in2 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  out0 = f32[1,4,4,2] add(in0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  out0 = f32[1,4,4,2] add(in0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
   out1 = f32[1,4,4,2] add(out0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
   ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(out0, out1, in2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
 }
@@ -780,8 +798,8 @@ stage_0_fwd_recomp {
   in0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   in1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   in2 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  out0 = f32[1,4,4,2] add(in0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
-  out1 = f32[1,4,4,2] add(out0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  out0 = f32[1,4,4,2] add(in0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
+  out1 = f32[1,4,4,2] add(out0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
   ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(out0, out1, in2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
 }
 
@@ -861,7 +879,7 @@ stage_0_fwd {
   in0 = f32[1,4,4,2] parameter(0), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   in1 = f32[1,4,4,2] parameter(1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
   in2 = f32[] parameter(2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
-  out0 = f32[1,4,4,2] add(in0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_DifferingSeeds\"}"
+  out0 = f32[1,4,4,2] add(in0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"$0\"}"
   out1 = f32[1,4,4,2] add(out0, in1), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_IdenticalSeeds\"}"
   ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(out0, out1, in2), backend_config="{\"stochastic_rounding\":\"THREESTATE_ON\", \"stochastic_rounding_method\":\"StochasticRoundingMethod_Any\"}"
 }
@@ -952,35 +970,45 @@ TEST_P(PrngSeedConsistencyTest, Check) {
   // semantics of the StochasticRoundingMethod of the corresponding Hlo
   // instruction. So if the instruction is setup with
   // StochasticRoundingMethod_IdenticalSeeds but the seeds are differing across
-  // replicas then the test will fail.
-  poplar::program::Sequence seq;
+  // replicas then the test will fail. These checks also assert that
+  // stochastic rounding is disabled when StochasticRoundingMethod_None is used
+  // and enabled otherwise.
+  poplar::program::Sequence& seq = resources_->preamble_sequence;
+
+  poplar::setStochasticRounding(graph, seq, true);
 
   resources_->enable_experimental_prng_stability = true;
   resources_->prng_seed_state =
       PrngSeedState::SetupSeeds(graph, identical_seed_, differing_seed_, seq);
 
-  auto entry = module_->entry_computation();
-  auto order = module_->schedule().sequence(entry).instructions();
-  EntryVisitor visitor(*resources_, entry);
-  TF_ASSERT_OK(entry->AcceptOrdered(&visitor, order));
+  resources_->prng_seed_state.ChangeStochasticRoundingMethod(default_sr_method_,
+                                                             seq);
 
-  seq.add(resources_->preamble_sequence);
-  seq.add(visitor.GetSequenceAndInitializeCounters());
+  TF_ASSERT_OK_AND_ASSIGN(poplar::Engine engine,
+                          Compile(*resources_, module_.get()));
+  engine.load(device_);
+
+  const uint32_t differing_seed_vals[] = {1, 2, 3, 4};
+  engine.writeTensor("differing_seed", &differing_seed_vals[0],
+                     &differing_seed_vals[4]);
 
   // Failed consistency checks will cause poplar execution to stop and an
   // exception to be thrown.
-  ASSERT_NO_THROW(RunSequence(graph, seq));
+  ASSERT_NO_THROW(engine.run(0));
 }
 
-INSTANTIATE_TEST_SUITE_P(PrngSeedHlo, PrngSeedConsistencyTest,
-                         ::testing::Values(simple_repeat,
-                                           repeat_with_resource_update,
-                                           while_loop, pipeline_loop,
-                                           pipeline_with_resource_update,
-                                           pipeline_with_reuse_recomputation,
-                                           pipeline_with_revisit_recomputation,
-                                           conditional_statement),
-                         HloTestCaseName);
+INSTANTIATE_TEST_SUITE_P(
+    PrngSeedHlo, PrngSeedConsistencyTest,
+    ::testing::Combine(
+        ::testing::Values(simple_repeat, repeat_with_resource_update,
+                          while_loop, pipeline_loop,
+                          pipeline_with_resource_update,
+                          pipeline_with_reuse_recomputation,
+                          pipeline_with_revisit_recomputation,
+                          conditional_statement),
+        ::testing::Values(StochasticRounding_On,
+                          StochasticRounding_ReplicaIdenticalOnly)),
+    PrngSeedConsistencyTest::TestName);
 
 INSTANTIATE_TEST_SUITE_P(
     StochasticRoundingMethods, PrngSeedSRModeTest,
