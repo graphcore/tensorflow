@@ -2242,6 +2242,21 @@ class PadToBoundingBoxTest(test_util.TensorFlowTestCase,
       y = image_ops.pad_to_bounding_box(image, 0, 0, 55, 66)
       self.assertTrue(y.op.name.startswith("pad_to_bounding_box"))
 
+  def testInvalidInput(self):
+    # Test case for GitHub issue 46890.
+    if test_util.is_xla_enabled():
+      # TODO(b/200850176): test fails with XLA.
+      return
+    with self.session():
+      with self.assertRaises(errors.InternalError):
+        v = image_ops.pad_to_bounding_box(
+            image=np.ones((1, 1, 1)),
+            target_height=5191549470,
+            target_width=5191549470,
+            offset_height=1,
+            offset_width=1)
+        self.evaluate(v)
+
 
 class SelectDistortedCropBoxTest(test_util.TensorFlowTestCase):
 
@@ -3148,6 +3163,14 @@ class ResizeImagesV2Test(test_util.TensorFlowTestCase, parameterized.TestCase):
     x = np.random.uniform(size=x_shape)
 
     self._assertResizeCheckShape(x, x_shape, [320, 320], [320, 320, 3])
+
+  def testLargeDim(self):
+    with self.session():
+      with self.assertRaises(errors.InternalError):
+        x = np.ones((5, 1, 1, 2))
+        v = image_ops.resize_images_v2(x, [1610637938, 1610637938],
+                                       image_ops.ResizeMethod.BILINEAR)
+        _ = self.evaluate(v)
 
 
 class ResizeImagesTest(test_util.TensorFlowTestCase,
@@ -5767,6 +5790,16 @@ class DecodeImageTest(test_util.TensorFlowTestCase, parameterized.TestCase):
             boxes=[[1.0e+40, 0, 0, 0]],
             box_indices=[1],
             crop_size=[1, 1])
+        self.evaluate(op)
+
+  def DISABLED_testImageCropAndResizeWithInvalidInput(self):
+    with self.session():
+      with self.assertRaises((errors.InternalError, ValueError)):
+        op = image_ops_impl.crop_and_resize_v2(
+            image=np.ones((1, 1, 1, 1)),
+            boxes=np.ones((11, 4)),
+            box_indices=np.ones((11)),
+            crop_size=[2065374891, 1145309325])
         self.evaluate(op)
 
   @parameterized.named_parameters(
