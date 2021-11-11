@@ -396,7 +396,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       # Large memory spikes are generated when the input for a MultiUpdateAdd
       # is not mapped in the scheme expected by poplibs.
       report = pva.openReport(report_helper.find_report())
-      self.assert_max_tile_memory(report, 2472, tolerance=0.1)
+      self.assert_max_tile_memory(report, 3212, tolerance=0.1)
 
   @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
