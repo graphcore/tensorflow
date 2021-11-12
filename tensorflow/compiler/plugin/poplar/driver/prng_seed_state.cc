@@ -74,6 +74,9 @@ std::unique_ptr<poputil::graphfn::VoidFunction> CreateSetSRModeFn(
   poprand::setSeed(graph, seed, 0, seq, {debug_info, "set"});
   auto differing_hw_seed = poplar::getHwSeeds(graph, seq, {debug_info, "get"});
 
+  // StochasticRoundingMethod_DifferingSeeds implies SR is on.
+  poplar::setStochasticRounding(graph, seq, /*behaviour*/ true);
+
   // We want the behaviour to be consistent whether we're running
   // with single or multiple seeds, so even when there's no replication
   // we pretend that there's a separate identical seed and do everything
@@ -96,7 +99,10 @@ std::unique_ptr<poputil::graphfn::VoidFunction> CreateSetSRModeFn(
   auto differing_hw_seed =
       poplar::getHwSeeds(graph, seq, {debug_info, "getDistinctHw"});
 
-  // Speciifying DifferingSeeds since the last seed set was the differing one.
+  // StochasticRoundingMethod_DifferingSeeds implies SR is on.
+  poplar::setStochasticRounding(graph, seq, /*behaviour*/ true);
+
+  // Specifying DifferingSeeds since the last seed set was the differing one.
   return PrngSeedState(graph, StochasticRoundingMethod_DifferingSeeds,
                        identical_hw_seed, differing_hw_seed);
 }

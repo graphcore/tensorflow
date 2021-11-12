@@ -103,8 +103,6 @@ struct PrngSeedStateTest : PrngSeedTest {
       output_ = graph_->addVariable(poplar::FLOAT, {5},
                                     poplar::VariableMappingMethod::LINEAR);
       graph_->createHostRead("outstream", output_);
-
-      poplar::setStochasticRounding(*graph_, seq_, true);
     }
   }
 
@@ -414,7 +412,6 @@ TEST_F(PrngSeedStateShardedTest, TaskParallelism) {
   // where the seed changes can happen at the same time on different IPUs.
   poplar::program::Sequence seq;
 
-  poplar::setStochasticRounding(*graph_, seq, true);
   auto prng_state =
       PrngSeedState::SetupSeeds(*graph_, identical_seed_, differing_seed_, seq);
 

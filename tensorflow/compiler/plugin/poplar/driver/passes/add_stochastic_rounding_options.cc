@@ -40,11 +40,18 @@ Shape CollectInputAndOutputShapes(const HloInstruction* inst) {
 }
 
 StatusOr<bool> NeedsSpecificSeedType(const HloInstruction* inst) {
-  // Custom poplar instructions which don't need a specific seed.
+  // Custom poplar instructions which don't need a specific seed since
+  // they don't do any compute.
   const std::vector<PoplarOp> non_compute_poplar_ops = {
-      PoplarOp::Assert,      PoplarOp::ExecutionCounter, PoplarOp::CopyInto,
-      PoplarOp::Fifo,        PoplarOp::InterTilesetCopy, PoplarOp::IpuInterCopy,
-      PoplarOp::StatefulNoop};
+      PoplarOp::Assert,
+      PoplarOp::ExecutionCounter,
+      PoplarOp::CopyInto,
+      PoplarOp::Fifo,
+      PoplarOp::InterTilesetCopy,
+      PoplarOp::IpuInterCopy,
+      PoplarOp::StatefulNoop,
+      PoplarOp::GradientAccumulatorCreate,
+      PoplarOp::GradientAccumulatorSink};
   const bool skippable = absl::c_any_of(
       non_compute_poplar_ops,
       [&](PoplarOp op) { return IsPoplarInstruction(op, inst); });

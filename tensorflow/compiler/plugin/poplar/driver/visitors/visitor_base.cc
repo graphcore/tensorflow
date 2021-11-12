@@ -89,7 +89,6 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
                                   {debug_name_and_id, "Preprocess"});
     TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
     resources_.stochastic_rounding_enabled = new_stochastic_rounding_enabled;
-    resources_.stochastic_rounding_used |= new_stochastic_rounding_enabled;
 
     VLOG(3) << "Changing stochastic rounding mode to "
             << ThreeState_Name(stochastic_rounding) << " for inst '"

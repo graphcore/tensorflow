@@ -388,6 +388,10 @@ bool MaybeChangeStochasticRoundingMethod(CompilerResources& res,
                                         inst_name);
       }
     }
+
+    res.stochastic_rounding_used |=
+        method == StochasticRoundingMethod_DifferingSeeds ||
+        method == StochasticRoundingMethod_IdenticalSeeds;
   }
 
   return seq_changed;

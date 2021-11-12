@@ -14,6 +14,8 @@
 # =============================================================================
 import numpy as np
 
+from absl.testing import parameterized
+
 from tensorflow import keras
 from tensorflow.keras.utils import to_categorical
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
@@ -123,14 +125,20 @@ ipu_count = 4
 def create_test_config():
   cfg = ipu.config.IPUConfig()
   cfg.auto_select_ipus = ipu_count
-  cfg.floating_point_behaviour.esr = True
-  cfg.experimental.enable_prng_stability = True
   tu.add_hw_ci_connection_options(cfg)
   return cfg
 
 
+def stochastic_rounding_modes():
+  test_modes = (ipu.config.StochasticRoundingBehaviour.ON,
+                ipu.config.StochasticRoundingBehaviour.REPLICA_IDENTICAL_ONLY)
+  return tuple(
+      ("_StochasticRounding_" + mode.name, mode) for mode in test_modes)
+
+
 # This test is intended to verify that we get the same weight values produced on each replica
 # when running simple models with the experimental.enable_prng_stability flag enabled.
+@parameterized.named_parameters(*stochastic_rounding_modes())
 @test_util.deprecated_graph_mode_only
 class PrngStabilityModelsTest(test_util.TensorFlowTestCase):
   @staticmethod
@@ -154,11 +162,13 @@ class PrngStabilityModelsTest(test_util.TensorFlowTestCase):
     dataset = dataset.repeat()
     return dataset
 
-  def setUp(self):
+  def setUpTest(self, stochastic_rounding_mode):
     # Reset to avoid global variables being used across tests.
     ops.reset_default_graph()
 
     cfg = create_test_config()
+    cfg.floating_point_behaviour.esr = stochastic_rounding_mode
+    cfg.experimental.enable_prng_stability = True
     cfg.configure_ipu_system()
 
     self.outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
@@ -172,7 +182,8 @@ class PrngStabilityModelsTest(test_util.TensorFlowTestCase):
       assert_all_weights_replica_identical(self, var, expected_replicas)
 
   @tu.test_uses_ipus(num_ipus=ipu_count)
-  def testSimpleLinearModel(self):
+  def testSimpleLinearModel(self, stochastic_rounding_mode):
+    self.setUpTest(stochastic_rounding_mode)
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
 
@@ -211,7 +222,9 @@ class PrngStabilityModelsTest(test_util.TensorFlowTestCase):
       self.assertAllWeightsReplicaIdentical(out_queue)
 
   @tu.test_uses_ipus(num_ipus=ipu_count)
-  def testSimpleDataDependency(self):
+  def testSimpleDataDependency(self, stochastic_rounding_mode):
+    self.setUpTest(stochastic_rounding_mode)
+
     with ipu.scopes.ipu_scope("/device:IPU:0"):
 
       def training_loop():
@@ -254,7 +267,9 @@ class PrngStabilityModelsTest(test_util.TensorFlowTestCase):
       self.assertAllWeightsReplicaIdentical(out_queue)
 
   @tu.test_uses_ipus(num_ipus=ipu_count)
-  def testFCModel(self):
+  def testFCModel(self, stochastic_rounding_mode):
+    self.setUpTest(stochastic_rounding_mode)
+
     dataset = self.make_mnist_dataset()
     infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
@@ -295,7 +310,9 @@ class PrngStabilityModelsTest(test_util.TensorFlowTestCase):
       self.assertAllWeightsReplicaIdentical(out_queue)
 
   @tu.test_uses_ipus(num_ipus=ipu_count)
-  def testPipelinedFCModel(self):
+  def testPipelinedFCModel(self, stochastic_rounding_mode):
+    self.setUpTest(stochastic_rounding_mode)
+
     dataset = self.make_mnist_dataset()
     infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
     loss_out = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
@@ -347,6 +364,7 @@ class PrngStabilityModelsTest(test_util.TensorFlowTestCase):
 
 
 # These tests are for TF2 only.
+@parameterized.named_parameters(*stochastic_rounding_modes())
 class PrngStabilityModelsKerasTest(test_util.TensorFlowTestCase):
   @staticmethod
   def make_mnist_dataset(y_as_categorical=False):
@@ -375,8 +393,10 @@ class PrngStabilityModelsKerasTest(test_util.TensorFlowTestCase):
     dataset = dataset.map(lambda x, y: (x, math_ops.cast(y, np.int32)))
     return dataset.batch(minibatch_size, drop_remainder=True)
 
-  def setUp(self):
+  def setUpTest(self, stochastic_rounding_mode):
     cfg = create_test_config()
+    cfg.floating_point_behaviour.esr = stochastic_rounding_mode
+    cfg.experimental.enable_prng_stability = True
     cfg.configure_ipu_system()
 
     keras.backend.set_floatx('float16')
@@ -396,8 +416,10 @@ class PrngStabilityModelsKerasTest(test_util.TensorFlowTestCase):
 
   @tu.test_uses_ipus(num_ipus=ipu_count)
   @test_util.run_v2_only
-  def testLinearRegression(self):
+  def testLinearRegression(self, stochastic_rounding_mode):
     from tensorflow.keras.layers.experimental import preprocessing
+
+    self.setUpTest(stochastic_rounding_mode)
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
@@ -424,7 +446,9 @@ class PrngStabilityModelsKerasTest(test_util.TensorFlowTestCase):
 
   @tu.test_uses_ipus(num_ipus=ipu_count)
   @test_util.run_v2_only
-  def testImdbRnn(self):
+  def testImdbRnn(self, stochastic_rounding_mode):
+    self.setUpTest(stochastic_rounding_mode)
+
     max_features = 10000
     minibatch_size = 32
 
@@ -454,7 +478,9 @@ class PrngStabilityModelsKerasTest(test_util.TensorFlowTestCase):
 
   @tu.test_uses_ipus(num_ipus=ipu_count)
   @test_util.run_v2_only
-  def testImdb(self):
+  def testImdb(self, stochastic_rounding_mode):
+    self.setUpTest(stochastic_rounding_mode)
+
     max_features = 20000
     minibatch_size = 32
     gradient_accumulation_steps_per_replica = 16
@@ -492,7 +518,9 @@ class PrngStabilityModelsKerasTest(test_util.TensorFlowTestCase):
 
   @tu.test_uses_ipus(num_ipus=ipu_count)
   @test_util.run_v2_only
-  def testMnistCnn(self):
+  def testMnistCnn(self, stochastic_rounding_mode):
+    self.setUpTest(stochastic_rounding_mode)
+
     def create_model():
       return keras.Sequential([
           keras.layers.Conv2D(64,
@@ -516,11 +544,13 @@ class PrngStabilityModelsKerasTest(test_util.TensorFlowTestCase):
                     steps_per_execution=steps_per_epoch)
       model.fit(dataset, epochs=3, steps_per_epoch=steps_per_epoch)
 
-      self.assertAllWeightsReplicaIdentical(expected_replicas=4)
+      self.assertAllWeightsReplicaIdentical(expected_replicas=ipu_count)
 
   @test_util.run_v2_only
   @tu.test_uses_ipus(num_ipus=ipu_count)
-  def testMnist(self):
+  def testMnist(self, stochastic_rounding_mode):
+    self.setUpTest(stochastic_rounding_mode)
+
     def create_model():
       return keras.Sequential([
           keras.layers.Flatten(),

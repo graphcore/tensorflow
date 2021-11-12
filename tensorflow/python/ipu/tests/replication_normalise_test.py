@@ -54,6 +54,7 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
+        'setStochasticRounding',
         '__seed',
         'IpuReplicationNormalise/replication-normalise*/replication_normalise/Op/Mul',
     ]
@@ -86,6 +87,7 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
+        'setStochasticRounding',
         '__seed*',
         'IpuReplicationNormalise/replication-normalise*/replication_normalise/Op/Mul',
         'add/add*/Add',
