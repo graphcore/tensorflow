@@ -1,6 +1,7 @@
 syntax = "proto2";
 
 enum PoplarOp {
+  Unknown = -1;
   AvgPool = 0;
   AvgPoolGrad = 1;
   GroupNormGrad = 2;

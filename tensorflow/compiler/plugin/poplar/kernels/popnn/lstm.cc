@@ -50,6 +50,9 @@ static PoplarOp get_lstm_type(LstmType lstm_type, bool is_fwd) {
       return is_fwd ? PoplarOp::DynamicLstmLayerFwd
                     : PoplarOp::DynamicLstmLayerBwd;
   }
+
+  LOG(FATAL) << "Got unexpected LstmType: " << lstm_type;
+  return PoplarOp::Unknown;
 }
 
 template <LstmType lstm_type>

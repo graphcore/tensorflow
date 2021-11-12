@@ -51,6 +51,9 @@ static PoplarOp get_gru_type(GruType gru_type, bool is_fwd) {
     case GruType::AUGRU:
       return is_fwd ? PoplarOp::AUGRULayerFwd : PoplarOp::AUGRULayerBwd;
   }
+
+  LOG(FATAL) << "Got unexpected GruType: " << static_cast<int>(gru_type);
+  return PoplarOp::Unknown;
 }
 
 /*
