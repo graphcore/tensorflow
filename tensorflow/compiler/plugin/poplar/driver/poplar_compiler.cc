@@ -585,8 +585,11 @@ StatusOr<poplar::program::Program> InitializeSeed(
     resources.prng_seed_state = PrngSeedState::SetupSeed(graph, seed, seq);
   }
 
-  resources.prng_seed_state.ChangeStochasticRoundingMethod(
-      StochasticRoundingMethod_DifferingSeeds, seq);
+  // Use the approriate SR method for the SR mode we have enabled.
+  const auto default_sr_method = DefaultStochasticRoundingMethod(
+      resources.global_floating_point_behaviour.esr());
+  resources.prng_seed_state.ChangeStochasticRoundingMethod(default_sr_method,
+                                                           seq);
 
   return seq;
 }
@@ -1726,6 +1729,14 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     TF_RETURN_IF_ERROR(CreatePoplarGraphs(resources, module, poplar_executor));
     auto& main_graph = GetMasterGraph(resources);
 
+    poplar::program::Sequence fp_setup;
+    // Set up the floating point control register if required. Do this before
+    // seed setup so we don't overwrite any FP settings it changes.
+    if (poplar_executor->FloatingPointBehaviourFlagsSet()) {
+      const auto& fp_control = poplar_executor->FloatingPointBehaviour();
+      setFpBehaviour(main_graph, fp_control, fp_setup);
+    }
+
     // Set up the random seed.
     TF_ASSIGN_OR_RETURN(
         auto seed_setup,
@@ -1783,13 +1794,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       main_program.add(poplar::program::Sync(poplar::SyncType::GLOBAL));
     }
 
+    main_program.add(fp_setup);
     main_program.add(seed_setup);
-
-    // Set up the floating point control register if required
-    if (poplar_executor->FloatingPointBehaviourFlagsSet()) {
-      const auto& fp_control = poplar_executor->FloatingPointBehaviour();
-      setFpBehaviour(main_graph, fp_control, main_program);
-    }
 
     // Add the preamble sequence.
     main_program.add(resources.preamble_sequence);
