@@ -200,6 +200,8 @@ poplar::Tensor TensorMap::FindTensorByName(const std::string& name,
       return it.second.tensor;
     }
   }
+
+  return poplar::Tensor();
 }
 
 TensorOrRemoteBufferVectors CastTensorVectors(
