@@ -128,10 +128,10 @@ class PopDistExtendedV1(IPUMultiWorkerExtendedV1):
     if reduce_op not in (reduce_util.ReduceOp.SUM, reduce_util.ReduceOp.MEAN):
       raise ValueError("Unsupported reduce op: {}".format(reduce_op))
 
-    result = cross_replica_ops.cross_replica_sum(value)
-
     if reduce_op == reduce_util.ReduceOp.MEAN:
-      result = gen_poputil_ops.ipu_replication_normalise(result)
+      result = cross_replica_ops.cross_replica_mean(value)
+    else:
+      result = cross_replica_ops.cross_replica_sum(value)
 
     return result
 

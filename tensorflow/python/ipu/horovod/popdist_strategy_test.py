@@ -74,11 +74,6 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
         # @tf.function decorator does not specify this anymore.
         y_all_reduced = replica_context.all_reduce(ReduceOp.SUM, y)
 
-        # Sanity check that replication normalise does not support int.
-        with self.assertRaisesRegex(TypeError,
-                                    "int32 not in list of allowed values"):
-          replica_context.all_reduce(ReduceOp.MEAN, 1)
-
         return y_all_reduced
 
       per_replica_value = strategy.run(per_replica_fn,
