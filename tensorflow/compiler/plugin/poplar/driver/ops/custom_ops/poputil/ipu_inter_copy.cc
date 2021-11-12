@@ -65,10 +65,15 @@ StatusOr<bool> SrcAndDstGraphsCompatible(CompilerResources& res,
 
   const int64 src_shard = GetShardForOutputIndex(src, 0);
 
-  // multi-device sharding is not compatible with any other sharding.
-  if ((src_shard == Devices::All && dst_shard != Devices::All) ||
-      (dst_shard == Devices::All && src_shard != Devices::All)) {
+  // multi-device sharding source is not compatible with any other sharding.
+  if (src_shard == Devices::All && dst_shard != Devices::All) {
     return false;
+  }
+
+  // The multi-device compute shard is a compatible destination for all other
+  // sharding.
+  if (dst_shard == Devices::All && src_tileset == TILESET_COMPUTE_TILES) {
+    return true;
   }
 
   if (src_tileset == TILESET_COMPUTE_TILES) {
@@ -128,18 +133,26 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
     return TensorCopyInfo{input, input.flatten(), output, output.flatten()};
   }
 
-  CHECK_GE(dst_shard, 0);
-  CHECK_LT(dst_shard, res.shard_to_ipu_id.size());
-  const unsigned dst_device_id = res.shard_to_ipu_id[dst_shard];
+  CHECK_GE(dst_shard, static_cast<int64>(Devices::All));
+  CHECK_LT(dst_shard, static_cast<int64>(res.shard_to_ipu_id.size()));
 
   // No tensor target and src and dst graphs have equivalent tiles available so
   // reuse the src tensor preserving aliasing.
   poplar::Graph& master_graph = GetMasterGraph(res);
 
-  poplar::Tensor output = poputil::cloneToIpu(
-      master_graph, input, dst_device_id,
-      {debug_name_and_id, std::to_string(output_flat_tuple_index)},
-      poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+  poplar::Tensor output;
+  // When the destination is all the compute tiles, we can directly clone it.
+  if (dst_shard == Devices::All) {
+    output = master_graph.clone(
+        input, {debug_name_and_id, std::to_string(output_flat_tuple_index)},
+        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+  } else {
+    const unsigned dst_device_id = res.shard_to_ipu_id[dst_shard];
+    output = poputil::cloneToIpu(
+        master_graph, input, dst_device_id,
+        {debug_name_and_id, std::to_string(output_flat_tuple_index)},
+        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+  }
 
   poplar::Tensor input_dealised = input.flatten();
   poplar::Tensor output_dealised = output.flatten();
