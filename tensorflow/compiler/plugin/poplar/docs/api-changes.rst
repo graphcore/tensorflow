@@ -132,7 +132,8 @@ ____________________
     deprecated and will not be supported in a future release.
     :py:class:`~tensorflow.python.ipu.config.StochasticRoundingBehaviour` should
     be used instead.
-  - 'IPUMultiReplicaStrategy' has been renamed to 'PopDistStrategy'. Using 'IPUMultiReplicaStrategy'
+  - 'ipu_multi_replica_strategy.IPUMultiReplicaStrategy' has been renamed to
+    'popdist_strategy.PopDistStrategy'. Using 'ipu_multi_replica_strategy.IPUMultiReplicaStrategy'
     will trigger a deprecation warning.
   - 'IPUMultiWorkerStrategy' is in the process of being deprecated. Using 'IPUMultiWorkerStrategy'
     will trigger a deprecation warning.

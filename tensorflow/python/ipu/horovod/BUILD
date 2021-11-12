@@ -84,6 +84,7 @@ py_library(
         "__init__.py",
         "basics.py",
         "ipu_horovod_strategy.py",
+        "ipu_multi_replica_strategy.py",
         "popdist_strategy.py",
     ],
     data = [
