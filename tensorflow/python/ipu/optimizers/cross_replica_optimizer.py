@@ -28,8 +28,7 @@ def apply_cross_replica_op_single(grad, var):
   if grad is None:
     return (grad, var)
   with ops.colocate_with(grad):
-    return (gen_poputil_ops.ipu_replication_normalise(
-        cross_replica_ops.cross_replica_sum(grad)), var)
+    return (cross_replica_ops.cross_replica_mean(grad), var)
 
 
 def apply_cross_replica_op(grads_and_vars):
