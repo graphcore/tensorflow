@@ -891,10 +891,10 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   }
 
   std::stringstream codelets_cpp_src{
-#include "tensorflow/compiler/plugin/poplar/tf.cppembed"
+#include "tensorflow/compiler/plugin/poplar/vertices/tf.cppembed"
   };
   std::stringstream codelets_asm_src{
-#include "tensorflow/compiler/plugin/poplar/tf.Sembed"
+#include "tensorflow/compiler/plugin/poplar/vertices/tf.Sembed"
   };
 
   std::stringstream compile_output;

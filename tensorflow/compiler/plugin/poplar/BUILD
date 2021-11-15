@@ -9,35 +9,11 @@ load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test", "i
 load("//tensorflow:tensorflow.bzl", "py_binary", "tf_cc_binary", "tf_cc_test", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
 load("//tensorflow/core/platform:build_config.bzl", "tf_proto_library")
 
-# Rule for generating internal cpp codelets
-genrule(
-    name = "convert_tf_cpp_graph_sources_to_literal",
-    srcs = ["vertices/tf.cpp"],
-    outs = ["tf.cppembed"],
-    cmd = """
-        echo 'R"(' > $@
-        cat $(SRCS) >> $@
-        echo ')"'>> $@
-        """,
-)
-
-# Rule for generating internal assembly codelets
-genrule(
-    name = "convert_tf_asm_graph_sources_to_literal",
-    srcs = ["vertices/tf.S"],
-    outs = ["tf.Sembed"],
-    cmd = """
-        echo 'R"(' > $@
-        cat $(SRCS) >> $@
-        echo ')"'>> $@
-        """,
-)
-
 cc_library(
     name = "tf_graph_sources",
     hdrs = [
-        ":convert_tf_asm_graph_sources_to_literal",
-        ":convert_tf_cpp_graph_sources_to_literal",
+        "//tensorflow/compiler/plugin/poplar/vertices:convert_tf_asm_graph_sources_to_literal",
+        "//tensorflow/compiler/plugin/poplar/vertices:convert_tf_cpp_graph_sources_to_literal",
     ],
 )
 
