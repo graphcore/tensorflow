@@ -167,8 +167,6 @@ cc_library(
 cc_library(
     name = "optimizers",
     srcs = [
-        "driver/invariant_passes/no_control_deps_checker.cc",
-        "driver/invariant_passes/resource_update_checker.cc",
         "driver/passes/add_stochastic_rounding_options.cc",
         "driver/passes/all_reduce_simplifier.cc",
         "driver/passes/all_to_all_finder.cc",
@@ -375,8 +373,6 @@ cc_library(
     hdrs = [
         "driver/compiler_annotations.h",
         "driver/compiler_information.h",
-        "driver/invariant_passes/no_control_deps_checker.h",
-        "driver/invariant_passes/resource_update_checker.h",
         "driver/passes/add_block_recompute.h",
         "driver/passes/add_stochastic_rounding_options.h",
         "driver/passes/all_reduce_simplifier.h",
@@ -591,6 +587,8 @@ cc_library(
         ":option_flag_cc_impl",
         ":pipeline_config_cc_impl",
         ":threestate_cc_impl",
+        "//tensorflow/compiler/plugin/poplar/driver/invariant_passes:no_control_deps_checker",
+        "//tensorflow/compiler/plugin/poplar/driver/invariant_passes:resource_update_checker",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/compiler/xla/service:call_inliner",
@@ -610,6 +608,18 @@ cc_library(
         "@com_google_protobuf//:protobuf_headers",
     ],
     alwayslink = True,
+)
+
+# This is temporary and will be removed after refactor is done.
+cc_library(
+    name = "tools_headers",
+    srcs = [],
+    hdrs = [
+        "driver/tools/flags.h",
+        "driver/tools/util.h",
+    ],
+    visibility = ["//tensorflow/compiler/plugin/poplar:__subpackages__"],
+    deps = [],
 )
 
 cc_library(
