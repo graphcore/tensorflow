@@ -14,35 +14,11 @@ load(
 )
 load("//tensorflow/compiler/xla:xla.bzl", "xla_proto_library")
 
-# Rule for generating internal cpp codelets
-genrule(
-    name = "convert_tf_cpp_graph_sources_to_literal",
-    srcs = ["vertices/tf.cpp"],
-    outs = ["tf.cppembed"],
-    cmd = """
-        echo 'R"(' > $@
-        cat $(SRCS) >> $@
-        echo ')"'>> $@
-        """,
-)
-
-# Rule for generating internal assembly codelets
-genrule(
-    name = "convert_tf_asm_graph_sources_to_literal",
-    srcs = ["vertices/tf.S"],
-    outs = ["tf.Sembed"],
-    cmd = """
-        echo 'R"(' > $@
-        cat $(SRCS) >> $@
-        echo ')"'>> $@
-        """,
-)
-
 cc_library(
     name = "tf_graph_sources",
     hdrs = [
-        ":convert_tf_asm_graph_sources_to_literal",
-        ":convert_tf_cpp_graph_sources_to_literal",
+        "//tensorflow/compiler/plugin/poplar/vertices:convert_tf_asm_graph_sources_to_literal",
+        "//tensorflow/compiler/plugin/poplar/vertices:convert_tf_cpp_graph_sources_to_literal",
     ],
 )
 
