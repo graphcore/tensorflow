@@ -180,30 +180,14 @@ operation.
 
 The computational stages can be interleaved on the devices in three different
 ways as described by the ``pipeline_schedule`` parameter.  By default the API
-will use the ``PipelineSchedule.Grouped`` mode, where the forward passes are
+will use the ``PipelineSchedule.Grouped`` mode (:numref:`fig-pipeline-grouped`), where the forward passes are
 grouped together, and the backward passes are grouped together.  The main
-alternative is the ``PipelineSchedule.Interleaved`` mode, where the forward and
-backward passes are interleaved, so that fewer activations need to be stored.
-Additionally, the ``PipelineSchedule.Sequential`` mode,
+alternative is the ``PipelineSchedule.Interleaved`` mode (:numref:`fig-pipeline-interleaved`), where the forward and
+backward passes are interleaved, so that fewer activations need to be stored. Additionally, the ``PipelineSchedule.Sequential`` mode (:numref:`fig-pipeline-sequential`),
 where the pipeline is scheduled in the same way as if it were a sharded model,
 may be useful when debugging your model.
 
-
-Sequential scheduling
-_____________________
-
-.. figure:: figures/sharded_pipeline.png
-    :width: 95%
-    :alt: Sequential pipeline schedule illustration
-    :align: center
-
-Interleaved scheduling
-______________________
-
-.. figure:: figures/interleaved_pipeline.png
-    :width: 95%
-    :alt: Interleaved pipeline schedule illustration
-    :align: center
+For more information on pipelining, refer to the technical note on `Model parallelism with TensorFlow: sharding and pipelining <https://docs.graphcore.ai/projects/tf-model-parallelism/>`_.
 
 Grouped scheduling
 __________________
@@ -212,6 +196,31 @@ __________________
     :width: 95%
     :alt: Grouped pipeline schedule illustration
     :align: center
+    :name: fig-pipeline-grouped
+
+    Grouped scheduling
+
+Interleaved scheduling
+______________________
+
+.. figure:: figures/interleaved_pipeline.png
+    :width: 95%
+    :alt: Interleaved pipeline schedule illustration
+    :align: center
+    :name: fig-pipeline-interleaved
+
+    Interleaved scheduling
+
+Sequential scheduling
+_____________________
+
+.. figure:: figures/sequential_pipeline.png
+    :width: 95%
+    :alt: Sequential pipeline schedule illustration
+    :align: center
+    :name: fig-pipeline-sequential
+
+    Sequential scheduling
 
 Pipeline stage inputs and outputs
 _________________________________
