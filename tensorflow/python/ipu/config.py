@@ -1587,6 +1587,11 @@ class _NormsExperimentalConfig(_ConfigBase):
     all-reduced every time the layer is executed (including any recomputation)
     across the replicas within a group. This option should not be used when
     using model parallelism (pipelining) and it is not supported with I/O tiles.
+    When recomputation is enabled and the training fused batch norm operation is
+    recomputed, the statistics will have to be all-reduced again, unless the
+    :py:attr:`~tensorflow.python.ipu.ops.pipelining_ops
+    .RecomputationMode.RecomputeAndBackpropagateInterleaved`
+    recomputation mode is used.
     """
     self.distributed_batch_norm_replica_group_size = 1
 
@@ -1875,8 +1880,8 @@ class IPUConfig(_ConfigBase):
       # IPUs in the second device.
       config.auto_select_ipus = [1, 2]
     """
-    self.auto_select_ipus: typing.Union[int, typing.List[int],
-                                        typing.Tuple[int, ...]] = []
+    self.auto_select_ipus: typing.Union[int, typing.List[int], typing.
+                                        Tuple[int, ...]] = []
     """
     Configure the IPUs to be used by the session.
 
@@ -2018,8 +2023,8 @@ class IPUConfig(_ConfigBase):
         # 0000:1a:00.0, 0000:1b:00.0, 0000:23:00.0, 0000:24:00.0.
         config.select_ipus = [0, 1, 2, 3]
     """
-    self.select_ipus: typing.Union[int, typing.List[int],
-                                   typing.Tuple[int, ...]] = []
+    self.select_ipus: typing.Union[int, typing.List[int], typing.
+                                   Tuple[int, ...]] = []
     """
     Sub-category containing configuration options that affect convolutions.
     """
