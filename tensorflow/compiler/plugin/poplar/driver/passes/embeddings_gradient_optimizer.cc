@@ -278,11 +278,9 @@ HloComputation* ReplaceResourceUpdateFunction(
   auto zero_broadcast =
       HloInstruction::CreateBroadcast(old_sink_shape, const_0.get(), {});
 
-  auto accum_update =
-      CreateMultiUpdateAdd(old_sink_shape,
-                           {zero_broadcast.get(), new_indices_reshape.get(),
-                            new_grads_arg.get(), const_1.get()},
-                           multi_update_add->GetSerializationFactor());
+  auto accum_update = CreateMultiUpdateAdd(
+      old_sink_shape, {zero_broadcast.get(), new_indices_reshape.get(),
+                       new_grads_arg.get(), const_1.get()});
 
   for (auto old_sink_user : old_sink_arg->users()) {
     VLOG(2) << "Old GradientAccumulatorSink user: "
@@ -376,19 +374,16 @@ StatusOr<HloComputation*> ReplaceAccumulatorCaller(
       plan.accum_grads_shape,
       {pipeline_stage_accum_grads_param ? pipeline_stage_accum_grads_param.get()
                                         : accum_grads.get(),
-       update_index_broadcast_grads_reshaped.get(), grads, scale},
-      multi_update_add->GetSerializationFactor());
+       update_index_broadcast_grads_reshaped.get(), grads, scale});
 
   TF_ASSIGN_OR_RETURN(auto indices_transpose,
                       MakeTransposeHlo(indices, {1, 0}));
-  auto indices_update =
-      CreateMultiUpdateAdd(plan.accum_indices_shape,
-                           {pipeline_stage_accum_indices_param
-                                ? pipeline_stage_accum_indices_param.get()
-                                : accum_indices.get(),
-                            update_index_broadcast_indices_reshaped.get(),
-                            indices_transpose, const_int_1.get()},
-                           multi_update_add->GetSerializationFactor());
+  auto indices_update = CreateMultiUpdateAdd(
+      plan.accum_indices_shape, {pipeline_stage_accum_indices_param
+                                     ? pipeline_stage_accum_indices_param.get()
+                                     : accum_indices.get(),
+                                 update_index_broadcast_indices_reshaped.get(),
+                                 indices_transpose, const_int_1.get()});
 
   std::unique_ptr<HloInstruction> grads_update_gte, indices_update_gte;
   if (pipeline_stage) {

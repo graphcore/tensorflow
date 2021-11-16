@@ -240,9 +240,9 @@ StatusOr<HloInstruction*> CreateNewMultiUpdate(
   }
 
   // Create a new multi update add instruction.
-  HloInstruction* new_multi_update_add = comp->AddInstruction(
-      CreateMultiUpdateAdd(operand->shape(), {operand, indices, updates, scale},
-                           multi_update->GetSerializationFactor()));
+  HloInstruction* new_multi_update_add =
+      comp->AddInstruction(CreateMultiUpdateAdd(
+          operand->shape(), {operand, indices, updates, scale}));
 
   if (shard) {
     new_multi_update_add->set_sharding(HloSharding::AssignDevice(*shard));

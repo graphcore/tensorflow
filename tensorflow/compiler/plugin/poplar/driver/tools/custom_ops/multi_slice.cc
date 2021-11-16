@@ -88,12 +88,12 @@ std::unique_ptr<HloInstruction> CreateMultiSlice(const Shape& shape,
 // MultiUpdate
 HloMultiUpdateInstruction::HloMultiUpdateInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    uint32 serialization_factor, bool is_update, bool indices_are_sorted)
+    bool is_update, bool indices_are_sorted)
     : HloPoplarInstruction(
           shape, operands,
           is_update ? PoplarOp::MultiUpdateAdd : PoplarOp::MultiUpdate,
-          serialization_factor, indices_are_sorted),
-      serialization_factor_(serialization_factor),
+          indices_are_sorted),
+
       indices_are_sorted_(indices_are_sorted) {
   CHECK_EQ(shape.rank(), 2);
   CHECK_EQ(operands[0]->shape().rank(), 2);
@@ -154,16 +154,13 @@ std::unique_ptr<HloInstruction>
 HloMultiUpdateInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
-  return CreateMultiUpdate(shape, new_operands, serialization_factor_,
-                           indices_are_sorted_);
+  return CreateMultiUpdate(shape, new_operands, indices_are_sorted_);
 }
 
 std::vector<std::string>
 HloMultiUpdateInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> attributes;
-  attributes.push_back("serialization_factor=" +
-                       std::to_string(serialization_factor_));
   attributes.push_back("indices_are_sorted=" +
                        std::string(indices_are_sorted_ ? "true" : "false"));
   return attributes;
@@ -171,31 +168,29 @@ HloMultiUpdateInstruction::ExtraPoplarAttributesToStringImpl(
 
 std::unique_ptr<HloInstruction> CreateMultiUpdate(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    uint32 serialization_factor, bool indices_are_sorted) {
-  return absl::make_unique<HloMultiUpdateInstruction>(
-      shape, operands, serialization_factor, indices_are_sorted);
+    bool indices_are_sorted) {
+  return absl::make_unique<HloMultiUpdateInstruction>(shape, operands,
+                                                      indices_are_sorted);
 }
 
 // MultiUpdateAdd
 HloMultiUpdateAddInstruction::HloMultiUpdateAddInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    uint32 serialization_factor, bool indices_are_sorted)
-    : HloMultiUpdateInstruction(shape, operands, serialization_factor, true,
-                                indices_are_sorted) {}
+    bool indices_are_sorted)
+    : HloMultiUpdateInstruction(shape, operands, true, indices_are_sorted) {}
 
 std::unique_ptr<HloInstruction>
 HloMultiUpdateAddInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
-  return CreateMultiUpdateAdd(shape, new_operands, serialization_factor_,
-                              indices_are_sorted_);
+  return CreateMultiUpdateAdd(shape, new_operands, indices_are_sorted_);
 }
 
 std::unique_ptr<HloInstruction> CreateMultiUpdateAdd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    uint32 serialization_factor, bool indices_are_sorted) {
-  return absl::make_unique<HloMultiUpdateAddInstruction>(
-      shape, operands, serialization_factor, indices_are_sorted);
+    bool indices_are_sorted) {
+  return absl::make_unique<HloMultiUpdateAddInstruction>(shape, operands,
+                                                         indices_are_sorted);
 }
 
 namespace {
@@ -213,8 +208,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloMultiUpdateInstructionFactoryFunc(
   auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
   TF_ASSIGN_OR_RETURN(bool indices_are_sorted,
                       attribute_map.GetAttributeAsBool("indices_are_sorted"));
-  return CreateMultiUpdate(call->shape(), call->operands(), 1,
-                           indices_are_sorted);
+  return CreateMultiUpdate(call->shape(), call->operands(), indices_are_sorted);
 }
 
 StatusOr<std::unique_ptr<HloInstruction>>
@@ -222,7 +216,7 @@ HloMultiUpdateAddInstructionFactoryFunc(HloCustomCallInstruction* call) {
   auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
   TF_ASSIGN_OR_RETURN(bool indices_are_sorted,
                       attribute_map.GetAttributeAsBool("indices_are_sorted"));
-  return CreateMultiUpdateAdd(call->shape(), call->operands(), 1,
+  return CreateMultiUpdateAdd(call->shape(), call->operands(),
                               indices_are_sorted);
 }
 

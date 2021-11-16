@@ -95,8 +95,7 @@ Status ReplaceMatch(HloMatcherMatched& match) {
       comp->AddInstruction(CreateMultiUpdateAdd(
           multi_update->shape(),
           {multi_update->mutable_operand(0), multi_update->mutable_operand(1),
-           multi_update->mutable_operand(2), scale},
-          multi_update->GetSerializationFactor()));
+           multi_update->mutable_operand(2), scale}));
 
   // Replace it.
   multi_update->SetupDerivedInstruction(new_multi_update_add);

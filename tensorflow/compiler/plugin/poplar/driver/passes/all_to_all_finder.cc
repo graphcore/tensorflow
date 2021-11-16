@@ -238,26 +238,16 @@ static Status ApplyTransformation(HloMatcherMatched& match,
   HloInstruction* normalized_updates =
       comp->AddInstruction(CreateReplicationNormalise(reduced_updates));
 
-  // TODO(T12935) - Serialize multi updates for large replication factors.
-  uint32 serialization_factor = multi_update->GetSerializationFactor();
-
-  if (replication_factor > 4 && replication_factor % 4 == 0) {
-    serialization_factor =
-        std::max(serialization_factor, replication_factor / 4);
-  }
-
   HloInstruction* output;
   if (match.pattern.GetType().find("multi_update_add") != std::string::npos) {
     // Create MultiUpdateAdd.
     HloInstruction* scale = match.instruction_mapping[instr_indices.scale];
     output = comp->AddInstruction(CreateMultiUpdateAdd(
         broadcast->shape(),
-        {broadcast, reduced_indices, normalized_updates, scale},
-        serialization_factor));
+        {broadcast, reduced_indices, normalized_updates, scale}));
   } else {
     output = comp->AddInstruction(CreateMultiUpdate(
-        broadcast->shape(), {broadcast, reduced_indices, normalized_updates},
-        serialization_factor));
+        broadcast->shape(), {broadcast, reduced_indices, normalized_updates}));
   }
 
   // Replace with the new output.
