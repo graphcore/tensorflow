@@ -40,6 +40,7 @@ from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.keras import callbacks as callbacks_module
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine import base_layer
+from tensorflow.python.keras.engine import input_spec
 from tensorflow.python.keras.engine import training as training_module
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.utils import tf_inspect
@@ -700,6 +701,10 @@ class ModelExtension(base_layer.KerasExtension):
           flat_targets = flatten_without_nones(targets)
           flat_sample_weight = flatten_without_nones(sample_weight)
           layer_start_idx = len(self.inputs)
+
+          # Validate inputs
+          input_spec.assert_input_compatibility(self.input_spec, inputs,
+                                                self.name)
         else:
           tensor_dict.clear()
           start_idx = 0

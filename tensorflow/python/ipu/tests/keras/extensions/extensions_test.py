@@ -14,17 +14,37 @@
 # ==============================================================================
 """Test for KerasExtension interface."""
 
+import numpy as np
+
+from tensorflow.python import ipu
 from tensorflow.python.ipu import config
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu.keras import extensions
 from tensorflow.python.eager import def_function
+from tensorflow.python.keras.datasets import imdb
 from tensorflow.python.keras.engine import base_layer
 from tensorflow.python.keras.engine import functional
 from tensorflow.python.keras.engine import sequential
 from tensorflow.python.keras.engine import training as training_module
 from tensorflow.python.keras import layers
+from tensorflow.python.keras import Model
+from tensorflow.python.keras import optimizer_v2
+from tensorflow.python.keras import preprocessing
+from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import test
+
+
+def get_imdb_dataset(num_words, maxlen):
+  (x_train, y_train), (_, _) = imdb.load_data(num_words=num_words)
+  x_train = preprocessing.sequence.pad_sequences(x_train, maxlen=maxlen)
+
+  ds = dataset_ops.Dataset.from_tensor_slices((x_train, y_train))
+  ds = ds.repeat()
+  ds = ds.map(lambda x, y: (x, math_ops.cast(y, np.int32)))
+  ds = ds.batch(32, drop_remainder=True)
+  return ds
 
 
 class KerasExtensionsTest(test.TestCase):
@@ -301,6 +321,49 @@ class KerasExtensionsTest(test.TestCase):
         model.evaluate([1.], [1.], batch_size=1)
       with self.assertRaisesRegex(RuntimeError, "The function `call`"):
         model.predict([1.], batch_size=1)
+
+  @test_util.run_v2_only
+  def testInputValidation(self):
+    class TwoInTwoOutIdentity(layers.Layer):
+      def __init__(self, **layer_args):
+        super(TwoInTwoOutIdentity, self).__init__(**layer_args)
+
+      def call(self, x, y):  # pylint: disable=arguments-differ
+        return x, y
+
+    cfg = config.IPUConfig()
+    cfg.auto_select_ipus = 2
+    cfg.configure_ipu_system()
+
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      input_x = layers.Input(shape=(80), dtype=np.int32, batch_size=32)
+      input_y = layers.Input(shape=(1,), dtype=np.int32, batch_size=32)
+
+      with ipu.keras.PipelineStage(0):
+        x = layers.Dense(10)(input_x)
+      with ipu.keras.PipelineStage(1):
+        x = layers.Dense(1)(x)
+        x = TwoInTwoOutIdentity()(x, input_y)[0]
+
+      # Setup a model that requires 2 inputs but is given a dataset that
+      # only generates one, which should fail with an exception saying as much.
+      model = Model(inputs=[input_x, input_y], outputs=x)
+      model.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
+                                   device_mapping=[0, 1])
+      model.compile(loss='binary_crossentropy',
+                    optimizer=optimizer_v2.adam.Adam(0.005),
+                    steps_per_execution=16)
+
+      dataset = get_imdb_dataset(num_words=2000, maxlen=80)
+      expected_message_regex = r"ValueError: Layer \w+ expects 2 input\(s\)," +\
+      r" but it received 1 input tensors\. Inputs received: .*"
+      self.assertRaisesRegex(ValueError,
+                             expected_message_regex,
+                             model.fit,
+                             dataset,
+                             steps_per_epoch=768,
+                             epochs=3)
 
 
 if __name__ == '__main__':
