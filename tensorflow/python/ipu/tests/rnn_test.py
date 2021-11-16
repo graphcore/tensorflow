@@ -177,14 +177,14 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     report = pva.openReport(report_helper.find_report())
 
     self.assert_compute_sets_count(report, cs_counters)
-    self.assert_total_tile_memory(report, total_mem)
-    self.assert_max_tile_memory(report, max_mem)
+    self.assert_total_tile_memory(report, total_mem, tolerance=0.1)
+    self.assert_max_tile_memory(report, max_mem, tolerance=0.1)
 
   @parameterized.parameters(
       {
           'build': build_tf_rnn1,
           'counters': {
-              'Copy': 22 if TF1 else 21,
+              'Copy': 23 if TF1 else 21,
               'host-exchange-local-copy': 1
           },
           'total_memory': 4232578 if TF1 else 3948575,
@@ -192,7 +192,7 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'build': build_tf_rnn2,
           'counters': {
-              'Copy': 32 if TF1 else 31,
+              'Copy': 34 if TF1 else 31,
               'host-exchange-local-copy': 1
           },
           'total_memory': 2908764 if TF1 else 2864563,
@@ -200,7 +200,7 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'build': build_tf_lstm1,
           'counters': {
-              'Copy': 41 if TF1 else 40,
+              'Copy': 48 if TF1 else 41,
               'host-exchange-local-copy': 1
           },
           'total_memory': 47341002,
@@ -208,15 +208,15 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'build': build_tf_gru1,
           'counters': {
-              'Copy': 40 if TF1 else 52,
+              'Copy': 51 if TF1 else 58,
               'host-exchange-local-copy': 1
           },
-          'total_memory': 5301307 if TF1 else 4725345,
-          'max_memory': 714446 if TF1 else 594266
+          'total_memory': 4744597 if TF1 else 4725345,
+          'max_memory': 616981 if TF1 else 594266
       }, {
           'build': build_model_rnn1,
           'counters': {
-              'Copy': 33 if TF1 else 32,
+              'Copy': 35 if TF1 else 32,
               'host-exchange-local-copy': 2
           },
           'total_memory': 4544890 if TF1 else 3893674,
@@ -224,7 +224,7 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'build': build_model_rnn2,
           'counters': {
-              'Copy': 53 if TF1 else 51,
+              'Copy': 57 if TF1 else 51,
               'host-exchange-local-copy': 2
           },
           'total_memory': 6082439 if TF1 else 6148616,
@@ -234,8 +234,8 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           'counters': {
               'Copy': 14
           },
-          'total_memory': 1299501,
-          'max_memory': 171901,
+          'total_memory': 1277668,
+          'max_memory': 160393,
           'options': {
               'batch_size': 1,
               'steps': 32
