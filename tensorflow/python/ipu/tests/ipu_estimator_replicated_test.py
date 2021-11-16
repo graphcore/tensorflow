@@ -119,7 +119,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
           loss_output.append(v.simple_value)
 
     # loss is averaged across iterations per loop
-    self.assertEqual(loss_output, [14.0, 16.0, 18.0])
+    self.assertAllClose(loss_output, [14.0, 16.0, 18.0])
 
   @parameterized.parameters(
       {'use_gradient_accumulation': False},

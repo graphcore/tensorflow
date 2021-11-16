@@ -497,9 +497,8 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
     if self._replication_factor == 1:
       return loop_sum / self._iterations_per_loop
 
-    loop_replica_sum = ipu_ops.cross_replica_ops.cross_replica_sum(loop_sum)
-    return loop_replica_sum / (self._iterations_per_loop *
-                               self._replication_factor)
+    loop_replica_mean = ipu_ops.cross_replica_ops.cross_replica_mean(loop_sum)
+    return loop_replica_mean / self._iterations_per_loop
 
   def _capture_hooks(self, hooks):
     if hooks:
