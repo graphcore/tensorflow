@@ -60,7 +60,6 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
  public:
   explicit HloMultiUpdateInstruction(const Shape& shape,
                                      absl::Span<HloInstruction* const> operands,
-                                     uint32 serialization_factor,
                                      bool is_update_add = false,
                                      bool indices_are_sorted = false);
 
@@ -75,9 +74,6 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
   bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
-  // Factor used for serializing the multi update.
-  std::size_t GetSerializationFactor() const { return serialization_factor_; }
-
   // Whether or not the given indices are sorted.
   bool GetIndicesAreSorted() const { return indices_are_sorted_; }
 
@@ -85,7 +81,6 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
 
-  const uint32 serialization_factor_;
   const bool indices_are_sorted_;
 
  private:
@@ -98,7 +93,7 @@ class HloMultiUpdateAddInstruction : public HloMultiUpdateInstruction {
  public:
   explicit HloMultiUpdateAddInstruction(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
-      uint32 serialization_factor, bool indices_are_sorted);
+      bool indices_are_sorted);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -112,11 +107,11 @@ std::unique_ptr<HloInstruction> CreateMultiSlice(
 
 std::unique_ptr<HloInstruction> CreateMultiUpdate(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    uint32 serialization_factor = 1, bool indices_are_sorted = false);
+    bool indices_are_sorted = false);
 
 std::unique_ptr<HloInstruction> CreateMultiUpdateAdd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    uint32 serialization_factor = 1, bool indices_are_sorted = false);
+    bool indices_are_sorted = false);
 
 }  // namespace poplarplugin
 }  // namespace xla

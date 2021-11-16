@@ -213,9 +213,7 @@ StatusOr<bool> MultiUpdateCombiner::HandleMatch(
   HloInstruction* new_multi_update =
       computation->AddInstruction(CreateMultiUpdateAdd(
           multi_update1->shape(),
-          {multi_update1->mutable_operand(0), new_indices, new_updates, one},
-          std::max(multi_update1->GetSerializationFactor(),
-                   multi_update2->GetSerializationFactor())));
+          {multi_update1->mutable_operand(0), new_indices, new_updates, one}));
   multi_update1->SetupDerivedInstruction(new_multi_update);
   computation->ReplaceInstruction(pattern_root, new_multi_update);
 

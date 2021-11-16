@@ -73,7 +73,6 @@ ENTRY main {
   HloInstruction* root = module->entry_computation()->root_instruction();
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MultiUpdate)(root));
   auto* multi_update = Cast<HloMultiUpdateInstruction>(root);
-  EXPECT_EQ(multi_update->GetSerializationFactor(), 1);
   HloInstruction* big_zero = FindInstruction(module, "big_zero");
   HloInstruction* offsets = FindInstruction(module, "offsets");
   HloInstruction* updates = FindInstruction(module, "updates");
@@ -127,7 +126,6 @@ ENTRY main {
   HloInstruction* root = module->entry_computation()->root_instruction();
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MultiUpdate)(root));
   auto* multi_update = Cast<HloMultiUpdateInstruction>(root);
-  EXPECT_EQ(multi_update->GetSerializationFactor(), 4);
   HloInstruction* big_zero = FindInstruction(module, "big_zero");
   HloInstruction* offsets = FindInstruction(module, "offsets");
   HloInstruction* updates = FindInstruction(module, "updates");
@@ -182,7 +180,6 @@ ENTRY main {
   HloInstruction* root = module->entry_computation()->root_instruction();
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(root));
   auto* multi_update = Cast<HloMultiUpdateInstruction>(root);
-  EXPECT_EQ(multi_update->GetSerializationFactor(), 1);
   HloInstruction* big_zero = FindInstruction(module, "big_zero");
   HloInstruction* offsets = FindInstruction(module, "offsets");
   HloInstruction* updates = FindInstruction(module, "updates");
@@ -279,7 +276,6 @@ ENTRY main {
   HloInstruction* root = module->entry_computation()->root_instruction();
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MultiUpdate)(root));
   auto* multi_update = Cast<HloMultiUpdateInstruction>(root);
-  EXPECT_EQ(multi_update->GetSerializationFactor(), 1);
 
   HloInstruction* big_zero = FindInstruction(module, "big_zero");
   HloInstruction* offsets = FindInstruction(module, "offsets");
@@ -348,7 +344,6 @@ ENTRY main {
   HloInstruction* root = module->entry_computation()->root_instruction();
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(root));
   auto* multi_update = Cast<HloMultiUpdateInstruction>(root);
-  EXPECT_EQ(multi_update->GetSerializationFactor(), 1);
 
   HloInstruction* big_zero = FindInstruction(module, "big_zero");
   HloInstruction* offsets = FindInstruction(module, "offsets");

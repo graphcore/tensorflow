@@ -166,83 +166,20 @@ Status MultiUpdateInternal(
   }
 
   const std::size_t num_updates = updates.shape()[0];
-  const uint32 serialization_factor = multi_update->GetSerializationFactor();
-
-  if (serialization_factor == 0 || serialization_factor > num_updates) {
-    return FailedPrecondition("Invalid serialization factor %u.",
-                              serialization_factor);
-  }
 
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                       GetSliceOptionsForInst(inst, res));
 
-  auto update_fn = [&graph, &opts, &plan, &operand, &debug_name_and_id, &mode,
-                    &scale](poplar::Tensor slice_indices,
-                            poplar::Tensor slice_updates,
-                            poplar::program::Sequence& seq) -> void {
-    slice_indices = slice_indices.reinterpret(poplar::UNSIGNED_INT);
-    slice_updates = slice_updates.expand({1});
+  poplar::Tensor unsigned_indices = indices.reinterpret(poplar::UNSIGNED_INT);
+  poplar::Tensor expanded_updates = updates.expand({1});
 
-    if (mode == UpdateMode::Replace) {
-      popops::multiUpdate(graph, operand, slice_updates, slice_indices, {0},
-                          {1}, seq, plan, opts, {debug_name_and_id});
-    } else {
-      popops::multiUpdateAdd(graph, operand, slice_updates, slice_indices,
-                             *scale, {0}, {1}, seq, plan, opts,
-                             {debug_name_and_id});
-    }
-  };
-
-  if (serialization_factor == 1) {
-    update_fn(indices, updates, prog);
+  if (mode == UpdateMode::Replace) {
+    popops::multiUpdate(graph, operand, expanded_updates, unsigned_indices, {0},
+                        {1}, prog, plan, opts, {debug_name_and_id});
   } else {
-    // Do the updates serially and reuse the code to do so.
-    const std::size_t slice_size = num_updates / serialization_factor;
-
-    // Allocate the indices with an ideal layout.
-    Shape indices_shape = multi_update->operand(1)->shape();
-    indices_shape.set_dimensions(0, slice_size);
-    TF_ASSIGN_OR_RETURN(poplar::Tensor allocated_slice_indices,
-                        CreateIndicesTensor(graph, plan, indices_shape,
-                                            {debug_name_and_id, "indices"}));
-
-    // Allocate the updates with an ideal layout.
-    Shape update_shape = multi_update->operand(2)->shape();
-    update_shape.set_dimensions(0, slice_size);
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor allocated_slice_updates,
-        CreateUpdatesTensor(graph, plan, multi_update->operand(0)->shape(),
-                            update_shape, indices_shape,
-                            {debug_name_and_id, "updates"}));
-
-    // Wrap the update function in a poplar function so that we can reuse it
-    // between the slices.
-    auto f = pgf::VoidFunction(
-        graph,
-        {pgf::input(allocated_slice_indices, "allocated_slice_indices"),
-         pgf::input(allocated_slice_updates, "allocated_slice_updates")},
-        [&](std::vector<poplar::Tensor>& args, poplar::program::Sequence& seq) {
-          update_fn(args[0], args[1], seq);
-        });
-
-    for (std::size_t i = 0; i != serialization_factor; ++i) {
-      // Slice the indices and updates.
-      const std::size_t slice_begin = i * slice_size;
-      poplar::Tensor slice_indices =
-          indices.slice(slice_begin, slice_begin + slice_size);
-      poplar::Tensor slice_updates =
-          updates.slice(slice_begin, slice_begin + slice_size);
-      // Reuse the multi update function.
-      std::vector<poplar::Tensor> args = {slice_indices, slice_updates};
-      f(args, prog);
-    }
-    if (slice_size * serialization_factor != num_updates) {
-      const std::size_t slice_begin = serialization_factor * slice_size;
-      // Do the remainder.
-      poplar::Tensor slice_indices = indices.slice(slice_begin, num_updates);
-      poplar::Tensor slice_updates = updates.slice(slice_begin, num_updates);
-      update_fn(slice_indices, slice_updates, prog);
-    }
+    popops::multiUpdateAdd(graph, operand, expanded_updates, unsigned_indices,
+                           *scale, {0}, {1}, prog, plan, opts,
+                           {debug_name_and_id});
   }
 
   return Status::OK();
