@@ -51,7 +51,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
  public:
   DataflowAnalysisBufferVisitor(
       HloPoplarDataflowAnalysis* analysis,
-      const CompilerAnnotations& annotations,
+      const CompilerAnnotations* annotations,
       ComputationInputBufferSets input_buffer_sets = {},
       bool is_entry_computation = false)
       : analysis_(analysis),
@@ -102,9 +102,10 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
 
         // Check whether this buffer is a remote buffer.
         const bool is_remote_buffer_parameter =
-            is_entry_computation_ &&
-            ContainsKey(annotations_.remote_parameter_infos,
-                        RemoteParameterInfo(inst->parameter_number()));
+            is_entry_computation_ && annotations_
+                ? ContainsKey(annotations_->remote_parameter_infos,
+                              RemoteParameterInfo(inst->parameter_number()))
+                : false;
 
         const BufferLocality locality = is_remote_buffer_parameter
                                             ? BufferLocality::kRemoteMemory
@@ -682,7 +683,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
   }
 
   HloPoplarDataflowAnalysis* analysis_;
-  const CompilerAnnotations& annotations_;
+  const CompilerAnnotations* annotations_;
   const bool is_entry_computation_;
   const ComputationInputBufferSets input_buffer_sets_;
 };
@@ -838,11 +839,10 @@ InstructionPoplarBufferSet& HloPoplarDataflowAnalysis::GetInstructionBufferSet(
 }
 
 Status HloPoplarDataflowAnalysis::InitializeAndPropagate(
-    const CompilerAnnotations& annotations) {
+    const CompilerAnnotations* annotations, const HloComputation* entry) {
   DataflowAnalysisBufferVisitor visitor(this, annotations,
                                         /*input_buffer_sets=*/{},
                                         /*is_entry_computation=*/true);
-  HloComputation* entry = module_->entry_computation();
   TF_RETURN_IF_ERROR(entry->Accept(&visitor));
 
   // Create empty buffer set for each non-visited instruction in the module
@@ -860,9 +860,10 @@ Status HloPoplarDataflowAnalysis::InitializeAndPropagate(
 
 /* static */
 StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>>
-HloPoplarDataflowAnalysis::Run(const HloModule* module,
-                               const CompilerAnnotations& annotations,
-                               const CallGraph& call_graph) {
+HloPoplarDataflowAnalysis::Run(const HloComputation* entry,
+                               const CallGraph& call_graph,
+                               const CompilerAnnotations* annotations) {
+  const HloModule* module = entry->parent();
   VLOG(1) << "HloPoplarDataflowAnalysis::Run on module " << module->name();
   XLA_VLOG_LINES(3, module->ToString());
 
@@ -874,7 +875,8 @@ HloPoplarDataflowAnalysis::Run(const HloModule* module,
   auto dataflow_analysis =
       absl::WrapUnique(new HloPoplarDataflowAnalysis(module));
 
-  TF_RETURN_IF_ERROR(dataflow_analysis->InitializeAndPropagate(annotations));
+  TF_RETURN_IF_ERROR(
+      dataflow_analysis->InitializeAndPropagate(annotations, entry));
 
   XLA_VLOG_LINES(3, dataflow_analysis->ToString());
 
@@ -883,10 +885,19 @@ HloPoplarDataflowAnalysis::Run(const HloModule* module,
 
 /* static */
 StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>>
+HloPoplarDataflowAnalysis::Run(const HloComputation* entry,
+                               const CompilerAnnotations* annotations) {
+  auto call_graph = CallGraph::Build(entry->parent());
+  return Run(entry, *call_graph, annotations);
+}
+
+/* static */
+StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>>
 HloPoplarDataflowAnalysis::Run(const HloModule* module,
                                const CompilerAnnotations& annotations) {
   auto call_graph = CallGraph::Build(module);
-  return Run(module, annotations, *call_graph);
+  return Run(module->entry_computation(), *call_graph, &annotations);
 }
+
 }  // namespace poplarplugin
 }  // namespace xla

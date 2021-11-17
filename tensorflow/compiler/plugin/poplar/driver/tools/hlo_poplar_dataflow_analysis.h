@@ -52,8 +52,12 @@ class HloPoplarDataflowAnalysis {
   // Run dataflow analysis on the given module. Requires the module to be
   // flattened.
   static StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>> Run(
-      const HloModule* module, const CompilerAnnotations& annotations,
-      const CallGraph& call_graph);
+      const HloComputation* entry, const CallGraph& call_graph,
+      const CompilerAnnotations* annotations = nullptr);
+
+  static StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>> Run(
+      const HloComputation* entry,
+      const CompilerAnnotations* annotations = nullptr);
 
   static StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>> Run(
       const HloModule* module, const CompilerAnnotations& annotations);
@@ -130,7 +134,8 @@ class HloPoplarDataflowAnalysis {
 
   // Constructs and initializes the InstructionPoplarBufferSets of all
   // instructions and then propagates them.
-  Status InitializeAndPropagate(const CompilerAnnotations& annotations);
+  Status InitializeAndPropagate(const CompilerAnnotations* annotations,
+                                const HloComputation* entry);
 
   const HloModule* module_;
 

@@ -807,6 +807,8 @@ ENTRY top {
   HloInstruction* c0 = FindInstruction(m.get(), "c0");
   HloInstruction* arg_tuple = FindInstruction(m.get(), "arg_tuple");
   HloInstruction* body_arg_tuple = FindInstruction(m.get(), "body_arg_tuple");
+  HloInstruction* body_reduce = FindInstruction(m.get(), "body_reduce");
+  HloInstruction* body_root_tuple = FindInstruction(m.get(), "body_root_tuple");
   HloInstruction* loop = FindInstruction(m.get(), "loop");
 
   auto arg0_buffer_set = analysis->GetBufferSet(arg0);
@@ -822,6 +824,19 @@ ENTRY top {
                             instruction_set));
   EXPECT_TRUE(
       buffers_equal(analysis->GetInstructionBufferSet(loop), instruction_set));
+
+  TF_ASSERT_OK_AND_ASSIGN(auto body_analysis,
+                          HloPoplarDataflowAnalysis::Run(loop->to_apply()));
+
+  InstructionPoplarBufferSet body_instruction_set(body_arg_tuple->shape());
+  body_instruction_set.SetOutputBufferSet(
+      ShapeIndex{0}, body_analysis->GetBufferSet(body_reduce));
+  body_instruction_set.SetOutputBufferSet(
+      ShapeIndex{1},
+      body_analysis->GetBufferSet(body_arg_tuple, ShapeIndex{1}));
+  EXPECT_TRUE(
+      buffers_equal(body_analysis->GetInstructionBufferSet(body_root_tuple),
+                    body_instruction_set));
 }
 
 TEST_F(HloPoplarDataflowAnalysisTest, TestRepeatLoop2) {
@@ -867,6 +882,8 @@ ENTRY top {
   HloInstruction* c0 = FindInstruction(m.get(), "c0");
   HloInstruction* body_arg0 = FindInstruction(m.get(), "body_arg0");
   HloInstruction* body_arg1 = FindInstruction(m.get(), "body_arg1");
+  HloInstruction* body_reduce = FindInstruction(m.get(), "body_reduce");
+  HloInstruction* body_root_tuple = FindInstruction(m.get(), "body_root_tuple");
   HloInstruction* loop = FindInstruction(m.get(), "loop");
 
   auto arg0_buffer_set = analysis->GetBufferSet(arg0);
@@ -880,6 +897,18 @@ ENTRY top {
   instruction_set.SetOutputBufferSet(ShapeIndex{1}, arg0_buffer_set);
   EXPECT_TRUE(
       buffers_equal(analysis->GetInstructionBufferSet(loop), instruction_set));
+
+  TF_ASSERT_OK_AND_ASSIGN(auto body_analysis,
+                          HloPoplarDataflowAnalysis::Run(loop->to_apply()));
+
+  InstructionPoplarBufferSet body_instruction_set(loop->shape());
+  body_instruction_set.SetOutputBufferSet(
+      ShapeIndex{0}, body_analysis->GetBufferSet(body_reduce));
+  body_instruction_set.SetOutputBufferSet(
+      ShapeIndex{1}, body_analysis->GetBufferSet(body_arg1));
+  EXPECT_TRUE(
+      buffers_equal(body_analysis->GetInstructionBufferSet(body_root_tuple),
+                    body_instruction_set));
 }
 
 }  // namespace
