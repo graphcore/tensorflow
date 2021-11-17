@@ -59,6 +59,15 @@ int64 ByteSizeOfIncludingTuple(const Shape& shape) {
 
   return ShapeUtil::ByteSizeOf(shape);
 }
+
+HloInstruction* AddReplacementInstruction(
+    HloComputation* comp, HloInstruction* original,
+    std::unique_ptr<HloInstruction> replacement) {
+  auto new_inst = comp->AddInstruction(std::move(replacement));
+  CopyShardingIfPresent(original, new_inst);
+
+  return new_inst;
+}
 }  // namespace
 
 InstructionColocatorHelper::InstructionColocatorHelper(
@@ -157,12 +166,9 @@ InstructionColocatorHelper::CombineAndReplaceColocatedInstructions(
       });
 
   // Add the new instruction.
-  HloInstruction* new_inst = comp->AddInstruction(
+  HloInstruction* new_inst = AddReplacementInstruction(
+      comp, to_combine[0],
       to_combine[0]->CloneWithNewOperands(shape, operands));
-  // Copy the sharding information if there was any.
-  if (to_combine[0]->has_sharding()) {
-    new_inst->set_sharding(to_combine[0]->sharding());
-  }
 
   // Replace all the users.
   std::vector<HloInstruction*> result(cluster_size + 1);
@@ -348,14 +354,10 @@ class SendToHostColocatorHelper : public InstructionColocatorHelper {
     const auto new_shape = ShapeUtil::MakeTupleShape(new_shapes);
 
     // Add the new instruction.
-    HloInstruction* new_send =
-        comp->AddInstruction(first_send->CloneWithNewOperandsAndRendezvousKeys(
+    HloInstruction* new_send = AddReplacementInstruction(
+        comp, first_send,
+        first_send->CloneWithNewOperandsAndRendezvousKeys(
             new_shape, new_operands, new_rendezvous_keys));
-
-    // Copy the sharding information if there was any.
-    if (first_send->has_sharding()) {
-      new_send->set_sharding(first_send->sharding());
-    }
 
     for (auto* old_send : old_sends) {
       TF_RETURN_IF_ERROR(new_send->CopyAllControlDepsFrom(old_send));
@@ -411,14 +413,10 @@ class RecvFromHostColocatorHelper : public InstructionColocatorHelper {
     const auto new_shape = ShapeUtil::MakeTupleShape(new_shapes);
 
     // Add the new instruction.
-    HloInstruction* new_recv =
-        comp->AddInstruction(first_recv->CloneWithNewOperandsAndRendezvousKeys(
+    HloInstruction* new_recv = AddReplacementInstruction(
+        comp, first_recv,
+        first_recv->CloneWithNewOperandsAndRendezvousKeys(
             new_shape, new_operands, new_rendezvous_keys));
-
-    // Copy the sharding information if there was any.
-    if (first_recv->has_sharding()) {
-      new_recv->set_sharding(first_recv->sharding());
-    }
 
     std::vector<HloInstruction*> result;
     result.push_back(new_recv);
@@ -537,12 +535,9 @@ class StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper
     auto shape = ShapeUtil::MakeTupleShape(output_shapes);
 
     // Add the new instruction.
-    HloInstruction* new_inst = comp->AddInstruction(
+    HloInstruction* new_inst = AddReplacementInstruction(
+        comp, to_combine[0],
         to_combine[0]->CloneWithNewOperands(shape, operands));
-    // Copy the sharding information if there was any.
-    if (to_combine[0]->has_sharding()) {
-      new_inst->set_sharding(to_combine[0]->sharding());
-    }
 
     // Replace all the users.
     std::vector<HloInstruction*> result(3 * cluster_size + 1);
@@ -640,13 +635,9 @@ class ReduceManyColocatorHelper : public InstructionColocatorHelper {
     const auto new_shape = ShapeUtil::MakeTupleShape(new_shapes);
 
     // Add the new instruction.
-    HloInstruction* reduce_many = comp->AddInstruction(
+    HloInstruction* reduce_many = AddReplacementInstruction(
+        comp, first_reduce,
         CreatePoplarReduceMany(new_operands, new_shape, reductions_info));
-
-    // Copy the sharding information if there was any.
-    if (first_reduce->has_sharding()) {
-      reduce_many->set_sharding(first_reduce->sharding());
-    }
 
     std::vector<HloInstruction*> result(cluster_size + 1);
     result[0] = reduce_many;
@@ -725,13 +716,9 @@ class AllGatherColocatorHelper : public InstructionColocatorHelper {
             ->GetPoplarReplicaGroups();
 
     // Add the new instruction.
-    HloInstruction* new_all_gather = comp->AddInstruction(
+    HloInstruction* new_all_gather = AddReplacementInstruction(
+        comp, first_all_gather,
         CreatePoplarAllGather(new_operands, new_shape, new_replica_groups));
-
-    // Copy the sharding information if there was any.
-    if (first_all_gather->has_sharding()) {
-      new_all_gather->set_sharding(first_all_gather->sharding());
-    }
 
     std::vector<HloInstruction*> result(cluster_size + 1);
     result[0] = new_all_gather;
