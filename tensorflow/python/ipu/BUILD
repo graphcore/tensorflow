@@ -33,16 +33,16 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:application_runtime_py",
-        "//tensorflow/compiler/plugin/poplar:dataset_benchmark_py",
-        "//tensorflow/compiler/plugin/poplar:functional_ops_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
-        "//tensorflow/compiler/plugin/poplar:popfloat_ops_py",
-        "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
-        "//tensorflow/compiler/plugin/poplar:popops_ops_py",
-        "//tensorflow/compiler/plugin/poplar:poprand_ops_py",
-        "//tensorflow/compiler/plugin/poplar:poputil_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:application_runtime_py",
+        "//tensorflow/compiler/plugin/poplar/ops:dataset_benchmark_py",
+        "//tensorflow/compiler/plugin/poplar/ops:functional_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:popfloat_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:popnn_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:popops_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:poprand_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:poputil_ops_py",
         "//tensorflow/compiler/xla:xla_data_proto_py",
     ],
 )
@@ -65,12 +65,12 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:functional_ops_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
-        "//tensorflow/compiler/plugin/poplar:popops_ops_py",
-        "//tensorflow/compiler/plugin/poplar:poprand_ops_py",
-        "//tensorflow/compiler/plugin/poplar:poputil_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:functional_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:popnn_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:popops_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:poprand_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:poputil_ops_py",
     ],
 )
 
@@ -84,7 +84,7 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
-        "//tensorflow/compiler/plugin/poplar:dataset_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:dataset_ops_py",
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/python/distribute:values",
     ],
@@ -97,7 +97,7 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:dataset_exporters_py",
+        "//tensorflow/compiler/plugin/poplar/ops:dataset_exporters_py",
         "//tensorflow/python/data/ops:dataset_ops",
     ],
 )
@@ -161,11 +161,12 @@ py_library(
     deps = [
         ":data",
         ":dataset_extractor",
-        ":ipu_grad_ops_lib",
         ":ipu_ops_lib",
+        ":ipu_grad_ops_lib",
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
-        "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
-        "//tensorflow/compiler/plugin/poplar:sendrecv_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:sendrecv_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor_lib",
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/python/compiler/xla:compiler_py",
@@ -278,7 +279,6 @@ tf_py_test(
     srcs = ["tests/dropout_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -307,9 +307,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/application_runtime_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/ipu:ipu_ops_lib",
@@ -329,7 +327,6 @@ tf_py_test(
     srcs = ["tests/nn_ops_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -400,7 +397,6 @@ tf_py_test(
     srcs = ["tests/fifo_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -433,7 +429,6 @@ tf_py_test(
     srcs = ["tests/iteration_counter_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -477,9 +472,7 @@ tf_py_test(
     srcs = ["tests/random_constant_matmul_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:control_flow_ops",
         "//tensorflow/python:framework",
@@ -656,9 +649,8 @@ py_test(
     srcs = ["tests/pop_datastream_test.py"],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -733,7 +725,6 @@ py_test(
     srcs_version = "PY2AND3",
     tags = ["hw_poplar_test"],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -800,7 +791,6 @@ tf_py_test(
     srcs = ["tests/user_ops_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -866,6 +856,7 @@ tf_py_test(
 
 py_library(
     name = "pipelining_test_util",
+    testonly = 1,
     srcs = ["tests/pipelining_test_util.py"],
     deps = [
         ":ipu_lib",
@@ -1558,7 +1549,6 @@ tf_py_test(
     srcs = ["tests/sequence_slice_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -1576,7 +1566,23 @@ tf_py_test(
     srcs = ["tests/histogram_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+    shard_count = 8,
+)
+
+tf_py_test(
+    name = "keras_gradient_accumulation_test",
+    size = "large",
+    srcs = ["tests/keras/keras_gradient_accumulation_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -1586,6 +1592,7 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     shard_count = 8,
+    tags = ["hw_poplar_test"],
 )
 
 tf_py_test(
