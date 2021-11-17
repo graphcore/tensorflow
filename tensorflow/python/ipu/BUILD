@@ -339,6 +339,18 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "application_compile_and_run_test",
+    size = "large",
+    srcs = ["tests/application_compile_and_run_test.py"],
+    tags = ["hw_poplar_test"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
     name = "application_runtime_test",
     size = "large",
     srcs = ["tests/application_runtime_test.py"],
