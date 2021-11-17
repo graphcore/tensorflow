@@ -33,16 +33,16 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:application_runtime_py",
-        "//tensorflow/compiler/plugin/poplar:dataset_benchmark_py",
-        "//tensorflow/compiler/plugin/poplar:functional_ops_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
-        "//tensorflow/compiler/plugin/poplar:popfloat_ops_py",
-        "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
-        "//tensorflow/compiler/plugin/poplar:popops_ops_py",
-        "//tensorflow/compiler/plugin/poplar:poprand_ops_py",
-        "//tensorflow/compiler/plugin/poplar:poputil_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:application_runtime_py",
+        "//tensorflow/compiler/plugin/poplar/ops:dataset_benchmark_py",
+        "//tensorflow/compiler/plugin/poplar/ops:functional_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:popfloat_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:popnn_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:popops_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:poprand_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:poputil_ops_py",
         "//tensorflow/compiler/xla:xla_data_proto_py",
     ],
 )
@@ -65,12 +65,12 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:functional_ops_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
-        "//tensorflow/compiler/plugin/poplar:popops_ops_py",
-        "//tensorflow/compiler/plugin/poplar:poprand_ops_py",
-        "//tensorflow/compiler/plugin/poplar:poputil_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:functional_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:popnn_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:popops_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:poprand_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:poputil_ops_py",
     ],
 )
 
@@ -84,7 +84,7 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
-        "//tensorflow/compiler/plugin/poplar:dataset_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:dataset_ops_py",
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/python/distribute:values",
     ],
@@ -97,7 +97,7 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:dataset_exporters_py",
+        "//tensorflow/compiler/plugin/poplar/ops:dataset_exporters_py",
         "//tensorflow/python/data/ops:dataset_ops",
     ],
 )
@@ -183,11 +183,12 @@ py_library(
     deps = [
         ":data",
         ":dataset_extractor",
-        ":ipu_grad_ops_lib",
         ":ipu_ops_lib",
+        ":ipu_grad_ops_lib",
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
-        "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
-        "//tensorflow/compiler/plugin/poplar:sendrecv_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:sendrecv_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor_lib",
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/python/compiler/xla:compiler_py",
@@ -315,7 +316,6 @@ tf_py_test(
     shard_count = 4,
     tags = ["hw_poplar_test"],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -345,7 +345,6 @@ tf_py_test(
     shard_count = 4,
     tags = ["hw_poplar_test"],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -364,7 +363,6 @@ tf_py_test(
     srcs = ["tests/nn_ops_test.py"],
     shard_count = 8,
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -712,7 +710,6 @@ tf_py_test(
     srcs = ["tests/fifo_test.py"],
     tags = ["hw_poplar_test"],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -744,7 +741,6 @@ tf_py_test(
     size = "large",
     srcs = ["tests/iteration_counter_test.py"],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -788,7 +784,6 @@ tf_py_test(
     size = "large",
     srcs = ["tests/random_constant_matmul_test.py"],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -989,9 +984,8 @@ py_test(
     srcs = ["tests/pop_datastream_test.py"],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -1066,7 +1060,6 @@ py_test(
     srcs_version = "PY2AND3",
     tags = ["hw_poplar_test"],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -1140,7 +1133,6 @@ tf_py_test(
         ":libwrong_api_level_custom.so",
     ],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -1450,7 +1442,6 @@ tf_py_test(
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -1959,7 +1950,6 @@ tf_py_test(
     srcs = ["tests/sequence_slice_test.py"],
     shard_count = 12,
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -1977,7 +1967,6 @@ tf_py_test(
     srcs = ["tests/histogram_test.py"],
     shard_count = 8,
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -1996,7 +1985,6 @@ tf_py_test(
     shard_count = 2,
     tags = ["hw_poplar_test"],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -2015,7 +2003,6 @@ tf_py_test(
     shard_count = 6,
     tags = ["hw_poplar_test"],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",

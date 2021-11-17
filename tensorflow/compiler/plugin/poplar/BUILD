@@ -1,12 +1,12 @@
 licenses(["restricted"])
 
-package(default_visibility = ["//visibility:private"])
+package(default_visibility = ["//tensorflow/compiler/plugin/poplar:__subpackages__"])
 
 load("//tensorflow/compiler/xla/tests:build_defs.bzl", "xla_test")
 load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
 load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test", "if_horovod", "poprun_py_test")
-load("//tensorflow:tensorflow.bzl", "py_binary", "tf_cc_binary", "tf_cc_test", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
+load("//tensorflow:tensorflow.bzl", "py_binary", "tf_cc_binary", "tf_cc_test")
 load("//tensorflow/core/platform:build_config.bzl", "tf_proto_library")
 
 cc_library(
@@ -958,15 +958,6 @@ cc_library(
 )
 
 cc_library(
-    name = "common_shape_fns",
-    srcs = ["ops/common_shape_fns.cc"],
-    hdrs = ["ops/common_shape_fns.h"],
-    linkstatic = 1,
-    deps = ["//tensorflow/core:framework"],
-    alwayslink = True,
-)
-
-cc_library(
     name = "dataset_exporters_kernel",
     srcs = [
         "kernels/datastream/exporters.cc",
@@ -1104,377 +1095,6 @@ cc_library(
     ],
 )
 
-# When creating a new set of ops the following needs to be done:
-#
-# 1. New cc_library:
-# cc_library(
-#     name = "new_ops",
-#     srcs = ["new/new_ops.cc"],
-#     deps = ["//tensorflow/core:framework"],
-#     alwayslink = True,
-# )
-#
-# 2. New python wrapper for those ops:
-# tf_gen_op_wrapper_py(
-#     name = "new_ops_wrapper_py",
-#     out = "gen_new_ops.py",
-#     deps = [":new_ops"],
-#     visibility = ["//tensorflow:internal"],
-# )
-#
-# 3. New custom op libary:
-# tf_custom_op_py_library(
-#     name = "new_ops_py",
-#     kernels = [":new_ops"],
-#     deps = [":new_ops_wrapper_py"],
-#     srcs_version = "PY2AND3",
-# )
-#
-# The cc library `new_ops` needs to be added as a dependency to:
-# //tensorflow/compiler/plugin/poplar:poplar_lib
-# The custom op py library `new_ops_py` needs to be added as a dependency to one
-# of the relevant libs in //tensorflow/python/ipu.
-
-cc_library(
-    name = "dataset_ops",
-    srcs = ["ops/dataset/dataset_ops.cc"],
-    visibility = ["//visibility:public"],
-    deps = ["//tensorflow/core:framework"],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "dataset_ops_wrapper_py",
-    out = "ops/gen_dataset_ops.py",
-    visibility = ["//tensorflow:internal"],
-    deps = [":dataset_ops"],
-)
-
-tf_custom_op_py_library(
-    name = "dataset_ops_py",
-    kernels = [":dataset_ops"],
-    srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
-    deps = [":dataset_ops_wrapper_py"],
-)
-
-cc_library(
-    name = "ipu_ops",
-    srcs = ["ops/ipu_ops.cc"],
-    deps = ["//tensorflow/core:framework"],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "ipu_ops_wrapper_py",
-    out = "ops/gen_ipu_ops.py",
-    deps = [":ipu_ops"],
-)
-
-tf_custom_op_py_library(
-    name = "ipu_ops_py",
-    kernels = [":ipu_ops"],
-    visibility = ["//visibility:public"],
-    deps = [":ipu_ops_wrapper_py"],
-)
-
-cc_library(
-    name = "popnn_ops",
-    srcs = [
-        "ops/popnn/ctc_loss.cc",
-        "ops/popnn/gelu.cc",
-        "ops/popnn/gru.cc",
-        "ops/popnn/hard_sigmoid.cc",
-        "ops/popnn/lstm.cc",
-        "ops/popnn/norm.cc",
-        "ops/popnn/swish.cc",
-    ],
-    deps = ["//tensorflow/core:framework"],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "popnn_ops_wrapper_py",
-    out = "ops/gen_popnn_ops.py",
-    visibility = ["//tensorflow:internal"],
-    deps = [":popnn_ops"],
-)
-
-tf_custom_op_py_library(
-    name = "popnn_ops_py",
-    kernels = [":popnn_ops"],
-    srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
-    deps = [":popnn_ops_wrapper_py"],
-)
-
-cc_library(
-    name = "popops_ops",
-    srcs = [
-        "ops/popops/all_to_all.cc",
-        "ops/popops/cross_replica_sum.cc",
-        "ops/popops/histogram.cc",
-        "ops/popops/multi_slice.cc",
-        "ops/popops/normalise_image.cc",
-        "ops/popops/reduce_scatter.cc",
-        "ops/popops/sequence_slice.cc",
-    ],
-    deps = ["//tensorflow/core:framework"],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "popops_ops_wrapper_py",
-    out = "ops/gen_popops_ops.py",
-    visibility = ["//tensorflow:internal"],
-    deps = [":popops_ops"],
-)
-
-tf_custom_op_py_library(
-    name = "popops_ops_py",
-    kernels = [":popops_ops"],
-    srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
-    deps = [":popops_ops_wrapper_py"],
-)
-
-cc_library(
-    name = "popfloat_ops",
-    srcs = [
-        "ops/popfloat/cast_to_gfloat.cc",
-    ],
-    deps = ["//tensorflow/core:framework"],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "popfloat_ops_wrapper_py",
-    out = "ops/gen_popfloat_ops.py",
-    visibility = ["//tensorflow:internal"],
-    deps = [":popfloat_ops"],
-)
-
-tf_custom_op_py_library(
-    name = "popfloat_ops_py",
-    kernels = [":popfloat_ops"],
-    srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
-    deps = [":popfloat_ops_wrapper_py"],
-)
-
-cc_library(
-    name = "poprand_ops",
-    srcs = [
-        "ops/poprand/dropout_tf.cc",
-    ],
-    deps = ["//tensorflow/core:framework"],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "poprand_ops_wrapper_py",
-    out = "ops/gen_poprand_ops.py",
-    visibility = ["//tensorflow:internal"],
-    deps = [":poprand_ops"],
-)
-
-tf_custom_op_py_library(
-    name = "poprand_ops_py",
-    kernels = [":poprand_ops"],
-    visibility = ["//visibility:public"],
-    deps = [":poprand_ops_wrapper_py"],
-)
-
-cc_library(
-    name = "poputil_ops",
-    srcs = [
-        "ops/poputil/assume_equal_across_replicas.cc",
-        "ops/poputil/codelet_expression.cc",
-        "ops/poputil/device_sync.cc",
-        "ops/poputil/execution_counter.cc",
-        "ops/poputil/fifo.cc",
-        "ops/poputil/print_tensor.cc",
-        "ops/poputil/recompute.cc",
-        "ops/poputil/remap.cc",
-        "ops/poputil/remap_deduce.cc",
-        "ops/poputil/replication_factor.cc",
-        "ops/poputil/replication_index.cc",
-        "ops/poputil/stateful_gradient_accumulate.cc",
-        "ops/poputil/user_operation.cc",
-    ],
-    deps = [
-        ":common_shape_fns",
-        "//tensorflow/core:framework",
-    ],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "poputil_ops_wrapper_py",
-    out = "ops/gen_poputil_ops.py",
-    visibility = ["//tensorflow:internal"],
-    deps = [":poputil_ops"],
-)
-
-tf_custom_op_py_library(
-    name = "poputil_ops_py",
-    kernels = [":poputil_ops"],
-    visibility = ["//visibility:public"],
-    deps = [":poputil_ops_wrapper_py"],
-)
-
-cc_library(
-    name = "pop_datastream_ops",
-    srcs = [
-        "ops/datastream/feeds.cc",
-        "ops/datastream/host_embedding.cc",
-    ],
-    deps = [
-        ":common_shape_fns",
-        "//tensorflow/core:framework",
-    ],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "pop_datastream_ops_wrapper_py",
-    out = "ops/gen_pop_datastream_ops.py",
-    visibility = ["//tensorflow:internal"],
-    deps = [":pop_datastream_ops"],
-)
-
-tf_custom_op_py_library(
-    name = "pop_datastream_ops_py",
-    kernels = [":pop_datastream_ops"],
-    srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
-    deps = [":pop_datastream_ops_wrapper_py"],
-)
-
-cc_library(
-    name = "sendrecv_ops",
-    srcs = ["ops/sendrecv_ops.cc"],
-    deps = ["//tensorflow/core:framework"],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "sendrecv_ops_wrapper_py",
-    out = "ops/gen_sendrecv_ops.py",
-    visibility = ["//tensorflow:internal"],
-    deps = [":sendrecv_ops"],
-)
-
-tf_custom_op_py_library(
-    name = "sendrecv_ops_py",
-    kernels = [":sendrecv_ops"],
-    srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
-    deps = [":sendrecv_ops_wrapper_py"],
-)
-
-cc_library(
-    name = "functional_ops",
-    srcs = [
-        "ops/functional/functional.cc",
-        "ops/functional/pipelining.cc",
-    ],
-    deps = [
-        ":common_shape_fns",
-        "//tensorflow/core:framework",
-    ],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "functional_ops_wrapper_py",
-    out = "ops/gen_functional_ops.py",
-    visibility = ["//tensorflow:internal"],
-    deps = [":functional_ops"],
-)
-
-tf_custom_op_py_library(
-    name = "functional_ops_py",
-    kernels = [":functional_ops"],
-    srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
-    deps = [":functional_ops_wrapper_py"],
-)
-
-cc_library(
-    name = "dataset_benchmark",
-    srcs = ["ops/datastream/dataset_benchmark.cc"],
-    deps = ["//tensorflow/core:framework"],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "dataset_benchmark_wrapper_py",
-    out = "ops/gen_dataset_benchmark.py",
-    visibility = ["//tensorflow:internal"],
-    deps = [":dataset_benchmark"],
-)
-
-tf_custom_op_py_library(
-    name = "dataset_benchmark_py",
-    kernels = [":dataset_benchmark"],
-    srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
-    deps = [":dataset_benchmark_wrapper_py"],
-)
-
-cc_library(
-    name = "application_runtime",
-    srcs = [
-        "ops/application_runtime/application_compile.cc",
-        "ops/application_runtime/application_runtime.cc",
-    ],
-    deps = [
-        "//tensorflow/core:framework",
-    ],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "application_runtime_wrapper_py",
-    out = "ops/gen_application_runtime.py",
-    visibility = ["//tensorflow:internal"],
-    deps = [":application_runtime"],
-)
-
-tf_custom_op_py_library(
-    name = "application_runtime_py",
-    kernels = [":application_runtime"],
-    srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
-    deps = [":application_runtime_wrapper_py"],
-)
-
-cc_library(
-    name = "dataset_exporters",
-    srcs = ["ops/datastream/exporters.cc"],
-    deps = [
-        ":common_shape_fns",
-        "//tensorflow/core:framework",
-    ],
-    alwayslink = True,
-)
-
-tf_gen_op_wrapper_py(
-    name = "dataset_exporters_wrapper_py",
-    out = "ops/gen_dataset_exporters.py",
-    visibility = ["//tensorflow:internal"],
-    deps = [":dataset_exporters"],
-)
-
-tf_custom_op_py_library(
-    name = "dataset_exporters_py",
-    kernels = [":dataset_exporters"],
-    srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
-    deps = [":dataset_exporters_wrapper_py"],
-)
-
 cc_library(
     name = "poplar_lib",
     srcs = [
@@ -1487,26 +1107,24 @@ cc_library(
     linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
-        ":application_runtime",
-        ":dataset_benchmark",
-        ":dataset_exporters",
-        ":dataset_ops",
         ":driver",
-        ":functional_ops",
         ":graph_optimizer_passes",
-        ":ipu_ops",
         ":kernels",
-        ":pop_datastream_ops",
-        ":popfloat_ops",
         ":poplar_backend",
-        ":popnn_ops",
-        ":popops_ops",
-        ":poprand_ops",
-        ":poputil_ops",
-        ":sendrecv_ops",
         "//tensorflow/compiler/jit:xla_device",
         "//tensorflow/compiler/jit:xla_jit_headers_lib",
         "//tensorflow/compiler/jit/kernels:xla_ops",
+        "//tensorflow/compiler/plugin/poplar/ops:ipu_ops",
+        "//tensorflow/compiler/plugin/poplar/ops:sendrecv_ops",
+        "//tensorflow/compiler/plugin/poplar/ops/application_runtime:ops",
+        "//tensorflow/compiler/plugin/poplar/ops/dataset:ops",
+        "//tensorflow/compiler/plugin/poplar/ops/datastream:ops",
+        "//tensorflow/compiler/plugin/poplar/ops/functional:ops",
+        "//tensorflow/compiler/plugin/poplar/ops/popfloat:ops",
+        "//tensorflow/compiler/plugin/poplar/ops/popnn:ops",
+        "//tensorflow/compiler/plugin/poplar/ops/popops:ops",
+        "//tensorflow/compiler/plugin/poplar/ops/poprand:ops",
+        "//tensorflow/compiler/plugin/poplar/ops/poputil:ops",
         "//tensorflow/compiler/tf2xla:xla_compiler",
         "//tensorflow/core:framework_headers_lib",
         "//tensorflow/core/kernels:constant_op",
@@ -2551,13 +2169,11 @@ tf_xla_py_test(
     tags = ["hw_poplar_test"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -3821,7 +3437,7 @@ py_library(
     srcs = ["tests/test_utils.py"],
     visibility = ["//visibility:public"],
     deps = [
-        ":ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/compiler/tf2xla/python:xla",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -3835,13 +3451,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 2,
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
     ],
 )
 
@@ -3852,15 +3462,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 2,
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -3871,14 +3473,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 4,
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -3888,13 +3483,7 @@ tf_xla_py_test(
     srcs = ["tests/topk_onehot_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
     ],
 )
 
@@ -3904,13 +3493,7 @@ tf_xla_py_test(
     srcs = ["tests/topk_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
     ],
 )
 
@@ -3921,13 +3504,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:nn",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:variables",
     ],
 )
 
@@ -3938,14 +3514,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:init_ops",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:nn",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:variables",
     ],
 )
 
@@ -3956,15 +3524,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:init_ops",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:nn",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -3975,13 +3534,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 8,
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:constant_op",
-        "//tensorflow/python:nn_ops",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -3995,14 +3548,7 @@ tf_xla_py_test(
     ],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:constant_op",
-        "//tensorflow/python:nn_ops",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4012,14 +3558,7 @@ tf_xla_py_test(
     srcs = ["tests/serialization_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:constant_op",
-        "//tensorflow/python:nn_ops",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4030,12 +3569,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 2,
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:constant_op",
-        "//tensorflow/python:nn_ops",
     ],
 )
 
@@ -4046,14 +3580,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 4,  # Run all tests in parallel to improve performance
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:layers_base",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
     ],
 )
 
@@ -4064,15 +3591,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:init_ops",
-        "//tensorflow/python:linalg_ops",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -4082,10 +3600,7 @@ tf_xla_py_test(
     srcs = ["tests/constant_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:constant_op",
     ],
 )
 
@@ -4096,12 +3611,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:random_ops",
-        "//tensorflow/python:resource_variable_ops",
-        "//tensorflow/python:variables",
     ],
 )
 
@@ -4111,19 +3620,7 @@ tf_xla_py_test(
     srcs = ["tests/variable_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:init_ops",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:random_ops",
-        "//tensorflow/python:resource_variable_ops",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4133,19 +3630,7 @@ tf_xla_py_test(
     srcs = ["tests/synthetic_data_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:init_ops",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:random_ops",
-        "//tensorflow/python:resource_variable_ops",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4156,19 +3641,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 3,
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:init_ops",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:random_ops",
-        "//tensorflow/python:resource_variable_ops",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4178,19 +3651,7 @@ tf_xla_py_test(
     srcs = ["tests/synthetic_data_categories_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:init_ops",
-        "//tensorflow/python:layers_base",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:random_ops",
-        "//tensorflow/python:resource_variable_ops",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -4204,10 +3665,6 @@ tf_xla_py_test(
     tags = ["hw_poplar_test"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
     ],
 )
 
@@ -4217,9 +3674,7 @@ tf_xla_py_test(
     srcs = ["tests/reduce_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
     ],
 )
 
@@ -4230,10 +3685,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
     ],
 )
 
@@ -4244,10 +3695,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
     ],
 )
 
@@ -4257,18 +3704,7 @@ tf_xla_py_test(
     srcs = ["tests/batch_norm_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:init_ops",
-        "//tensorflow/python:layers",
-        "//tensorflow/python:nn",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4280,16 +3716,7 @@ tf_xla_py_test(
     shard_count = 2,
     tags = ["hw_poplar_test"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:init_ops",
-        "//tensorflow/python:nn",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -4473,15 +3900,7 @@ tf_xla_py_test(
     srcs = ["tests/fuse_ops_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:layers",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4491,14 +3910,7 @@ tf_xla_py_test(
     srcs = ["tests/assert_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:layers_base",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
     ],
 )
 
@@ -4509,15 +3921,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 5,
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4528,14 +3932,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:tensor_array_grad",
-        "//tensorflow/python:tensor_array_ops",
-        "//tensorflow/python:variables",
     ],
 )
 
@@ -4546,12 +3942,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:layers",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:variables",
     ],
 )
 
@@ -4561,13 +3951,7 @@ tf_xla_py_test(
     srcs = ["tests/casts_elimination_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
     ],
 )
 
@@ -4577,14 +3961,7 @@ tf_xla_py_test(
     srcs = ["tests/sendrecv_ops_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":sendrecv_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -4597,12 +3974,6 @@ tf_xla_py_test(
     tags = ["isolated_poplar_tests"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -4612,13 +3983,7 @@ tf_xla_py_test(
     srcs = ["tests/update_op_dependencies_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
     ],
 )
 
@@ -4628,15 +3993,7 @@ tf_xla_py_test(
     srcs = ["tests/norm_graph_caching_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4646,15 +4003,7 @@ tf_xla_py_test(
     srcs = ["tests/norm_graph_caching_sharded_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4664,14 +4013,7 @@ tf_xla_py_test(
     srcs = ["tests/conv_graph_caching_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:layers",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
     ],
 )
 
@@ -4682,13 +4024,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:layers",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -4699,15 +4034,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 8,
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4718,15 +4045,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 6,
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -4737,14 +4056,7 @@ tf_xla_py_test(
     srcs = ["tests/wide_const_expansion_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -4755,14 +4067,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 4,
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4772,15 +4077,7 @@ tf_xla_py_test(
     srcs = ["tests/stateful_gradient_accumulate_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
-        ":popops_ops_py",
-        ":poputil_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
     ],
 )
 
@@ -4791,10 +4088,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4805,14 +4098,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:control_flow_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -4823,15 +4108,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:control_flow_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/compiler/xla:compiler_py",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -4842,14 +4118,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:control_flow_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -4860,14 +4128,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:control_flow_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -4878,11 +4138,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:candidate_sampling_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -4893,15 +4148,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:control_flow_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:init_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -4912,10 +4158,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4927,10 +4169,6 @@ tf_xla_py_test(
     shard_count = 8,
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4942,10 +4180,6 @@ tf_xla_py_test(
     shard_count = 4,
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4957,10 +4191,6 @@ tf_xla_py_test(
     shard_count = 6,
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4972,10 +4202,6 @@ tf_xla_py_test(
     shard_count = 4,
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -4986,10 +4212,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python:layers",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5000,10 +4222,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python:layers",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5014,13 +4232,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5031,13 +4242,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5048,13 +4252,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5066,13 +4263,6 @@ tf_xla_py_test(
     tags = ["isolated_poplar_tests"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5083,13 +4273,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5100,13 +4283,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5117,13 +4293,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5144,8 +4313,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5161,8 +4328,6 @@ tf_xla_py_test(
     tags = ["hw_poplar_test"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5185,8 +4350,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5369,14 +4532,7 @@ tf_xla_py_test(
     srcs = ["tests/bias_apply_graph_caching_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -5386,14 +4542,7 @@ tf_xla_py_test(
     srcs = ["tests/matmul_graph_caching_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -5404,14 +4553,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     tags = ["exclusive"],
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -5467,15 +4609,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 6,
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -5499,17 +4633,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 2,
     deps = [
-        ":ipu_ops_py",
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:init_ops",
-        "//tensorflow/python:nn",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -5604,8 +4728,6 @@ tf_xla_py_test(
     shard_count = 4,
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -5770,8 +4892,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 

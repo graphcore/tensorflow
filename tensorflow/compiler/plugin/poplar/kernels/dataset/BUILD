@@ -32,7 +32,7 @@ tf_cc_test(
     srcs = ["buffer_dataset_op_test.cc"],
     deps = [
         ":buffer_dataset_op",
-        "//tensorflow/compiler/plugin/poplar:dataset_ops",
+        "//tensorflow/compiler/plugin/poplar/ops/dataset:ops",
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:dataset_ops_op_lib",
         "//tensorflow/core:framework",
@@ -51,7 +51,7 @@ tf_kernel_library(
     name = "dataset",
     deps = [
         ":buffer_dataset_op",
-        "//tensorflow/compiler/plugin/poplar:dataset_ops",
+        "//tensorflow/compiler/plugin/poplar/ops/dataset:ops",
     ],
 )
 
