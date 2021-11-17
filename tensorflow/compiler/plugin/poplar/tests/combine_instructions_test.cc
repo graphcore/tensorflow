@@ -54,7 +54,60 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-using CombineInstructionsTest = HloPoplarTestBase;
+// Utility matchers..
+MATCHER_P2(ContainsNOps, opcode, expected_count, "") {
+  const auto& sequence = arg;
+  const auto pred = [&](const HloInstruction* inst) {
+    return inst->opcode() == opcode;
+  };
+
+  const auto count = absl::c_count_if(sequence, pred);
+  const auto success = count == expected_count;
+  if (!success) {
+    *result_listener << "Sequence contains " << count << " "
+                     << HloOpcodeString(opcode) << " but expected "
+                     << expected_count;
+  }
+
+  return success;
+}
+
+MATCHER_P2(ContainsNPoplarOps, opcode, expected_count, "") {
+  const auto& sequence = arg;
+
+  const auto count = absl::c_count_if(sequence, IsPoplarInstruction(opcode));
+  const auto success = count == expected_count;
+  if (!success) {
+    *result_listener << "Sequence contains " << count << " "
+                     << PoplarOp_Name(opcode) << " but expected "
+                     << expected_count;
+  }
+
+  return success;
+}
+
+struct CombineInstructionsTest : HloPoplarTestBase {
+  static HloMemoryScheduler CreateHloScheduler(
+      IpuSchedulerAlgorithm algorithm) {
+    HloMemoryScheduler scheduler(
+        [](const BufferValue& buffer) {
+          return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+        },
+        ComputationSchedulerToModuleScheduler(
+            IpuToMemorySchedulerAlgorithm(algorithm)));
+
+    return scheduler;
+  }
+
+  static HloMemoryScheduler CreateLookAheadScheduler(
+      const CompilerInformation& information) {
+    return CreateHloScheduler(CreateClusteringMemoryScheduler(information));
+  }
+
+  void SetUp() override { config_.set_debug_options(GetDebugOptionsForTest()); }
+
+  HloModuleConfig config_;
+};
 
 TEST_F(CombineInstructionsTest, TestSyncScheduler) {
   std::string hlo_string = R"(
@@ -76,21 +129,11 @@ add {
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(f16[4] %a1, f16[4] %a2, f16[4] %a3)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateSyncListMemoryScheduler(64 * 1024))));
+  auto scheduler = CreateHloScheduler(CreateSyncListMemoryScheduler(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -106,11 +149,7 @@ add {
   auto s = module->schedule().sequence(module->entry_computation());
   auto seq = s.instructions();
   ASSERT_EQ(seq.size(), 8);
-
-  auto pred = [](const HloInstruction* inst) {
-    return inst->opcode() == HloOpcode::kAllReduce;
-  };
-  ASSERT_EQ(absl::c_count_if(seq, pred), 1);
+  ASSERT_THAT(seq, ContainsNOps(HloOpcode::kAllReduce, 1));
 }
 
 TEST_F(CombineInstructionsTest, TestLookAheadScheduler) {
@@ -133,23 +172,12 @@ add {
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(f16[4] %a1, f16[4] %a2, f16[4] %a3)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_all_reduce_buffer_size(64 *
-                                                                   1024)))));
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_all_reduce_buffer_size(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -165,11 +193,7 @@ add {
   auto s = module->schedule().sequence(module->entry_computation());
   auto seq = s.instructions();
   ASSERT_EQ(seq.size(), 8);
-
-  auto pred = [](const HloInstruction* inst) {
-    return inst->opcode() == HloOpcode::kAllReduce;
-  };
-  ASSERT_EQ(absl::c_count_if(seq, pred), 1);
+  ASSERT_THAT(seq, ContainsNOps(HloOpcode::kAllReduce, 1));
 }
 
 TEST_F(CombineInstructionsTest, TestMergeInterIpuCopiesLookAheadScheduler) {
@@ -204,13 +228,8 @@ ENTRY entry () -> f32[2] {
   ROOT get-tuple-element.52 = f32[2] get-tuple-element(call), index=1, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
   auto* comp = module->entry_computation();
@@ -223,27 +242,18 @@ ENTRY entry () -> f32[2] {
 
   // Expect three inter IPU copies to have been inserted.
   EXPECT_EQ(body->instruction_count(), 15);
-  ASSERT_EQ(absl::c_count_if(body->instructions(),
-                             IsPoplarInstruction(PoplarOp::IpuInterCopy)),
-            3);
+  ASSERT_THAT(body->instructions(),
+              ContainsNPoplarOps(PoplarOp::IpuInterCopy, 3));
 
   // Schedule and combine.
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_inter_ipu_copies_buffer_size(
-                  64 * 1024)))));
-
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_inter_ipu_copies_buffer_size(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
   // Two IPU copies have been merged.
-  EXPECT_EQ(absl::c_count_if(body->instructions(),
-                             IsPoplarInstruction(PoplarOp::IpuInterCopy)),
-            2);
+  EXPECT_THAT(body->instructions(),
+              ContainsNPoplarOps(PoplarOp::IpuInterCopy, 2));
   EXPECT_EQ(body->instruction_count(), 16);
 }
 
@@ -273,11 +283,7 @@ add {
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(ga0, ga1, ga2)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -293,14 +299,8 @@ add {
   EXPECT_TRUE(fuser.Run(module).ValueOrDie());
   EXPECT_EQ(entry->instruction_count(), 10);
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_all_reduce_buffer_size(64 *
-                                                                   1024)))));
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_all_reduce_buffer_size(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -316,10 +316,8 @@ add {
   auto s = module->schedule().sequence(module->entry_computation());
   auto seq = s.instructions();
   ASSERT_EQ(seq.size(), 11);
-  ASSERT_EQ(absl::c_count_if(
-                seq, IsPoplarInstruction(
-                         PoplarOp::StatefulGradientAccumulateAndAllReduce)),
-            1);
+  ASSERT_THAT(seq, ContainsNPoplarOps(
+                       PoplarOp::StatefulGradientAccumulateAndAllReduce, 1));
 }
 
 TEST_F(CombineInstructionsTest,
@@ -364,14 +362,10 @@ add {
   ROOT %tuple = (f16[4], f16[4], f16[4], f16[4], f16[4], f16[4]) tuple(new_grad0, new_accum0, new_grad1, new_accum1, new_grad2, new_accum2)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
+
   CompilerAnnotations annotations(module);
   auto* entry = module->entry_computation();
 
@@ -384,14 +378,8 @@ add {
   EXPECT_TRUE(fuser.Run(module).ValueOrDie());
   EXPECT_EQ(entry->instruction_count(), 17);
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_all_reduce_buffer_size(64 *
-                                                                   1024)))));
+  auto scheduler = CreateHloScheduler(CreateClusteringMemoryScheduler(
+      CompilerInformation().set_max_all_reduce_buffer_size(64 * 1024)));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -403,13 +391,11 @@ add {
   auto s = module->schedule().sequence(entry);
   auto seq = s.instructions();
   ASSERT_EQ(seq.size(), 24);
-  ASSERT_EQ(
-      absl::c_count_if(
-          seq,
-          IsPoplarInstruction(
-              PoplarOp::
-                  StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm)),
-      1);
+  ASSERT_THAT(
+      seq,
+      ContainsNPoplarOps(
+          PoplarOp::StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm,
+          1));
 }
 
 TEST_F(CombineInstructionsTest,
@@ -439,14 +425,10 @@ add {
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(ga0, norm1, ga2)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
+
   CompilerAnnotations annotations(module);
   auto* entry = module->entry_computation();
 
@@ -459,14 +441,8 @@ add {
   EXPECT_TRUE(fuser.Run(module).ValueOrDie());
   EXPECT_EQ(entry->instruction_count(), 10);
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_all_reduce_buffer_size(64 *
-                                                                   1024)))));
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_all_reduce_buffer_size(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
@@ -489,13 +465,8 @@ HloModule top
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(r0, r1, r2)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
   CustomOpReplacer custom_op_replacer;
@@ -504,20 +475,12 @@ HloModule top
   CompilerAnnotations annotations(module);
   auto* entry = module->entry_computation();
 
-  ASSERT_EQ(absl::c_count_if(entry->instructions(),
-                             IsPoplarInstruction(PoplarOp::ReduceScatter)),
-            4);
+  ASSERT_THAT(entry->instructions(),
+              ContainsNPoplarOps(PoplarOp::ReduceScatter, 4));
 
   // Schedule and combine.
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_reduce_scatter_buffer_size(
-                  64 * 1024)))));
-
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_reduce_scatter_buffer_size(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -529,8 +492,7 @@ HloModule top
   // - One combined with with op=ADD replica_group_size=2
   // - One left alone with with op=ADD replica_group_size=4
   // - One left alone with with op=LOCAL replica_group_size=4
-  ASSERT_EQ(absl::c_count_if(seq, IsPoplarInstruction(PoplarOp::ReduceScatter)),
-            3);
+  ASSERT_THAT(seq, ContainsNPoplarOps(PoplarOp::ReduceScatter, 3));
 }
 
 TEST_F(CombineInstructionsTest, TestCombineSendToHost) {
@@ -545,13 +507,8 @@ ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
   ROOT %ret = () tuple()
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
   CustomOpReplacer custom_op_replacer;
@@ -559,14 +516,9 @@ ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
 
   const int64 max_send_recv_cluster_size = 8;
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_send_recv_cluster_size(
-                  max_send_recv_cluster_size)))));
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_send_recv_cluster_size(
+          max_send_recv_cluster_size));
   ASSERT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   ASSERT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -574,7 +526,7 @@ ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
   auto s = module->schedule().sequence(module->entry_computation());
   auto seq = s.instructions();
 
-  EXPECT_EQ(absl::c_count_if(seq, IsPoplarInstruction(SendToHost)), 1);
+  ASSERT_THAT(seq, ContainsNPoplarOps(PoplarOp::SendToHost, 1));
 
   auto send_inst = Cast<HloSendToHostInstruction>(
       *absl::c_find_if(seq, IsPoplarInstruction(SendToHost)));
@@ -605,34 +557,24 @@ ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
   ROOT %tuple = () tuple()
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
   EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
 
   const int64 max_send_recv_cluster_size = 4;
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_send_recv_cluster_size(
-                  max_send_recv_cluster_size)))));
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_send_recv_cluster_size(
+          max_send_recv_cluster_size));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
 
   auto s = module->schedule().sequence(module->entry_computation());
   auto seq = s.instructions();
-  EXPECT_EQ(absl::c_count_if(seq, IsPoplarInstruction(SendToHost)), 2);
+  ASSERT_THAT(seq, ContainsNPoplarOps(PoplarOp::SendToHost, 2));
 }
 
 TEST_F(CombineInstructionsTest, TestCombineRecvFromHost) {
@@ -645,13 +587,8 @@ ENTRY %top () -> (f32[], f32[]) {
   ROOT %tuple = (f32[], f32[]) tuple(%recv1, %recv2)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
   CustomOpReplacer custom_op_replacer;
@@ -659,14 +596,9 @@ ENTRY %top () -> (f32[], f32[]) {
 
   const int64 max_send_recv_cluster_size = 8;
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_send_recv_cluster_size(
-                  max_send_recv_cluster_size)))));
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_send_recv_cluster_size(
+          max_send_recv_cluster_size));
   ASSERT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   ASSERT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -674,7 +606,7 @@ ENTRY %top () -> (f32[], f32[]) {
   auto s = module->schedule().sequence(module->entry_computation());
   auto seq = s.instructions();
 
-  EXPECT_EQ(absl::c_count_if(seq, IsPoplarInstruction(RecvFromHost)), 1);
+  ASSERT_THAT(seq, ContainsNPoplarOps(PoplarOp::RecvFromHost, 1));
 
   auto recv_inst = Cast<HloRecvFromHostInstruction>(
       *absl::c_find_if(seq, IsPoplarInstruction(RecvFromHost)));
@@ -711,13 +643,8 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   ROOT %tuple = (f32[], f32[2]) tuple(%recv1, %recv2)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
   EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
@@ -727,14 +654,9 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
 
   const int64 max_send_recv_cluster_size = 12;
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_send_recv_cluster_size(
-                  max_send_recv_cluster_size)))));
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_send_recv_cluster_size(
+          max_send_recv_cluster_size));
   ASSERT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   ASSERT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -808,12 +730,8 @@ cluster_1  {
   ROOT %tuple = (f32[512], f32[512], f32[512]) tuple(r0, r1, r2)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
   TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo_string, config));
+                          ParseAndReturnVerifiedModule(hlo_string, config_));
 
   CompilerAnnotations annotations(module.get());
   auto* entry = module.get()->entry_computation();
@@ -822,15 +740,8 @@ cluster_1  {
 
   uint64 node_size = 4 * 512;  // float32 * 512.
   // Schedule and combine.
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_reduce_many_buffer_size(
-                  2 * node_size)))));  // 2 nodes out of the 3 in the graph.
-
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_reduce_many_buffer_size(2 * node_size));
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
   EXPECT_TRUE(CombineInstructions().Run(module.get()).ValueOrDie());
 
@@ -839,8 +750,7 @@ cluster_1  {
 
   // Two reduces should be combined into a reduce many, while one is left
   // unmodified.
-  ASSERT_EQ(absl::c_count_if(seq, IsPoplarInstruction(PoplarOp::ReduceMany)),
-            1);
+  ASSERT_THAT(seq, ContainsNPoplarOps(PoplarOp::ReduceMany, 1));
   ASSERT_EQ(absl::c_count_if(seq, IsReduceAddOrMultiply), 1);
 }
 
@@ -885,12 +795,8 @@ cluster_1  {
   ROOT %tuple = (f32[512], f32[512]) tuple(r0, r1)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
   TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo_string, config));
+                          ParseAndReturnVerifiedModule(hlo_string, config_));
 
   CompilerAnnotations annotations(module.get());
   auto* entry = module.get()->entry_computation();
@@ -899,15 +805,8 @@ cluster_1  {
 
   uint64 node_size = 4 * 512;  // float32 * 512.
   // Schedule and combine.
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_reduce_many_buffer_size(
-                  2 * node_size)))));  // Sufficient for both reduces.
-
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_reduce_many_buffer_size(2 * node_size));
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
   EXPECT_TRUE(CombineInstructions().Run(module.get()).ValueOrDie());
 
@@ -915,8 +814,7 @@ cluster_1  {
   auto seq = s.instructions();
 
   // Both reduce fusions should be combined into a ReduceMany.
-  ASSERT_EQ(absl::c_count_if(seq, IsPoplarInstruction(PoplarOp::ReduceMany)),
-            1);
+  ASSERT_THAT(seq, ContainsNPoplarOps(PoplarOp::ReduceMany, 1));
   ASSERT_EQ(absl::c_count_if(seq, IsReductionFusion), 0);
 }
 
@@ -965,27 +863,17 @@ ENTRY cluster_1  {
   ROOT %tuple = (f32[16], f32[16], f32[16]) tuple(r0, r1, r2)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
   TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo_string, config));
+                          ParseAndReturnVerifiedModule(hlo_string, config_));
+  using ::testing::Each;
 
   CompilerAnnotations annotations(module.get());
   auto* entry = module.get()->entry_computation();
 
   uint64 node_size = 4 * 32;  // float32 * 32.
   // Schedule and combine.
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_reduce_many_buffer_size(
-                  4 * node_size)))));  // Sufficient for all reduces.
-
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_reduce_many_buffer_size(4 * node_size));
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
   EXPECT_TRUE(CombineInstructions().Run(module.get()).ValueOrDie());
 
@@ -1026,15 +914,9 @@ ENTRY cluster_1  {
   device.detach();
 
   // Check outputs
-  for (auto& n : out0) {
-    ASSERT_EQ(n, 37);  // 5 + ((2^2) * 8)
-  }
-  for (auto& n : out1) {
-    ASSERT_EQ(n, 768);  // 3 * (2 ^ 8)
-  }
-  for (auto& n : out2) {
-    ASSERT_EQ(n, 16);  // 0 + (2 * 8)
-  }
+  ASSERT_THAT(out0, Each(37));   // 5 + ((2^2) * 8)
+  ASSERT_THAT(out1, Each(768));  // 3 * (2 ^ 8);
+  ASSERT_THAT(out2, Each(16));   // 0 + (2 * 8)
 }
 
 TEST_F(CombineInstructionsTest, TestInplace) {
@@ -1063,14 +945,10 @@ add {
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(ga0, ga1, ga2)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
+
   CompilerAnnotations annotations(module);
   auto* entry = module->entry_computation();
 
@@ -1089,11 +967,9 @@ add {
 
   // Expect the gradient accumulations to be inplace.
   auto inplace_instructions = GetInplaceInstructions(module);
-  ASSERT_EQ(
-      absl::c_count_if(inplace_instructions,
-                       IsPoplarInstruction(
-                           PoplarOp::StatefulGradientAccumulateAndAllReduce)),
-      3);
+  ASSERT_THAT(
+      inplace_instructions,
+      ContainsNPoplarOps(PoplarOp::StatefulGradientAccumulateAndAllReduce, 3));
 
   // Make one of the gradient accumulations not inplace.
   auto root = entry->root_instruction();
@@ -1101,14 +977,8 @@ add {
   auto ga_and_ar = norm1->mutable_operand(0);
   MakeUsedNotInplace(ga_and_ar);
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_all_reduce_buffer_size(64 *
-                                                                   1024)))));
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_all_reduce_buffer_size(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -1117,10 +987,8 @@ add {
   auto seq = s.instructions();
   ASSERT_EQ(seq.size(), 11);
   // Expect two gradient accumulation instructions.
-  ASSERT_EQ(absl::c_count_if(
-                seq, IsPoplarInstruction(
-                         PoplarOp::StatefulGradientAccumulateAndAllReduce)),
-            2);
+  ASSERT_THAT(seq, ContainsNPoplarOps(
+                       PoplarOp::StatefulGradientAccumulateAndAllReduce, 2));
 }
 
 TEST_F(CombineInstructionsTest, TestDataDependency) {
@@ -1142,23 +1010,12 @@ add {
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(f16[4] %a1, f16[4] %a2, f16[4] %a3)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_all_reduce_buffer_size(64 *
-                                                                   1024)))));
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_all_reduce_buffer_size(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -1174,11 +1031,7 @@ add {
   auto s = module->schedule().sequence(module->entry_computation());
   auto seq = s.instructions();
   ASSERT_EQ(seq.size(), 7);
-
-  auto pred = [](const HloInstruction* inst) {
-    return inst->opcode() == HloOpcode::kAllReduce;
-  };
-  ASSERT_EQ(absl::c_count_if(seq, pred), 2);
+  ASSERT_THAT(seq, ContainsNOps(HloOpcode::kAllReduce, 2));
 }
 
 TEST_F(CombineInstructionsTest, TestControlDependency) {
@@ -1200,23 +1053,12 @@ add {
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(f16[4] %a1, f16[4] %a2, f16[4] %a3)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_all_reduce_buffer_size(64 *
-                                                                   1024)))));
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_all_reduce_buffer_size(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
@@ -1246,23 +1088,12 @@ add {
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(f16[4] %a4, f16[4] %a5, f16[4] %a6)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_all_reduce_buffer_size(64 *
-                                                                   1024)))));
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_all_reduce_buffer_size(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -1278,11 +1109,7 @@ add {
   auto s = module->schedule().sequence(module->entry_computation());
   auto seq = s.instructions();
   ASSERT_EQ(seq.size(), 13);
-
-  auto pred = [](const HloInstruction* inst) {
-    return inst->opcode() == HloOpcode::kAllReduce;
-  };
-  ASSERT_EQ(absl::c_count_if(seq, pred), 4);
+  ASSERT_THAT(seq, ContainsNOps(HloOpcode::kAllReduce, 4));
 }
 
 TEST_F(CombineInstructionsTest, TestMultipleTypes) {
@@ -1313,23 +1140,12 @@ add {
   ROOT %tuple = (f32[4], f16[4], f32[4], f16[4], f32[4], f16[4]) tuple(f32[4] %a1, f16[4] %a2, f32[4] %a3, f16[4] %a4, f32[4] %a5, f16[4] %a6)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              CompilerInformation().set_max_all_reduce_buffer_size(64 *
-                                                                   1024)))));
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_all_reduce_buffer_size(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -1341,23 +1157,17 @@ add {
   // all reduce) + 1 output tuple. = 15 instructions.
   ASSERT_EQ(seq.size(), 15);
 
-  auto pred = [](const HloInstruction* inst) {
-    return inst->opcode() == HloOpcode::kAllReduce;
-  };
-
   // All of the fp16 kernels should be fused in one and all of the floating
   // point 32 in another, so there should only be two.
-  ASSERT_EQ(absl::c_count_if(seq, pred), 2);
+  ASSERT_THAT(seq, ContainsNOps(HloOpcode::kAllReduce, 2));
 }
 
-class CombineInstructionsAllGatherTest : public HloPoplarTestBase {
+class CombineInstructionsAllGatherTest : public CombineInstructionsTest {
   void SetUp() override {
-    HloModuleConfig config;
-    config.set_replica_count(_replication_factor);
-    config.set_debug_options(GetDebugOptionsForTest());
+    config_.set_debug_options(GetDebugOptionsForTest());
 
     TF_ASSERT_OK_AND_ASSIGN(_module,
-                            ParseAndReturnVerifiedModule(_hlo_string, config));
+                            ParseAndReturnVerifiedModule(_hlo_string, config_));
     EXPECT_TRUE(CustomOpReplacer().Run(_module.get()).ValueOrDie());
   }
 
@@ -1402,14 +1212,9 @@ entry {
   void ScheduleInstructions() {
     uint64 node_size = 4 * 512;  // float32 * 512.
     // Scheduling is required to run the combiner.
-    HloMemoryScheduler scheduler(
-        [](const BufferValue& buffer) {
-          return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-        },
-        ComputationSchedulerToModuleScheduler(
-            IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-                CompilerInformation().set_max_all_gather_buffer_size(
-                    2 * node_size)))));  // 2 nodes out of the 3 in the graph.
+    auto scheduler = CreateLookAheadScheduler(
+        CompilerInformation().set_max_all_gather_buffer_size(
+            2 * node_size));  // 2 nodes out of the 3 in the graph.
     EXPECT_TRUE(scheduler.Run(_module.get()).ValueOrDie());
   }
 };
@@ -1435,11 +1240,8 @@ TEST_F(CombineInstructionsAllGatherTest, TestCombineAllGather) {
 
   // Three groups of three gathers should be each combined into a single
   // PoplarAllGather.
-  std::vector<HloInstruction*> poplar_all_gather_insts;
   auto instructions = _module->schedule().sequence(entry).instructions();
-  absl::c_copy_if(instructions, std::back_inserter(poplar_all_gather_insts),
-                  IsPoplarInstruction(PoplarOp::AllGather));
-  ASSERT_EQ(poplar_all_gather_insts.size(), 3);
+  ASSERT_THAT(instructions, ContainsNPoplarOps(PoplarOp::AllGather, 3));
 }
 
 TEST_F(CombineInstructionsAllGatherTest, TestCombineAllGatherOutputsIdentical) {
