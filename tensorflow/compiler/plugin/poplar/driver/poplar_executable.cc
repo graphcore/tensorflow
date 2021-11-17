@@ -189,6 +189,32 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
 
   info.logging_cycle_count = proto.logging_cycle_count();
 
+  for (const auto& input_info : ertc.signature().inputs()) {
+    info.entry_input_infos.insert(
+        InputInfo{input_info.name(), input_info.handle(), input_info.argument(),
+                  input_info.tuple_index(), Shape(input_info.shape())});
+  }
+
+  for (const auto& streamed_input_info : ertc.signature().streamed_inputs()) {
+    info.feed_input_infos.insert(InputInfo{
+        streamed_input_info.name(), streamed_input_info.handle(),
+        streamed_input_info.argument(), streamed_input_info.tuple_index(),
+        Shape(streamed_input_info.shape())});
+  }
+
+  for (const auto& output_info : ertc.signature().outputs()) {
+    info.entry_output_infos.insert(
+        OutputInfo{output_info.name(), output_info.handle(),
+                   output_info.tuple_index(), Shape(output_info.shape())});
+  }
+
+  for (const auto& streamed_output_info : ertc.signature().streamed_outputs()) {
+    info.feed_output_infos.insert(
+        OutputInfo{streamed_output_info.name(), streamed_output_info.handle(),
+                   streamed_output_info.tuple_index(),
+                   Shape(streamed_output_info.shape())});
+  }
+
   // Load the additional Poplar engine options that we need to restore.
   CHECK_NOTNULL(engine_options);
   for (const auto& flag : proto.option_flags()) {
@@ -307,7 +333,6 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
 
   proto.set_logging_cycle_count(info.logging_cycle_count);
 
-  // Items that don't need deserialising.
   for (const auto& input_info : info.entry_input_infos) {
     auto input = ertc->mutable_signature()->add_inputs();
     input->set_name(input_info.name);
