@@ -251,42 +251,35 @@ Status PoplarExceptionToTensorflowStatus(const std::string& origin,
                                          const std::exception& e,
                                          bool& reset_engine) {
   const std::string prefix = "[Poplar]" + origin + " ";
+  const std::string recovery_message =
+      " IPU will be reset the next time a program is executed.";
+
   try {
     std::rethrow_exception(std::current_exception());
   } catch (const poplar::recoverable_runtime_error& e) {
     auto runtime_error =
         static_cast<const poplar::recoverable_runtime_error*>(&e);
+    std::string error_message = absl::StrCat(
+        prefix, runtime_error->type, ": [Recovery action: ",
+        poplar::toString(runtime_error->getRecoveryAction()), "] ", e.what());
+
     // Recoverable runtime error with IPU_RESET action is handled by resetting
     // the engine to nullptr, otherwise it's a fatal error.
     if (runtime_error->getRecoveryAction() ==
         poplar::RecoveryAction::IPU_RESET) {
       reset_engine = true;
-      return tensorflow::errors::Internal(
-          prefix, runtime_error->type, ": ", e.what(),
-          ". IPU will be reset the next time a program is executed.");
-    } else {
-      return tensorflow::errors::Internal(
-          prefix, runtime_error->type, ": ", e.what(),
-          " Recovery action required: ",
-          poplar::toString(runtime_error->getRecoveryAction()));
+      error_message = error_message + recovery_message;
     }
+
+    return tensorflow::errors::Internal(error_message);
   } catch (const poplar::application_runtime_error& e) {
+    auto poplar_error = static_cast<const poplar::poplar_error*>(&e);
     // Application errors require an engine reset.
     reset_engine = true;
-    auto runtime_error =
-        static_cast<const poplar::application_runtime_error*>(&e);
-    return tensorflow::errors::Internal(prefix, runtime_error->type, ": ",
-                                        e.what());
-  } catch (const poplar::runtime_error& e) {
-    auto runtime_error = static_cast<const poplar::runtime_error*>(&e);
-    // Default case for runtime errors which we can't recover from.
-    return tensorflow::errors::Internal(prefix, runtime_error->type, ": ",
-                                        e.what());
-  } catch (const poplar::link_error& e) {
-    auto link_error = static_cast<const poplar::link_error*>(&e);
-    return tensorflow::errors::Internal(prefix, link_error->type, ": ",
-                                        e.what(),
-                                        " Output: ", link_error->output);
+
+    return tensorflow::errors::Internal(prefix, poplar_error->type,
+                                        ": [Recovery action: IPU_RESET] ",
+                                        e.what(), recovery_message);
   } catch (const poplar::poplar_error& e) {
     auto poplar_error = static_cast<const poplar::poplar_error*>(&e);
     return tensorflow::errors::Internal(prefix, poplar_error->type, ": ",

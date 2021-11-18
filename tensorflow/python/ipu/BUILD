@@ -315,6 +315,18 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "exception_test",
+    size = "large",
+    srcs = ["tests/exception_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
     name = "application_runtime_test",
     size = "large",
     srcs = ["tests/application_runtime_test.py"],
@@ -1628,6 +1640,7 @@ tf_py_test(
 test_suite(
     name = "all_tests",
     tests = [
+        "application_compile_and_run_test",
         "application_compile_test",
         "application_runtime_test",
         "assume_equal_test",
@@ -1639,6 +1652,7 @@ test_suite(
         "dropout_test",
         "embedding_lookup_test",
         "estimator_test",
+        "exception_test",
         "expression_op_test",
         "fifo_test",
         "floating_point_control_bits_test",

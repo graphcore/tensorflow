@@ -34,6 +34,7 @@ from tensorflow.python.ops import nn, nn_ops
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops, dtypes
 from tensorflow.compiler.plugin.poplar.ops import gen_application_runtime
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -847,9 +848,10 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
 
     with sl.Session() as sess:
       with self.assertRaisesRegex(
-          Exception,
-          r"\[Poplar\]\[Execute engine\] application_runtime_error: Tiles in "
-          r"excepted state.*"):
+          errors.InternalError,
+          r"\[Poplar\]\[Execute engine\] application_runtime_error: \[Recovery "
+          r"action: IPU_RESET\] Tiles in excepted state [\s\S]* IPU will be "
+          r"reset the next time a program is executed."):
         sess.run(result)
 
   @tu.test_uses_ipus(num_ipus=1)
