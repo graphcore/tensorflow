@@ -14,7 +14,9 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
+
 #include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
@@ -249,6 +251,115 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
     })),
 
+  // Reduce with scale as scalar tensor - shape(), input f16.
+  HloMatcherPattern(
+    PatternType("reduction_square_add"),
+    PatternMetaTarget(1),
+    PatternInputs({4, 5, 6}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kMultiply, NodeOperands({6, 1})},
+      {HloOpcode::kReduce, NodeOperands({2, 5})},
+      {HloOpcode::kConvert, NodeOperands({3}), IsF16ToF32Convert},
+      {HloOpcode::kMultiply, NodeOperands({4, 4})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}),
+        {IsSingleElement, IsF32}}
+    })),
+
+  // Reduce with scale as scalar tensor - shape().
+  HloMatcherPattern(
+    PatternType("reduction_square_add"),
+    PatternMetaTarget(1),
+    PatternInputs({3, 4, 5}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kMultiply, NodeOperands({5, 1})},
+      {HloOpcode::kReduce, NodeOperands({2, 4})},
+      {HloOpcode::kMultiply, NodeOperands({3, 3})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}),
+        {IsSingleElement, IsF32}}
+    })),
+
+  // Reduce with scale as single element tensor - shape(1), input f16.
+  HloMatcherPattern(
+    PatternType("reduction_square_add"),
+    PatternMetaTarget(3),
+    PatternInputs({6, 7, 1}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kMultiply, NodeOperands({1, 2})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}),
+        {IsSingleElement, IsF32}},
+      {HloOpcode::kReshape, NodeOperands({3})},
+      {HloOpcode::kReduce, NodeOperands({4, 7})},
+      {HloOpcode::kConvert, NodeOperands({5}), IsF16ToF32Convert},
+      {HloOpcode::kMultiply, NodeOperands({6, 6})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+  // Reduce sum a squared input with scale as single element tensor - shape(1)
+  HloMatcherPattern(
+    PatternType("reduction_square_add"),
+    PatternMetaTarget(3),
+    PatternInputs({5, 6, 1}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kMultiply, NodeOperands({1, 2})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}),
+        {IsSingleElement, IsF32}},
+      {HloOpcode::kReshape, NodeOperands({3})},
+      {HloOpcode::kReduce, NodeOperands({4, 6})},
+      {HloOpcode::kMultiply, NodeOperands({5, 5})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+  // Reduce with scale broadcasted, input f16.
+  HloMatcherPattern(
+    PatternType("reduction_square_add"),
+    PatternMetaTarget(3),
+    PatternInputs({6, 7, 2}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kMultiply, NodeOperands({3, 1})},
+      {HloOpcode::kBroadcast, NodeOperands({2})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}),
+        {IsSingleElement, IsF32}},
+      {HloOpcode::kReduce, NodeOperands({4, 7})},
+      {HloOpcode::kConvert, NodeOperands({5}), IsF16ToF32Convert},
+      {HloOpcode::kMultiply, NodeOperands({6, 6})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+  // Reduce with scale broadcasted.
+  HloMatcherPattern(
+    PatternType("reduction_square_add"),
+    PatternMetaTarget(3),
+    PatternInputs({5, 6, 2}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kMultiply, NodeOperands({3, 1})},
+      {HloOpcode::kBroadcast, NodeOperands({2})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}),
+        {IsSingleElement, IsF32}},
+      {HloOpcode::kReduce, NodeOperands({4, 6})},
+      {HloOpcode::kMultiply, NodeOperands({5, 5})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
   // Reduce sum a squared input.
   HloMatcherPattern(
     PatternType("reduction_square_add"),
@@ -279,19 +390,122 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32}
     })),
 
-  // Reduction from FP16 to F32.
+  // Reduce with scale as scalar tensor - shape(), input f16.
   HloMatcherPattern(
-    PatternType("reduction_fp16_input"),
-    PatternMetaTarget(0),
-    PatternInputs({2, 3}),
+    PatternType("reduction_scaled"),
+    PatternMetaTarget(1),
+    PatternInputs({3, 4, 5}),
     PatternOutputs({0}),
     Pattern({
       // NOLINTNEXTLINE
-      {HloOpcode::kReduce, NodeOperands({1, 3}), {IsF32, IsReduceAddOrMultiply}},
-      {HloOpcode::kConvert, NodeOperands({2}), IsF16ToF32Convert},
+      {HloOpcode::kMultiply, NodeOperands({5, 1})},
+      {HloOpcode::kReduce, NodeOperands({2, 4}), IsReduceAdd},
+      {HloOpcode::kConvert, NodeOperands({3}), IsF16ToF32Convert},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32}
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}),
+        {IsSingleElement, IsF32}}
     })),
+
+  // Reduce with scale as scalar tensor - shape().
+  HloMatcherPattern(
+    PatternType("reduction_scaled"),
+    PatternMetaTarget(1),
+    PatternInputs({2, 3, 4}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kMultiply, NodeOperands({4, 1})},
+      {HloOpcode::kReduce, NodeOperands({2, 3}), IsReduceAdd},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}),
+        {IsSingleElement, IsF32}}
+    })),
+
+  // Reduce with scale as single element tensor - shape(1), input f16.
+  HloMatcherPattern(
+    PatternType("reduction_scaled"),
+    PatternMetaTarget(3),
+    PatternInputs({5, 6, 1}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kMultiply, NodeOperands({1, 2})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}),
+        {IsSingleElement, IsF32}},
+      {HloOpcode::kReshape, NodeOperands({3})},
+      {HloOpcode::kReduce, NodeOperands({4, 6}), IsReduceAdd},
+      {HloOpcode::kConvert, NodeOperands({5}), IsF16ToF32Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+  // Reduce with scale as single element tensor - shape(1)
+  HloMatcherPattern(
+    PatternType("reduction_scaled"),
+    PatternMetaTarget(3),
+    PatternInputs({4, 5, 1}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kMultiply, NodeOperands({1, 2})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}),
+        {IsSingleElement, IsF32}},
+      {HloOpcode::kReshape, NodeOperands({3})},
+      {HloOpcode::kReduce, NodeOperands({4, 5}), IsReduceAdd},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+  // Reduce with scale broadcasted, input f16.
+  HloMatcherPattern(
+    PatternType("reduction_scaled"),
+    PatternMetaTarget(3),
+    PatternInputs({5, 6, 2}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kMultiply, NodeOperands({3, 1})},
+      {HloOpcode::kBroadcast, NodeOperands({2})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}),
+        {IsSingleElement, IsF32}},
+      {HloOpcode::kReduce, NodeOperands({4, 6}), IsReduceAdd},
+      {HloOpcode::kConvert, NodeOperands({5}), IsF16ToF32Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+  // Reduce with scale broadcasted.
+  HloMatcherPattern(
+    PatternType("reduction_scaled"),
+    PatternMetaTarget(3),
+    PatternInputs({4, 5, 2}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kMultiply, NodeOperands({3, 1})},
+      {HloOpcode::kBroadcast, NodeOperands({2})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}),
+        {IsSingleElement, IsF32}},
+      {HloOpcode::kReduce, NodeOperands({4, 5}), IsReduceAdd},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+    // Reduction from FP16 to F32.
+    HloMatcherPattern(
+      PatternType("reduction_fp16_input"),
+      PatternMetaTarget(0),
+      PatternInputs({2, 3}),
+      PatternOutputs({0}),
+      Pattern({
+        // NOLINTNEXTLINE
+        {HloOpcode::kReduce, NodeOperands({1, 3}), {IsF32, IsReduceAddOrMultiply}},
+        {HloOpcode::kConvert, NodeOperands({2}), IsF16ToF32Convert},
+        {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16},
+        {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32}
+      })),
 };
 // clang-format on
 

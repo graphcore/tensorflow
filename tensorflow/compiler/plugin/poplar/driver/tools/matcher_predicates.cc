@@ -368,7 +368,8 @@ bool IsAnySliceApply(const HloInstruction* inst) {
 
 bool IsReductionFusion(const HloInstruction* inst) {
   return IsPopOpsFusion(inst, "reduction_fp16_input") ||
-         IsPopOpsFusion(inst, "reduction_square_add");
+         IsPopOpsFusion(inst, "reduction_square_add") ||
+         IsPopOpsFusion(inst, "reduction_scaled");
 }
 
 bool IsWideConstant(const HloInstruction* inst) {

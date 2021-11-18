@@ -429,12 +429,39 @@ class ReductionFp16InputOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(
         poplar::program::Sequence prog,
         CreateSimpleReduction(res, inst, reduce_inst, output_shape, tensor_map,
-                              {debug_info}));
+                              /*with_scale=*/false, {debug_info}));
     return prog;
   }
 };
 
 REGISTER_POPLAR_OP(Reduction_fp16_input, ReductionFp16InputOp)
+
+static StatusOr<const HloInstruction*> GetReduceInstruction(
+    const HloInstruction* root_inst) {
+  const HloInstruction* reduce_instruction = nullptr;
+
+  if (root_inst->opcode() == HloOpcode::kReduce) {
+    reduce_instruction = root_inst->fused_expression_root();
+  }
+
+  for (const HloInstruction* candidate_instruction :
+       root_inst->fused_instructions()) {
+    if (candidate_instruction->opcode() == HloOpcode::kReduce) {
+      if (reduce_instruction) {
+        return xla::FailedPrecondition(
+            "More than one reduction instrucion in Simple Reduction fusion");
+      }
+      reduce_instruction = candidate_instruction;
+    }
+  }
+
+  if (reduce_instruction) {
+    return reduce_instruction;
+  }
+
+  return xla::NotFound(
+      "Reduction instruction not found in Simple Reduction fusion");
+}
 
 class ReductionSquareAddOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
@@ -442,17 +469,37 @@ class ReductionSquareAddOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ReductionSquareAddOp");
-    const HloInstruction* reduce_inst = inst->fused_expression_root();
+    const bool with_scale = inst->operand_count() == 3;
+    TF_ASSIGN_OR_RETURN(const HloInstruction* reduce_inst,
+                        GetReduceInstruction(inst));
     TF_ASSIGN_OR_RETURN(
         poplar::program::Sequence prog,
         CreateSimpleReduction(res, popops::Operation::SQUARE_ADD, inst,
-                              reduce_inst, output_shape, tensor_map,
+                              reduce_inst, output_shape, tensor_map, with_scale,
                               {debug_info}));
     return prog;
   }
 };
 
 REGISTER_POPLAR_OP(Reduction_square_add, ReductionSquareAddOp)
+
+class ReductionScaledOp : public PoplarOpDef {
+  StatusOr<poplar::program::Sequence> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "ReductionScaledOp");
+    TF_ASSIGN_OR_RETURN(const HloInstruction* reduce_inst,
+                        GetReduceInstruction(inst));
+    TF_ASSIGN_OR_RETURN(
+        poplar::program::Sequence prog,
+        CreateSimpleReduction(res, inst, reduce_inst, output_shape, tensor_map,
+                              /*with_scale=*/true, {debug_info}));
+    return prog;
+  }
+};
+
+REGISTER_POPLAR_OP(Reduction_scaled, ReductionScaledOp)
 
 class ArithemticExpressionOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
