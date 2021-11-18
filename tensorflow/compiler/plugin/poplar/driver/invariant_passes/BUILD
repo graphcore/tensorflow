@@ -1,8 +1,10 @@
 licenses(["restricted"])
 
+load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")
+
 package(default_visibility = ["//tensorflow/compiler/plugin/poplar:__subpackages__"])
 
-cc_library(
+poplar_cc_library(
     name = "no_control_deps_checker",
     srcs = [
         "no_control_deps_checker.cc",
@@ -18,7 +20,7 @@ cc_library(
     ],
 )
 
-cc_library(
+poplar_cc_library(
     name = "resource_update_checker",
     srcs = [
         "resource_update_checker.cc",

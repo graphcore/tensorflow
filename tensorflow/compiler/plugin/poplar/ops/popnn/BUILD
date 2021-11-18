@@ -2,7 +2,9 @@ licenses(["restricted"])
 
 package(default_visibility = ["//tensorflow/compiler/plugin/poplar:__subpackages__"])
 
-cc_library(
+load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")
+
+poplar_cc_library(
     name = "ctc_loss",
     srcs = [
         "ctc_loss.cc",
@@ -13,7 +15,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "gelu",
     srcs = [
         "gelu.cc",
@@ -24,7 +26,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "gru",
     srcs = [
         "gru.cc",
@@ -35,7 +37,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "hard_sigmoid",
     srcs = [
         "hard_sigmoid.cc",
@@ -46,7 +48,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "lstm",
     srcs = [
         "lstm.cc",
@@ -57,7 +59,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "norm",
     srcs = [
         "norm.cc",
@@ -68,7 +70,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "swish",
     srcs = [
         "swish.cc",
@@ -79,7 +81,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "ops",
     srcs = [],
     deps = [

@@ -200,7 +200,8 @@ build --define=LIBDIR=$(PREFIX)/lib
 build --define=INCLUDEDIR=$(PREFIX)/include
 
 # Suppress C++ compiler warnings, otherwise build logs become 10s of MBs.
-build --copt=-w
+# IPU specific change - disabling -w so we can compile with warnings
+# build --copt=-w
 
 # Suppress all warning messages.
 build:short_logs --output_filter=DONT_MATCH_ANYTHING

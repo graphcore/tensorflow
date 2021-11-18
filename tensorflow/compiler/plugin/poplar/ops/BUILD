@@ -1,10 +1,11 @@
 load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
+load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")
 
 licenses(["restricted"])
 
 package(default_visibility = ["//tensorflow/compiler/plugin/poplar:__subpackages__"])
 
-cc_library(
+poplar_cc_library(
     name = "common_shape_fns",
     srcs = ["common_shape_fns.cc"],
     hdrs = ["common_shape_fns.h"],
@@ -15,8 +16,8 @@ cc_library(
 
 # When creating a new set of ops the following needs to be done:
 #
-# 1. New cc_library:
-# cc_library(
+# 1. New poplar_cc_library:
+# poplar_cc_library(
 #     name = "new_ops",
 #     srcs = ["new/new_ops.cc"],
 #     deps = ["//tensorflow/core:framework"],
@@ -44,21 +45,21 @@ cc_library(
 # The custom op py library `new_ops_py` needs to be added as a dependency to one
 # of the relevant libs in //tensorflow/python/ipu.
 
-cc_library(
+poplar_cc_library(
     name = "sendrecv_ops",
     srcs = ["sendrecv_ops.cc"],
     deps = ["//tensorflow/core:framework"],
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "ipu_ops",
     srcs = ["ipu_ops.cc"],
     deps = ["//tensorflow/core:framework"],
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "host_compute_ops",
     srcs = ["host_compute_ops.cc"],
     deps = ["//tensorflow/core:framework"],

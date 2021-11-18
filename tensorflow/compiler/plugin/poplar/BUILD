@@ -2,6 +2,7 @@ licenses(["restricted"])
 
 package(default_visibility = ["//tensorflow/compiler/plugin/poplar:__subpackages__"])
 
+load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")
 load("//tensorflow/compiler/xla/tests:build_defs.bzl", "xla_test")
 load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
@@ -14,7 +15,7 @@ load(
 )
 load("//tensorflow/compiler/xla:xla.bzl", "xla_proto_library")
 
-cc_library(
+poplar_cc_library(
     name = "tf_graph_sources",
     hdrs = [
         "//tensorflow/compiler/plugin/poplar/vertices:convert_tf_asm_graph_sources_to_literal",
@@ -38,7 +39,7 @@ genrule(
     tools = [":poplar_version_generator"],
 )
 
-cc_library(
+poplar_cc_library(
     name = "poplar_version",
     srcs = [":generate_poplar_version"],
 )
@@ -162,7 +163,7 @@ tf_proto_library(
     make_default_target_header_only = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "custom_kernels_util",
     srcs = [
         "kernels/custom_kernels_util.cc",
@@ -186,7 +187,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "optimizers",
     srcs = [
         "driver/passes/add_stochastic_rounding_options.cc",
@@ -631,7 +632,7 @@ cc_library(
 )
 
 # This is temporary and will be removed after refactor is done.
-cc_library(
+poplar_cc_library(
     name = "tools_headers",
     srcs = [],
     hdrs = [
@@ -642,7 +643,7 @@ cc_library(
     deps = [],
 )
 
-cc_library(
+poplar_cc_library(
     name = "hash",
     srcs = [],
     hdrs = [
@@ -653,7 +654,7 @@ cc_library(
     ],
 )
 
-cc_library(
+poplar_cc_library(
     name = "flags",
     srcs = [
         "driver/tools/flags.cc",
@@ -670,7 +671,7 @@ cc_library(
     ],
 )
 
-cc_library(
+poplar_cc_library(
     name = "common",
     srcs = [
         "driver/ipu_devices.cc",
@@ -685,7 +686,7 @@ cc_library(
     ],
 )
 
-cc_library(
+poplar_cc_library(
     name = "infeed_utils",
     srcs = [
         "driver/tools/infeed_allocator.cc",
@@ -710,7 +711,7 @@ cc_library(
     ],
 )
 
-cc_library(
+poplar_cc_library(
     name = "popef_util",
     srcs = [
         "driver/tools/popef_util.cc",
@@ -725,7 +726,7 @@ cc_library(
     ],
 )
 
-cc_library(
+poplar_cc_library(
     name = "driver",
     srcs = [
         "driver/ops/cast_to_gfloat_ops.cc",
@@ -946,7 +947,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "graph_optimizer_passes",
     srcs = [
         "graph_optimizer_passes/extract_outside_compilation_pass.cc",
@@ -976,7 +977,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "dataset_exporters_kernel",
     srcs = [
         "kernels/datastream/exporters.cc",
@@ -999,7 +1000,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "xla_util",
     srcs = [
         "driver/tools/xla_util.cc",
@@ -1013,7 +1014,7 @@ cc_library(
     ],
 )
 
-cc_library(
+poplar_cc_library(
     name = "kernels",
     srcs = [
         "kernels/application_runtime/application_compile.cc",
@@ -1096,7 +1097,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "poplar_test_base",
     testonly = True,
     srcs = [
@@ -1114,7 +1115,7 @@ cc_library(
     ],
 )
 
-cc_library(
+poplar_cc_library(
     name = "poplar_lib",
     srcs = [
         "driver/xla_ipu_device.cc",
@@ -1164,7 +1165,7 @@ cc_binary(
     ],
 )
 
-cc_library(
+poplar_cc_library(
     name = "poplar_backend",
     srcs = [
         "driver/xla_ipu_backend.cc",
@@ -1182,7 +1183,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "ipu_config",
     srcs = [
         "config/ipu_config.cc",
@@ -1207,7 +1208,7 @@ tf_cc_binary(
     ],
 )
 
-cc_library(
+poplar_cc_library(
     name = "test_utils",
     srcs = [],
     hdrs = [

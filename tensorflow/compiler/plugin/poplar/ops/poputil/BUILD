@@ -2,7 +2,9 @@ licenses(["restricted"])
 
 package(default_visibility = ["//tensorflow/compiler/plugin/poplar:__subpackages__"])
 
-cc_library(
+load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")
+
+poplar_cc_library(
     name = "assume_equal_across_replicas",
     srcs = [
         "assume_equal_across_replicas.cc",
@@ -14,7 +16,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "codelet_expression",
     srcs = [
         "codelet_expression.cc",
@@ -26,7 +28,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "device_sync",
     srcs = [
         "device_sync.cc",
@@ -38,7 +40,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "execution_counter",
     srcs = [
         "execution_counter.cc",
@@ -50,7 +52,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "fifo",
     srcs = [
         "fifo.cc",
@@ -62,7 +64,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "print_tensor",
     srcs = [
         "print_tensor.cc",
@@ -74,7 +76,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "recompute",
     srcs = [
         "recompute.cc",
@@ -86,7 +88,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "remap_deduce",
     srcs = [
         "remap_deduce.cc",
@@ -98,7 +100,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "remap",
     srcs = [
         "remap.cc",
@@ -110,7 +112,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "replication_factor",
     srcs = [
         "replication_factor.cc",
@@ -122,7 +124,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "replication_index",
     srcs = [
         "replication_index.cc",
@@ -134,7 +136,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "stateful_gradient_accumulate",
     srcs = [
         "stateful_gradient_accumulate.cc",
@@ -146,7 +148,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "user_operation",
     srcs = [
         "user_operation.cc",
@@ -158,7 +160,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "ops",
     srcs = [],
     deps = [
