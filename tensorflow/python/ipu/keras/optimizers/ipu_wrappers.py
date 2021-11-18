@@ -49,7 +49,7 @@ class IpuOptimizer(OptimizerV2):
     for the wrapped optimizer.
 
     Args:
-      name: The name of the atrribute to set.
+      name: The name of the attribute to set.
       value: The value to set.
     """
     # Delegate setting hyperparameter to inner optimizer if the attribute does
@@ -235,7 +235,7 @@ class IpuOptimizer(OptimizerV2):
       var: A variable to look up.
       slot_name: The name of the slot.
     """
-    return self.get_slot(var, slot_name)
+    return self._opt.get_slot(var, slot_name)
 
   def add_slot(self, var, slot_name, initializer="zeros"):
     """
