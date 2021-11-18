@@ -2,7 +2,9 @@ licenses(["restricted"])
 
 package(default_visibility = ["//tensorflow/compiler/plugin/poplar:__subpackages__"])
 
-cc_library(
+load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")
+
+poplar_cc_library(
     name = "dataset_benchmark",
     srcs = [
         "dataset_benchmark.cc",
@@ -13,7 +15,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "exporters",
     srcs = [
         "exporters.cc",
@@ -25,7 +27,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "feeds",
     srcs = [
         "feeds.cc",
@@ -37,7 +39,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "host_embedding",
     srcs = [
         "host_embedding.cc",
@@ -49,7 +51,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "ops",
     srcs = [],
     deps = [

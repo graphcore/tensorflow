@@ -282,8 +282,9 @@ build:ios --noenable_platform_specific_config
 # Suppress C++ compiler warnings, otherwise build logs become 10s of MBs.
 build:android --copt=-w
 build:ios --copt=-w
-build:linux --copt=-w
-build:linux --host_copt=-w
+# IPU specific change - disabling -w so we can compile with warnings
+# build:linux --copt=-w
+# build:linux --host_copt=-w
 build:macos --copt=-w
 build:windows --copt=/W0
 

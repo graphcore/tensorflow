@@ -2,7 +2,9 @@ licenses(["restricted"])
 
 package(default_visibility = ["//tensorflow/compiler/plugin/poplar:__subpackages__"])
 
-cc_library(
+load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")
+
+poplar_cc_library(
     name = "functional",
     srcs = [
         "functional.cc",
@@ -14,7 +16,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "pipelining",
     srcs = [
         "pipelining.cc",
@@ -26,7 +28,7 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
+poplar_cc_library(
     name = "ops",
     srcs = [],
     deps = [
