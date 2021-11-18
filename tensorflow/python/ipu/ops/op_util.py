@@ -32,6 +32,7 @@ from tensorflow.python.ipu import scopes
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.ops import math_grad
 from tensorflow.python.ops import nn_grad
+from tensorflow.python.ops import math_ops
 from tensorflow.python.util import tf_contextlib
 
 
@@ -320,8 +321,8 @@ def accumulate_gradients(grads_and_vars, gradient_accumulation_dtype):
         accumulator = gen_poputil_ops.gradient_accumulator_create(
             var, output_type=dtype)
         # Add the gradients to the accumulator.
-        accumulator = gen_poputil_ops.gradient_accumulator_add(
-            accumulator, grad)
+        accumulator = gen_poputil_ops.gradient_accumulator_add_with_scale(
+            accumulator, grad, math_ops.cast(1.0, dtype))
         # Sink the accumulators.
         grad = gen_poputil_ops.gradient_accumulator_sink(accumulator)
     # Use the accumulated gradients.

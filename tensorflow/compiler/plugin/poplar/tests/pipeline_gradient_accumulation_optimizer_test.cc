@@ -66,9 +66,10 @@ stage_1_bwd {
 stage_0_bwd {
   stage_0_bwd_p0 = f32[2] parameter(0)
   stage_0_bwd_p1 = f32[2] parameter(1)
+  acc_scale = f32[] constant(1)
   stage_0_bwd_accumulator = f32[2] parameter(2)
   stage_0_bwd_add_grads = f32[2] add(stage_0_bwd_p0, stage_0_bwd_p1)
-  stage_0_bwd_accumulator_update = f32[2] custom-call(stage_0_bwd_accumulator, stage_0_bwd_add_grads), custom_call_target="GradientAccumulatorAdd"
+  stage_0_bwd_accumulator_update = f32[2] custom-call(stage_0_bwd_accumulator, stage_0_bwd_add_grads, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
   ROOT stage_0_bwd_tuple = (f32[2]) tuple(stage_0_bwd_accumulator_update)
 }
 
@@ -147,8 +148,8 @@ ENTRY e {
     HloComputation* bwd_stage_0_comp = bwd_stage_0->to_apply();
     auto root = bwd_stage_0_comp->root_instruction();
     auto accumulator_add = root->operand(0);
-    EXPECT_TRUE(
-        IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
+        accumulator_add));
     auto lhs = accumulator_add->operand(0);
     EXPECT_EQ(lhs->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(lhs->parameter_number(), 2);
@@ -171,8 +172,8 @@ ENTRY e {
     HloComputation* bwd_stage_2_comp = bwd_stage_2->to_apply();
     auto root = bwd_stage_2_comp->root_instruction();
     auto accumulator_add = root->operand(1);
-    EXPECT_TRUE(
-        IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
+        accumulator_add));
     auto lhs = accumulator_add->operand(0);
     EXPECT_EQ(lhs->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(lhs->parameter_number(), 1);
@@ -211,10 +212,11 @@ stage_2_fwd {
 }
 
 stage_2_bwd {
+  acc_scale = f32[] constant(1)
   stage_2_bwd_p0 = f32[2] parameter(0)
   grad = f32[2] constant({2.9, 2.1})
   stage_2_bwd_accumulator = f32[2] parameter(1)
-  stage_2_bwd_accumulator_update = f32[2] custom-call(stage_2_bwd_accumulator, grad), custom_call_target="GradientAccumulatorAdd"
+  stage_2_bwd_accumulator_update = f32[2] custom-call(stage_2_bwd_accumulator, grad, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
   ROOT stage_2_bwd_tuple = (f32[2], f32[2]) tuple(stage_2_bwd_p0, stage_2_bwd_accumulator_update)
 }
 
@@ -225,11 +227,12 @@ stage_1_bwd {
 }
 
 stage_0_bwd {
+  acc_scale = f32[] constant(1)
   stage_0_bwd_p0 = f32[2] parameter(0)
   stage_0_bwd_p1 = f32[2] parameter(1)
   stage_0_bwd_accumulator = f32[2] parameter(2)
   stage_0_bwd_add_grads = f32[2] add(stage_0_bwd_p0, stage_0_bwd_p1)
-  stage_0_bwd_accumulator_update = f32[2] custom-call(stage_0_bwd_accumulator, stage_0_bwd_add_grads), custom_call_target="GradientAccumulatorAdd"
+  stage_0_bwd_accumulator_update = f32[2] custom-call(stage_0_bwd_accumulator, stage_0_bwd_add_grads, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
   ROOT stage_0_bwd_tuple = (f32[2]) tuple(stage_0_bwd_accumulator_update)
 }
 
@@ -310,8 +313,8 @@ ENTRY e {
     HloComputation* bwd_stage_0_comp = bwd_stage_0->to_apply();
     auto root = bwd_stage_0_comp->root_instruction();
     auto accumulator_add = root->operand(0);
-    EXPECT_TRUE(
-        IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
+        accumulator_add));
     auto lhs = accumulator_add->operand(0);
     EXPECT_EQ(lhs->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(lhs->parameter_number(), 2);
@@ -335,8 +338,8 @@ ENTRY e {
     HloComputation* bwd_stage_2_comp = bwd_stage_2->to_apply();
     auto root = bwd_stage_2_comp->root_instruction();
     auto accumulator_add = root->operand(1);
-    EXPECT_TRUE(
-        IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
+        accumulator_add));
     auto lhs = accumulator_add->operand(0);
     EXPECT_EQ(lhs->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(lhs->parameter_number(), 1);

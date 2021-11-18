@@ -1428,7 +1428,9 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     # There should be 2 GA-adds. One for the weight and one for the outfeed.
     report_json = pva.openReport(report_helper.find_report())
-    ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
+    ok = [
+        'GradientAccumulatorAddWithScale', 'GradientAccumulatorAddWithScale_1'
+    ]
     self.assert_compute_sets_contain_list(report_json, ok)
 
   @test_util.deprecated_graph_mode_only
@@ -1483,7 +1485,9 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     report_json = pva.openReport(report_helper.find_report())
     # There should be 2 GA-adds. One for the weight and one for the outfeed.
-    ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
+    ok = [
+        'GradientAccumulatorAddWithScale', 'GradientAccumulatorAddWithScale_1'
+    ]
     self.assert_compute_sets_contain_list(report_json, ok)
 
   @test_util.deprecated_graph_mode_only
@@ -1600,8 +1604,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     report_json = pva.openReport(report_helper.find_report())
     # There should be 3 GA-adds. One for the weight and one for each output.
     ok = [
-        'GradientAccumulatorAdd', 'GradientAccumulatorAdd_1',
-        'GradientAccumulatorAdd_2'
+        'GradientAccumulatorAddWithScale', 'GradientAccumulatorAddWithScale_1',
+        'GradientAccumulatorAddWithScale_2'
     ]
     self.assert_compute_sets_contain_list(report_json, ok)
 
@@ -1645,7 +1649,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     report_json = pva.openReport(report_helper.find_report())
     # There should be 1 GA-add for the outfeed.
-    ok = ['GradientAccumulatorAdd']
+    ok = ['GradientAccumulatorAddWithScale']
     self.assert_compute_sets_contain_list(report_json, ok)
 
   @test_util.deprecated_graph_mode_only
@@ -1688,7 +1692,9 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     report_json = pva.openReport(report_helper.find_report())
     # There should be a GA-add for each output from the last stage.
-    ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
+    ok = [
+        'GradientAccumulatorAddWithScale', 'GradientAccumulatorAddWithScale_1'
+    ]
     self.assert_compute_sets_contain_list(report_json, ok)
 
   @test_util.deprecated_graph_mode_only
