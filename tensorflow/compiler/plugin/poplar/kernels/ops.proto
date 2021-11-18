@@ -143,4 +143,5 @@ enum PoplarOp {
   // retired = 219;
   Reduction_fp16_input = 220;
   Reduction_square_add = 221;
+  Reduction_scaled = 222;
 }
