@@ -351,7 +351,8 @@ build:windows --distinct_host_configuration=false
 # Suppress all warning messages.
 build:short_logs --output_filter=DONT_MATCH_ANYTHING
 build:verbose_logs --output_filter=
-build --config=short_logs
+# IPU specific options - disable short_logs so we can see compile warnings
+# build --config=short_logs
 
 # Instruction set optimizations
 # TODO(gunan): Create a feature in toolchains for avx/avx2 to
