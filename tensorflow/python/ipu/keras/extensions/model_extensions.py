@@ -24,6 +24,8 @@ import threading
 import time
 import six
 import libpvti
+import popdist
+
 from collections import OrderedDict
 from functools import partial
 
@@ -147,7 +149,8 @@ class _PollingThread(threading.Thread):
   def __init__(self,
                output_iterator,
                num_steps,
-               replication_factor,
+               global_replication_factor,
+               local_replication_factor,
                batch_begin_fn,
                batch_end_fn,
                unpack_step_results=False):
@@ -156,7 +159,8 @@ class _PollingThread(threading.Thread):
     self._result = None
     self._output_iterator = output_iterator
     self._num_steps = num_steps
-    self._replication_factor = replication_factor
+    self._global_replication_factor = global_replication_factor
+    self._local_replication_factor = local_replication_factor
     self._batch_begin_fn = batch_begin_fn
     self._batch_end_fn = batch_end_fn
     self._unpack_step_results = unpack_step_results
@@ -205,17 +209,17 @@ class _PollingThread(threading.Thread):
 
   def _iterate_over_replica_results(self, data):
     """Function which slices out the per replica results."""
-    if self._replication_factor == 1:
+    if self._local_replication_factor == 1:
       yield data
       return
 
     # Each tensor has an extra dimension
-    for replica in range(self._replication_factor):
+    for replica in range(self._local_replication_factor):
       yield nest.map_structure(lambda t: t[replica], data)  # pylint: disable=cell-var-from-loop
 
   def run(self):
     step = 0
-    end_step = self._num_steps
+    end_step = self._num_steps / popdist.getNumInstances()
 
     self._batch_begin_fn(step)
 
@@ -249,7 +253,7 @@ class _PredictPollingThread(_PollingThread):
   """Optimized version of the PollingThread for predict function."""
   def run(self):
     step = 0
-    end_step = self._num_steps
+    end_step = self._num_steps / popdist.getNumInstances()
 
     self._batch_begin_fn(step)
 
@@ -287,8 +291,8 @@ class _PredictPollingThread(_PollingThread):
             self._batch_begin_fn(step)
 
       # Append the results.
-      merged_results = _merge_into_batch_dimension(results,
-                                                   self._replication_factor)
+      merged_results = _merge_into_batch_dimension(
+          results, self._local_replication_factor)
       if self._result is None:
         self._result = [merged_results]
       else:
@@ -317,7 +321,8 @@ class ModelExtension(base_layer.KerasExtension):
     self._ipu_train_function = None
     self._ipu_test_function = None
     self._ipu_predict_function = None
-    self._replication_factor = None
+    self._local_replication_factor = None
+    self._global_replication_factor = None
     self._use_synthetic_data = utils.use_synthetic_data_for(
         utils.SyntheticDataCategory.Outfeed)
     self._compiled_gradient_accumulation_steps_per_replica = None
@@ -363,7 +368,7 @@ class ModelExtension(base_layer.KerasExtension):
 
   def _get_replication_factor(self):
     """Get the replication of the model."""
-    if self._replication_factor is None:
+    if self._global_replication_factor is None:
       device_string = self.distribute_strategy.extended.non_slot_devices(None)
       current_device = tf_device.DeviceSpec.from_string(device_string)
 
@@ -381,9 +386,11 @@ class ModelExtension(base_layer.KerasExtension):
         raise ValueError(
             "Current device has {} IPUs attached, however the current model "
             "requires a multiple of {} IPUs.".format(num_ipus, shard_count))
-      self._replication_factor = num_ipus // shard_count
+      self._global_replication_factor = num_ipus // shard_count
+      self._local_replication_factor = int(self._global_replication_factor /\
+        popdist.getNumInstances())
 
-    return self._replication_factor
+    return self._global_replication_factor
 
   def _get_steps_per_execution_per_replica(self, inferred_steps,
                                            original_steps_per_execution_value,
@@ -472,7 +479,8 @@ class ModelExtension(base_layer.KerasExtension):
       self._ipu_train_function = None
       self._ipu_test_function = None
       self._ipu_predict_function = None
-      self._replication_factor = None
+      self._global_replication_factor = None
+      self._local_replication_factor = None
       self._outfeed_manager = _OutfeedManager()
       self._infeed_manager = _InfeedManager()
 
@@ -511,7 +519,7 @@ class ModelExtension(base_layer.KerasExtension):
     self._ipu_predict_function = ipu_predict_function
     return functions
 
-  def _get_last_batch_results(self, outfeed_queue, replication_factor):
+  def _get_last_batch_results(self, outfeed_queue, local_replication_factor):
     """Returns the last batch from the outfeed queue (handling replication) if
     synthetic data is not used, otherwise returns a batch of zeros."""
     if self._use_synthetic_data:
@@ -527,12 +535,13 @@ class ModelExtension(base_layer.KerasExtension):
 
     results = outfeed_queue.dequeue()
     results = nest.map_structure(lambda x: x[-1], results)
-    if replication_factor > 1:
+
+    if local_replication_factor > 1:
       results = nest.map_structure(lambda x: x[-1], results)
 
     return results
 
-  def _get_all_batch_results(self, outfeed_queue, replication_factor,
+  def _get_all_batch_results(self, outfeed_queue, local_replication_factor,
                              num_steps):
     """Returns all the batches of data from the outfeed queue (if synthetic data
     is not used, otherwise returns batches of zeros."""
@@ -551,7 +560,7 @@ class ModelExtension(base_layer.KerasExtension):
           flat_buffers)
 
     results = outfeed_queue.dequeue()
-    return _merge_into_batch_dimension(results, replication_factor)
+    return _merge_into_batch_dimension(results, local_replication_factor)
 
   def _make_single_ipu_train_function(self):
     @def_function.function(experimental_compile=True)
@@ -1243,7 +1252,9 @@ class ModelExtension(base_layer.KerasExtension):
     training_module._disallow_inside_tf_function('fit')  # pylint: disable=protected-access
 
     self._check_mode()
-    replication_factor = self._get_replication_factor()
+    global_replication_factor = self._get_replication_factor()
+    local_replication_factor = int(global_replication_factor /\
+      popdist.getNumInstances())
 
     if validation_split:
       # Create the validation data using the training data. Only supported for
@@ -1351,7 +1362,8 @@ class ModelExtension(base_layer.KerasExtension):
           outfeed_thread = _PollingThread(
               outfeed,
               inferred_steps,
-              replication_factor,
+              global_replication_factor,
+              local_replication_factor,
               batch_begin_fn,
               batch_end_fn,
               unpack_step_results=unpack_step_results)
@@ -1380,7 +1392,8 @@ class ModelExtension(base_layer.KerasExtension):
             self._train_counter.assign_add(steps_per_execution_value)
 
             if not asynchronous_callbacks:
-              data = self._get_last_batch_results(outfeed, replication_factor)
+              data = self._get_last_batch_results(outfeed,
+                                                  local_replication_factor)
               logs = data[0] if unpack_step_results else data
               batch_end_fn(end_step, logs)
 
@@ -1469,7 +1482,9 @@ class ModelExtension(base_layer.KerasExtension):
     training_module._disallow_inside_tf_function('evaluate')  # pylint: disable=protected-access
 
     self._check_mode()
-    replication_factor = self._get_replication_factor()
+    global_replication_factor = self._get_replication_factor()
+    local_replication_factor = int(global_replication_factor /\
+      popdist.getNumInstances())
 
     with self.distribute_strategy.scope(), \
          libpvti.Tracepoint(_pvti_trace_channel, self.name + ".evaluate()"):
@@ -1556,7 +1571,8 @@ class ModelExtension(base_layer.KerasExtension):
           outfeed_thread = _PollingThread(
               outfeed,
               inferred_steps,
-              replication_factor,
+              global_replication_factor,
+              local_replication_factor,
               batch_begin_fn,
               batch_end_fn,
               unpack_step_results=unpack_step_results)
@@ -1581,7 +1597,8 @@ class ModelExtension(base_layer.KerasExtension):
             self._test_counter.assign_add(steps_per_execution_value)
 
             if not asynchronous_callbacks:
-              data = self._get_last_batch_results(outfeed, replication_factor)
+              data = self._get_last_batch_results(outfeed,
+                                                  local_replication_factor)
               logs = data[0] if unpack_step_results else data
               batch_end_fn(end_step, logs)
 
@@ -1630,7 +1647,9 @@ class ModelExtension(base_layer.KerasExtension):
     training_module._disallow_inside_tf_function('predict')  # pylint: disable=protected-access
 
     self._check_mode()
-    replication_factor = self._get_replication_factor()
+    global_replication_factor = self._get_replication_factor()
+    local_replication_factor = int(global_replication_factor /\
+      popdist.getNumInstances())
 
     outputs = None
     with self.distribute_strategy.scope(), \
@@ -1704,7 +1723,8 @@ class ModelExtension(base_layer.KerasExtension):
         outfeed_thread = None
         if self._asynchronous_callbacks:
           outfeed_thread = _PredictPollingThread(outfeed, inferred_steps,
-                                                 replication_factor,
+                                                 global_replication_factor,
+                                                 local_replication_factor,
                                                  batch_begin_fn, batch_end_fn)
           outfeed_thread.start()
 
@@ -1728,7 +1748,7 @@ class ModelExtension(base_layer.KerasExtension):
 
           if not self._asynchronous_callbacks:
             batch_outputs = self._get_all_batch_results(
-                outfeed, replication_factor, steps_per_execution_value)
+                outfeed, local_replication_factor, steps_per_execution_value)
             batch_end_fn(end_step, batch_outputs)
             outputs = process_batch(outputs, batch_outputs)
 
@@ -1834,12 +1854,13 @@ class ModelExtension(base_layer.KerasExtension):
             training_module.Model.make_predict_function)
 
 
-def _merge_into_batch_dimension(tensors, replication_factor):
+def _merge_into_batch_dimension(tensors, local_replication_factor):
   """Merges steps (and replication) into batch dimension"""
   def merge_fn(x):
     # Merge the steps, batches (and replication) dimensions.
     flat_shape = [x.shape[0] * x.shape[1]] + x.shape[2:]
-    if replication_factor > 1:
+
+    if local_replication_factor > 1:
       flat_shape = [flat_shape[0] * flat_shape[1]] + flat_shape[2:]
 
     return array_ops.reshape(x, flat_shape)
