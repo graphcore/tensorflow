@@ -1707,6 +1707,7 @@ xla_test(
     deps = [
         ":optimizers",
         ":poplar_test_base",
+        ":test_utils",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
