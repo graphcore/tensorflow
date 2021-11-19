@@ -311,6 +311,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
                 << " inplace operands.";
       }
 
+      CHECK_GE(num_inplace_outputs, 0);
       if (num_inplace_outputs) {
         CHECK(inst->shape().IsTuple());
       }
@@ -355,7 +356,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
       for (auto& indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
         const ShapeIndex& index = indexed_shape.index;
         HloPoplarBufferSet buffer_set;
-        if (num_inplace_outputs && num_inplace_outputs < index[0]) {
+        if (index[0] < num_inplace_outputs) {
           buffer_set = analysis_->GetBufferSet(comp->root_instruction(), index);
         } else {
           HloPoplarBuffer* buffer = analysis_->NewHloPoplarBuffer(

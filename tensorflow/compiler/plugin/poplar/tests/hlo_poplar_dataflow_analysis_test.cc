@@ -763,6 +763,68 @@ auto buffers_equal = [](const InstructionPoplarBufferSet& A,
   return equal;
 };
 
+TEST_F(HloPoplarDataflowAnalysisTest,
+       TestExistingBufferSetReusedForInplaceOutputs) {
+  std::string hlo = R"(
+HloModule top
+
+function {
+  fn.arg0 = f32[] parameter(0)
+  fn.arg1 = f32[] parameter(1)
+  fn.add0 = f32[] add(fn.arg0, fn.arg1)
+  ROOT fn.tuple = (f32[], f32[]) tuple(fn.add0, fn.arg1)
+}
+
+ENTRY main {
+  arg0 = f32[] parameter(0)
+  arg1 = f32[] parameter(1)
+
+  arg0_load = f32[] custom-call(arg0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
+
+  call0 = (f32[], f32[]) call(arg0_load, arg1), to_apply=function, backend_config="{\"call_config\":{\"type\":\"Function\",\"function_config\":{\"keep_input_layouts\":true,\"unique_sharding\":true,\"num_modified_remote_buffer_inputs\":\"1\",\"num_unmodified_remote_buffer_inputs\":\"0\",\"partitioned_elementwise_cluster\":true}},\"is_inplace\":false,\"hash_of_custom_attributes\":\"0\",\"stochastic_rounding\":\"THREESTATE_OFF\",\"ml_type\":\"NONE\",\"partials_type\":\"PRIMITIVE_TYPE_INVALID\",\"convolution_options\":[],\"matmul_options\":[],\"slice_options\":[],\"tileset\":\"TILESET_COMPUTE_TILES\",\"is_replica_identical\":false,\"stochastic_rounding_method\":\"StochasticRoundingMethod_Undefined\"}"
+  gte0 = f32[] get-tuple-element(call0), index=0
+  gte1 = f32[] get-tuple-element(call0), index=1
+
+  arg0_store = f32[] custom-call(arg0, gte0), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
+
+  ROOT add0 = f32[] add(gte0, gte1)
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+  // Mark arg0 as in remote memory.
+  annotations.remote_parameter_infos.emplace(0);
+
+  ASSERT_TRUE(CustomOpReplacer().Run(m.get()).ValueOrDie());
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  EXPECT_THAT(analysis->buffer_count(), 5);
+
+  HloInstruction* arg0 = FindInstruction(m.get(), "arg0");
+  HloInstruction* arg1 = FindInstruction(m.get(), "arg1");
+  HloInstruction* gte0 = FindInstruction(m.get(), "gte0");
+  HloInstruction* gte1 = FindInstruction(m.get(), "gte1");
+  HloInstruction *arg0_load, *arg0_store;
+  TF_ASSERT_OK(GetRemoteLoadStoreUsers(arg0, &arg0_load, &arg0_store));
+
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(arg0));
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(arg1));
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(arg0_load));
+
+  auto arg0_load_buffer_set = analysis->GetInstructionBufferSet(arg0_load);
+  auto gte0_buffer_set = analysis->GetInstructionBufferSet(gte0);
+
+  auto arg1_buffer_set = analysis->GetInstructionBufferSet(arg1);
+  auto gte1_buffer_set = analysis->GetInstructionBufferSet(gte1);
+
+  // Ensure the BufferSet is reused for the in-place output.
+  ASSERT_TRUE(buffers_equal(arg0_load_buffer_set, gte0_buffer_set));
+  // And ensure that a new BufferSet is created for the other parameter.
+  ASSERT_FALSE(buffers_equal(arg1_buffer_set, gte1_buffer_set));
+}
+
 TEST_F(HloPoplarDataflowAnalysisTest, TestRepeatLoop1) {
   std::string hlo = R"(
 HloModule top
