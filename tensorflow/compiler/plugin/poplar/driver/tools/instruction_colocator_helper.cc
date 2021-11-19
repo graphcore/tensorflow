@@ -68,6 +68,17 @@ HloInstruction* AddReplacementInstruction(
 
   return new_inst;
 }
+
+StatusOr<HloInstruction*> AddGTEInstruction(HloInstruction* operand,
+                                            int64 index) {
+  TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                      MakeGetTupleElementHlo(operand, index));
+  // Mark it as inplace.
+  MakeUsedInplace(gte);
+  CopyShardingIfPresent(operand, gte);
+
+  return gte;
+}
 }  // namespace
 
 InstructionColocatorHelper::InstructionColocatorHelper(
@@ -176,10 +187,8 @@ InstructionColocatorHelper::CombineAndReplaceColocatedInstructions(
   for (uint64 i = 0; i != cluster_size; ++i) {
     HloInstruction* inst = to_combine[i];
     // Add a GTE to unpack the new_inst result.
-    auto gte = comp->AddInstruction(
-        HloInstruction::CreateGetTupleElement(inst->shape(), new_inst, i));
-    // Mark it as inplace.
-    MakeUsedInplace(gte);
+    TF_ASSIGN_OR_RETURN(HloInstruction * gte, AddGTEInstruction(new_inst, i));
+
     result[i + 1] = gte;
 
     // Replace the old inst.
@@ -425,9 +434,7 @@ class RecvFromHostColocatorHelper : public InstructionColocatorHelper {
     for (uint64 i = 0; i != old_recvs.size(); ++i) {
       HloInstruction* old_recv = old_recvs[i];
       // Add a GTE to unpack the new_recv result.
-      auto* gte = comp->AddInstruction(HloInstruction::CreateGetTupleElement(
-          old_recv->shape(), new_recv, i));
-      MakeUsedInplace(gte);
+      TF_ASSIGN_OR_RETURN(HloInstruction * gte, AddGTEInstruction(new_recv, i));
       result.push_back(gte);
 
       // Replace the old inst.
@@ -545,22 +552,20 @@ class StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper
     for (uint64 i = 0; i != cluster_size; ++i) {
       HloInstruction* inst = to_combine[i];
       // GTE to get the new accumulator.
-      auto gte_accum = comp->AddInstruction(
-          HloInstruction::CreateGetTupleElement(output_shapes[i], new_inst, i));
-      MakeUsedInplace(gte_accum);
+      TF_ASSIGN_OR_RETURN(HloInstruction * gte_accum,
+                          AddGTEInstruction(new_inst, i));
       result[i + 1] = gte_accum;
 
       // GTE to get the new gradient.
-      auto gte_grad =
-          comp->AddInstruction(HloInstruction::CreateGetTupleElement(
-              output_shapes[cluster_size + i], new_inst, cluster_size + i));
-      MakeUsedInplace(gte_grad);
+      TF_ASSIGN_OR_RETURN(HloInstruction * gte_grad,
+                          AddGTEInstruction(new_inst, cluster_size + i));
       result[cluster_size + i + 1] = gte_grad;
 
       // Create a tuple instruction so that we can easily replace all the users.
       auto tuple = comp->AddInstruction(
           HloInstruction::CreateTuple({gte_accum, gte_grad}));
       MakeUsedInplace(tuple);
+      CopyShardingIfPresent(new_inst, tuple);
       result[2 * cluster_size + i + 1] = tuple;
 
       // Replace the old inst.
@@ -646,9 +651,8 @@ class ReduceManyColocatorHelper : public InstructionColocatorHelper {
       HloInstruction* old_reduce = to_combine[i];
       // Add a GTE to unpack the new_inst result.
       TF_ASSIGN_OR_RETURN(HloInstruction * gte,
-                          MakeGetTupleElementHlo(reduce_many, i));
-      // Mark it as inplace.
-      MakeUsedInplace(gte);
+                          AddGTEInstruction(reduce_many, i));
+
       result[i + 1] = gte;
       TF_RETURN_IF_ERROR(reduce_many->CopyAllControlDepsFrom(old_reduce));
       TF_RETURN_IF_ERROR(old_reduce->DropAllControlDeps());
@@ -727,9 +731,8 @@ class AllGatherColocatorHelper : public InstructionColocatorHelper {
       HloInstruction* old_all_gather = to_combine[i];
       // Add a GTE to unpack the new_inst result.
       TF_ASSIGN_OR_RETURN(HloInstruction * gte,
-                          MakeGetTupleElementHlo(new_all_gather, i));
-      // Mark it as inplace.
-      MakeUsedInplace(gte);
+                          AddGTEInstruction(new_all_gather, i));
+
       result[i + 1] = gte;
       TF_RETURN_IF_ERROR(
           new_all_gather->CopyAllControlDepsFrom(old_all_gather));

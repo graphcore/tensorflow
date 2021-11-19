@@ -44,6 +44,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
+#include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
@@ -86,6 +87,23 @@ MATCHER_P2(ContainsNPoplarOps, opcode, expected_count, "") {
   return success;
 }
 
+MATCHER_P(AllSharded, expected_sharding, "") {
+  const auto& instructions = arg;
+  for (auto inst : instructions) {
+    if (!inst->has_sharding()) {
+      *result_listener << "Expected " << inst->name() << " to be sharded.";
+      return false;
+    }
+    if (inst->sharding() != expected_sharding) {
+      *result_listener << "Expected " << inst->name() << " to have sharding "
+                       << expected_sharding.ToString();
+      return false;
+    }
+  }
+
+  return true;
+}
+
 struct CombineInstructionsTest : HloPoplarTestBase {
   static HloMemoryScheduler CreateHloScheduler(
       IpuSchedulerAlgorithm algorithm) {
@@ -109,8 +127,7 @@ struct CombineInstructionsTest : HloPoplarTestBase {
   HloModuleConfig config_;
 };
 
-TEST_F(CombineInstructionsTest, TestSyncScheduler) {
-  std::string hlo_string = R"(
+const char* all_reduce_hlo = R"(
 HloModule top
 
 add {
@@ -129,7 +146,8 @@ add {
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(f16[4] %a1, f16[4] %a2, f16[4] %a3)
 }
   )";
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
+TEST_F(CombineInstructionsTest, TestSyncScheduler) {
+  auto module_or_status = ParseAndReturnVerifiedModule(all_reduce_hlo, config_);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -153,26 +171,7 @@ add {
 }
 
 TEST_F(CombineInstructionsTest, TestLookAheadScheduler) {
-  std::string hlo_string = R"(
-HloModule top
-
-add {
-  x = f32[] parameter(0)
-  y = f32[] parameter(1)
-  add = f32[] add(x, y)
-}
-
-%cluster_1  {
-  %arg0 = f16[4] parameter(0)
-  %arg1 = f16[4] parameter(1)
-  %arg2 = f16[4] parameter(2)
-  %a1 = f16[4] all-reduce(arg0), to_apply=add
-  %a2 = f16[4] all-reduce(arg1), to_apply=add
-  %a3 = f16[4] all-reduce(arg2), to_apply=add
-  ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(f16[4] %a1, f16[4] %a2, f16[4] %a3)
-}
-  )";
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
+  auto module_or_status = ParseAndReturnVerifiedModule(all_reduce_hlo, config_);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -255,10 +254,19 @@ ENTRY entry () -> f32[2] {
   EXPECT_THAT(body->instructions(),
               ContainsNPoplarOps(PoplarOp::IpuInterCopy, 2));
   EXPECT_EQ(body->instruction_count(), 16);
+
+  // Combined IpuInterCopy and it's GTEs will be inserted between add.1 and
+  // add.2
+  const HloSharding expected_sharding = HloSharding::AssignDevice(1);
+
+  auto add_1 = FindInstruction(module, "add.1");
+  EXPECT_THAT(add_1->users(), AllSharded(expected_sharding));
+
+  auto add_2 = FindInstruction(module, "add.2");
+  EXPECT_THAT(add_2->operands(), AllSharded(expected_sharding));
 }
 
-TEST_F(CombineInstructionsTest, TestLookAheadSchedulerGradientAccumulation) {
-  std::string hlo_string = R"(
+const char* gradient_accumulation_hlo = R"(
 HloModule top
 
 add {
@@ -283,7 +291,9 @@ add {
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(ga0, ga1, ga2)
 }
   )";
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
+TEST_F(CombineInstructionsTest, TestLookAheadSchedulerGradientAccumulation) {
+  auto module_or_status =
+      ParseAndReturnVerifiedModule(gradient_accumulation_hlo, config_);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -320,9 +330,7 @@ add {
                        PoplarOp::StatefulGradientAccumulateAndAllReduce, 1));
 }
 
-TEST_F(CombineInstructionsTest,
-       TestLookAheadSchedulerGradientAccumulationWithMomentum) {
-  std::string hlo_string = R"(
+const char* gradient_accumulation_with_momentum_hlo = R"(
 HloModule top
 
 add {
@@ -362,7 +370,10 @@ add {
   ROOT %tuple = (f16[4], f16[4], f16[4], f16[4], f16[4], f16[4]) tuple(new_grad0, new_accum0, new_grad1, new_accum1, new_grad2, new_accum2)
 }
   )";
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
+TEST_F(CombineInstructionsTest,
+       TestLookAheadSchedulerGradientAccumulationWithMomentum) {
+  auto module_or_status = ParseAndReturnVerifiedModule(
+      gradient_accumulation_with_momentum_hlo, config_);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -449,8 +460,7 @@ add {
   EXPECT_EQ(entry->instruction_count(), 10);
 }
 
-TEST_F(CombineInstructionsTest, TestCombineReduceScatter) {
-  std::string hlo_string = R"(
+const char* reduce_scatter_hlo = R"(
 HloModule top
 
 %cluster_1  {
@@ -465,7 +475,9 @@ HloModule top
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(r0, r1, r2)
 }
   )";
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
+TEST_F(CombineInstructionsTest, TestCombineReduceScatter) {
+  auto module_or_status =
+      ParseAndReturnVerifiedModule(reduce_scatter_hlo, config_);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -495,8 +507,7 @@ HloModule top
   ASSERT_THAT(seq, ContainsNPoplarOps(PoplarOp::ReduceScatter, 3));
 }
 
-TEST_F(CombineInstructionsTest, TestCombineSendToHost) {
-  std::string hlo_string = R"(
+const char* send_to_host_hlo = R"(
 HloModule top
 
 ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
@@ -507,7 +518,9 @@ ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
   ROOT %ret = () tuple()
 }
   )";
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
+TEST_F(CombineInstructionsTest, TestCombineSendToHost) {
+  auto module_or_status =
+      ParseAndReturnVerifiedModule(send_to_host_hlo, config_);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -546,18 +559,8 @@ ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
 }
 
 TEST_F(CombineInstructionsTest, TestSendToHostNotCombinedWhenBufferTooSmall) {
-  std::string hlo_string = R"(
-HloModule top
-
-ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
-  %arg1 = f32[] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args"}
-  %send1 = () custom-call(f32[] %arg1), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"arg1\"}", custom_call_has_side_effect=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %arg2 = f32[] parameter(1), parameter_replication={false}, metadata={op_name="XLA_Args"}
-  %send2 = () custom-call(f32[] %arg2), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"arg2\"}", custom_call_has_side_effect=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  ROOT %tuple = () tuple()
-}
-  )";
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
+  auto module_or_status =
+      ParseAndReturnVerifiedModule(send_to_host_hlo, config_);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -577,8 +580,7 @@ ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
   ASSERT_THAT(seq, ContainsNPoplarOps(PoplarOp::SendToHost, 2));
 }
 
-TEST_F(CombineInstructionsTest, TestCombineRecvFromHost) {
-  std::string hlo_string = R"(
+const char* recv_from_host_hlo = R"(
 HloModule top
 
 ENTRY %top () -> (f32[], f32[]) {
@@ -587,7 +589,9 @@ ENTRY %top () -> (f32[], f32[]) {
   ROOT %tuple = (f32[], f32[]) tuple(%recv1, %recv2)
 }
   )";
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
+TEST_F(CombineInstructionsTest, TestCombineRecvFromHost) {
+  auto module_or_status =
+      ParseAndReturnVerifiedModule(recv_from_host_hlo, config_);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -664,8 +668,8 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   auto s = module->schedule().sequence(module->entry_computation());
   auto seq = s.instructions();
 
-  EXPECT_EQ(absl::c_count_if(seq, IsPoplarInstruction(SendToHost)), 1);
-  EXPECT_EQ(absl::c_count_if(seq, IsPoplarInstruction(RecvFromHost)), 1);
+  EXPECT_THAT(seq, ContainsNPoplarOps(PoplarOp::SendToHost, 1));
+  EXPECT_THAT(seq, ContainsNPoplarOps(PoplarOp::RecvFromHost, 1));
 
   auto send_inst = Cast<HloSendToHostInstruction>(
       *absl::c_find_if(seq, IsPoplarInstruction(SendToHost)));
@@ -701,8 +705,7 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   EXPECT_EQ(barrier_inst->control_successors()[0], recv_inst);
 }
 
-TEST_F(CombineInstructionsTest, TestCombineReductionsIntoReduceMany) {
-  std::string hlo_string = R"(
+const char* reduce_hlo = R"(
 HloModule top
 
 add {
@@ -730,8 +733,9 @@ cluster_1  {
   ROOT %tuple = (f32[512], f32[512], f32[512]) tuple(r0, r1, r2)
 }
   )";
+TEST_F(CombineInstructionsTest, TestCombineReductionsIntoReduceMany) {
   TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo_string, config_));
+                          ParseAndReturnVerifiedModule(reduce_hlo, config_));
 
   CompilerAnnotations annotations(module.get());
   auto* entry = module.get()->entry_computation();
@@ -754,8 +758,7 @@ cluster_1  {
   ASSERT_EQ(absl::c_count_if(seq, IsReduceAddOrMultiply), 1);
 }
 
-TEST_F(CombineInstructionsTest, TestCombineReduceFusionsIntoReduceMany) {
-  std::string hlo_string = R"(
+const char* reduction_fusion_hlo = R"(
 HloModule top
 
 add {
@@ -795,8 +798,9 @@ cluster_1  {
   ROOT %tuple = (f32[512], f32[512]) tuple(r0, r1)
 }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo_string, config_));
+TEST_F(CombineInstructionsTest, TestCombineReduceFusionsIntoReduceMany) {
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(reduction_fusion_hlo, config_));
 
   CompilerAnnotations annotations(module.get());
   auto* entry = module.get()->entry_computation();
@@ -920,32 +924,8 @@ ENTRY cluster_1  {
 }
 
 TEST_F(CombineInstructionsTest, TestInplace) {
-  std::string hlo_string = R"(
-HloModule top
-
-add {
-  x = f32[] parameter(0)
-  y = f32[] parameter(1)
-  add = f32[] add(x, y)
-}
-
-%cluster_1  {
-  %arg0 = f16[4] parameter(0)
-  %a0 = f16[4] all-reduce(arg0), to_apply=add
-  %norm0 = f16[4] custom-call(a0), custom_call_target="ReplicationNormalise", backend_config="{}\n"
-  %ga0 = f16[4] custom-call(norm0), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
-  %arg1 = f16[4] parameter(1)
-  %a1 = f16[4] all-reduce(arg1), to_apply=add
-  %norm1 = f16[4] custom-call(a1), custom_call_target="ReplicationNormalise", backend_config="{}\n"
-  %ga1 = f16[4] custom-call(norm1), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
-  %arg2 = f16[4] parameter(2)
-  %a2 = f16[4] all-reduce(arg2), to_apply=add
-  %norm2 = f16[4] custom-call(a2), custom_call_target="ReplicationNormalise", backend_config="{}\n"
-  %ga2 = f16[4] custom-call(norm2), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
-  ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(ga0, ga1, ga2)
-}
-  )";
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config_);
+  auto module_or_status =
+      ParseAndReturnVerifiedModule(gradient_accumulation_hlo, config_);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -1162,16 +1142,7 @@ add {
   ASSERT_THAT(seq, ContainsNOps(HloOpcode::kAllReduce, 2));
 }
 
-class CombineInstructionsAllGatherTest : public CombineInstructionsTest {
-  void SetUp() override {
-    config_.set_debug_options(GetDebugOptionsForTest());
-
-    TF_ASSERT_OK_AND_ASSIGN(_module,
-                            ParseAndReturnVerifiedModule(_hlo_string, config_));
-    EXPECT_TRUE(CustomOpReplacer().Run(_module.get()).ValueOrDie());
-  }
-
-  const std::string _hlo_string = R"hlo(
+const char* all_gather_hlo = R"hlo(
 HloModule top
 
 entry {
@@ -1200,6 +1171,14 @@ entry {
     f32[4,10], f32[4,10]) tuple(r0, r1, r2, r3, r4, r5, r6, r7, r8)
 }
   )hlo";
+class CombineInstructionsAllGatherTest : public CombineInstructionsTest {
+  void SetUp() override {
+    config_.set_replica_count(_replication_factor);
+
+    TF_ASSERT_OK_AND_ASSIGN(
+        _module, ParseAndReturnVerifiedModule(all_gather_hlo, config_));
+    EXPECT_TRUE(CustomOpReplacer().Run(_module.get()).ValueOrDie());
+  }
 
  protected:
   const int _replication_factor = 4;
@@ -1223,9 +1202,8 @@ TEST_F(CombineInstructionsAllGatherTest, TestCombineAllGather) {
   auto* entry = _module->entry_computation();
 
   // Ensure we got 9 AllGather instructions.
-  ASSERT_EQ(absl::c_count_if(entry->instructions(),
-                             IsPoplarInstruction(PoplarOp::AllGather)),
-            9);
+  ASSERT_THAT(entry->instructions(),
+              ContainsNPoplarOps(PoplarOp::AllGather, 9));
 
   ScheduleInstructions();
   EXPECT_TRUE(CombineInstructions().Run(_module.get()).ValueOrDie());
@@ -1309,6 +1287,66 @@ TEST_F(CombineInstructionsAllGatherTest, TestCombineAllGatherOutputsIdentical) {
     }
   }
 }
+
+struct ShardingPropogationTest : CombineInstructionsTest,
+                                 ::testing::WithParamInterface<HloTestCase> {
+  void SetUp() override {
+    TF_ASSERT_OK_AND_ASSIGN(
+        module_, ParseAndReturnVerifiedModule(GetParam().hlo, config_));
+
+    CustomOpReplacer custom_op_replacer;
+    custom_op_replacer.Run(module_.get());
+
+    CompilerAnnotations annotations(module_.get());
+    GradientAccumulationFuser fuser(annotations);
+    fuser.Run(module_.get());
+
+    information_.set_max_reduce_scatter_buffer_size(60 * 1024);
+    information_.set_max_all_reduce_buffer_size(64 * 1024);
+    information_.set_max_send_recv_cluster_size(8);
+    information_.set_max_reduce_many_buffer_size(8 * 1024);
+  }
+
+  std::unique_ptr<VerifiedHloModule> module_;
+  CompilerInformation information_;
+};
+
+TEST_P(ShardingPropogationTest, IsSharded) {
+  // This test checks that the CombineInstructions pass adds sharding
+  // information to the instructions it creates. We set a particular sharding on
+  // every instruction and expect new instructions to have that same sharding.
+
+  const auto expected_sharding = HloSharding::AssignDevice(0);
+
+  auto* comp = module_->entry_computation();
+  for (auto* inst : comp->instructions()) {
+    inst->set_sharding(expected_sharding);
+  }
+
+  auto scheduler = CreateLookAheadScheduler(information_);
+  TF_ASSERT_OK_AND_ASSIGN(bool scheduled, scheduler.Run(module_.get()));
+  ASSERT_TRUE(scheduled);
+
+  CombineInstructions combine_instructions;
+  TF_ASSERT_OK_AND_ASSIGN(bool combined,
+                          combine_instructions.Run(module_.get()));
+  ASSERT_TRUE(combined);
+
+  ASSERT_THAT(comp->instructions(), AllSharded(expected_sharding));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    CombineInstructionsHLO, ShardingPropogationTest,
+    ::testing::Values(
+        MAKE_HLO_TEST_CASE(all_reduce_hlo),
+        MAKE_HLO_TEST_CASE(gradient_accumulation_hlo),
+        MAKE_HLO_TEST_CASE(gradient_accumulation_with_momentum_hlo),
+        MAKE_HLO_TEST_CASE(reduce_scatter_hlo),
+        MAKE_HLO_TEST_CASE(send_to_host_hlo),
+        MAKE_HLO_TEST_CASE(recv_from_host_hlo), MAKE_HLO_TEST_CASE(reduce_hlo),
+        MAKE_HLO_TEST_CASE(reduction_fusion_hlo),
+        MAKE_HLO_TEST_CASE(all_gather_hlo)),
+    HloTestCaseName);
 
 }  // namespace
 }  // namespace poplarplugin

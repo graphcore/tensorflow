@@ -35,6 +35,8 @@ namespace poplarplugin {
 #define POPLAR_TEST_P(X, Y)
 #endif
 
+#define MAKE_HLO_TEST_CASE(hlo_string) HloTestCase(#hlo_string, hlo_string)
+
 // Common types/utilities for writing HLO based tests
 struct HloTestFixture : HloTestBase {
   using HloTestBase::HloTestBase;
