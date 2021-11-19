@@ -163,7 +163,9 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
+    cfg.compilation_poplar_options["debug.disablePasses"] = "mergeCopies"
     ipu.utils.configure_ipu_system(cfg)
+
     ipu.utils.move_variable_initialization_to_cpu()
 
     # Run the model
@@ -180,59 +182,62 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assert_total_tile_memory(report, total_mem, tolerance=0.1)
     self.assert_max_tile_memory(report, max_mem, tolerance=0.1)
 
-  @parameterized.parameters(
+  @parameterized.named_parameters(
       {
+          'testcase_name': 'tf_rnn1',
           'build': build_tf_rnn1,
           'counters': {
-              'Copy': 23 if TF1 else 21,
-              'host-exchange-local-copy': 1
+              'Copy': 46 if TF1 else 46
           },
           'total_memory': 4232578 if TF1 else 3948575,
           'max_memory': 542547 if TF1 else 509134
       }, {
+          'testcase_name': 'tf_rnn2',
           'build': build_tf_rnn2,
           'counters': {
-              'Copy': 34 if TF1 else 31,
-              'host-exchange-local-copy': 1
+              'Copy': 79 if TF1 else 79
           },
           'total_memory': 2908764 if TF1 else 2864563,
           'max_memory': 368781 if TF1 else 363662
       }, {
+          'testcase_name': 'tf_lstm1',
           'build': build_tf_lstm1,
           'counters': {
-              'Copy': 48 if TF1 else 41,
-              'host-exchange-local-copy': 1
+              'Copy': 115 if TF1 else 115
           },
           'total_memory': 47341002,
           'max_memory': 5923927
       }, {
+          'testcase_name': 'tf_gru1',
           'build': build_tf_gru1,
           'counters': {
-              'Copy': 51 if TF1 else 58,
-              'host-exchange-local-copy': 1
+              'Copy': 149 if TF1 else 149
           },
           'total_memory': 4744597 if TF1 else 4725345,
           'max_memory': 616981 if TF1 else 594266
       }, {
+          'testcase_name': 'model_rnn1',
           'build': build_model_rnn1,
           'counters': {
-              'Copy': 35 if TF1 else 32,
-              'host-exchange-local-copy': 2
+              'Copy': 74 if TF1 else 74,
+              'host-exchange-local-copy': 1
           },
           'total_memory': 4544890 if TF1 else 3893674,
           'max_memory': 572439 if TF1 else 490372
       }, {
+          'testcase_name': 'model_rnn2',
           'build': build_model_rnn2,
           'counters': {
-              'Copy': 57 if TF1 else 51,
-              'host-exchange-local-copy': 2
+              'Copy': 129 if TF1 else 129,
+              'host-exchange-local-copy': 1
           },
           'total_memory': 6082439 if TF1 else 6148616,
           'max_memory': 777772 if TF1 else 786597
       }, {
+          'testcase_name': 'model_cnn1',
           'build': build_model_cnn1,
           'counters': {
-              'Copy': 14
+              'Copy': 23
           },
           'total_memory': 1277668,
           'max_memory': 160393,
