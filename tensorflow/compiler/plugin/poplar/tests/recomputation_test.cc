@@ -493,6 +493,7 @@ TEST_F(NormInputRecomputationTest, RecomputeF16WithCast) {
   ConvolutionClassifier classifier(annotations);
 
   EXPECT_TRUE(flatten.Run(module).ValueOrDie());
+  EXPECT_TRUE(CustomOpReplacer().Run(module).ok());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());

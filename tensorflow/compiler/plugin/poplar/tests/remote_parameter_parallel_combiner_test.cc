@@ -669,10 +669,10 @@ ENTRY e {
 
   auto* module = module_or_status.ValueOrDie().get();
 
+  EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
+
   TF_ASSERT_OK_AND_ASSIGN(bool changed, ShardingPass().Run(module));
   EXPECT_TRUE(changed);
-
-  EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
 
   CompilerAnnotations annotations(module);
 
