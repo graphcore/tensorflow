@@ -154,19 +154,19 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
   }
 
-  poplar::Tensor input_dealised = input.flatten();
-  poplar::Tensor output_dealised = output.flatten();
-  if (input_dealised.containsAliases()) {
-    input_dealised = input_dealised.flatten();
-    output_dealised = output_dealised.flatten();
+  poplar::Tensor input_dealiased = input.flatten();
+  poplar::Tensor output_dealiased = output.flatten();
+  if (input_dealiased.containsAliases()) {
+    input_dealiased = input_dealiased.flatten();
+    output_dealiased = output_dealiased.flatten();
 
     auto flat_regions = master_graph.getSortedContiguousRegions(
-        input_dealised, {{0, input_dealised.numElements()}}, true);
+        input_dealiased, {{0, input_dealiased.numElements()}}, true);
 
-    input_dealised = poplar::concat(input_dealised.slices(flat_regions));
-    output_dealised = poplar::concat(output_dealised.slices(flat_regions));
+    input_dealiased = poplar::concat(input_dealiased.slices(flat_regions));
+    output_dealiased = poplar::concat(output_dealiased.slices(flat_regions));
   }
-  return TensorCopyInfo{input, input_dealised, output, output_dealised};
+  return TensorCopyInfo{input, input_dealiased, output, output_dealiased};
 }
 }  // namespace
 
@@ -189,6 +189,7 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
   // perform.
   using ShardCopyInfos = std::map<int64, DestinationShardCopyInfos>;
   ShardCopyInfos copy_informations;
+  std::vector<int64> operand_shardings;
 
   // Construct the information about the source and destination copies.
   for (int64 i = 0, flat_tuple_index = 0; i < inst->operand_count(); ++i) {
@@ -197,10 +198,8 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
       return FailedPrecondition("Missing shard information on %s", src->name());
     }
     const auto& src_sharding = GetShardingDeviceIdVector(src->sharding());
-
-    if (src_sharding.size() != dst_sharding.size()) {
-      return FailedPrecondition("Mismatched sharding info on %s", inst->name());
-    }
+    operand_shardings.insert(operand_shardings.end(), src_sharding.begin(),
+                             src_sharding.end());
 
     auto operand_tensors = FindInstructionInputs(tensor_map, res, inst, i, seq,
                                                  {debug_info}, false);
@@ -209,7 +208,7 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
     for (int64 index = 0; index < src_sharding.size();
          ++index, ++flat_tuple_index) {
       const int64 src_shard = src_sharding[index];
-      const int64 dst_shard = dst_sharding[index];
+      const int64 dst_shard = dst_sharding[flat_tuple_index];
       if (operand_tensors[index].IsTensor()) {
         TF_ASSIGN_OR_RETURN(
             TensorCopyInfo copy_info,
@@ -230,6 +229,11 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
             inst->name(), i, index);
       }
     }
+  }
+
+  if (operand_shardings.size() != dst_sharding.size()) {
+    return FailedPrecondition("Mismatched sharding info on %s",
+                              inst->ToString());
   }
 
   // Insert the copies.

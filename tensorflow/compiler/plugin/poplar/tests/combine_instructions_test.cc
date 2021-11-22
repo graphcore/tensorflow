@@ -96,7 +96,8 @@ MATCHER_P(AllSharded, expected_sharding, "") {
     }
     if (inst->sharding() != expected_sharding) {
       *result_listener << "Expected " << inst->name() << " to have sharding "
-                       << expected_sharding.ToString();
+                       << expected_sharding.ToString() << ", but it has "
+                       << "sharding: " << inst->sharding().ToString();
       return false;
     }
   }
@@ -255,15 +256,44 @@ ENTRY entry () -> f32[2] {
               ContainsNPoplarOps(PoplarOp::IpuInterCopy, 2));
   EXPECT_EQ(body->instruction_count(), 16);
 
-  // Combined IpuInterCopy and it's GTEs will be inserted between add.1 and
-  // add.2
-  const HloSharding expected_sharding = HloSharding::AssignDevice(1);
+  // Combined IpuInterCopy and its GTEs will be inserted between add.1 and .2
+  // to copy from output of add.1 (on device 0) to device 1.
+  const HloSharding assign_device_1 = HloSharding::AssignDevice(1);
 
-  auto add_1 = FindInstruction(module, "add.1");
-  EXPECT_THAT(add_1->users(), AllSharded(expected_sharding));
+  {
+    auto add_1 = FindInstruction(module, "add.1");
+    EXPECT_EQ(add_1->sharding(), HloSharding::AssignDevice(0));
 
-  auto add_2 = FindInstruction(module, "add.2");
-  EXPECT_THAT(add_2->operands(), AllSharded(expected_sharding));
+    const auto& users = add_1->users();
+    std::vector<HloInstruction*> ipu_inter_copy_insts;
+    absl::c_copy_if(users, std::back_inserter(ipu_inter_copy_insts),
+                    IsPoplarInstruction(PoplarOp::IpuInterCopy));
+    EXPECT_EQ(ipu_inter_copy_insts.size(), 1)
+        << "The only user of `add.1` should be a single IpuInterCopy.";
+
+    const Shape inner_shape = ShapeUtil::MakeShape(F32, {2});
+    const Shape tuple_shape =
+        ShapeUtil::MakeTupleShape({inner_shape, inner_shape});
+    const HloSharding expected_sharding =
+        HloSharding::Tuple(tuple_shape, {assign_device_1, assign_device_1});
+    EXPECT_THAT(ipu_inter_copy_insts, AllSharded(expected_sharding));
+  }
+
+  {
+    auto add_2 = FindInstruction(module, "add.2");
+    EXPECT_EQ(add_2->sharding(), assign_device_1);
+
+    const auto& operands = add_2->operands();
+    std::vector<HloInstruction*> get_tuple_element_insts;
+    absl::c_copy_if(operands, std::back_inserter(get_tuple_element_insts),
+                    [](HloInstruction* inst) {
+                      return inst->opcode() == HloOpcode::kGetTupleElement;
+                    });
+    EXPECT_EQ(get_tuple_element_insts.size(), 2)
+        << "There should only be two GetTupleElement operands to "
+           "`add.2`.";
+    EXPECT_THAT(get_tuple_element_insts, AllSharded(assign_device_1));
+  }
 }
 
 const char* gradient_accumulation_hlo = R"(
@@ -1286,6 +1316,165 @@ TEST_F(CombineInstructionsAllGatherTest, TestCombineAllGatherOutputsIdentical) {
       ASSERT_EQ(outputs_original[i][j], outputs_new[i][j]);
     }
   }
+}
+
+class CombineInstructionsIpuInterCopyTest : public CombineInstructionsTest {
+ private:
+  void SetUp() override {
+    HloModuleConfig config;
+    config.set_debug_options(GetDebugOptionsForTest());
+
+    auto module_or_status = ParseAndReturnVerifiedModule(_hlo_string, config);
+    EXPECT_TRUE(module_or_status.ok());
+
+    _original_module = module_or_status.ConsumeValueOrDie();
+
+    EXPECT_TRUE(CustomOpReplacer().Run(_original_module.get()).ValueOrDie());
+
+    auto scheduler = CreateLookAheadScheduler(
+        CompilerInformation().set_max_inter_ipu_copies_buffer_size(
+            _max_inter_ipu_copies_buffer_size));
+    EXPECT_TRUE(scheduler.Run(_original_module.get()).ValueOrDie());
+  }
+
+  std::string _hlo_string = R"hlo(
+HloModule cluster_1
+
+ENTRY %cluster_1 () -> s32[] {
+  %constant.1.clone.2 = s32[] constant(1), sharding={maximal device=3}
+  %constant.1.clone.1 = s32[] constant(1), sharding={maximal device=2}
+  %constant.1.clone = s32[] constant(1), sharding={maximal device=1}
+  %constant.2.clone.2 = s32[] constant(2), sharding={maximal device=3}
+  %constant.2.clone.1 = s32[] constant(2), sharding={maximal device=2}
+  %constant.2.clone = s32[] constant(2), sharding={maximal device=1}
+  %constant.2 = s32[] constant(2), sharding={maximal device=0}
+  %constant.1 = s32[] constant(1), sharding={maximal device=0}
+  %multiply = s32[] multiply(s32[] %constant.2, s32[] %constant.1), sharding={maximal device=0}
+  %ipu-inter-copy = s32[] custom-call(s32[] %multiply), custom_call_target="IpuInterCopy", sharding={maximal device=1}
+  %multiply.1 = s32[] multiply(s32[] %constant.2.clone, s32[] %constant.1.clone), sharding={maximal device=1}
+  %ipu-inter-copy.1 = s32[] custom-call(s32[] %multiply.1), custom_call_target="IpuInterCopy", sharding={maximal device=2}
+  %multiply.2 = s32[] multiply(s32[] %constant.2.clone.1, s32[] %constant.1.clone.1), sharding={maximal device=2}
+  %add.1 = s32[] add(s32[] %multiply.2, s32[] %constant.2.clone.1), sharding={maximal device=2}
+  %multiply.3 = s32[] multiply(s32[] %constant.2, s32[] %constant.1), sharding={maximal device=0}
+  %ipu-inter-copy.2 = s32[] custom-call(s32[] %multiply.3), custom_call_target="IpuInterCopy", sharding={maximal device=3}
+  %multiply.4 = s32[] multiply(s32[] %constant.2.clone.2, s32[] %ipu-inter-copy.2), sharding={maximal device=3}
+  %add.2 = s32[] add(s32[] %multiply.4, s32[] %constant.2.clone.2), sharding={maximal device=3}
+  %ipu-inter-copy.3 = (s32[], s32[], s32[]) custom-call(s32[] %constant.2, s32[] %add.1, s32[] %add.2), custom_call_target="IpuInterCopy", sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  %get-tuple-element.2 = s32[] get-tuple-element((s32[], s32[], s32[]) %ipu-inter-copy.3), index=2, sharding={maximal device=0}
+  %get-tuple-element.1 = s32[] get-tuple-element((s32[], s32[], s32[]) %ipu-inter-copy.3), index=1, sharding={maximal device=0}
+  %get-tuple-element = s32[] get-tuple-element((s32[], s32[], s32[]) %ipu-inter-copy.3), index=0, sharding={maximal device=0}
+  %add.3 = s32[] add(s32[] %multiply.3, s32[] %constant.2), sharding={maximal device=0}
+  %add.4 = s32[] add(s32[] %add.3, s32[] %get-tuple-element), sharding={maximal device=0}
+  %add.5 = s32[] add(s32[] %add.4, s32[] %get-tuple-element.1), sharding={maximal device=0}
+  ROOT %add.6 = s32[] add(s32[] %add.5, s32[] %get-tuple-element.2), sharding={maximal device=0}
+}
+  )hlo";
+
+ protected:
+  std::unique_ptr<VerifiedHloModule> _original_module;
+  int64 _max_inter_ipu_copies_buffer_size = 64 * 1024;
+  const unsigned _num_ipus = 4;
+  const unsigned _num_tiles_per_ipu = 32;
+};
+
+TEST_F(CombineInstructionsIpuInterCopyTest,
+       TestIpuInterCopyCombineMultipleSharding) {
+  auto orig_instructions =
+      _original_module->entry_computation()->instructions();
+  ASSERT_THAT(orig_instructions, ContainsNPoplarOps(PoplarOp::IpuInterCopy, 4));
+
+  auto module = _original_module->Clone();
+
+  CombineInstructions combine_instructions;
+  EXPECT_TRUE(combine_instructions.Run(module.get()).ValueOrDie());
+
+  auto sequence = module->schedule().sequence(module->entry_computation());
+  auto instructions = sequence.instructions();
+
+  // Ensure we now have two IpuInterCopy instructions
+  ASSERT_THAT(instructions, ContainsNPoplarOps(PoplarOp::IpuInterCopy, 2));
+
+  // Check the inplace instructions are all GTEs
+  auto inplace_instructions = GetInplaceInstructions(module.get());
+  EXPECT_EQ(inplace_instructions.size(), 3);
+  for (auto inplace_inst : inplace_instructions) {
+    EXPECT_EQ(inplace_inst->opcode(), HloOpcode::kGetTupleElement);
+    EXPECT_LT(inplace_inst->tuple_index(), 3);
+  }
+
+  std::vector<HloInstruction*> ipu_inter_copy_insts;
+  absl::c_copy_if(instructions, std::back_inserter(ipu_inter_copy_insts),
+                  IsPoplarInstruction(PoplarOp::IpuInterCopy));
+
+  {
+    // The first IpuInterCopy should be combined
+    auto* inst = ipu_inter_copy_insts.front();
+    ASSERT_TRUE(inst->has_sharding());
+
+    const auto& sharding = inst->sharding();
+    ASSERT_TRUE(sharding.IsTuple());
+
+    // Ensure we have three different sharding elements in the tuple
+    const auto& sharding_tuple = sharding.tuple_elements();
+    ASSERT_EQ(sharding_tuple.size(), 3);
+
+    // Ensure we have three device assignment shardings from [1, 4).
+    for (int64 i = 1; i < 4; i++) {
+      ASSERT_NE(absl::c_find(sharding_tuple, HloSharding::AssignDevice(i)),
+                sharding_tuple.end())
+          << "device " << i << " not in sharding";
+    }
+  }
+
+  {
+    // The second IpuInterCopy should remain untouched
+    auto* inst = ipu_inter_copy_insts[1];
+    ASSERT_TRUE(inst->has_sharding());
+
+    const auto& sharding = inst->sharding();
+    ASSERT_TRUE(sharding.HasUniqueDevice());
+    ASSERT_EQ(*sharding.UniqueDevice(), 0);
+  }
+}
+
+TEST_F(CombineInstructionsIpuInterCopyTest,
+       TestIpuInterCopyCombineMultipleShardingRun) {
+  auto device = CreateIpuModel(_num_ipus);
+  auto resources = GetMockResources(device, _original_module.get());
+
+  // Setup virtual graphs for sharding.
+  const auto& graph = resources->main_graph;
+  const poplar::Target& target = graph->getTarget();
+  for (unsigned ipu = 0; ipu < _num_ipus; ++ipu) {
+    poplar::Graph ipu_graph = graph->createVirtualGraph(
+        ipu * _num_tiles_per_ipu, (ipu + 1) * _num_tiles_per_ipu);
+    resources->shard_io_graphs.emplace_back(ipu_graph.createVirtualGraph(0));
+    resources->shard_compute_graphs.emplace_back(std::move(ipu_graph));
+  }
+
+  resources->shard_to_ipu_id = {0, 1, 2, 3};
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto engine,
+      Compile(*resources, static_cast<HloModule*>(_original_module.get())));
+
+  // Connect I/O
+  auto& io_map = resources->annotations.input_output_aliasing_map;
+  auto& outputs = io_map.GetEntryOutputInfos();
+  EXPECT_EQ(outputs.size(), 1);
+  EXPECT_EQ(outputs[0].Handles().size(), 1);
+
+  std::array<int, 1> out;
+  engine.connectStream(outputs[0].Handles()[0], out.data(),
+                       out.data() + out.size());
+
+  // Run the program.
+  device.attach();
+  engine.load(device);
+  engine.run(0);
+  device.detach();
+
+  ASSERT_EQ(out[0], 16);
 }
 
 struct ShardingPropogationTest : CombineInstructionsTest,

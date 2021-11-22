@@ -70,12 +70,13 @@ HloInstruction* AddReplacementInstruction(
 }
 
 StatusOr<HloInstruction*> AddGTEInstruction(HloInstruction* operand,
-                                            int64 index) {
+                                            int64 index,
+                                            HloInstruction* to_replace) {
   TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                       MakeGetTupleElementHlo(operand, index));
   // Mark it as inplace.
   MakeUsedInplace(gte);
-  CopyShardingIfPresent(operand, gte);
+  CopyShardingIfPresent(to_replace, gte);
 
   return gte;
 }
@@ -118,7 +119,7 @@ bool InstructionColocatorHelper::CanColocate(const HloInstruction* a,
   }
 
   // Make sure a and b have compatible sharding.
-  if (!a->has_compatible_sharding(b)) {
+  if (!CanColocateSharding(a, b)) {
     return false;
   }
 
@@ -137,6 +138,11 @@ bool InstructionColocatorHelper::CanColocate(const HloInstruction* a,
   return CanColocateExtra(a, b);
 }
 
+bool InstructionColocatorHelper::CanColocateSharding(
+    const HloInstruction* a, const HloInstruction* b) const {
+  return a->has_compatible_sharding(b);
+}
+
 bool InstructionColocatorHelperPtrComparator::operator()(
     const InstructionColocatorHelper* const& lhs,
     const InstructionColocatorHelper* const& rhs) const {
@@ -150,18 +156,13 @@ bool InstructionColocatorHelperPtrComparator::operator()(
   return lhs->GetID() < rhs->GetID();
 }
 
-StatusOr<std::vector<HloInstruction*>>
-InstructionColocatorHelper::CombineAndReplaceColocatedInstructions(
-    std::vector<HloInstruction*> to_combine) const {
-  const uint64 cluster_size = to_combine.size();
-  if (cluster_size == 1) {
-    return to_combine;
-  }
+HloInstruction* InstructionColocatorHelper::CombineColocatedInstructions(
+    const std::vector<HloInstruction*>& to_combine) const {
+  HloInstruction* archetype = to_combine[0];
 
-  HloComputation* comp = to_combine[0]->parent();
-  // Be default merge all the operands.
+  // By default merge all the operands.
   // Combine all the shapes into a single one.
-  std::vector<Shape> shapes(cluster_size);
+  std::vector<Shape> shapes(to_combine.size());
   absl::c_transform(to_combine, shapes.begin(),
                     [](HloInstruction* inst) { return inst->shape(); });
   auto shape = ShapeUtil::MakeTupleShape(shapes);
@@ -178,8 +179,22 @@ InstructionColocatorHelper::CombineAndReplaceColocatedInstructions(
 
   // Add the new instruction.
   HloInstruction* new_inst = AddReplacementInstruction(
-      comp, to_combine[0],
-      to_combine[0]->CloneWithNewOperands(shape, operands));
+      archetype->parent(), archetype,
+      archetype->CloneWithNewOperands(shape, operands));
+
+  return new_inst;
+}
+
+StatusOr<std::vector<HloInstruction*>>
+InstructionColocatorHelper::CombineAndReplaceColocatedInstructions(
+    std::vector<HloInstruction*> to_combine) const {
+  const uint64 cluster_size = to_combine.size();
+  if (cluster_size == 1) {
+    return to_combine;
+  }
+
+  auto* new_inst = CombineColocatedInstructions(to_combine);
+  auto* comp = new_inst->parent();
 
   // Replace all the users.
   std::vector<HloInstruction*> result(cluster_size + 1);
@@ -187,7 +202,8 @@ InstructionColocatorHelper::CombineAndReplaceColocatedInstructions(
   for (uint64 i = 0; i != cluster_size; ++i) {
     HloInstruction* inst = to_combine[i];
     // Add a GTE to unpack the new_inst result.
-    TF_ASSIGN_OR_RETURN(HloInstruction * gte, AddGTEInstruction(new_inst, i));
+    TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                        AddGTEInstruction(new_inst, i, inst));
 
     result[i + 1] = gte;
 
@@ -239,7 +255,7 @@ class InstructionColocatorHelperRegistrar {
   InstructionColocatorHelperRegistrar() = delete;
 };
 
-#define REGISTER_INSTRUCTION_COLLOCATOR_HELPER(colocator)              \
+#define REGISTER_INSTRUCTION_COLOCATOR_HELPER(colocator)               \
   namespace {                                                          \
   static InstructionColocatorHelperRegistrar                           \
       registrar__colocator__##colocator##__object(                     \
@@ -275,18 +291,40 @@ class AllReduceColocatorHelper : public InstructionColocatorHelper {
   }
 };
 
-// Colocator helper which is used to combine multiple inter IPU copies.
-class InterIpuCopyColocatorHelper : public InstructionColocatorHelper {
+// Colocator helper which is used to combine multiple inter-IPU copies.
+class IpuInterCopyColocatorHelper : public InstructionColocatorHelper {
  public:
-  InterIpuCopyColocatorHelper() : InstructionColocatorHelper() {}
+  IpuInterCopyColocatorHelper()
+      : InstructionColocatorHelper(/*requires_matching_element_types=*/false) {}
 
   bool CanColocate(const HloInstruction* inst) const override {
     return IsPoplarInstruction(PoplarOp::IpuInterCopy)(inst);
   }
 
+  bool CanColocateSharding(const HloInstruction* a,
+                           const HloInstruction* b) const override {
+    // We can merge inter-IPU copies with different sharding information.
+    return true;
+  }
+
   int64 GetColocateBufferSize(
       const CompilerInformation& information) const override {
     return information.max_inter_ipu_copies_buffer_size;
+  }
+
+  HloInstruction* CombineColocatedInstructions(
+      const std::vector<HloInstruction*>& to_combine) const override {
+    auto* new_inst =
+        InstructionColocatorHelper::CombineColocatedInstructions(to_combine);
+    std::vector<HloSharding> new_sharding;
+    for (const auto* inst : to_combine) {
+      new_sharding.push_back(inst->sharding());
+    }
+
+    CHECK_EQ(new_inst->shape().tuple_shapes_size(), new_sharding.size());
+    new_inst->set_sharding(HloSharding::Tuple(new_inst->shape(), new_sharding));
+
+    return new_inst;
   }
 };
 
@@ -434,7 +472,8 @@ class RecvFromHostColocatorHelper : public InstructionColocatorHelper {
     for (uint64 i = 0; i != old_recvs.size(); ++i) {
       HloInstruction* old_recv = old_recvs[i];
       // Add a GTE to unpack the new_recv result.
-      TF_ASSIGN_OR_RETURN(HloInstruction * gte, AddGTEInstruction(new_recv, i));
+      TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                          AddGTEInstruction(new_recv, i, old_recv));
       result.push_back(gte);
 
       // Replace the old inst.
@@ -553,12 +592,12 @@ class StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper
       HloInstruction* inst = to_combine[i];
       // GTE to get the new accumulator.
       TF_ASSIGN_OR_RETURN(HloInstruction * gte_accum,
-                          AddGTEInstruction(new_inst, i));
+                          AddGTEInstruction(new_inst, i, inst));
       result[i + 1] = gte_accum;
 
       // GTE to get the new gradient.
       TF_ASSIGN_OR_RETURN(HloInstruction * gte_grad,
-                          AddGTEInstruction(new_inst, cluster_size + i));
+                          AddGTEInstruction(new_inst, cluster_size + i, inst));
       result[cluster_size + i + 1] = gte_grad;
 
       // Create a tuple instruction so that we can easily replace all the users.
@@ -651,7 +690,7 @@ class ReduceManyColocatorHelper : public InstructionColocatorHelper {
       HloInstruction* old_reduce = to_combine[i];
       // Add a GTE to unpack the new_inst result.
       TF_ASSIGN_OR_RETURN(HloInstruction * gte,
-                          AddGTEInstruction(reduce_many, i));
+                          AddGTEInstruction(reduce_many, i, old_reduce));
 
       result[i + 1] = gte;
       TF_RETURN_IF_ERROR(reduce_many->CopyAllControlDepsFrom(old_reduce));
@@ -731,7 +770,7 @@ class AllGatherColocatorHelper : public InstructionColocatorHelper {
       HloInstruction* old_all_gather = to_combine[i];
       // Add a GTE to unpack the new_inst result.
       TF_ASSIGN_OR_RETURN(HloInstruction * gte,
-                          AddGTEInstruction(new_all_gather, i));
+                          AddGTEInstruction(new_all_gather, i, old_all_gather));
 
       result[i + 1] = gte;
       TF_RETURN_IF_ERROR(
@@ -749,17 +788,17 @@ class AllGatherColocatorHelper : public InstructionColocatorHelper {
 
 }  // namespace
 
-REGISTER_INSTRUCTION_COLLOCATOR_HELPER(InterIpuCopyColocatorHelper)
-REGISTER_INSTRUCTION_COLLOCATOR_HELPER(AllReduceColocatorHelper)
-REGISTER_INSTRUCTION_COLLOCATOR_HELPER(ReduceScatterColocatorHelper)
-REGISTER_INSTRUCTION_COLLOCATOR_HELPER(
+REGISTER_INSTRUCTION_COLOCATOR_HELPER(IpuInterCopyColocatorHelper)
+REGISTER_INSTRUCTION_COLOCATOR_HELPER(AllReduceColocatorHelper)
+REGISTER_INSTRUCTION_COLOCATOR_HELPER(ReduceScatterColocatorHelper)
+REGISTER_INSTRUCTION_COLOCATOR_HELPER(
     StatefulGradientAccumulationAllReduceColocatorHelper)
-REGISTER_INSTRUCTION_COLLOCATOR_HELPER(
+REGISTER_INSTRUCTION_COLOCATOR_HELPER(
     StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper)
-REGISTER_INSTRUCTION_COLLOCATOR_HELPER(ReduceManyColocatorHelper)
-REGISTER_INSTRUCTION_COLLOCATOR_HELPER(AllGatherColocatorHelper)
-REGISTER_INSTRUCTION_COLLOCATOR_HELPER(SendToHostColocatorHelper)
-REGISTER_INSTRUCTION_COLLOCATOR_HELPER(RecvFromHostColocatorHelper)
+REGISTER_INSTRUCTION_COLOCATOR_HELPER(ReduceManyColocatorHelper)
+REGISTER_INSTRUCTION_COLOCATOR_HELPER(AllGatherColocatorHelper)
+REGISTER_INSTRUCTION_COLOCATOR_HELPER(SendToHostColocatorHelper)
+REGISTER_INSTRUCTION_COLOCATOR_HELPER(RecvFromHostColocatorHelper)
 
 const std::vector<const InstructionColocatorHelper*>&
 GetAllInstructionColocatorHelpers() {
@@ -782,6 +821,6 @@ bool CanColocate(const HloInstruction* a, const HloInstruction* b) {
   return colocator ? (*colocator)->CanColocate(a, b) : false;
 }
 
-#undef REGISTER_INSTRUCTION_COLLOCATOR_HELPER
+#undef REGISTER_INSTRUCTION_COLOCATOR_HELPER
 }  // namespace poplarplugin
 }  // namespace xla
