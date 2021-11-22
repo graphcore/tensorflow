@@ -2162,7 +2162,6 @@ test_suite(
         "replication_all_to_all_test",
         "replication_grouped_collectives_test",
         "replication_normalise_test",
-        "rnn_test",
         "seed_control_test",
         "sequence_slice_test",
         "sharded_and_replicated_test",
