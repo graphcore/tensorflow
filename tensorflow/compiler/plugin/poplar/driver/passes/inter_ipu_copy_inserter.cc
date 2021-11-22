@@ -92,6 +92,13 @@ StatusOr<bool> InterIpuCopyInserter::Run(HloModule* module) {
 
   bool added = false;
 
+  auto is_ineligible_op = [](const HloInstruction* inst) {
+    // These ops are expected to have their input(s) on a different device to
+    // their output(s).
+    return inst->opcode() == HloOpcode::kAfterAll ||
+           IsPoplarInstruction(PoplarOp::IpuInterCopy)(inst);
+  };
+
   for (auto* comp : module->MakeComputationPostOrder()) {
     if (IsPopOpsFusion(comp)) {
       continue;
@@ -101,11 +108,7 @@ StatusOr<bool> InterIpuCopyInserter::Run(HloModule* module) {
     // devices
     auto original_insts = comp->MakeInstructionPostOrder();
     for (auto* inst : original_insts) {
-      if (!inst->has_sharding()) {
-        continue;
-      }
-
-      if (inst->opcode() == HloOpcode::kAfterAll) {
+      if (!inst->has_sharding() || is_ineligible_op(inst)) {
         continue;
       }
 
@@ -118,7 +121,7 @@ StatusOr<bool> InterIpuCopyInserter::Run(HloModule* module) {
       std::set<std::vector<int64>> dst_shardings;
       std::map<std::vector<int64>, HloSharding> sharding_map;
       for (const auto& user : inst->users()) {
-        if (user->opcode() == HloOpcode::kAfterAll) {
+        if (is_ineligible_op(user)) {
           continue;
         }
 

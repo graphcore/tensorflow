@@ -162,6 +162,63 @@ cluster_1  {
   }
 }
 
+TEST_F(InterIpuCopyInserterTest, ExistingIpuInterCopy) {
+  // In this test we check that existing `IpuInterCopy` instructions are not
+  // themselves modified.
+  std::string hlo_string = R"(
+HloModule top
+
+cluster_1  {
+  arg0 = f16[] parameter(0), sharding={maximal device=0}
+  const0 = f16[] constant(0.1), sharding={maximal device=0}
+  ipu-inter-copy = (f16[], f16[]) custom-call(f16[] arg0, f16[] const0), custom_call_target="IpuInterCopy", sharding={{maximal device=1}, {maximal device=1}}
+  gte0 = f16[] get-tuple-element((f16[], f16[]) ipu-inter-copy), index=0, sharding={maximal device=1}
+  gte1 = f16[] get-tuple-element((f16[], f16[]) ipu-inter-copy), index=0, sharding={maximal device=1}
+  ROOT mul = f16[] multiply(gte0, gte1), sharding={maximal device=1}
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto module = module_or_status.ConsumeValueOrDie();
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+
+  InterIpuCopyInserter inserterPass;
+  EXPECT_FALSE(inserterPass.Run(module.get())
+                   .ValueOrDie());  // The pass shouldn't have done anything
+
+  auto* root = module->entry_computation()->root_instruction();
+  EXPECT_EQ(root->operand(0)->opcode(), HloOpcode::kGetTupleElement);
+  EXPECT_EQ(root->operand(1)->opcode(), HloOpcode::kGetTupleElement);
+
+  auto insts = module->entry_computation()->instructions();
+
+  std::vector<HloInstruction*> inter_ipu_copy_insts;
+  absl::c_copy_if(insts, std::back_inserter(inter_ipu_copy_insts),
+                  IsPoplarInstruction(PoplarOp::IpuInterCopy));
+
+  ASSERT_EQ(inter_ipu_copy_insts.size(), 1);
+
+  auto inter_ipu_copy = inter_ipu_copy_insts.front();
+  ASSERT_TRUE(inter_ipu_copy->shape().IsTuple());
+  ASSERT_EQ(inter_ipu_copy->shape().tuple_shapes_size(), 2);
+  ASSERT_EQ(inter_ipu_copy->sharding(),
+            HloSharding::Tuple(
+                inter_ipu_copy->shape(),
+                {HloSharding::AssignDevice(1), HloSharding::AssignDevice(1)}));
+
+  for (auto* inst : insts) {
+    EXPECT_TRUE(inst->has_sharding());
+    const auto& sharding = inst->sharding();
+    EXPECT_TRUE(sharding.HasUniqueDevice());
+  }
+}
+
 TEST_F(InterIpuCopyInserterTest, CloneWideConstantToIpu) {
   // In this test we check that the wide constant inst has been cloned with the
   // new sharding information rather than copied.

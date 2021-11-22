@@ -25,6 +25,7 @@ limitations under the License.
 namespace xla {
 
 class HloInstruction;
+class HloSharding;
 
 namespace poplarplugin {
 
@@ -32,15 +33,19 @@ class InstructionColocatorHelper {
  protected:
   explicit InstructionColocatorHelper(
       bool requires_matching_element_types = true);
-  // Function which can be specialized for each collocator.
+  // Function which can be specialized for each colocator.
   virtual bool CanColocateExtra(const HloInstruction* a,
                                 const HloInstruction* b) const;
 
  public:
-  // Return true if this Colocator can be used for this instruction.
+  // Returns true if this colocator can be used for this instruction.
   virtual bool CanColocate(const HloInstruction* inst) const = 0;
-  // Return true iff a and b can be used colocated together.
+  // Returns true iff a and b can be used colocated together.
   bool CanColocate(const HloInstruction* a, const HloInstruction* b) const;
+  // Returns true iff the sharding of a and b are eligible to be colocated
+  // together. By default, ensures the sharding is identical.
+  virtual bool CanColocateSharding(const HloInstruction* a,
+                                   const HloInstruction* b) const;
   // Returns how many bytes to colocate.
   virtual int64 GetColocateBufferSize(
       const CompilerInformation& information) const = 0;
@@ -55,10 +60,17 @@ class InstructionColocatorHelper {
   CombineAndReplaceColocatedInstructions(
       std::vector<HloInstruction*> to_combine) const;
 
+ protected:
+  // Combines several instructions to one. Does not replace the existing
+  // instruction or modify its users.
+  virtual HloInstruction* CombineColocatedInstructions(
+      const std::vector<HloInstruction*>& to_combine) const;
+
  private:
   // ID used for determinism in scheduling.
   static int64 GetNextID();
   int64 id_;
+
   bool requires_matching_element_types_;
 };
 
