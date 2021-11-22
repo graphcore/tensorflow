@@ -441,8 +441,15 @@ bool IsSerializedGradientAccumulation(const HloInstruction* inst) {
 
 std::function<bool(const HloInstruction*)> IsPoplarInstruction(PoplarOp op) {
   return [op](const HloInstruction* inst) -> bool {
-    return IsPoplibsHloCustomOp(inst) &&
-           inst->custom_call_target() == PoplarOp_Name(op);
+    bool is_poplar_custom_op = IsPoplibsHloCustomOp(inst);
+    bool name_matches = inst->opcode() == HloOpcode::kCustomCall &&
+                        inst->custom_call_target() == PoplarOp_Name(op);
+    CHECK(is_poplar_custom_op || !name_matches)
+        << "Found custom call (" << inst->name()
+        << ") which would otherwise match IsPoplarInstruction, but is not an "
+           "HloPoplarInstruction. You have likely not applied the "
+           "CustomOpReplacer on your HLO module.";
+    return is_poplar_custom_op && name_matches;
   };
 }
 
