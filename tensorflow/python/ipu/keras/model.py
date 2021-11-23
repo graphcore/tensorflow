@@ -27,15 +27,15 @@ class _IpuModelBase:
 class IPUSequential:
   def __init__(self, *args, **kwargs):
     raise RuntimeError(
-      "IPUSequential has been deleted. Use tf.keras.Sequential within a "
-      "`tensorflow.python.ipu.ipu_strategy.IPUStrategy instead.")
+        "IPUSequential has been deleted. Use tf.keras.Sequential within a "
+        "`tensorflow.python.ipu.ipu_strategy.IPUStrategy` instead.")
 
 
 class IPUModel:
   def __init__(self, *args, **kwargs):
     raise RuntimeError(
-      "IPUModel has been deleted. Use tf.keras.Model within a "
-      "`tensorflow.python.ipu.ipu_strategy.IPUStrategy instead.")
+        "IPUModel has been deleted. Use tf.keras.Model within a "
+        "`tensorflow.python.ipu.ipu_strategy.IPUStrategy` instead.")
 
 
 Model = IPUModel

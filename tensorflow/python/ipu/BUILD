@@ -121,7 +121,7 @@ py_library(
         "keras/extensions/__init__.py",
         "keras/extensions/data_adapter.py",
         "keras/extensions/functional_extensions.py",
-        "keras/extensions/model_extensions.py",
+        "keras/extensions/keras_extension_base.py",
         "keras/extensions/sequential_extensions.py",
         "keras/layers/__init__.py",
         "keras/layers/assume_equal_across_replicas.py",

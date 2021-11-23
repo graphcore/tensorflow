@@ -301,7 +301,7 @@ class _PredictPollingThread(_PollingThread):
       self.postprocess(step - begin_step)
 
 
-class ModelExtension(base_layer.KerasExtension):
+class KerasExtensionBase(base_layer.KerasExtension):
   @trackable.no_automatic_dependency_tracking
   def __init__(self):
     # Following values need to be serializable.

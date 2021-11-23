@@ -108,7 +108,8 @@ class IPUModelReplicatedMnistTest(test_util.TensorFlowTestCase):
       with strategy.scope():
         ipu_model = keras.models.load_model(model_file)
         self.assertIsInstance(
-            ipu_model, ipu_keras.extensions.model_extensions.ModelExtension)
+            ipu_model,
+            ipu_keras.extensions.keras_extension_base.KerasExtensionBase)
         ipu_model.compile(steps_per_execution=4)
         ipu_predictions = ipu_model.predict(predict_ds, steps=12)
 

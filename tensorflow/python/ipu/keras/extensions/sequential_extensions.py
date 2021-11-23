@@ -18,7 +18,7 @@ IPU specific Keras Sequentail extensions
 """
 import copy
 
-from tensorflow.python.ipu.keras.extensions import model_extensions
+from tensorflow.python.ipu.keras.extensions import keras_extension_base
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras.engine import sequential
 from tensorflow.python.platform import tf_logging as logging
@@ -62,10 +62,10 @@ class SequentialLayerPipelineStageAssignment:
         self.layer.name, self.pipeline_stage))
 
 
-class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=abstract-method
+class SequentialExtension(keras_extension_base.KerasExtensionBase):  # pylint: disable=abstract-method
   @trackable.no_automatic_dependency_tracking
   def __init__(self):
-    model_extensions.ModelExtension.__init__(self)
+    keras_extension_base.KerasExtensionBase.__init__(self)
     self._pipeline_stage_assignment_valid = False
     self._pipeline_stage_assignment = []
 
@@ -81,7 +81,7 @@ class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=a
   def _get_config_delegate(self):
     # Get the Keras config.
     config = self.get_config(__extension_delegate=False)
-    # Get the ModelExtension config and merge it in.
+    # Get the KerasExtensionBase config and merge it in.
     extension_config = self._get_base_config()
     config.update(extension_config)
     # Add pipelining options.
