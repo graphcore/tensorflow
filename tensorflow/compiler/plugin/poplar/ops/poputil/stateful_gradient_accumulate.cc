@@ -50,9 +50,10 @@ REGISTER_OP("GradientAccumulatorCreate")
     .SetIsStateful()
     .SetShapeFn(shape_inference::UnchangedShape);
 
-REGISTER_OP("GradientAccumulatorAdd")
+REGISTER_OP("GradientAccumulatorAddWithScale")
     .Input("accumulator: accumulator_type")
     .Input("gradients: gradient_type")
+    .Input("accumulator_scale: accumulator_type")
     .Output("accumulated: accumulator_type")
     .Attr("accumulator_type: {float16, float32}")
     .Attr("gradient_type: {float16, float32}")
