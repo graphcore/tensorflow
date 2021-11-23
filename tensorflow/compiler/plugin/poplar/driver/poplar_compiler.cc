@@ -1009,9 +1009,10 @@ void AddFrameworkFileToDirectory(const std::string& tensorflow_info,
   }
 }
 
-void AddPipelineOptimizerPass(HloPassPipeline& pipeline) {
+void AddPipelineOptimizerPass(HloPassPipeline& pipeline,
+                              xla::CompilationStats* compilation_stats) {
   auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-      "pipeline-optimizer-wrapper");
+      "pipeline-optimizer-wrapper", compilation_stats);
   pass.AddPass<CallOptimizer>();
   pass.AddPass<PipelineOptimizer>();
   pass.AddPass<HloDCE>();
@@ -1324,10 +1325,10 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
   {
     Tracepoint tracepoint("HloOptimizerPipeline");
-    std::unique_ptr<PVTICompilerStats> optimizer_compiler_stats =
+    std::unique_ptr<PVTICompilerStats> pipeline_compiler_stats =
         absl::make_unique<PVTICompilerStats>();
     HloPassPipeline optimizer_pipeline("OptimizerPipeline",
-                                       optimizer_compiler_stats.get());
+                                       pipeline_compiler_stats.get());
 
     if (PoplarXlaFlags::Get().enable_hlo_verifier) {
       optimizer_pipeline.AddInvariantChecker<HloVerifier>(
@@ -1336,7 +1337,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
     {
       auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
-          "before control dependencies");
+          "before control dependencies", pipeline_compiler_stats.get());
       // Make sure there are no control dependencies for the passes in this
       // pipeline.
       pipeline.AddInvariantChecker<NoControlDepsChecker>();
@@ -1368,7 +1369,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           poplar_executor->GetIpuOptions().algebraic_simplifier_config());
       {
         auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-            "pipeline-gradient-accumulation-optimizer-wrapper");
+            "pipeline-gradient-accumulation-optimizer-wrapper",
+            pipeline_compiler_stats.get());
         pass.AddPass<PipelineGradientAccumulationOptimizer>();
         pass.AddPass<CallOptimizer>();
         pass.AddPass<PipelineOptimizer>();
@@ -1401,8 +1403,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<WideConstFinder>();
       pipeline.AddPass<CommutativeInstructionReorderOperands>();
       {
-        auto& pass =
-            pipeline.AddPass<HloPassFix<HloPassPipeline>>("repeated-fusing");
+        auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+            "repeated-fusing", pipeline_compiler_stats.get());
         pass.AddPass<CastsElimination>(resources.annotations);
         pass.AddPass<HloCSE>(true);
         pass.AddPass<HloDCE>();
@@ -1427,13 +1429,13 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           pass.AddPass<MultiSliceCombiner>(resources.annotations);
         }
       }
-      AddPipelineOptimizerPass(pipeline);
+      AddPipelineOptimizerPass(pipeline, pipeline_compiler_stats.get());
       pipeline.AddPass<CommutativeInstructionReorderOperands>();
       pipeline.AddPass<AllToAllFinder>(resources.annotations,
                                        resources.replication_factor);
       {
         auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-            "multi-update-optimizer");
+            "multi-update-optimizer", pipeline_compiler_stats.get());
         pass.AddPass<MultiUpdateScaleApply>(resources.annotations);
         pass.AddPass<MultiUpdateApply>(resources.annotations);
         pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
@@ -1464,14 +1466,16 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<PipelineStageMerger>();
       pipeline.AddPass<PipelineCommunicationOptimizer>(
           resources.remote_memory_supported);
-      AddPipelineOptimizerPass(pipeline);
+      AddPipelineOptimizerPass(pipeline, pipeline_compiler_stats.get());
       {
         auto& batch_serialization_pass = pipeline.AddPass<HloPassPipeline>(
-            "pipeline-batch-serialization-fixer-wrapper");
+            "pipeline-batch-serialization-fixer-wrapper",
+            pipeline_compiler_stats.get());
         batch_serialization_pass
             .AddPass<PipelineBatchSerializationBufferInserter>(
                 resources.remote_memory_supported);
-        AddPipelineOptimizerPass(batch_serialization_pass);
+        AddPipelineOptimizerPass(batch_serialization_pass,
+                                 pipeline_compiler_stats.get());
         batch_serialization_pass
             .AddPass<PipelineBatchSerializationLoopInserter>();
       }
@@ -1503,7 +1507,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     // Passes below this point need to respect control dependencies.
     {
       auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
-          "with control dependencies");
+          "with control dependencies", pipeline_compiler_stats.get());
       pipeline.AddInvariantChecker<ResourceUpdateChecker>();
 
       pipeline.AddPass<HostEmbeddingNotification>();
@@ -1519,7 +1523,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           pipeline.AddPass<AddBlockRecompute>();
           {
             auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-                "resolve-recompute-suggestions");
+                "resolve-recompute-suggestions", pipeline_compiler_stats.get());
 
             pass.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
             pass.AddPass<HloPassFix<LiftRecomputeSuggestion>>();
@@ -1557,7 +1561,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     // Passes below this point need to respect the inplace information.
     {
       auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
-          "with inplace information");
+          "with inplace information", pipeline_compiler_stats.get());
       pipeline.AddInvariantChecker<ResourceUpdateChecker>();
 
       pipeline.AddPass<InplaceFinder>(resources.annotations);
