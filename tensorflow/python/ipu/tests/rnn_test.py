@@ -192,7 +192,7 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'build': build_tf_rnn2,
           'counters': {
-              'Copy': 37 if TF1 else 33,
+              'Copy': 34 if TF1 else 31,
               'host-exchange-local-copy': 1
           },
           'total_memory': 2908764 if TF1 else 2864563,
@@ -200,7 +200,7 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'build': build_tf_lstm1,
           'counters': {
-              'Copy': 49 if TF1 else 41,
+              'Copy': 48 if TF1 else 41,
               'host-exchange-local-copy': 1
           },
           'total_memory': 47341002,
@@ -208,15 +208,15 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'build': build_tf_gru1,
           'counters': {
-              'Copy': 55 if TF1 else 62,
+              'Copy': 51 if TF1 else 58,
               'host-exchange-local-copy': 1
           },
           'total_memory': 4744597 if TF1 else 4725345,
-          'max_memory': 686613 if TF1 else 594266
+          'max_memory': 616981 if TF1 else 594266
       }, {
           'build': build_model_rnn1,
           'counters': {
-              'Copy': 36 if TF1 else 32,
+              'Copy': 35 if TF1 else 32,
               'host-exchange-local-copy': 2
           },
           'total_memory': 4544890 if TF1 else 3893674,
@@ -224,7 +224,7 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'build': build_model_rnn2,
           'counters': {
-              'Copy': 61 if TF1 else 64,
+              'Copy': 57 if TF1 else 51,
               'host-exchange-local-copy': 2
           },
           'total_memory': 6082439 if TF1 else 6148616,
@@ -232,7 +232,7 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'build': build_model_cnn1,
           'counters': {
-              'Copy': 15
+              'Copy': 14
           },
           'total_memory': 1277668,
           'max_memory': 160393,

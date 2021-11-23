@@ -159,7 +159,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 18294942)
+    self.assert_total_tile_memory(report, 19050335)
 
   def testSerializedMatmul(self):
     cfg = ipu.utils.IPUConfig()
