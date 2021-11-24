@@ -16,7 +16,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_gradient_accumulation_optimizer.h"
 
 #include <memory>
-#include <utility>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
@@ -107,13 +106,10 @@ StatusOr<bool> PipelineGradientAccumulationOptimizer::OptimizePipeline(
     HloInstruction* end_of_path = gradient_path.back();
     std::vector<HloInstruction*> end_of_path_users = end_of_path->users();
     if (!(end_of_path_users.size() == 1 &&
-          IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
+          IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(
               end_of_path_users[0]))) {
       continue;
     }
-    auto const_opt = GetConstantValue<float>(end_of_path_users[0]->operand(2));
-    CHECK(const_opt && *const_opt == 1.0f);
-
     HloInstruction* gradient_accumulator_add = end_of_path_users[0];
 
     // Find the GradientAccumulatorCreate instruction given the path.
@@ -233,16 +229,9 @@ StatusOr<bool> PipelineGradientAccumulationOptimizer::OptimizePipeline(
         HloInstruction* gte_clone =
             pipeline_comp->AddInstruction(old_user_operand->Clone());
         // Create a gradient add instruction.
-        // TODO(T46014, T46015) : Add appropriate accumulator scale
-        TF_ASSIGN_OR_RETURN(
-            Literal literal,
-            LiteralUtil::CreateR0(1.0f).Convert(
-                gradient_accumulator_create->shape().element_type()));
-        auto* one = pipeline_comp->AddInstruction(
-            HloInstruction::CreateConstant(std::move(literal)));
         HloInstruction* accumulator_add =
-            pipeline_comp->AddInstruction(CreateGradientAccumulatorAddWithScale(
-                gradient_accumulator_create, gte_clone, one));
+            pipeline_comp->AddInstruction(CreateGradientAccumulatorAdd(
+                gradient_accumulator_create, gte_clone));
 
         // Create a new sink instruction such that it has the output of the
         // accumulator as an operand to merge the buffers into a single one.
@@ -261,9 +250,9 @@ StatusOr<bool> PipelineGradientAccumulationOptimizer::OptimizePipeline(
             gradient_accumulation_sink, new_sink));
 
         // Lower the accumulator add into the pipeline stage.
-        TF_RETURN_IF_ERROR(AddInstructionsToPipelineStage(
-                               producer_stage, {one, accumulator_add})
-                               .status());
+        TF_RETURN_IF_ERROR(
+            AddInstructionsToPipelineStage(producer_stage, {accumulator_add})
+                .status());
         break;
       }
       case 1: {
@@ -286,7 +275,7 @@ StatusOr<bool> PipelineGradientAccumulationOptimizer::OptimizePipeline(
 
         HloInstruction* producer_gradient_accumulator_add =
             producer_parameter->users()[0];
-        if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
+        if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(
                 producer_gradient_accumulator_add)) {
           return FailedPrecondition(
               "Expected the gradient accumulation creator to have been "

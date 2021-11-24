@@ -629,8 +629,7 @@ StatusOr<bool> PipelineFixer::FixConstantGradients(
     // We expect the sink to only have a single input at this point.
     CHECK_EQ(sink->operand_count(), 1);
     HloInstruction* sink_input = operand->mutable_operand(0);
-    if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-            sink_input)) {
+    if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(sink_input)) {
       continue;
     }
     HloInstruction* lhs = sink_input->mutable_operand(0);

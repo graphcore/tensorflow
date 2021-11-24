@@ -77,7 +77,7 @@ enum PoplarOp {
   SliceApplyabY = 72;
   SliceApplyaXb = 73;
   GradientAccumulatorCreate = 74;
-  GradientAccumulatorAddWithScale = 75;
+  GradientAccumulatorAdd = 75;
   GradientAccumulatorSink = 76;
   WeightsTransposeChansFlipXY = 77;
   ExecutionCounter = 78;

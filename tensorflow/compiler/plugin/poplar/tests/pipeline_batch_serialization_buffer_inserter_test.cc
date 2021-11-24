@@ -72,10 +72,9 @@ stage_1_bwd {
 stage_0_bwd {
   stage_0_bwd_p0 = f32[2] parameter(0)
   stage_0_bwd_p1 = f32[2] parameter(1)
-  acc_scale = f32[] constant(1)
   stage_0_bwd_accumulator = f32[2] parameter(2)
   stage_0_bwd_add_grads = f32[2] add(stage_0_bwd_p0, stage_0_bwd_p1)
-  stage_0_bwd_accumulator_update = f32[2] custom-call(stage_0_bwd_accumulator, stage_0_bwd_add_grads, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
+  stage_0_bwd_accumulator_update = f32[2] custom-call(stage_0_bwd_accumulator, stage_0_bwd_add_grads), custom_call_target="GradientAccumulatorAdd"
   ROOT stage_0_bwd_tuple = (f32[2]) tuple(stage_0_bwd_accumulator_update)
 }
 
@@ -237,8 +236,8 @@ TEST_F(PipelineBatchSerializationBufferInserterTest, TestInMemory) {
     HloInstruction* accumulator_add;
     EXPECT_TRUE(Match(stage->to_apply()->root_instruction(),
                       m::Tuple(m::Op(&accumulator_add))));
-    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-        accumulator_add));
+    EXPECT_TRUE(
+        IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
     EXPECT_TRUE(Match(accumulator_add->operand(0), m::Parameter(0)));
     HloInstruction *counter1, *counter2;
     EXPECT_TRUE(Match(
@@ -390,14 +389,13 @@ TEST_F(PipelineBatchSerializationBufferInserterTest, TestOffloaded) {
     HloInstruction* accumulator_add;
     EXPECT_TRUE(Match(stage->to_apply()->root_instruction(),
                       m::Tuple(m::Op(&accumulator_add))));
-    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-        accumulator_add));
-    HloInstruction *counter, *load0, *load1;
     EXPECT_TRUE(
-        Match(accumulator_add, m::CustomCall(m::Parameter(0),
-                                             m::Add(m::Reshape(m::Op(&load0)),
-                                                    m::Reshape(m::Op(&load1))),
-                                             m::ConstantScalar(1.0f))));
+        IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
+    HloInstruction *counter, *load0, *load1;
+    EXPECT_TRUE(Match(
+        accumulator_add,
+        m::CustomCall(m::Parameter(0), m::Add(m::Reshape(m::Op(&load0)),
+                                              m::Reshape(m::Op(&load1))))));
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferLoadSlice)(load0));
     EXPECT_TRUE(Match(load0, m::CustomCall(m::Parameter(2), m::Op(&counter))));
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));

@@ -52,7 +52,7 @@ bool IsMultiUpdateAdd(const HloInstruction* inst) {
 }
 
 bool IsGradientAccumulatorAdd(const HloInstruction* inst) {
-  return IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(inst);
+  return IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(inst);
 }
 
 bool IsGradientAccumulatorSink(const HloInstruction* inst) {
