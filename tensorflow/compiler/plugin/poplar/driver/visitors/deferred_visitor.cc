@@ -799,10 +799,10 @@ Status DeferredVisitor::HandleConditional(HloInstruction* inst) {
   TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
 
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
+      poplar::program::Sequence seq,
       CreateConditionalOp(resources_, inst, inputs, GetOutputShape(inst),
                           tensor_map, debug_name_and_id));
-  return AddSequenceForInstruction(inst, prog);
+  return AddSequenceForInstruction(inst, seq);
 }
 
 Status DeferredVisitor::HandleCall(HloInstruction* inst) {
@@ -1061,7 +1061,8 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
         // The create buffer is inside of the pipeline which means it's used
         // as a stash.
         TF_RETURN_IF_ERROR(AddSequenceForInstruction(
-            inst, poplar::program::WriteUndef(tensor)));
+            inst,
+            poplar::program::Sequence({poplar::program::WriteUndef(tensor)})));
       }
       return tensor;
     };
@@ -1824,9 +1825,10 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
                                                      std::to_string(i)});
         AddSequenceForAliasingCopy(
             computation->root_instruction(),
-            poplar::program::Copy(loop_outputs[i].AsTensor(),
-                                  unaliased_loop_outputs[i].AsTensor(), false,
-                                  {debug_name_and_id}));
+            poplar::program::Sequence(
+                {poplar::program::Copy(loop_outputs[i].AsTensor(),
+                                       unaliased_loop_outputs[i].AsTensor(),
+                                       false, {debug_name_and_id})}));
         break;
       }
       default:
@@ -1854,9 +1856,9 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
           // Get the input ready for the next iteration.
           AddSequenceForAliasingCopy(
               computation->root_instruction(),
-              poplar::program::Copy(unaliased_loop_outputs[i].AsTensor(),
-                                    loop_inputs[i].AsTensor(), false,
-                                    {debug_name_and_id}));
+              poplar::program::Sequence({poplar::program::Copy(
+                  unaliased_loop_outputs[i].AsTensor(),
+                  loop_inputs[i].AsTensor(), false, {debug_name_and_id})}));
         }
         break;
       }

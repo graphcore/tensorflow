@@ -33,7 +33,7 @@ inline const HloInstruction* LookThroughBroadcast(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kBroadcast ? inst->operand(0) : inst;
 }
 
-static StatusOr<poplar::program::Program> RandomNormal(
+static StatusOr<poplar::program::Sequence> RandomNormal(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     double mean_val, double sd_val, const xla::Shape& output_shape,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
@@ -52,7 +52,7 @@ static StatusOr<poplar::program::Program> RandomNormal(
 }
 
 class RandomNormalScaleOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -86,7 +86,7 @@ class RandomNormalScaleOp : public PoplarOpDef {
 
 REGISTER_POPLAR_OP(Norm_scale_add, RandomNormalScaleOp);
 
-static StatusOr<poplar::program::Program> RandomUniform(
+static StatusOr<poplar::program::Sequence> RandomUniform(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     double lower_val, double upper_val, const xla::Shape& output_shape,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
@@ -105,7 +105,7 @@ static StatusOr<poplar::program::Program> RandomUniform(
 }
 
 class RandomUniformScaleOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -141,7 +141,7 @@ class RandomUniformScaleOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Uniform_scale_add, RandomUniformScaleOp);
 
 class RngOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

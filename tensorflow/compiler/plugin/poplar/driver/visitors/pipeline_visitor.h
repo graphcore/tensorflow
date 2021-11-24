@@ -187,16 +187,16 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       fwd_stage_visitors_;
 
   struct RepeatBlock {
-    poplar::program::Program program;
+    poplar::program::Sequence program;
     int64 iterations;
   };
 
   virtual RepeatBlock GetPipelineRampUpSequence(
       const poplar::DebugNameAndId& debug_name_and_id) const = 0;
-  virtual poplar::program::Program GetPipelineRampDownSequence(
+  virtual poplar::program::Sequence GetPipelineRampDownSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& additional_iterations = 0) const = 0;
-  virtual poplar::program::Program GetPipelineRepeatBlockSequence(
+  virtual poplar::program::Sequence GetPipelineRepeatBlockSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& iterations) const = 0;
 
@@ -236,10 +236,10 @@ class ParallelPipelineVisitor : public PipelineVisitor {
  protected:
   RepeatBlock GetPipelineRampUpSequence(
       const poplar::DebugNameAndId& debug_name_and_id) const override;
-  poplar::program::Program GetPipelineRampDownSequence(
+  poplar::program::Sequence GetPipelineRampDownSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& additional_iterations = 0) const override;
-  poplar::program::Program GetPipelineRepeatBlockSequence(
+  poplar::program::Sequence GetPipelineRepeatBlockSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& iterations) const override;
 
@@ -261,10 +261,10 @@ class SequentialPipelineVisitor : public PipelineVisitor {
  protected:
   RepeatBlock GetPipelineRampUpSequence(
       const poplar::DebugNameAndId& debug_name_and_id) const override;
-  poplar::program::Program GetPipelineRampDownSequence(
+  poplar::program::Sequence GetPipelineRampDownSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& additional_iterations = 0) const override;
-  poplar::program::Program GetPipelineRepeatBlockSequence(
+  poplar::program::Sequence GetPipelineRepeatBlockSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& iterations) const override;
 

@@ -281,7 +281,7 @@ static popnn::pooling::PoolParams GetPoplibsPoolParams(
           stride,       padding_lower,     padding_upper,
           num_channels, batch_size,        input_data_type};
 }
-StatusOr<poplar::program::Program> CreateSimpleReduction(
+StatusOr<poplar::program::Sequence> CreateSimpleReduction(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -289,7 +289,7 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
                                debug_name_and_id);
 }
 
-StatusOr<poplar::program::Program> CreateSimpleReduction(
+StatusOr<poplar::program::Sequence> CreateSimpleReduction(
     CompilerResources& res, const HloInstruction* inst,
     const HloInstruction* reduce_inst, const xla::Shape& output_shape,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
@@ -299,7 +299,7 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
                                output_shape, tensor_map, debug_name_and_id);
 }
 
-StatusOr<poplar::program::Program> CreateSimpleReduction(
+StatusOr<poplar::program::Sequence> CreateSimpleReduction(
     CompilerResources& res, popops::Operation reduction_operation,
     const HloInstruction* inst, const HloInstruction* reduce_inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
@@ -401,7 +401,7 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateSimpleWindowReduction(
+StatusOr<poplar::program::Sequence> CreateSimpleWindowReduction(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -564,7 +564,7 @@ StatusOr<poplar::program::Program> CreateSimpleWindowReduction(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreatePoplibsWindowReduction(
+StatusOr<poplar::program::Sequence> CreatePoplibsWindowReduction(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -599,7 +599,7 @@ StatusOr<poplar::program::Program> CreatePoplibsWindowReduction(
   }
 }
 
-StatusOr<poplar::program::Program> CreatePoplibsPooling(
+StatusOr<poplar::program::Sequence> CreatePoplibsPooling(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     popnn::PoolingType pooling_type, const Window& window,
     const poplar::DebugNameAndId& debug_name_and_id,
@@ -683,7 +683,7 @@ StatusOr<poplar::program::Program> CreatePoplibsPooling(
   return prog;
 }
 
-StatusOr<poplar::program::Program> CreatePoplibsMaxPoolGrad(
+StatusOr<poplar::program::Sequence> CreatePoplibsMaxPoolGrad(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     const Window& window, const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
@@ -722,7 +722,7 @@ StatusOr<poplar::program::Program> CreatePoplibsMaxPoolGrad(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreatePoplibsPoolingGrad(
+StatusOr<poplar::program::Sequence> CreatePoplibsPoolingGrad(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     popnn::PoolingType pooling_type, const Window& window,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -787,7 +787,7 @@ StatusOr<poplar::program::Program> CreatePoplibsPoolingGrad(
   return prog;
 }
 
-StatusOr<poplar::program::Program> CreateSimpleSelectAndScatter(
+StatusOr<poplar::program::Sequence> CreateSimpleSelectAndScatter(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -963,7 +963,7 @@ StatusOr<poplar::program::Program> CreateSimpleSelectAndScatter(
   return prog;
 }
 
-StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
+StatusOr<poplar::program::Sequence> CreateReplicatedAllReduce(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const popops::CollectiveOperator op,
@@ -1004,7 +1004,7 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateReplicatedAllToAll(
+StatusOr<poplar::program::Sequence> CreateReplicatedAllToAll(
     CompilerResources& res, const HloInstruction* inst, const xla::Shape&,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);

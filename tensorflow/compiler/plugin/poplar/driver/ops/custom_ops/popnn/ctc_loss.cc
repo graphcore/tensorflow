@@ -48,7 +48,7 @@ class CTCLossOpBase : public PoplarOpDef {
       const poplar::DebugInfo&) const = 0;
 
  public:
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -200,7 +200,7 @@ class CTCBeamSearchOpBase : public PoplarOpDef {
       const poplar::DebugNameAndId& debug_name_and_id) const = 0;
 
  public:
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

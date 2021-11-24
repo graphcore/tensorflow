@@ -539,7 +539,7 @@ HloPrintOptions GetPrintOptions() {
   return opts;
 }
 
-StatusOr<poplar::program::Program> InitializeSeed(
+StatusOr<poplar::program::Sequence> InitializeSeed(
     poplar::Graph& graph, int replication_factor, CompilerResources& resources,
     const poplar::DebugContext& debug_context = {"__seed"}) {
   PoplarOpDefDebugInfo debug_info(debug_context, "InitializeSeed");

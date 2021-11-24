@@ -31,7 +31,7 @@ namespace poplarplugin {
 namespace {
 
 class ScaledInplaceXbYOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -75,7 +75,7 @@ class ScaledInplaceXbYOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(ScaledInplaceXbY, ScaledInplaceXbYOp);
 
 class ScaledInplaceaXbYOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

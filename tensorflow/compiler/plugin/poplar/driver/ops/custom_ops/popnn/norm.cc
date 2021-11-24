@@ -282,7 +282,7 @@ class NormInferenceAndTrainingOp : public PoplarOpDef {
 };
 
 class NormInferenceOp : public NormInferenceAndTrainingOp {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -390,7 +390,7 @@ REGISTER_POPLAR_OP(GroupNormInference, NormInferenceOp);
 REGISTER_HLO_OP(kBatchNormInference, NormInferenceOp);
 
 class NormTrainingOp : public NormInferenceAndTrainingOp {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {
@@ -527,7 +527,7 @@ REGISTER_POPLAR_OP(GroupNormTraining, NormTrainingOp);
 REGISTER_HLO_OP(kBatchNormTraining, NormTrainingOp);
 
 class NormGradOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {
@@ -680,7 +680,7 @@ REGISTER_POPLAR_OP(GroupNormGrad, NormGradOp);
 REGISTER_HLO_OP(kBatchNormGrad, NormGradOp);
 
 class NormStatisticsOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {

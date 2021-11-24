@@ -34,7 +34,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class UnaryElementwiseOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -125,7 +125,7 @@ REGISTER_POPLAR_OP(Square, UnaryElementwiseOp);
 REGISTER_POPLAR_OP(Erf, UnaryElementwiseOp);
 
 struct NaryOutput {
-  poplar::program::Program sequence;
+  poplar::program::Sequence sequence;
   poplar::Tensor result;
 };
 
@@ -162,7 +162,7 @@ class BinaryElementwiseOp : public PoplarOpDef {
   }
 
  public:
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -281,7 +281,7 @@ class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
     return output;
   }
 
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -355,7 +355,7 @@ class TernaryElementwiseOp : public PoplarOpDef {
   }
 
  public:
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -372,7 +372,7 @@ REGISTER_HLO_OP(kClamp, TernaryElementwiseOp);
 REGISTER_HLO_OP(kSelect, TernaryElementwiseOp);
 
 class ImplicitTernaryElementwiseOp : public TernaryElementwiseOp {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

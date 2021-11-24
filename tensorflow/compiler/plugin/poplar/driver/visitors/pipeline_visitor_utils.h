@@ -1034,7 +1034,7 @@ struct DefaultScheduler {
   }
 
   template <typename ElementType>
-  poplar::program::Program CreateRepeatBlock(
+  poplar::program::Sequence CreateRepeatBlock(
       std::vector<std::vector<ElementType>>& infeed_sequences,
       const poplar::DebugNameAndId& debug_name_and_id,
       std::size_t offset_size) const {
@@ -1064,7 +1064,7 @@ struct GroupedScheduler : public DefaultScheduler {
   }
 
   template <typename ElementType>
-  poplar::program::Program CreateRepeatBlock(
+  poplar::program::Sequence CreateRepeatBlock(
       std::vector<std::vector<ElementType>>& infeed_sequences,
       const poplar::DebugNameAndId& debug_name_and_id,
       std::size_t offset_size) const {
@@ -1073,8 +1073,8 @@ struct GroupedScheduler : public DefaultScheduler {
     }
     auto repeat_block = DefaultScheduler().CreateRepeatBlock(
         infeed_sequences, debug_name_and_id, offset_size);
-    return poplar::program::Repeat(offset_size, repeat_block,
-                                   {debug_name_and_id});
+    return poplar::program::Sequence({poplar::program::Repeat(
+        offset_size, repeat_block, {debug_name_and_id})});
   }
 };
 
@@ -1140,11 +1140,11 @@ struct PipelineSchedulerUtil {
   }
 
   template <typename ElementType>
-  poplar::program::Program CreateRepeatBlock(
+  poplar::program::Sequence CreateRepeatBlock(
       std::vector<std::vector<ElementType>>& infeed_sequences,
       const poplar::DebugNameAndId& debug_name_and_id,
       std::size_t offset_size) const {
-    auto vis = make_visitor<poplar::program::Program>(
+    auto vis = make_visitor<poplar::program::Sequence>(
         [&](const DefaultScheduler& scheduler) {
           return scheduler.CreateRepeatBlock(infeed_sequences,
                                              debug_name_and_id, offset_size);
@@ -1163,19 +1163,20 @@ struct PipelineSchedulerUtil {
 
 inline poplar::program::Sequence ForProgram(
     const absl::variant<int64, PipelineVisitor::CountAndGraph>& count,
-    const poplar::program::Program& body,
+    const poplar::program::Sequence& body,
     const poplar::DebugContext& debug_context) {
-  return absl::visit(make_visitor<poplar::program::Program>(
-                         [&](const int64 i) -> poplar::program::Program {
-                           return poplar::program::Repeat(i, body,
-                                                          debug_context);
-                         },
-                         [&](const PipelineVisitor::CountAndGraph i)
-                             -> poplar::program::Program {
-                           return popops::countedForLoop(i.graph, 0, i.count, 1,
-                                                         body, debug_context);
-                         }),
-                     count);
+  return absl::visit(
+      make_visitor<poplar::program::Sequence>(
+          [&](const int64 i) -> poplar::program::Sequence {
+            return poplar::program::Sequence(
+                {poplar::program::Repeat(i, body, debug_context)});
+          },
+          [&](const PipelineVisitor::CountAndGraph i)
+              -> poplar::program::Sequence {
+            return popops::countedForLoop(i.graph, 0, i.count, 1, body,
+                                          debug_context);
+          }),
+      count);
 }
 
 }  // namespace pipelinevisitorutils

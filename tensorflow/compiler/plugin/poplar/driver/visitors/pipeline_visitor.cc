@@ -1049,7 +1049,7 @@ Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
 Status PipelineVisitor::HandleCopy(HloInstruction* hlo) {
   VLOG(1) << "Processing " << hlo->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(hlo);
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
                       CreateCopy(resources_, hlo, GetOutputShape(hlo),
                                  tensor_map, debug_name_and_id));
   if (hlo->user_count() == 1 && IsResourceUpdate(hlo->users()[0])) {
@@ -1086,7 +1086,7 @@ Status PipelineVisitor::HandleExecutionCounter(HloInstruction* hlo) {
 
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(hlo);
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
                       CreateCustomCallOp(resources_, hlo, hlo->shape(),
                                          tensor_map, debug_name_and_id));
 
@@ -1103,7 +1103,7 @@ Status PipelineVisitor::HandleFifo(HloInstruction* hlo) {
 
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(hlo);
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
                       CreateCustomCallOp(resources_, hlo, hlo->shape(),
                                          tensor_map, debug_name_and_id));
 
@@ -1120,7 +1120,7 @@ Status PipelineVisitor::HandleInterIpuCopy(HloInstruction* hlo) {
 
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(hlo);
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
                       CreateCustomCallOp(resources_, hlo, hlo->shape(),
                                          tensor_map, debug_name_and_id));
 
@@ -1137,7 +1137,7 @@ Status PipelineVisitor::HandleInterTilesetCopy(HloInstruction* hlo) {
 
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(hlo);
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
                       CreateCustomCallOp(resources_, hlo, hlo->shape(),
                                          tensor_map, debug_name_and_id));
 
@@ -1173,7 +1173,7 @@ Status PipelineVisitor::HandleOutfeed(HloInstruction* hlo) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(hlo);
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
+      poplar::program::Sequence prog,
       CreateOutfeed(resources_, hlo, tensor_map, debug_name_and_id));
 
   outfeed_sequences_[stage].add(prog);
@@ -1219,7 +1219,7 @@ Status PipelineVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
       -> poplar::program::Sequence {
     auto f = graph.addFunction(seq);
     return poplar::program::Sequence(
-        poplar::program::Call(f, {debug_name_and_id}));
+        {poplar::program::Call(f, {debug_name_and_id})});
   };
 
   // Transform all of the pipeline stage sequences into poplar function calls.
@@ -1306,7 +1306,7 @@ PipelineVisitor::RepeatBlock ParallelPipelineVisitor::GetPipelineRampUpSequence(
 }
 
 // Collect the pipeline stage programs and call CreateRampSequences
-poplar::program::Program ParallelPipelineVisitor::GetPipelineRampDownSequence(
+poplar::program::Sequence ParallelPipelineVisitor::GetPipelineRampDownSequence(
     const poplar::DebugNameAndId& debug_name_and_id,
     const PipelineVisitor::IterationsType& additional_iterations) const {
   // Find the set of non-overlapping program offsets.
@@ -1369,7 +1369,7 @@ poplar::program::Program ParallelPipelineVisitor::GetPipelineRampDownSequence(
 }
 
 // Collect the pipeline stage programs and build the repeat block
-poplar::program::Program
+poplar::program::Sequence
 ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
     const poplar::DebugNameAndId& debug_name_and_id,
     const IterationsType& iterations) const {
@@ -1429,18 +1429,18 @@ ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
       infeed_sequences, debug_name_and_id, offsets.size());
 
   return absl::visit(
-      make_visitor<poplar::program::Program>(
-          [&](const int64 i) -> poplar::program::Program {
+      make_visitor<poplar::program::Sequence>(
+          [&](const int64 i) -> poplar::program::Sequence {
             const int64 num_repeats = ((i / offsets.size()) - 1);
             if (num_repeats < 1) {
               return poplar::program::Sequence({}, debug_name_and_id);
             }
 
-            return poplar::program::Repeat(num_repeats, repeat_block,
-                                           {debug_name_and_id});
+            return poplar::program::Sequence({poplar::program::Repeat(
+                num_repeats, repeat_block, {debug_name_and_id})});
           },
           [&](const PipelineVisitor::CountAndGraph i)
-              -> poplar::program::Program {
+              -> poplar::program::Sequence {
             poplar::program::Sequence result({}, {debug_name_and_id});
             // Incase the counter comes from a different graph get the top graph
             auto counter_graph = i.graph.getTopLevelGraph();
@@ -1477,14 +1477,15 @@ SequentialPipelineVisitor::GetPipelineRampUpSequence(
 }
 
 // Collect the pipeline stage programs and call CreateRampSequences
-poplar::program::Program SequentialPipelineVisitor::GetPipelineRampDownSequence(
+poplar::program::Sequence
+SequentialPipelineVisitor::GetPipelineRampDownSequence(
     const poplar::DebugNameAndId& debug_name_and_id,
     const IterationsType& additional_iterations) const {
   return poplar::program::Sequence({}, {debug_name_and_id, "RampDown"});
 }
 
 // Collect the pipeline stage programs and build the repeat block
-poplar::program::Program
+poplar::program::Sequence
 SequentialPipelineVisitor::GetPipelineRepeatBlockSequence(
     const poplar::DebugNameAndId& debug_name_and_id,
     const IterationsType& iterations) const {

@@ -45,7 +45,7 @@ namespace poplarplugin {
 namespace {
 
 class StatefulGradientAccumulateOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -164,7 +164,7 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
     return graph.clone(outputs[0], {debug_info});
   }
 
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -309,7 +309,7 @@ REGISTER_POPLAR_OP(StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm,
 // which can be used by multiple pipeline stages on the same IPU.
 // It is however handeled by the deferred allocation visitor.
 class GradientAccumulatorCreateOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -325,7 +325,7 @@ REGISTER_POPLAR_OP(GradientAccumulatorCreate, GradientAccumulatorCreateOp);
 // A gradient accumulation sink combines accumulators from different pipeline
 // stages on the same IPU into a single buffer.
 class GradientAccumulatorSinkOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -361,7 +361,7 @@ REGISTER_POPLAR_OP(GradientAccumulatorSink, GradientAccumulatorSinkOp);
 // An instruction only used for keeping track of the gradient accumulation count
 // in compilation. Doesn't produce calls to poplar/poplibs
 class GradientAccumulationCountOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

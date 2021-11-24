@@ -100,20 +100,20 @@ class ExecutionCounters {
 
   // Copy counters from `source`. Any counters which are live in `this` are
   // marked as live in `source`.
-  StatusOr<poplar::program::Program> SetInitialValuesFrom(
+  StatusOr<poplar::program::Sequence> SetInitialValuesFrom(
       ExecutionCounters* source);
 
   // Create a sequence which sets the values of live counters to zero.
-  poplar::program::Program SetInitialValuesToZero();
+  poplar::program::Sequence SetInitialValuesToZero();
 
   // Update counters in `destination` by copying the values of current counters.
   // Any counters which are live in `this` are expected to also be live in
   // `destination`
-  StatusOr<poplar::program::Program> UpdateCounters(
+  StatusOr<poplar::program::Sequence> UpdateCounters(
       ExecutionCounters* destination);
 
   // Increment all the live counters by one.
-  poplar::program::Program IncrementLiveCounters() const;
+  poplar::program::Sequence IncrementLiveCounters() const;
 
   const std::vector<bool>& GetLiveCounters() const;
 

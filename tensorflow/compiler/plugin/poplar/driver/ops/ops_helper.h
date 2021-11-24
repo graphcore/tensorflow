@@ -48,7 +48,7 @@ StatusOr<poplar::Tensor> AllocatePoplarOpTensor(
     const TensorTarget& tensor_target, const xla::Shape& shape,
     const TensorMap& tensor_map);
 
-StatusOr<poplar::program::Program> CreatePoplarOp(
+StatusOr<poplar::program::Sequence> CreatePoplarOp(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
@@ -59,11 +59,11 @@ StatusOr<poplar::Tensor> AllocateHloOpTensor(
     const TensorTarget& tensor_target, const xla::Shape& shape,
     const TensorMap& tensor_map);
 
-StatusOr<poplar::program::Program> CreateHloOp(poplar::Graph& graph,
-                                               CompilerResources& res,
-                                               const HloInstruction* inst,
-                                               const xla::Shape& output,
-                                               TensorMap& tensor_map);
+StatusOr<poplar::program::Sequence> CreateHloOp(poplar::Graph& graph,
+                                                CompilerResources& res,
+                                                const HloInstruction* inst,
+                                                const xla::Shape& output,
+                                                TensorMap& tensor_map);
 }  // namespace poplarplugin
 }  // namespace xla
 

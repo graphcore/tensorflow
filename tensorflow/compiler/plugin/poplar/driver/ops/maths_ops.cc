@@ -238,7 +238,7 @@ StatusOr<popops::expr::TernaryOpType> LookupTernaryFn(
   }
 }
 
-StatusOr<poplar::program::Program> CreateTupleSelectOp(
+StatusOr<poplar::program::Sequence> CreateTupleSelectOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -369,7 +369,7 @@ Status ScaledInplaceConstantOrTensor(
                                          debug_name_and_id);
 }
 
-StatusOr<poplar::program::Program> CreateMatMulForDotOp(
+StatusOr<poplar::program::Sequence> CreateMatMulForDotOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -458,7 +458,7 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateCastOp(
+StatusOr<poplar::program::Sequence> CreateCastOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {

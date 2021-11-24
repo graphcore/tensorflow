@@ -56,7 +56,7 @@ using tensorflow::str_util::StartsWith;
 namespace xla {
 namespace poplarplugin {
 
-typedef StatusOr<poplar::program::Program> (*CustomCallFn)(
+typedef StatusOr<poplar::program::Sequence> (*CustomCallFn)(
     CompilerResources&, const HloInstruction*, const xla::Shape&, TensorMap&);
 
 Status BaseVisitor::Preprocess(HloInstruction* inst) {
@@ -128,7 +128,7 @@ Status BaseVisitor::HandleHloOp(HloInstruction* inst) {
   poplar::Graph& graph = GetGraph(resources_, inst);
 
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
+      poplar::program::Sequence prog,
       CreateHloOp(graph, resources_, inst, GetOutputShape(inst), tensor_map));
   return AddSequenceForInstruction(inst, prog);
 }
@@ -136,7 +136,7 @@ Status BaseVisitor::HandleHloOp(HloInstruction* inst) {
 Status BaseVisitor::HandleConvert(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
                       CreateCastOp(resources_, inst, GetOutputShape(inst),
                                    tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -146,7 +146,7 @@ Status BaseVisitor::HandleTupleSelect(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
+      poplar::program::Sequence prog,
       CreateTupleSelectOp(resources_, inst, GetOutputShape(inst), tensor_map,
                           debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -247,7 +247,7 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->ToString();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   poplar::program::Sequence seq({}, debug_name_and_id);
-  poplar::program::Program prog;
+  poplar::program::Sequence prog;
   HloComputation* comp = inst->fused_instructions_computation();
 
   if (IsPopOpsFusion(inst)) {
@@ -276,7 +276,7 @@ Status BaseVisitor::HandleCall(HloInstruction* inst) {
   HloComputation* comp = inst->to_apply();
   VLOG(1) << "Processing " << inst->name() << " : " << comp->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
                       CreateCallOp(resources_, inst, GetOutputShape(inst),
                                    tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -285,7 +285,7 @@ Status BaseVisitor::HandleCall(HloInstruction* inst) {
 Status BaseVisitor::HandleCustomCall(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
                       CreateCustomCallOp(resources_, inst, GetOutputShape(inst),
                                          tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -295,7 +295,7 @@ Status BaseVisitor::HandleTuple(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
+      poplar::program::Sequence prog,
       CreateTuple(resources_, inst, tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
@@ -307,7 +307,7 @@ Status BaseVisitor::HandleMap(HloInstruction* inst) {
                       IsParallelMap(inst, inst->to_apply()));
   if (simple_parallel) {
     TF_ASSIGN_OR_RETURN(
-        poplar::program::Program prog,
+        poplar::program::Sequence prog,
         CreateParallelMap(resources_, inst, GetOutputShape(inst), tensor_map,
                           debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
@@ -318,7 +318,7 @@ Status BaseVisitor::HandleMap(HloInstruction* inst) {
 Status BaseVisitor::HandleConditional(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
+      poplar::program::Sequence prog,
       CreateConditionalOp(resources_, inst, GetOutputShape(inst), tensor_map,
                           debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);

@@ -89,7 +89,7 @@ StatusOr<bool> IsParallelMap(const HloInstruction* inst,
   return tester._is_ok;
 }
 
-StatusOr<poplar::program::Program> CreateParallelMap(
+StatusOr<poplar::program::Sequence> CreateParallelMap(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -115,7 +115,7 @@ StatusOr<poplar::program::Program> CreateParallelMap(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateCallOp(
+StatusOr<poplar::program::Sequence> CreateCallOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -142,7 +142,7 @@ StatusOr<poplar::program::Program> CreateCallOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateCustomCallOp(
+StatusOr<poplar::program::Sequence> CreateCustomCallOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -158,7 +158,7 @@ StatusOr<poplar::program::Program> CreateCustomCallOp(
   }
 }
 
-StatusOr<poplar::program::Program> CreateFusionOp(
+StatusOr<poplar::program::Sequence> CreateFusionOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -188,7 +188,7 @@ StatusOr<poplar::program::Program> CreateFusionOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateWhileOp(
+StatusOr<poplar::program::Sequence> CreateWhileOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -206,7 +206,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateWhileOp(
+StatusOr<poplar::program::Sequence> CreateWhileOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
@@ -358,7 +358,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(
   return main_seq;
 }
 
-StatusOr<poplar::program::Program> CreateRepeatOp(
+StatusOr<poplar::program::Sequence> CreateRepeatOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -568,7 +568,7 @@ StatusOr<std::unique_ptr<RepeatLoopVisitor>> CreateLoopVisitor(
 }
 }  // namespace
 
-StatusOr<poplar::program::Program> CreateRepeatOp(
+StatusOr<poplar::program::Sequence> CreateRepeatOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
@@ -627,7 +627,7 @@ TensorOrRemoteBufferVectors GetAllInstructionInputs(
 }
 }  // namespace
 
-StatusOr<poplar::program::Program> CreateFunctionOp(
+StatusOr<poplar::program::Sequence> CreateFunctionOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -644,7 +644,7 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateFunctionOp(
+StatusOr<poplar::program::Sequence> CreateFunctionOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& deferred_inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
@@ -776,7 +776,7 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreatePipelineOp(
+StatusOr<poplar::program::Sequence> CreatePipelineOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -818,7 +818,7 @@ static PipelineVisitor::IterationsType GetIterationsArgument(
       graph, GetGradientAccumulationCountTensor(inst, inputs));
 }
 
-StatusOr<poplar::program::Program> CreatePipelineOp(
+StatusOr<poplar::program::Sequence> CreatePipelineOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
@@ -899,7 +899,7 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateConditionalOp(
+StatusOr<poplar::program::Sequence> CreateConditionalOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -918,7 +918,7 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateConditionalOp(
+StatusOr<poplar::program::Sequence> CreateConditionalOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& deferred_inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
@@ -1070,7 +1070,7 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateResourceUpdateOp(
+StatusOr<poplar::program::Sequence> CreateResourceUpdateOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {

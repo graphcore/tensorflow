@@ -90,7 +90,7 @@ Status FullVisitor::HandleDot(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
+      poplar::program::Sequence prog,
       CreateMatMulForDotOp(resources_, inst, GetOutputShape(inst), tensor_map,
                            debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -99,7 +99,7 @@ Status FullVisitor::HandleDot(HloInstruction* inst) {
 Status FullVisitor::HandleCopy(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
                       CreateCopy(resources_, inst, GetOutputShape(inst),
                                  tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -128,7 +128,7 @@ Status FullVisitor::HandleReduce(HloInstruction* inst) {
   if (IsReducibleArithmetic(inst->to_apply())) {
     poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
     TF_ASSIGN_OR_RETURN(
-        poplar::program::Program prog,
+        poplar::program::Sequence prog,
         CreateSimpleReduction(resources_, inst, GetOutputShape(inst),
                               tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
@@ -208,7 +208,7 @@ Status FullVisitor::HandleTranspose(HloInstruction* inst) {
 Status FullVisitor::HandleSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
                       CreateSlice(resources_, inst, GetOutputShape(inst),
                                   tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -218,7 +218,7 @@ Status FullVisitor::HandleDynamicSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
+      poplar::program::Sequence prog,
       CreateDynamicSliceOp(resources_, inst, GetOutputShape(inst), tensor_map,
                            debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -228,7 +228,7 @@ Status FullVisitor::HandleDynamicUpdateSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
+      poplar::program::Sequence prog,
       CreateDynamicUpdateSliceOp(resources_, inst, GetOutputShape(inst),
                                  tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -239,14 +239,14 @@ Status FullVisitor::HandleReduceWindow(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   if (IsPoplibsPool(inst, inst->to_apply())) {
     TF_ASSIGN_OR_RETURN(
-        poplar::program::Program prog,
+        poplar::program::Sequence prog,
         CreatePoplibsWindowReduction(resources_, inst, GetOutputShape(inst),
                                      tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
   }
   if (IsReducibleArithmetic(inst->to_apply())) {
     TF_ASSIGN_OR_RETURN(
-        poplar::program::Program prog,
+        poplar::program::Sequence prog,
         CreateSimpleWindowReduction(resources_, inst, GetOutputShape(inst),
                                     tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
@@ -260,7 +260,7 @@ Status FullVisitor::HandleSelectAndScatter(HloInstruction* inst) {
     VLOG(1) << "Processing " << inst->name();
     poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
     TF_ASSIGN_OR_RETURN(
-        poplar::program::Program prog,
+        poplar::program::Sequence prog,
         CreateSimpleSelectAndScatter(resources_, inst, GetOutputShape(inst),
                                      tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
@@ -273,7 +273,7 @@ Status FullVisitor::HandleWhile(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   // Version of the while operation which does not allow parameters to be
   // deferred.
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
                       CreateWhileOp(resources_, inst, GetOutputShape(inst),
                                     tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);

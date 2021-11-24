@@ -71,7 +71,7 @@ AddRemoteBufferStoreCopy(
 }
 
 class RemoteParameterLoadOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -82,7 +82,7 @@ class RemoteParameterLoadOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(RemoteParameterLoad, RemoteParameterLoadOp);
 
 class RemoteParameterStoreOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -143,7 +143,7 @@ class RemoteParameterStoreOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(RemoteParameterStore, RemoteParameterStoreOp);
 
 class BufferLoadSliceOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -154,7 +154,7 @@ class BufferLoadSliceOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(BufferLoadSlice, BufferLoadSliceOp);
 
 class BufferStoreSliceOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

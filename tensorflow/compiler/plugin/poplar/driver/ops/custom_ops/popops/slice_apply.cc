@@ -96,7 +96,7 @@ class SliceApplyAllocatorOp : public PoplarOpDef {
 };
 
 class SliceApplyaXbYOp : public SliceApplyAllocatorOp {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -135,7 +135,7 @@ class SliceApplyaXbYOp : public SliceApplyAllocatorOp {
 REGISTER_POPLAR_OP(SliceApplyaXbY, SliceApplyaXbYOp);
 
 class SliceApplyabYOp : public SliceApplyAllocatorOp {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -171,7 +171,7 @@ class SliceApplyabYOp : public SliceApplyAllocatorOp {
 REGISTER_POPLAR_OP(SliceApplyabY, SliceApplyabYOp);
 
 class SliceApplyaXbOp : public SliceApplyAllocatorOp {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -214,7 +214,7 @@ class SliceApplyaXbOp : public SliceApplyAllocatorOp {
 REGISTER_POPLAR_OP(SliceApplyaXb, SliceApplyaXbOp);
 
 class SliceApplyOp : public SliceApplyAllocatorOp {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

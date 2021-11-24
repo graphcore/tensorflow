@@ -98,7 +98,7 @@ StatusOr<RemoteBufferHolder*> GetOrCreateRemoteBuffer(
 
 class HostEmbeddingLookupOp : public PoplarOpDef {
   // Synthetic embedding lookup.
-  StatusOr<poplar::program::Program> SyntheticImpl(
+  StatusOr<poplar::program::Sequence> SyntheticImpl(
       poplar::Graph& graph, poplar::Tensor indices,
       poplar::program::Sequence seq, CompilerResources& res,
       const HloHostEmbeddingLookupInstruction* inst,
@@ -115,7 +115,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
   }
 
   // Host embedding using a poplar callback.
-  StatusOr<poplar::program::Program> CallbackImpl(
+  StatusOr<poplar::program::Sequence> CallbackImpl(
       poplar::Graph& graph, poplar::Tensor indices,
       poplar::program::Sequence seq, CompilerResources& res,
       const HloHostEmbeddingLookupInstruction* inst,
@@ -156,7 +156,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
   }
 
   // Single replica remote buffer implementation.
-  StatusOr<poplar::program::Program> RemoteBufferImpl(
+  StatusOr<poplar::program::Sequence> RemoteBufferImpl(
       poplar::Graph& graph, poplar::RemoteBuffer& remote_buffer,
       poplar::Tensor indices, poplar::program::Sequence seq,
       CompilerResources& res, const HloHostEmbeddingLookupInstruction* inst,
@@ -191,7 +191,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
 
   // Replicated remote buffer embedding lookup using the token splitting
   // strategy.
-  StatusOr<poplar::program::Program> RemoteBufferSplitTokensImpl(
+  StatusOr<poplar::program::Sequence> RemoteBufferSplitTokensImpl(
       poplar::Graph& graph, poplar::RemoteBuffer& remote_buffer,
       poplar::Tensor indices, poplar::program::Sequence seq,
       CompilerResources& res, const HloHostEmbeddingLookupInstruction* inst,
@@ -284,7 +284,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
 
   // Replicated remote buffer embedding lookup using the encoding splitting
   // strategy.
-  StatusOr<poplar::program::Program> RemoteBufferSplitEncodingImpl(
+  StatusOr<poplar::program::Sequence> RemoteBufferSplitEncodingImpl(
       poplar::Graph& graph, poplar::RemoteBuffer& remote_buffer,
       poplar::Tensor indices, poplar::program::Sequence seq,
       CompilerResources& res, const HloHostEmbeddingLookupInstruction* inst,
@@ -339,7 +339,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -401,13 +401,13 @@ REGISTER_POPLAR_OP(HostEmbeddingLookup, HostEmbeddingLookupOp);
 
 class HostEmbeddingUpdateOp : public PoplarOpDef {
   // Synthetic embedding update.
-  StatusOr<poplar::program::Program> SyntheticImpl(
+  StatusOr<poplar::program::Sequence> SyntheticImpl(
       poplar::program::Sequence seq) {
     return seq;
   }
 
   // Host embedding using a poplar callback.
-  StatusOr<poplar::program::Program> CallbackImpl(
+  StatusOr<poplar::program::Sequence> CallbackImpl(
       poplar::Graph& graph, poplar::Tensor grads, poplar::Tensor indices,
       poplar::program::Sequence seq, CompilerResources& res,
       const HloHostEmbeddingUpdateInstruction* inst,
@@ -434,7 +434,7 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
   }
 
   // Single replica remote buffer implementation.
-  StatusOr<poplar::program::Program> RemoteBufferImpl(
+  StatusOr<poplar::program::Sequence> RemoteBufferImpl(
       poplar::Graph& graph, poplar::RemoteBuffer& remote_buffer,
       poplar::Tensor grads, poplar::Tensor indices,
       poplar::program::Sequence seq, CompilerResources& res,
@@ -465,7 +465,7 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
 
   // Replicated remote buffer embedding lookup using the token splitting
   // strategy.
-  StatusOr<poplar::program::Program> RemoteBufferSplitTokensImpl(
+  StatusOr<poplar::program::Sequence> RemoteBufferSplitTokensImpl(
       poplar::Graph& graph, poplar::RemoteBuffer& remote_buffer,
       poplar::Tensor grads, poplar::Tensor indices,
       poplar::program::Sequence seq, CompilerResources& res,
@@ -559,7 +559,7 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
 
   // Replicated remote buffer embedding lookup using the encoding splitting
   // strategy.
-  StatusOr<poplar::program::Program> RemoteBufferSplitEncodingImpl(
+  StatusOr<poplar::program::Sequence> RemoteBufferSplitEncodingImpl(
       poplar::Graph& graph, poplar::RemoteBuffer& remote_buffer,
       poplar::Tensor grads, poplar::Tensor indices,
       poplar::program::Sequence seq, CompilerResources& res,
@@ -615,7 +615,7 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -680,7 +680,7 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(HostEmbeddingUpdate, HostEmbeddingUpdateOp);
 
 class HostEmbeddingNotifyOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
