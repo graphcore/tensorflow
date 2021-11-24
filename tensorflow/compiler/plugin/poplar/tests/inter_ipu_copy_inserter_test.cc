@@ -164,8 +164,8 @@ cluster_1  {
   }
 }
 
-TEST_F(InterIpuCopyInserterTest, ExistingIpuInterCopy) {
-  // In this test we check that existing `IpuInterCopy` instructions are not
+TEST_F(InterIpuCopyInserterTest, ExistingInterIpuCopy) {
+  // In this test we check that existing `InterIpuCopy` instructions are not
   // themselves modified.
   std::string hlo_string = R"(
 HloModule top
@@ -173,9 +173,9 @@ HloModule top
 cluster_1  {
   arg0 = f16[] parameter(0), sharding={maximal device=0}
   const0 = f16[] constant(0.1), sharding={maximal device=0}
-  ipu-inter-copy = (f16[], f16[]) custom-call(f16[] arg0, f16[] const0), custom_call_target="IpuInterCopy", sharding={{maximal device=1}, {maximal device=1}}
-  gte0 = f16[] get-tuple-element((f16[], f16[]) ipu-inter-copy), index=0, sharding={maximal device=1}
-  gte1 = f16[] get-tuple-element((f16[], f16[]) ipu-inter-copy), index=0, sharding={maximal device=1}
+  inter-ipu-copy = (f16[], f16[]) custom-call(f16[] arg0, f16[] const0), custom_call_target="InterIpuCopy", sharding={{maximal device=1}, {maximal device=1}}
+  gte0 = f16[] get-tuple-element((f16[], f16[]) inter-ipu-copy), index=0, sharding={maximal device=1}
+  gte1 = f16[] get-tuple-element((f16[], f16[]) inter-ipu-copy), index=0, sharding={maximal device=1}
   ROOT mul = f16[] multiply(gte0, gte1), sharding={maximal device=1}
 }
   )";
@@ -202,7 +202,7 @@ cluster_1  {
 
   std::vector<HloInstruction*> inter_ipu_copy_insts;
   absl::c_copy_if(insts, std::back_inserter(inter_ipu_copy_insts),
-                  IsPoplarInstruction(PoplarOp::IpuInterCopy));
+                  IsPoplarInstruction(PoplarOp::InterIpuCopy));
 
   ASSERT_EQ(inter_ipu_copy_insts.size(), 1);
 
@@ -838,7 +838,7 @@ cluster_1  {
 
   auto* root = module->entry_computation()->root_instruction();
   EXPECT_THAT(root->sharding().GetUniqueDevice(), 1);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::IpuInterCopy)(root->operand(0)));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::InterIpuCopy)(root->operand(0)));
   EXPECT_THAT(root->operand(0)->sharding().GetUniqueDevice(), 1);
   EXPECT_TRUE(
       IsPoplarInstruction(PoplarOp::ExecutionCounter)(root->operand(1)));
@@ -893,7 +893,7 @@ cluster_1  {
   // check that the ipu copy op is the same op
   EXPECT_EQ(ipucopy0, ipucopy1);
   // check copy is inserted where t0 used to be
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::IpuInterCopy)(ipucopy0));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::InterIpuCopy)(ipucopy0));
 
   auto* platform = dynamic_cast<PoplarPlatform*>(
       se::MultiPlatformManager::PlatformWithName("Poplar").ConsumeValueOrDie());

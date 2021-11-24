@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_ipu_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
@@ -21,56 +21,56 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-HloIpuInterCopy::HloIpuInterCopy(absl::Span<HloInstruction* const> operands)
+HloInterIpuCopy::HloInterIpuCopy(absl::Span<HloInstruction* const> operands)
     : HloPoplarInstruction(GetHloPoplarInstructionShape(operands), operands,
-                           PoplarOp::IpuInterCopy) {}
+                           PoplarOp::InterIpuCopy) {}
 
-absl::flat_hash_set<int64> HloIpuInterCopy::AllocatingIndices() const {
+absl::flat_hash_set<int64> HloInterIpuCopy::AllocatingIndices() const {
   return {};
 }
 
-bool HloIpuInterCopy::AllocatingOutput() const { return false; }
+bool HloInterIpuCopy::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloIpuInterCopy::LayoutDependencies() const {
+absl::flat_hash_map<int64, int64> HloInterIpuCopy::LayoutDependencies() const {
   return {};
 }
 
-HloPoplarUseDescriptions HloIpuInterCopy::GetUseDescriptions() const {
+HloPoplarUseDescriptions HloInterIpuCopy::GetUseDescriptions() const {
   return UseDescriptionsNoInputOutputAlias();
 }
 
-HloPoplarBufferDescriptions HloIpuInterCopy::GetBufferDescriptions() const {
+HloPoplarBufferDescriptions HloInterIpuCopy::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
-const FindConsumersExtensionResults HloIpuInterCopy::FindConsumers(
+const FindConsumersExtensionResults HloInterIpuCopy::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
-bool HloIpuInterCopy::AllowNonInplaceLowering() const { return false; }
+bool HloInterIpuCopy::AllowNonInplaceLowering() const { return false; }
 
-bool HloIpuInterCopy::IsPopOpsElementwise() const { return false; }
+bool HloInterIpuCopy::IsPopOpsElementwise() const { return false; }
 
-std::unique_ptr<HloInstruction> HloIpuInterCopy::CloneWithNewOperandsImpl(
+std::unique_ptr<HloInstruction> HloInterIpuCopy::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext* context) const {
-  return CreateIpuInterCopy(new_operands);
+  return CreateInterIpuCopy(new_operands);
 }
 
-std::vector<std::string> HloIpuInterCopy::ExtraPoplarAttributesToStringImpl(
+std::vector<std::string> HloInterIpuCopy::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   return {};
 }
 
-std::unique_ptr<HloInstruction> CreateIpuInterCopy(
+std::unique_ptr<HloInstruction> CreateInterIpuCopy(
     absl::Span<HloInstruction* const> operands) {
-  return absl::make_unique<HloIpuInterCopy>(operands);
+  return absl::make_unique<HloInterIpuCopy>(operands);
 }
 
-static HloPoplarInstructionFactory ipu_inter_copy_factory(
-    PoplarOp::IpuInterCopy, [](HloCustomCallInstruction* inst) {
-      return CreateIpuInterCopy(inst->operands());
+static HloPoplarInstructionFactory inter_ipu_copy_factory(
+    PoplarOp::InterIpuCopy, [](HloCustomCallInstruction* inst) {
+      return CreateInterIpuCopy(inst->operands());
     });
 }  // namespace poplarplugin
 }  // namespace xla
