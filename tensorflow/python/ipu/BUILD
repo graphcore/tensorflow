@@ -1564,6 +1564,7 @@ tf_py_test(
         "//tensorflow/python/keras",
         "//third_party/py/numpy",
     ],
+    shard_count = 4,
     tags = ["hw_poplar_test"],
 )
 
