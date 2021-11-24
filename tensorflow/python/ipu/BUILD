@@ -1958,6 +1958,7 @@ tf_py_test(
     srcs = [
         "tests/prng_stability_models_test.py",
     ],
+    shard_count = 4,
     tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
