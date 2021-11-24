@@ -181,8 +181,8 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
     // Call the base class since we do not want our own handling of
     // parameters for this special case.
     TF_RETURN_IF_ERROR(DeferredVisitor::AddSequenceForInstruction(
-        inst, poplar::program::Copy(non_modified_tensor, tensor, false,
-                                    {debug_name_and_id})));
+        inst, poplar::program::Sequence({poplar::program::Copy(
+                  non_modified_tensor, tensor, false, {debug_name_and_id})})));
   }
   return tensor;
 }
@@ -274,9 +274,9 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
            ++tuple_index) {
         if (in_tensors[tuple_index] != out_tensors[tuple_index]) {
           TF_RETURN_IF_ERROR(AddSequenceForInstruction(
-              root, poplar::program::Copy(out_tensors[tuple_index],
-                                          in_tensors[tuple_index], false,
-                                          debug_name_and_id)));
+              root, poplar::program::Sequence({poplar::program::Copy(
+                        out_tensors[tuple_index], in_tensors[tuple_index],
+                        false, debug_name_and_id)})));
         }
       }
     }

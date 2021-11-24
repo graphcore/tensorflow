@@ -32,7 +32,7 @@ namespace poplarplugin {
 namespace {
 
 class IpuInterCopyOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override;
@@ -170,7 +170,7 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
 }
 }  // namespace
 
-StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
+StatusOr<poplar::program::Sequence> IpuInterCopyOp::Creator(
     poplar::Graph&, CompilerResources& res, const HloInstruction* inst,
     const Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugContext& debug_context) {

@@ -151,7 +151,7 @@ Status CreateReusablePoplarD2HFIFO(
 }
 }  // namespace
 
-StatusOr<poplar::program::Program> CreateInfeed(
+StatusOr<poplar::program::Sequence> CreateInfeed(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const xla::Shape& shape, poplar::Tensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -188,7 +188,7 @@ StatusOr<poplar::program::Program> CreateInfeed(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateOutfeed(
+StatusOr<poplar::program::Sequence> CreateOutfeed(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);

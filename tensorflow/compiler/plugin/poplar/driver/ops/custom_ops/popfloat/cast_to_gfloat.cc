@@ -47,7 +47,7 @@ namespace poplarplugin {
 namespace {
 
 class CalcGfloatParamsOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -77,7 +77,7 @@ class CalcGfloatParamsOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(CalcGfloatParams, CalcGfloatParamsOp);
 
 class CastNativeToGfloatOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -123,7 +123,7 @@ class CastNativeToGfloatOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(CastNativeToGfloat, CastNativeToGfloatOp);
 
 class CastGfloatToNativeOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

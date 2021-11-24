@@ -41,7 +41,7 @@ namespace {
  */
 class HistogramOp : public PoplarOpDef {
  public:
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -75,7 +75,7 @@ REGISTER_POPLAR_OP(Histogram, HistogramOp);
  */
 class HistogramUpdateOp : public PoplarOpDef {
  public:
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

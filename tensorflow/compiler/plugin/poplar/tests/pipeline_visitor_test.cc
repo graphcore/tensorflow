@@ -190,7 +190,7 @@ TEST_P(PipelineVisitorTestParam, TestPipelineVisitor) {
 
   // Compile the graph
   poplar::Engine engine(*resources->main_graph,
-                        poplar::program::Sequence(verify_program, program),
+                        poplar::program::Sequence({verify_program, program}),
                         params.opts);
   engine.enableExecutionProfiling();
   // Capture the engine output into a string stream.

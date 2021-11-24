@@ -34,7 +34,7 @@ namespace poplarplugin {
 namespace {
 
 class StatefulNoopOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph&, CompilerResources&, const HloInstruction*,
       const xla::Shape&, TensorMap&,
       const poplar::DebugContext& debug_context) override {

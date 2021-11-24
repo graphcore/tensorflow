@@ -154,7 +154,7 @@ StatusOr<poplar::Tensor> GetDynamicSliceOffsets(
 }
 }  // namespace
 
-StatusOr<poplar::program::Program> CreateDynamicUpdateSliceOp(
+StatusOr<poplar::program::Sequence> CreateDynamicUpdateSliceOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -203,7 +203,7 @@ StatusOr<poplar::program::Program> CreateDynamicUpdateSliceOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateDynamicSliceOp(
+StatusOr<poplar::program::Sequence> CreateDynamicSliceOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -244,7 +244,7 @@ StatusOr<poplar::program::Program> CreateDynamicSliceOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateIota(
+StatusOr<poplar::program::Sequence> CreateIota(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -311,7 +311,7 @@ StatusOr<poplar::program::Program> CreateIota(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateCopy(
+StatusOr<poplar::program::Sequence> CreateCopy(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -342,7 +342,7 @@ StatusOr<poplar::program::Program> CreateCopy(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateSlice(
+StatusOr<poplar::program::Sequence> CreateSlice(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -413,7 +413,7 @@ StatusOr<poplar::program::Program> CreateSlice(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateSelectScalarFromRows(
+StatusOr<poplar::program::Sequence> CreateSelectScalarFromRows(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
@@ -434,7 +434,7 @@ StatusOr<poplar::program::Program> CreateSelectScalarFromRows(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateUpdateScalarInRows(
+StatusOr<poplar::program::Sequence> CreateUpdateScalarInRows(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
@@ -458,7 +458,7 @@ StatusOr<poplar::program::Program> CreateUpdateScalarInRows(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateTuple(
+StatusOr<poplar::program::Sequence> CreateTuple(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing,
     bool preserve_aliases) {

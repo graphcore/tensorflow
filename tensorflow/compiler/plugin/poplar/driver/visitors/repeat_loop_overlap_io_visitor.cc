@@ -92,14 +92,14 @@ poplar::program::Sequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
   poplar::program::Sequence seq({}, debug_name_and_id);
   seq.add(pre_loop_sequence_);
 
-  poplar::program::Sequence compute_seq({}, {debug_name_and_id, "compute"});
-  compute_seq.add(GetSequence(/*copy_execution_counters*/ false));
-  // Increase the local execution counters at the end of each iteration.
-  compute_seq.add(execution_counters_.IncrementLiveCounters());
-
+  poplar::Graph& graph = GetGraph(resources_, inst);
+  poplar::program::Sequence call_seq({}, {debug_name_and_id, "call"});
   {
-    poplar::Graph& graph = GetGraph(resources_, inst);
-    compute_seq = poplar::program::Call(graph.addFunction(compute_seq));
+    poplar::program::Sequence compute_seq({}, {debug_name_and_id, "compute"});
+    compute_seq.add(GetSequence(/*copy_execution_counters*/ false));
+    // Increase the local execution counters at the end of each iteration.
+    compute_seq.add(execution_counters_.IncrementLiveCounters());
+    call_seq.add(poplar::program::Call(graph.addFunction(compute_seq)));
   }
 
   // The inner body of the loop. To allow the computa and IO to overlap we
@@ -121,7 +121,7 @@ poplar::program::Sequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
   // Start sending the n-1th compute-batch of data to the host.
   repeat_seq.add(outfeed_sequence_);
   // Compute on the nth compute-batch of data.
-  repeat_seq.add(compute_seq);
+  repeat_seq.add(call_seq);
 
   if (has_resource_update_) {
     CHECK_GT(num_mini_batches_to_accumulate_, 0);
@@ -139,7 +139,7 @@ poplar::program::Sequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
     // Start loading the next iteration's data.
     inner_seq.add(infeed_sequence_);
     // Compute on the first data elements.
-    inner_seq.add(compute_seq);
+    inner_seq.add(call_seq);
 
     // Run the inner loop defined above. We now have data ready to compute on
     // and ready to be sent to the host.
@@ -151,7 +151,7 @@ poplar::program::Sequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
     // Start sending results to the host.
     inner_seq.add(outfeed_sequence_);
     // Compute on the last data elements.
-    inner_seq.add(compute_seq);
+    inner_seq.add(call_seq);
     // Copy the final results to the IO tiles.
     inner_seq.add(io_tile_copy_out_sequence_);
     // Send the final results to the host.
@@ -171,7 +171,7 @@ poplar::program::Sequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
     // Start loading the next iteration's data.
     seq.add(infeed_sequence_);
     // Compute on the first data elements.
-    seq.add(compute_seq);
+    seq.add(call_seq);
 
     // Run the inner loop defined above. We now have data ready to compute on
     // and ready to be sent to the host.
@@ -183,7 +183,7 @@ poplar::program::Sequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
     // Start sending results to the host.
     seq.add(outfeed_sequence_);
     // Compute on the last data elements.
-    seq.add(compute_seq);
+    seq.add(call_seq);
     // Copy the final results to the IO tiles.
     seq.add(io_tile_copy_out_sequence_);
     // Send the final results to the host.

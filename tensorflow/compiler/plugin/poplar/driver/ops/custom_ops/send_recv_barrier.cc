@@ -24,14 +24,15 @@ namespace poplarplugin {
 namespace {
 
 class SendRecvBarrierOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     // Add an internal sync which essentially functions as a compiler
     // barrier that avoids merging of host syncs and then reordering
     // of the Send/Recv stream copies (which would cause a deadlock).
-    return poplar::program::Sync(poplar::SyncType::INTERNAL);
+    return poplar::program::Sequence(
+        {poplar::program::Sync(poplar::SyncType::INTERNAL)}, debug_context);
   }
 };
 

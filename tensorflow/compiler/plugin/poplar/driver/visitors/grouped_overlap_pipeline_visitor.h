@@ -51,10 +51,10 @@ class GroupedOverlapPipelineVisitor : public ParallelPipelineVisitor {
  protected:
   RepeatBlock GetPipelineRampUpSequence(
       const poplar::DebugNameAndId& debug_name_and_id) const override;
-  poplar::program::Program GetPipelineRampDownSequence(
+  poplar::program::Sequence GetPipelineRampDownSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& additional_iterations = 0) const override;
-  poplar::program::Program GetPipelineRepeatBlockSequence(
+  poplar::program::Sequence GetPipelineRepeatBlockSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& iterations) const override;
 };

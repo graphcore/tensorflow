@@ -75,7 +75,7 @@ StatusOr<poplar::Tensor> AddConvolutionWeights(
 }
 
 class Conv2DOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -176,7 +176,7 @@ class Conv2DOp : public PoplarOpDef {
 REGISTER_HLO_OP(kConvolution, Conv2DOp);
 
 class Conv2DReverseOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -247,7 +247,7 @@ class Conv2DReverseOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(ConvWithReverse, Conv2DReverseOp);
 
 class ConvScaledInplaceOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -415,7 +415,7 @@ class MultiConvOp : public PoplarOpDef {
     return out;
   }
 
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

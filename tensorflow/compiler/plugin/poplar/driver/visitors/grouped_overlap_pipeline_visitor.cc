@@ -192,7 +192,7 @@ GroupedOverlapPipelineVisitor::GetPipelineRampUpSequence(
   return {std::move(repeat_block), (offsets.size() / 2) + 1};
 }
 
-poplar::program::Program
+poplar::program::Sequence
 GroupedOverlapPipelineVisitor::GetPipelineRampDownSequence(
     const poplar::DebugNameAndId& debug_name_and_id,
     const IterationsType& additional_iterations) const {
@@ -257,7 +257,7 @@ GroupedOverlapPipelineVisitor::GetPipelineRampDownSequence(
   return repeat_block;
 }
 
-poplar::program::Program
+poplar::program::Sequence
 GroupedOverlapPipelineVisitor::GetPipelineRepeatBlockSequence(
     const poplar::DebugNameAndId& debug_name_and_id,
     const IterationsType& iterations) const {
@@ -327,7 +327,7 @@ GroupedOverlapPipelineVisitor::GetPipelineRepeatBlockSequence(
       pipeline_sequences, debug_name_and_id, offsets.size());
 
   return absl::visit(
-      make_visitor<poplar::program::Program>(
+      make_visitor<poplar::program::Sequence>(
           [&](const int64 i) {
             const int64 num_repeats = ((i / offsets.size()) - 1);
             if (num_repeats < 1) {
@@ -335,8 +335,8 @@ GroupedOverlapPipelineVisitor::GetPipelineRepeatBlockSequence(
             }
 
             return poplar::program::Sequence(
-                poplar::program::Repeat(num_repeats * offsets.size() - 2,
-                                        repeat_block, {debug_name_and_id}));
+                {poplar::program::Repeat(num_repeats * offsets.size() - 2,
+                                         repeat_block, {debug_name_and_id})});
           },
           [&](const PipelineVisitor::CountAndGraph i) {
             poplar::program::Sequence result({}, {debug_name_and_id});

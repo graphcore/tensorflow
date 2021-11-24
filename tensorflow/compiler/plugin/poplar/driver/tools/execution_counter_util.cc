@@ -56,7 +56,7 @@ Status CopyExecutionCountersFromScope(CompilerResources& resources,
     return FailedPrecondition("Cannot set the execution counters from stack.");
   }
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Program copies_seq,
+      poplar::program::Sequence copies_seq,
       counters.SetInitialValuesFrom(resources.execution_counter_scopes.top()));
   sequence.add(copies_seq);
   return Status::OK();
@@ -112,7 +112,7 @@ StatusOr<poplar::Tensor> ExecutionCounters::GetCounter(int64 shard) {
   return counters_[shard];
 }
 
-StatusOr<poplar::program::Program> ExecutionCounters::SetInitialValuesFrom(
+StatusOr<poplar::program::Sequence> ExecutionCounters::SetInitialValuesFrom(
     ExecutionCounters* source) {
   CHECK_EQ(source->counters_.size(), counters_.size());
   poplar::program::Sequence seq({}, dnai_);
@@ -129,7 +129,7 @@ StatusOr<poplar::program::Program> ExecutionCounters::SetInitialValuesFrom(
   return seq;
 }
 
-poplar::program::Program ExecutionCounters::SetInitialValuesToZero() {
+poplar::program::Sequence ExecutionCounters::SetInitialValuesToZero() {
   poplar::program::Sequence seq({}, dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
@@ -142,7 +142,7 @@ poplar::program::Program ExecutionCounters::SetInitialValuesToZero() {
   return seq;
 }
 
-StatusOr<poplar::program::Program> ExecutionCounters::UpdateCounters(
+StatusOr<poplar::program::Sequence> ExecutionCounters::UpdateCounters(
     ExecutionCounters* destination) {
   CHECK_EQ(destination->counters_.size(), counters_.size());
   poplar::program::Sequence seq({}, dnai_);
@@ -158,7 +158,7 @@ StatusOr<poplar::program::Program> ExecutionCounters::UpdateCounters(
   return seq;
 }
 
-poplar::program::Program ExecutionCounters::IncrementLiveCounters() const {
+poplar::program::Sequence ExecutionCounters::IncrementLiveCounters() const {
   poplar::program::Sequence seq({}, dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {

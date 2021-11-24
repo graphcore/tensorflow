@@ -151,7 +151,7 @@ class BaseVisitor : public DfsHloVisitor {
   Status Preprocess(HloInstruction* hlo) override;
 
   // Add the sequence produced for the given instruction. Note that a
-  // poplar::program::Program can be passed directly since it is implicitly
+  // poplar::program::Sequence can be passed directly since it is implicitly
   // convertible to a poplar::program::Sequence.
   virtual Status AddSequenceForInstruction(
       const HloInstruction* inst, const poplar::program::Sequence& seq);

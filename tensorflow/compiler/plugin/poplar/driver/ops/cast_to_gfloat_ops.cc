@@ -27,7 +27,7 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
-StatusOr<poplar::program::Program> CreatePoplibsGfloatParams(
+StatusOr<poplar::program::Sequence> CreatePoplibsGfloatParams(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     poplar::Type gf_calc_type, const unsigned gf_packed_cfg,
@@ -46,7 +46,7 @@ StatusOr<poplar::program::Program> CreatePoplibsGfloatParams(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreatePoplibsCastNativeToGfloat(
+StatusOr<poplar::program::Sequence> CreatePoplibsCastNativeToGfloat(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     popfloat::experimental::GfloatCast::CastConfig& gf_cast_cfg,
@@ -100,7 +100,7 @@ StatusOr<poplar::program::Program> CreatePoplibsCastNativeToGfloat(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreatePoplibsCastGfloatToNative(
+StatusOr<poplar::program::Sequence> CreatePoplibsCastGfloatToNative(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     popfloat::experimental::GfloatCast::CastConfig& gf_cast_cfg,

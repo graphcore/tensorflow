@@ -34,7 +34,7 @@ namespace poplarplugin {
 namespace {
 
 class TruncatedNormalOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -56,7 +56,7 @@ class TruncatedNormalOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(TruncatedNormal, TruncatedNormalOp);
 
 class StatelessRandomUniformOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -108,7 +108,7 @@ class StatelessRandomUniformOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(StatelessRandomUniform, StatelessRandomUniformOp);
 
 class StatelessRandomUniformIntOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -162,7 +162,7 @@ class StatelessRandomUniformIntOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(StatelessRandomUniformInt, StatelessRandomUniformIntOp);
 
 class StatelessRandomNormalOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -205,7 +205,7 @@ class StatelessRandomNormalOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(StatelessRandomNormal, StatelessRandomNormalOp);
 
 class StatelessTruncatedNormalOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -249,7 +249,7 @@ class StatelessTruncatedNormalOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(StatelessTruncatedNormal, StatelessTruncatedNormalOp);
 
 class SeedOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+  StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
