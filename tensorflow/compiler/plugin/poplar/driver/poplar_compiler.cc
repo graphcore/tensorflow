@@ -741,8 +741,6 @@ absl::optional<Tilesets> PartitionTiles(const poplar::Graph& main_graph,
 
   CHECK_LT(num_io_tiles, num_tiles_per_ipu);
 
-  const auto num_compute_tiles = num_tiles_per_ipu - num_io_tiles;
-
   const auto io_tiles = gcl::perIPUTiles(main_graph, 0, num_io_tiles,
                                          /*sorted=*/true, /*tilePairs=*/true);
   CHECK_EQ(io_tiles.size(), num_io_tiles);
@@ -1701,7 +1699,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
   std::unique_ptr<poplar::Engine> engine;
   std::vector<poplar::program::Program> progs;
-  bool logging_cycle_count;
+  bool logging_cycle_count = false;
 
   if (compile) {
     Tracepoint tracepoint("ExecutableConstruction");
