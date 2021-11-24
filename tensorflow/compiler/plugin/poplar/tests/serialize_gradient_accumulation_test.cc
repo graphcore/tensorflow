@@ -34,13 +34,12 @@ namespace {
 struct SerializeGradientAccumulationTestSpec {
   PrimitiveType gradient_type;
   PrimitiveType accumulator_type;
-  float acc_scale;
 };
 
 void PrintTo(const SerializeGradientAccumulationTestSpec& spec,
              std::ostream* os) {
   *os << PrimitiveType_Name(spec.gradient_type) << ", "
-      << PrimitiveType_Name(spec.accumulator_type) << ", " << spec.acc_scale;
+      << PrimitiveType_Name(spec.accumulator_type);
 }
 
 struct SerializeGradientAccumulationTest
@@ -59,14 +58,10 @@ struct SerializeGradientAccumulationTest
 
 INSTANTIATE_TEST_SUITE_P(
     SerializeGradientAccumulationTestCases, SerializeGradientAccumulationTest,
-    ::testing::Values(SerializeGradientAccumulationTestSpec{F32, F32, 1.0f},
-                      SerializeGradientAccumulationTestSpec{F16, F32, 1.0f},
-                      SerializeGradientAccumulationTestSpec{F16, F16, 1.0f},
-                      SerializeGradientAccumulationTestSpec{F32, F16, 1.0f},
-                      SerializeGradientAccumulationTestSpec{F32, F32, 1.125f},
-                      SerializeGradientAccumulationTestSpec{F16, F32, 1.125f},
-                      SerializeGradientAccumulationTestSpec{F16, F16, 1.125f},
-                      SerializeGradientAccumulationTestSpec{F32, F16, 1.125f}));
+    ::testing::Values(SerializeGradientAccumulationTestSpec{F32, F32},
+                      SerializeGradientAccumulationTestSpec{F16, F32},
+                      SerializeGradientAccumulationTestSpec{F16, F16},
+                      SerializeGradientAccumulationTestSpec{F32, F16}));
 
 string ReplaceParams(absl::string_view s,
                      const SerializeGradientAccumulationTestSpec& spec) {
@@ -76,7 +71,6 @@ string ReplaceParams(absl::string_view s,
               primitive_util::LowercasePrimitiveTypeName(spec.gradient_type)},
              {"$AT", primitive_util::LowercasePrimitiveTypeName(
                          spec.accumulator_type)},
-             {"$ACC_SCALE", std::to_string(spec.acc_scale)},
          });
 }
 
@@ -91,13 +85,12 @@ _pop_op_wide_const {
 
 ENTRY main {
   accumulator = $AT[100, 16] parameter(0)
-  acc_scale = $AT[] constant($ACC_SCALE)
   offsets = s32[24,1] parameter(1)
   updates = $GT[24,16] parameter(2)
   scale = $GT[] parameter(3)
   big_zero = $GT[100,16] fusion(), kind=kCustom, calls=_pop_op_wide_const
   mua = $GT[100,16] custom-call(big_zero, offsets, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
-  add = $AT[100,16] custom-call(accumulator, mua, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
+  add = $AT[100,16] custom-call(accumulator, mua), custom_call_target="GradientAccumulatorAdd"
   ROOT t = ($AT[100, 16]) tuple(add)
 }
 )";
@@ -119,8 +112,8 @@ ENTRY main {
 
   auto root = module->entry_computation()->root_instruction();
   auto accumulator_add = root->operand(0);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-      accumulator_add));
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
   auto accumulator = accumulator_add->operand(0);
 
   SerializeGradientAccumulation sga;
@@ -147,24 +140,15 @@ ENTRY main {
   if (param.gradient_type == param.accumulator_type) {
     EXPECT_TRUE(Match(
         accumulator_add->fused_expression_root(),
-        m::CustomCall(m::Op() /* acc */, m::Parameter(offsets_index),
-                      m::Parameter(updates_index), m::Parameter(scale_index))));
+        m::CustomCall(m::Parameter(accumulator_index),
+                      m::Parameter(offsets_index), m::Parameter(updates_index),
+                      m::Parameter(scale_index))));
   } else {
-    EXPECT_TRUE(
-        Match(accumulator_add->fused_expression_root(),
-              m::CustomCall(m::Op() /* acc */, m::Parameter(offsets_index),
-                            m::Convert(m::Parameter(updates_index)),
-                            m::Convert(m::Parameter(scale_index)))));
-  }
-
-  if (param.acc_scale == 1.0f) {
-    EXPECT_TRUE(Match(accumulator_add->fused_expression_root()->operand(0),
-                      m::Parameter(accumulator_index)));
-  } else {
-    EXPECT_TRUE(
-        Match(accumulator_add->fused_expression_root()->operand(0),
-              m::Multiply(m::Parameter(accumulator_index),
-                          m::Broadcast(m::ConstantScalar(param.acc_scale)))));
+    EXPECT_TRUE(Match(accumulator_add->fused_expression_root(),
+                      m::CustomCall(m::Parameter(accumulator_index),
+                                    m::Parameter(offsets_index),
+                                    m::Convert(m::Parameter(updates_index)),
+                                    m::Convert(m::Parameter(scale_index)))));
   }
 }
 
@@ -181,8 +165,7 @@ ENTRY main {
   grads2 = $GT[100, 16] parameter(5)
   add_grads = $GT[100, 16] add(grads1, grads2)
   mua = $GT[100,16] custom-call(add_grads, offsets, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
-  acc_scale = $AT[] constant($ACC_SCALE)
-  add = $AT[100,16] custom-call(accumulator, mua, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
+  add = $AT[100,16] custom-call(accumulator, mua), custom_call_target="GradientAccumulatorAdd"
   ROOT t = ($AT[100, 16]) tuple(add)
 }
 )";
@@ -204,8 +187,8 @@ ENTRY main {
 
   auto root = module->entry_computation()->root_instruction();
   auto accumulator_add = root->operand(0);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-      accumulator_add));
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
   auto accumulator = accumulator_add->operand(0);
 
   SerializeGradientAccumulation sga;
@@ -234,38 +217,22 @@ ENTRY main {
   EXPECT_EQ(accumulator_index, 0);
 
   if (param.gradient_type == param.accumulator_type) {
-    EXPECT_TRUE(
-        Match(accumulator_add->fused_expression_root(),
-              m::CustomCall(
-                  m::Add(m::Add(m::Op() /* acc */, m::Parameter(grads1_index)),
-                         m::Parameter(grads2_index)),
-                  m::Parameter(offsets_index), m::Parameter(updates_index),
-                  m::Parameter(scale_index))));
+    EXPECT_TRUE(Match(
+        accumulator_add->fused_expression_root(),
+        m::CustomCall(m::Add(m::Add(m::Parameter(accumulator_index),
+                                    m::Parameter(grads1_index)),
+                             m::Parameter(grads2_index)),
+                      m::Parameter(offsets_index), m::Parameter(updates_index),
+                      m::Parameter(scale_index))));
   } else {
     EXPECT_TRUE(Match(
         accumulator_add->fused_expression_root(),
-        m::CustomCall(m::Add(m::Add(m::Op() /* acc */,
+        m::CustomCall(m::Add(m::Add(m::Parameter(accumulator_index),
                                     m::Convert(m::Parameter(grads1_index))),
                              m::Convert(m::Parameter(grads2_index))),
                       m::Parameter(offsets_index),
                       m::Convert(m::Parameter(updates_index)),
                       m::Convert(m::Parameter(scale_index)))));
-  }
-
-  if (param.acc_scale == 1.0f) {
-    EXPECT_TRUE(Match(accumulator_add->fused_expression_root()
-                          ->operand(0)
-                          ->operand(0)
-                          ->operand(0),
-                      m::Parameter(accumulator_index)));
-  } else {
-    EXPECT_TRUE(
-        Match(accumulator_add->fused_expression_root()
-                  ->operand(0)
-                  ->operand(0)
-                  ->operand(0),
-              m::Multiply(m::Parameter(accumulator_index),
-                          m::Broadcast(m::ConstantScalar(param.acc_scale)))));
   }
 }
 
@@ -286,8 +253,7 @@ ENTRY main {
   add1 = $GT[10, 16] add(p5, p4)
   add2 = $GT[10, 16] add(add1, a)
   add3 = $GT[10, 16] add(add2, p6)
-  acc_scale = $AT[] constant($ACC_SCALE)
-  add = $AT[10, 16] custom-call(accumulator, add3, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
+  add = $AT[10, 16] custom-call(accumulator, add3), custom_call_target="GradientAccumulatorAdd"
   ROOT t = ($AT[100, 16]) tuple(add)
 }
 )";
@@ -309,8 +275,8 @@ ENTRY main {
 
   auto root = module->entry_computation()->root_instruction();
   auto accumulator_add = root->operand(0);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-      accumulator_add));
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
   auto accumulator = accumulator_add->operand(0);
 
   SerializeGradientAccumulation sga;
@@ -390,16 +356,9 @@ ENTRY main {
   }
   next = next->mutable_operand(0);
   {
-    if (param.acc_scale == 1) {
-      EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
-      EXPECT_EQ(next->parameter_number(), 0);
-    } else {
-      EXPECT_TRUE(Match(
-          next, m::Multiply(m::Parameter(0),
-                            m::Broadcast(m::ConstantScalar(param.acc_scale)))));
-      EXPECT_EQ(next->operand(0)->parameter_number(), 0);
-    }
+    EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
+    EXPECT_EQ(next->parameter_number(), 0);
   }
 }
 
@@ -417,8 +376,7 @@ ENTRY main {
   scale = $GT[] constant(0.1)
   bscale = $GT[10, 16] broadcast(scale), dimensions={}
   m = $GT[10, 16] multiply(a, bscale)
-  acc_scale = $AT[] constant($ACC_SCALE)
-  add = $AT[10, 16] custom-call(accumulator, m, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
+  add = $AT[10, 16] custom-call(accumulator, m), custom_call_target="GradientAccumulatorAdd"
   ROOT t = ($AT[100, 16]) tuple(add)
 }
 )";
@@ -440,8 +398,8 @@ ENTRY main {
 
   auto root = module->entry_computation()->root_instruction();
   auto accumulator_add = root->operand(0);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-      accumulator_add));
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
   auto accumulator = accumulator_add->operand(0);
 
   SerializeGradientAccumulation sga;
@@ -506,16 +464,9 @@ ENTRY main {
   }
   next = next->mutable_operand(0);
   {
-    if (param.acc_scale == 1) {
-      EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
-      EXPECT_EQ(next->parameter_number(), 0);
-    } else {
-      EXPECT_TRUE(Match(
-          next, m::Multiply(m::Parameter(0),
-                            m::Broadcast(m::ConstantScalar(param.acc_scale)))));
-      EXPECT_EQ(next->operand(0)->parameter_number(), 0);
-    }
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
+    EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
+    EXPECT_EQ(next->parameter_number(), 0);
   }
 }
 
@@ -531,8 +482,7 @@ _pop_op_wide_const {
 ENTRY main {
   accumulator = $AT[100, 16] parameter(0)
   big_zero = $GT[100,16] fusion(), kind=kCustom, calls=_pop_op_wide_const
-  acc_scale = $AT[] constant($ACC_SCALE)
-  add = $AT[100,16] custom-call(accumulator, big_zero, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
+  add = $AT[100,16] custom-call(accumulator, big_zero), custom_call_target="GradientAccumulatorAdd"
   ROOT t = ($AT[100, 16]) tuple(add)
 }
 )";
@@ -554,21 +504,14 @@ ENTRY main {
 
   auto root = module->entry_computation()->root_instruction();
   auto accumulator_add = root->operand(0);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-      accumulator_add));
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
   auto accumulator = accumulator_add->operand(0);
 
   SerializeGradientAccumulation sga;
   EXPECT_TRUE(sga.Run(module).ValueOrDie());
   accumulator_add = root->operand(0);
-  if (param.acc_scale == 1) {
-    EXPECT_EQ(accumulator_add, accumulator);
-  } else {
-    auto* fused_root = accumulator_add->fused_expression_root();
-    EXPECT_TRUE(Match(
-        fused_root, m::Multiply(m::Parameter(0), m::Broadcast(m::ConstantScalar(
-                                                     param.acc_scale)))));
-  }
+  EXPECT_EQ(accumulator_add, accumulator);
   EXPECT_EQ(accumulator_add->shape().element_type(), param.accumulator_type);
 }
 
@@ -590,8 +533,7 @@ ENTRY main {
   add1 = $GT[10, 16] add(p5, p4)
   add2 = $GT[10, 16] add(add1, a_t)
   add3 = $GT[10, 16] add(add2, p6)
-  acc_scale = $AT[] constant($ACC_SCALE)
-  add = $AT[10, 16] custom-call(accumulator, add3, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
+  add = $AT[10, 16] custom-call(accumulator, add3), custom_call_target="GradientAccumulatorAdd"
   ROOT t = ($AT[100, 16]) tuple(add)
 }
 )";
@@ -613,8 +555,8 @@ ENTRY main {
 
   auto root = module->entry_computation()->root_instruction();
   auto accumulator_add = root->operand(0);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-      accumulator_add));
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
   auto accumulator = accumulator_add->operand(0);
 
   SerializeGradientAccumulation sga;
@@ -695,16 +637,9 @@ ENTRY main {
   }
   next = next->mutable_operand(0);
   {
-    if (param.acc_scale == 1) {
-      EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
-      EXPECT_EQ(next->parameter_number(), 0);
-    } else {
-      EXPECT_TRUE(Match(
-          next, m::Multiply(m::Parameter(0),
-                            m::Broadcast(m::ConstantScalar(param.acc_scale)))));
-      EXPECT_EQ(next->operand(0)->parameter_number(), 0);
-    }
+    EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
+    EXPECT_EQ(next->parameter_number(), 0);
   }
 }
 
@@ -723,8 +658,7 @@ ENTRY main {
   bscale = $GT[16, 10] broadcast(scale), dimensions={}
   m = $GT[16, 10] multiply(a, bscale)
   m_t = $GT[10, 16] transpose(m), dimensions={1,0}
-  acc_scale = $AT[] constant($ACC_SCALE)
-  add = $AT[10, 16] custom-call(accumulator, m_t, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
+  add = $AT[10, 16] custom-call(accumulator, m_t), custom_call_target="GradientAccumulatorAdd"
   ROOT t = ($AT[100, 16]) tuple(add)
 }
 )";
@@ -746,8 +680,8 @@ ENTRY main {
 
   auto root = module->entry_computation()->root_instruction();
   auto accumulator_add = root->operand(0);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-      accumulator_add));
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
   auto accumulator = accumulator_add->operand(0);
 
   SerializeGradientAccumulation sga;
@@ -805,16 +739,9 @@ ENTRY main {
   }
   next = next->mutable_operand(0);
   {
-    if (param.acc_scale == 1) {
-      EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
-      EXPECT_EQ(next->parameter_number(), 0);
-    } else {
-      EXPECT_TRUE(Match(
-          next, m::Multiply(m::Parameter(0),
-                            m::Broadcast(m::ConstantScalar(param.acc_scale)))));
-      EXPECT_EQ(next->operand(0)->parameter_number(), 0);
-    }
+    EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
+    EXPECT_EQ(next->parameter_number(), 0);
   }
 }
 
@@ -828,8 +755,7 @@ ENTRY main {
   grads2 = $GT[16, 100] parameter(2)
   add_grads = $GT[16, 100] add(grads1, grads2)
   add_grads_t = $GT[100, 16] transpose(add_grads), dimensions={1,0}
-  acc_scale = $AT[] constant($ACC_SCALE)
-  add = $AT[100,16] custom-call(accumulator, add_grads_t, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
+  add = $AT[100,16] custom-call(accumulator, add_grads_t), custom_call_target="GradientAccumulatorAdd"
   ROOT t = ($AT[100, 16]) tuple(add)
 }
 )";
@@ -851,8 +777,8 @@ ENTRY main {
 
   auto root = module->entry_computation()->root_instruction();
   auto accumulator_add = root->operand(0);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-      accumulator_add));
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
   auto accumulator = accumulator_add->operand(0);
 
   SerializeGradientAccumulation sga;
@@ -874,26 +800,15 @@ ENTRY main {
   EXPECT_EQ(accumulator_index, 0);
 
   if (param.gradient_type == param.accumulator_type) {
-    EXPECT_TRUE(
-        Match(accumulator_add->fused_expression_root(),
-              m::Add(m::Add(m::Op() /* acc */, m::Parameter(grads1_t_index)),
-                     m::Parameter(grads2_t_index))));
+    EXPECT_TRUE(Match(accumulator_add->fused_expression_root(),
+                      m::Add(m::Add(m::Parameter(accumulator_index),
+                                    m::Parameter(grads1_t_index)),
+                             m::Parameter(grads2_t_index))));
   } else {
     EXPECT_TRUE(Match(accumulator_add->fused_expression_root(),
-                      m::Add(m::Add(m::Op() /* acc */,
+                      m::Add(m::Add(m::Parameter(accumulator_index),
                                     m::Convert(m::Parameter(grads1_t_index))),
                              m::Convert(m::Parameter(grads2_t_index)))));
-  }
-
-  if (param.acc_scale == 1.0f) {
-    EXPECT_TRUE(
-        Match(accumulator_add->fused_expression_root()->operand(0)->operand(0),
-              m::Parameter(accumulator_index)));
-  } else {
-    EXPECT_TRUE(
-        Match(accumulator_add->fused_expression_root()->operand(0)->operand(0),
-              m::Multiply(m::Parameter(accumulator_index),
-                          m::Broadcast(m::ConstantScalar(param.acc_scale)))));
   }
 }
 
@@ -912,8 +827,7 @@ ENTRY main {
   multiply1 = $GT[16,100] multiply(grads1, bscale1)
   multiply2 = $GT[16,100] multiply(grads2, bscale2)
   add_grads = $GT[16,100] add(multiply1, multiply2)
-  acc_scale = $AT[] constant($ACC_SCALE)
-  add = $AT[16,100] custom-call(accumulator, add_grads, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
+  add = $AT[16,100] custom-call(accumulator, add_grads), custom_call_target="GradientAccumulatorAdd"
   ROOT t = ($AT[16,100]) tuple(add)
 }
 )";
@@ -933,8 +847,8 @@ ENTRY main {
 
   auto root = module->entry_computation()->root_instruction();
   auto accumulator_add = root->operand(0);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-      accumulator_add));
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
   auto accumulator = accumulator_add->operand(0);
 
   SerializeGradientAccumulation sga;
@@ -956,26 +870,15 @@ ENTRY main {
     EXPECT_TRUE(Match(
         scaled_add_1,
         m::CustomCall(
-            m::CustomCall(m::Op() /* acc */, m::Parameter(1), m::Parameter(2)),
+            m::CustomCall(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
             m::Parameter(3), m::Parameter(4))));
   } else {
     EXPECT_TRUE(
         Match(scaled_add_1,
               m::CustomCall(
-                  m::CustomCall(m::Op() /* acc */, m::Convert(m::Parameter(3)),
+                  m::CustomCall(m::Parameter(0), m::Convert(m::Parameter(3)),
                                 m::Convert(m::Parameter(4))),
                   m::Convert(m::Parameter(1)), m::Convert(m::Parameter(2)))));
-  }
-
-  if (param.acc_scale == 1.0f) {
-    EXPECT_TRUE(
-        Match(accumulator_add->fused_expression_root()->operand(0)->operand(0),
-              m::Parameter(accumulator_index)));
-  } else {
-    EXPECT_TRUE(
-        Match(accumulator_add->fused_expression_root()->operand(0)->operand(0),
-              m::Multiply(m::Parameter(accumulator_index),
-                          m::Broadcast(m::ConstantScalar(param.acc_scale)))));
   }
 }
 
@@ -986,8 +889,7 @@ HloModule main
 ENTRY main {
   accumulator = $AT[16, 100] parameter(0)
   grad = $GT[16, 100] parameter(1)
-  acc_scale = $AT[] constant($ACC_SCALE)
-  add = $AT[16, 100] custom-call(accumulator, grad, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
+  add = $AT[16, 100] custom-call(accumulator, grad), custom_call_target="GradientAccumulatorAdd"
   ROOT t = ($AT[16, 100], $GT[16, 100]) tuple(add, grad)
 }
 )";
@@ -1009,8 +911,8 @@ ENTRY main {
 
   auto root = module->entry_computation()->root_instruction();
   auto accumulator_add = root->operand(0);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
-      accumulator_add));
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
   auto accumulator = accumulator_add->operand(0);
 
   SerializeGradientAccumulation sga;
@@ -1035,16 +937,9 @@ ENTRY main {
   }
   next = next->mutable_operand(0);
   {
-    if (param.acc_scale == 1) {
-      EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
-      EXPECT_EQ(next->parameter_number(), 0);
-    } else {
-      EXPECT_TRUE(Match(
-          next, m::Multiply(m::Parameter(0),
-                            m::Broadcast(m::ConstantScalar(param.acc_scale)))));
-      EXPECT_EQ(next->operand(0)->parameter_number(), 0);
-    }
+    EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
+    EXPECT_EQ(next->parameter_number(), accumulator_index);
   }
 
   EXPECT_EQ(entry->root_instruction()->operand(1), grad);

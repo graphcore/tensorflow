@@ -451,11 +451,11 @@ const HloInstruction* GetGradientAccumulationCountInstruction(
   return inst->operand(index);
 }
 
-template <typename NativeT>
-absl::optional<NativeT> GetConstantValue(const HloInstruction* inst) {
+absl::optional<int64> GetAccumulationConstantsValue(
+    const HloInstruction* inst) {
   if (inst->IsConstant()) {
-    auto value = LiteralScalarToNativeType<NativeT>(inst->literal());
-    return absl::optional<NativeT>(value.ValueOrDie());
+    auto value = LiteralScalarToNativeType<int>(inst->literal());
+    return absl::optional<int64>(value.ValueOrDie());
   }
   // If instruction is not a constant can try a little harder by trying to
   // evaluate the instruction
@@ -470,28 +470,8 @@ absl::optional<NativeT> GetConstantValue(const HloInstruction* inst) {
   if (!evaluator.TryEvaluate(cloned_inst.get(), &result)) {
     return absl::nullopt;
   }
-  auto value = LiteralScalarToNativeType<NativeT>(result);
-  return absl::optional<NativeT>(value.ValueOrDie());
-}
-
-template absl::optional<uint8> GetConstantValue(const HloInstruction* inst);
-template absl::optional<uint16> GetConstantValue(const HloInstruction* inst);
-template absl::optional<uint32> GetConstantValue(const HloInstruction* inst);
-template absl::optional<uint64> GetConstantValue(const HloInstruction* inst);
-template absl::optional<int8> GetConstantValue(const HloInstruction* inst);
-template absl::optional<int16> GetConstantValue(const HloInstruction* inst);
-template absl::optional<int32> GetConstantValue(const HloInstruction* inst);
-template absl::optional<int64> GetConstantValue(const HloInstruction* inst);
-template absl::optional<half> GetConstantValue(const HloInstruction* inst);
-template absl::optional<bfloat16> GetConstantValue(const HloInstruction* inst);
-template absl::optional<float> GetConstantValue(const HloInstruction* inst);
-template absl::optional<double> GetConstantValue(const HloInstruction* inst);
-template absl::optional<complex64> GetConstantValue(const HloInstruction* inst);
-template absl::optional<bool> GetConstantValue(const HloInstruction* inst);
-
-absl::optional<int64> GetAccumulationConstantsValue(
-    const HloInstruction* inst) {
-  return GetConstantValue<int64>(inst);
+  auto value = LiteralScalarToNativeType<int>(result);
+  return absl::optional<int64>(value.ValueOrDie());
 }
 
 absl::optional<int64> GetGradientAccumulationCount(const HloInstruction* inst) {
