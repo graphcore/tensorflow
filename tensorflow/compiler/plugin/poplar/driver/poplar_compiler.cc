@@ -1821,6 +1821,9 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       main_graph.outputVertexGraph(stream, progs);
     }
 
+    const std::string map_json =
+        GetTensorMappingJson(module->name(), main_graph, resources.tensor_maps);
+
     try {
       Tracepoint tracepoint("PoplarEngineConstruction");
       VLOG(1) << "Begin compiling Poplar engine " << module->name();
@@ -1849,8 +1852,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           poplar_executor->GetModuleReportDirectory(module->name());
 
       poplar::Executable exec =
-          poplar::compileGraph(main_graph, progs, opt_flags, progress_logging,
-                               executable_debug_name);
+          poplar::compileGraph(std::move(main_graph), progs, opt_flags,
+                               progress_logging, executable_debug_name);
 
       if (is_cacheable) {
         // If we have the lock, serialize the result to the executable cache.
@@ -1932,9 +1935,6 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
       TF_ASSIGN_OR_RETURN(auto inst_info,
                           GetInstructionCompilationInfo(module, resources));
-
-      std::string map_json = GetTensorMappingJson(module->name(), main_graph,
-                                                  resources.tensor_maps);
 
       poplar_executor->AddCompileEndEventRecord(module->name(), map_json,
                                                 inst_info, duration);
