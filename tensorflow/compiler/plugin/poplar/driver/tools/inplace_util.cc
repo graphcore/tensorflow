@@ -62,14 +62,14 @@ bool IsUsedAsInplace(const HloInstruction* user, const HloInstruction* inst,
   if (user_description.GetType() != inplace_type) {
     return false;
   }
-  std::vector<int64> use_indecies = user->OperandIndices(inst);
+  auto use_indicies = user->OperandIndices(inst);
   std::vector<int64> inplace_indexes =
       user_description.GetInplaceOperandIndices();
   std::vector<int64> intersection;
 
-  absl::c_sort(use_indecies);
+  absl::c_sort(use_indicies);
   absl::c_sort(inplace_indexes);
-  absl::c_set_intersection(use_indecies, inplace_indexes,
+  absl::c_set_intersection(use_indicies, inplace_indexes,
                            std::back_inserter(intersection));
   return intersection.size();
 }
