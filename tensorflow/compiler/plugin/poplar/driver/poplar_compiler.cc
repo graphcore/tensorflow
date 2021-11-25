@@ -1821,8 +1821,13 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       main_graph.outputVertexGraph(stream, progs);
     }
 
-    const std::string map_json =
-        GetTensorMappingJson(module->name(), main_graph, resources.tensor_maps);
+    std::string map_json = "";
+    if (enable_trace_events) {
+      // Only generate the mapping json when explicitly requested as it is an
+      // expensive call.
+      map_json = GetTensorMappingJson(module->name(), main_graph,
+                                      resources.tensor_maps);
+    }
 
     try {
       Tracepoint tracepoint("PoplarEngineConstruction");
