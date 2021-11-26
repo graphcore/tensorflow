@@ -556,8 +556,8 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
       HloReachabilityMap::Build(comp);
 
   // Get everything that depends upon an op with a special layout
-  const auto get_consumers = [is_layout_producer, &g](HloInstruction* inst) {
-    return g.FindConsumers(inst, [is_layout_producer](HloInstruction* inst) {
+  const auto get_consumers = [&is_layout_producer, &g](HloInstruction* inst) {
+    return g.FindConsumers(inst, [&is_layout_producer](HloInstruction* inst) {
       return !is_layout_producer(inst);
     });
   };
@@ -568,12 +568,12 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
   const auto source_ops = g.FindVertices(is_input);
 
   // Get everything that depends on a source op
-  const auto get_source_consumers = [is_layout_producer, layout_producing_ops,
-                                     alloc_dependencies,
-                                     g](HloInstruction* inst) {
+  const auto get_source_consumers = [&is_layout_producer, &layout_producing_ops,
+                                     &alloc_dependencies,
+                                     &g](HloInstruction* inst) {
     return g.FindConsumers(inst,
-                           [is_layout_producer, layout_producing_ops,
-                            alloc_dependencies](HloInstruction* inst) {
+                           [&is_layout_producer, &layout_producing_ops,
+                            &alloc_dependencies](HloInstruction* inst) {
                              return !is_layout_producer(inst) &&
                                     !alloc_dependencies.contains(inst) &&
                                     layout_producing_ops.count(inst) == 0;
@@ -690,7 +690,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
   const auto source_ops = g.FindVertices(is_input);
 
   // Get everything that depends on a source op
-  const auto get_source_consumers = [g](HloInstruction* inst) {
+  const auto get_source_consumers = [&g](HloInstruction* inst) {
     return g.FindConsumers(inst, [](HloInstruction*) { return true; }, true);
   };
   const ForwardAllocationGraph source_consumers(source_ops,
