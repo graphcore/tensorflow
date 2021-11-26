@@ -183,8 +183,24 @@ class DataHandlerTest(keras_parameterized.TestCase):
           yield (ops.convert_to_tensor_v2_with_dispatch([step]),)
 
     with self.assertRaisesRegex(
-        ValueError, r"The provided set of data contains a shape \(None,\)"):
+        ValueError, (r"Please use \`tf\.data\.Dataset\.from_generator\(\)\` to"
+                     r" specify the shape of your data\.")):
       data_handler = data_adapter.IPUDataHandler(generator(),
+                                                 epochs=2,
+                                                 steps_per_epoch=3)
+      del data_handler
+
+  def test_iterator(self):
+    steps = []
+    for _ in range(2):
+      for step in range(3):
+        steps.append(ops.convert_to_tensor_v2_with_dispatch([step]))
+
+    with self.assertRaisesRegex(
+        ValueError, (r"wrap your iterator inside a generator like so:\n\ndef "
+                     r"generator:\n    while True:\n        yield next\(iterat"
+                     r"or\)\n\nand")):
+      data_handler = data_adapter.IPUDataHandler(iter(steps),
                                                  epochs=2,
                                                  steps_per_epoch=3)
       del data_handler

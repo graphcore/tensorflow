@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+from typing import Generator, Iterator
 from tensorflow.python.data.experimental.ops import cardinality
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import distribution_strategy_context as ds_context
@@ -69,6 +70,19 @@ class IPUDataHandler(data_adapter.DataHandler):
                                 use_multiprocessing=use_multiprocessing,
                                 distribution_strategy=strategy,
                                 model=model)
+    if isinstance(self._adapter, data_adapter.GeneratorDataAdapter):
+      hint = ("use `tf.data.Dataset.from_generator()` to specify the shape of "
+              "your data.")
+      if isinstance(x, Iterator) and not isinstance(x, Generator):
+        hint = ("wrap your iterator inside a generator like so:\n\n"
+                "def generator:\n"
+                "    while True:\n"
+                "        yield next(iterator)\n\n"
+                "and " + hint)
+      raise ValueError(
+          "The provided set of data is of type `{}` which is not "
+          "compatible with the IPU's requirement to know the data shape ahead "
+          "of time. Please {}".format(type(x).__name__, hint))
 
     dataset = self._get_and_post_process_dataset(class_weight)
 
