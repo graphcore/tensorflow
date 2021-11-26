@@ -43,10 +43,8 @@ class MetaGraph {
   MetaGraph(){};
 
   template <typename Predicate>
-  MetaGraphSet FindConsumers(T node, Predicate&& pred, bool inclusive,
-                             MetaGraphSet& visited) const {
-    MetaGraphSet consumers;
-
+  void FindConsumers(T node, Predicate&& pred, bool inclusive,
+                     MetaGraphSet& visited, MetaGraphSet& consumers) const {
     const auto itr = graph_.find(node);
     if (itr != graph_.end()) {
       for (const auto& neighbour : itr->second) {
@@ -57,15 +55,11 @@ class MetaGraph {
         if (pred(neighbour) && !already_visited) {
           consumers.insert(neighbour);
           visited.insert(neighbour);
-          MetaGraphSet neighbour_consumers =
-              FindConsumers(neighbour, pred, inclusive, visited);
-          consumers.insert(neighbour_consumers.begin(),
-                           neighbour_consumers.end());
+
+          FindConsumers(neighbour, pred, inclusive, visited, consumers);
         }
       }
     }
-
-    return consumers;
   }
 
   Graph graph_;
@@ -137,7 +131,10 @@ class MetaGraph {
     // FindConsumers is a depth first traversal - this is a wrapper for it where
     // we create a set of visited nodes to prevent getting stuck in cycles.
     MetaGraphSet visited;
-    return FindConsumers(node, pred, inclusive, visited);
+    MetaGraphSet consumers;
+    FindConsumers(node, pred, inclusive, visited, consumers);
+
+    return consumers;
   }
 
   template <typename Predicate>
