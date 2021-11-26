@@ -118,9 +118,9 @@ CreateStatefulGradientAccumulationWithMomentumAndAllReduceWithNorm(
 // Gradient accumulation is split into the following ops:
 // * HloGradientAccumulatorCreate - this op creates the gradient accumulation
 //   buffer and zeros it at the begining/after the gradients have been applied.
-// * HloGradientAccumulatorAdd - this op takes the accumulator on the LHS and
-//   the gradient on the RHS. This op is converted into an elementwise add
-//   before lowering.
+// * HloGradientAccumulatorAddWithScale - this op takes the accumulator with a
+//   scaling factor on the LHS and the gradient on the RHS. This op is
+//   converted into an elementwise add before lowering.
 // * HloGradientAccumulatorSink - this op combines accumulators when they are
 //   used in multiple pipeline stages and unifies them into a single buffer.
 class HloGradientAccumulatorCreate : public HloPoplarInstruction {
@@ -170,10 +170,11 @@ std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
 std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
     HloInstruction* const variable, bool is_remote = false);
 
-class HloGradientAccumulatorAdd : public HloPoplarInstruction {
+class HloGradientAccumulatorAddWithScale : public HloPoplarInstruction {
  public:
-  explicit HloGradientAccumulatorAdd(HloInstruction* const accumulator,
-                                     HloInstruction* const gradient);
+  explicit HloGradientAccumulatorAddWithScale(
+      HloInstruction* const accumulator, HloInstruction* const gradient,
+      HloInstruction* const accumulator_scale);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -195,8 +196,9 @@ class HloGradientAccumulatorAdd : public HloPoplarInstruction {
       HloCloneContext*) const override;
 };
 
-std::unique_ptr<HloInstruction> CreateGradientAccumulatorAdd(
-    HloInstruction* const accumulator, HloInstruction* const gradient);
+std::unique_ptr<HloInstruction> CreateGradientAccumulatorAddWithScale(
+    HloInstruction* const accumulator, HloInstruction* const gradient,
+    HloInstruction* const accumulator_scale);
 
 class HloGradientAccumulatorSink : public HloPoplarInstruction {
  public:

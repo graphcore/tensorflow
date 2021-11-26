@@ -911,7 +911,8 @@ def pipeline(computational_stages,
             # Create a new t for the accumulator buffer.
             acc = gen_poputil_ops.gradient_accumulator_create_from_shape(
                 shape=t.shape, output_type=dtype)
-            acc = gen_poputil_ops.gradient_accumulator_add(acc, t)
+            acc = gen_poputil_ops.gradient_accumulator_add_with_scale(
+                acc, t, math_ops.cast(1.0, dtype))
             sink = gen_poputil_ops.gradient_accumulator_sink(acc)
             return sink
 

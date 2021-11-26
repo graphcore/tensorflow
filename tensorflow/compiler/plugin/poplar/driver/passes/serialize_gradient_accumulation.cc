@@ -45,12 +45,22 @@ HloInstruction* ConvertOperand(HloInstruction* inst, int64 operand_index,
   return convert;
 }
 
+bool IsAccScaleConst1(HloInstruction* accumulator_scale) {
+  auto const_opt = GetConstantValue<float>(accumulator_scale);
+  if (!const_opt) {
+    return false;
+  }
+
+  return *const_opt == 1.0f;
+}
+
 Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
   HloComputation* comp = inst->parent();
 
   // Convert the GradientAccumulatorAdd into a normal add.
   HloInstruction* accumulator = inst->mutable_operand(0);
-  HloInstruction* to_serialize = inst->mutable_operand(1);
+  HloInstruction* gradient = inst->mutable_operand(1);
+  HloInstruction* accumulator_scale = inst->mutable_operand(2);
 
   const PrimitiveType accumulator_type = accumulator->shape().element_type();
   CHECK(primitive_util::IsFloatingPointType(accumulator_type));
@@ -58,8 +68,34 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
   // The accumulator type may be lower precision than the Add output, but
   // MakeBinaryHlo chooses the higher precision type as the output, so create
   // the Add op manually with the accumulator type.
-  HloInstruction* add = comp->AddInstruction(HloInstruction::CreateBinary(
-      accumulator->shape(), HloOpcode::kAdd, accumulator, to_serialize));
+  std::vector<HloInstruction*> to_outline;
+  HloInstruction* add;
+  if (IsAccScaleConst1(accumulator_scale)) {
+    add = comp->AddInstruction(HloInstruction::CreateBinary(
+        accumulator->shape(), HloOpcode::kAdd, accumulator, gradient));
+  } else {
+    if (accumulator_scale->shape().element_type() !=
+        accumulator->shape().element_type()) {
+      auto new_shape = ShapeUtil::ChangeElementType(
+          accumulator_scale->shape(), accumulator->shape().element_type());
+      accumulator_scale = comp->AddInstruction(
+          HloInstruction::CreateConvert(new_shape, accumulator_scale));
+    }
+    HloInstruction* broadcasted_accumulator_scale =
+        comp->AddInstruction(HloInstruction::CreateBroadcast(
+            accumulator->shape(), accumulator_scale, {}));
+    HloInstruction* scaled_accumulator =
+        comp->AddInstruction(HloInstruction::CreateBinary(
+            accumulator->shape(), HloOpcode::kMultiply, accumulator,
+            broadcasted_accumulator_scale));
+
+    // Do these need to be in the fusion?
+    to_outline.push_back(accumulator_scale);
+    to_outline.push_back(broadcasted_accumulator_scale);
+
+    add = comp->AddInstruction(HloInstruction::CreateBinary(
+        accumulator->shape(), HloOpcode::kAdd, scaled_accumulator, gradient));
+  }
 
   CHECK_EQ(add->shape().element_type(), accumulator_type) << add->ToString();
   inst->SetupDerivedInstruction(add);
@@ -337,7 +373,6 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
   // temporarily put it inside of a fusion computation. The
   // PostSerializeGradientAccumulation pass will inline this back after all the
   // optimizations are performed.
-  std::vector<HloInstruction*> to_outline;
   CHECK_EQ(accumulator->user_count(), 1);
   HloInstruction* next_inst = accumulator->users()[0];
 
@@ -394,7 +429,8 @@ StatusOr<bool> ConvertGradientAccumulatorAdds(HloModule* module) {
     // Get all the accumulators.
     std::vector<HloInstruction*> accumulator_adds;
     for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
-      if (IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(inst)) {
+      if (IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
+              inst)) {
         accumulator_adds.push_back(inst);
       }
     }

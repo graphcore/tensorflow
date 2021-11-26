@@ -1129,8 +1129,10 @@ pipeline_wrapper {
   c2 = f32[2] constant({10, 2})
   other_update = f32[2] add(p1, c2)
 
+  acc-scale = f32[] constant(1)
+
   create = f32[2] custom-call(other_update), custom_call_target="GradientAccumulatorCreate", backend_config="{}"
-  add = f32[2] custom-call(create, p1), custom_call_target="GradientAccumulatorAdd", backend_config="{}"
+  add = f32[2] custom-call(create, p1, acc-scale), custom_call_target="GradientAccumulatorAddWithScale", backend_config="{}"
   sink = f32[2] custom-call(add), custom_call_target="GradientAccumulatorSink", backend_config="{}"
 
 

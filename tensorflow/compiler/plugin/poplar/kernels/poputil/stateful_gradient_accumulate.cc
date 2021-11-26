@@ -171,9 +171,9 @@ REGISTER_IPU_OP("GradientAccumulatorCreate", GradientAccumulatorCreate<true>);
 REGISTER_IPU_OP("GradientAccumulatorCreateFromShape",
                 GradientAccumulatorCreate<false>)
 
-class GradientAccumulatorAdd : public XlaOpKernel, IpuOpKernel {
+class GradientAccumulatorAddWithScale : public XlaOpKernel, IpuOpKernel {
  public:
-  explicit GradientAccumulatorAdd(OpKernelConstruction* ctx)
+  explicit GradientAccumulatorAddWithScale(OpKernelConstruction* ctx)
       : XlaOpKernel(ctx), IpuOpKernel() {}
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -182,8 +182,11 @@ class GradientAccumulatorAdd : public XlaOpKernel, IpuOpKernel {
 
     auto accumulator = ctx->Input(0);
     auto gradient = ctx->Input(1);
+    auto accumulator_scale = ctx->Input(2);
+
     auto accumulator_shape = ctx->InputShape(0);
     auto gradient_shape = ctx->InputShape(1);
+    auto accumulator_scale_shape = ctx->InputShape(2);
 
     OP_REQUIRES(ctx, accumulator_shape.IsSameSize(gradient_shape),
                 errors::InvalidArgument(
@@ -191,22 +194,33 @@ class GradientAccumulatorAdd : public XlaOpKernel, IpuOpKernel {
                     accumulator_shape.DebugString(), " ",
                     gradient_shape.DebugString()));
 
+    xla::Shape accumulator_scale_xla_shape;
+    OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, accumulator_scale_shape,
+                                              &accumulator_scale_xla_shape));
+
+    OP_REQUIRES(ctx, xla::ShapeUtil::IsScalar(accumulator_scale_xla_shape),
+                errors::InvalidArgument(
+                    "Accumulator scale must be scalar, but has dimensions ",
+                    accumulator_scale_shape.DebugString()));
+
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx,
                    TensorShapeToXLAShape(dtype, gradient_shape, &xla_shape));
 
     xla::XlaOp output = xla::CustomCall(
-        b, PoplarOp_Name(PoplarOp::GradientAccumulatorAdd),
-        {accumulator, gradient}, xla_shape, attribute_map_.Serialise());
+        b, PoplarOp_Name(PoplarOp::GradientAccumulatorAddWithScale),
+        {accumulator, gradient, accumulator_scale}, xla_shape,
+        attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }
 
  private:
-  TF_DISALLOW_COPY_AND_ASSIGN(GradientAccumulatorAdd);
+  TF_DISALLOW_COPY_AND_ASSIGN(GradientAccumulatorAddWithScale);
 };
 
-REGISTER_IPU_OP("GradientAccumulatorAdd", GradientAccumulatorAdd);
+REGISTER_IPU_OP("GradientAccumulatorAddWithScale",
+                GradientAccumulatorAddWithScale);
 
 class GradientAccumulatorSink : public XlaOpKernel, IpuOpKernel {
  public:

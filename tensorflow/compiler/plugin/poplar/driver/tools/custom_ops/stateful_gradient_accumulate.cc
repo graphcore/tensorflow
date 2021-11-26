@@ -332,61 +332,71 @@ std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
   return HloGradientAccumulatorCreate::CreateFromShapeOnly(shape, is_remote);
 }
 
-HloGradientAccumulatorAdd::HloGradientAccumulatorAdd(
-    HloInstruction* const accumulator, HloInstruction* const gradient)
-    : HloPoplarInstruction(accumulator->shape(), {accumulator, gradient},
-                           PoplarOp::GradientAccumulatorAdd) {}
+HloGradientAccumulatorAddWithScale::HloGradientAccumulatorAddWithScale(
+    HloInstruction* const accumulator, HloInstruction* const gradient,
+    HloInstruction* const accumulator_scale)
+    : HloPoplarInstruction(accumulator->shape(),
+                           {accumulator, gradient, accumulator_scale},
+                           PoplarOp::GradientAccumulatorAddWithScale) {}
 
-absl::flat_hash_set<int64> HloGradientAccumulatorAdd::AllocatingIndices()
-    const {
+absl::flat_hash_set<int64>
+HloGradientAccumulatorAddWithScale::AllocatingIndices() const {
   return {};
 }
 
-bool HloGradientAccumulatorAdd::AllocatingOutput() const { return false; }
+bool HloGradientAccumulatorAddWithScale::AllocatingOutput() const {
+  return false;
+}
 
 absl::flat_hash_map<int64, int64>
-HloGradientAccumulatorAdd::LayoutDependencies() const {
+HloGradientAccumulatorAddWithScale::LayoutDependencies() const {
   return {};
 }
 
-HloPoplarUseDescriptions HloGradientAccumulatorAdd::GetUseDescriptions() const {
+HloPoplarUseDescriptions
+HloGradientAccumulatorAddWithScale::GetUseDescriptions() const {
   return UseDescriptionsNoInputOutputAlias();
 }
 
-HloPoplarBufferDescriptions HloGradientAccumulatorAdd::GetBufferDescriptions()
-    const {
+HloPoplarBufferDescriptions
+HloGradientAccumulatorAddWithScale::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
-const FindConsumersExtensionResults HloGradientAccumulatorAdd::FindConsumers(
+const FindConsumersExtensionResults
+HloGradientAccumulatorAddWithScale::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
-bool HloGradientAccumulatorAdd::AllowNonInplaceLowering() const {
+bool HloGradientAccumulatorAddWithScale::AllowNonInplaceLowering() const {
   return false;
 }
 
-bool HloGradientAccumulatorAdd::IsPopOpsElementwise() const { return false; }
+bool HloGradientAccumulatorAddWithScale::IsPopOpsElementwise() const {
+  return false;
+}
 
 std::unique_ptr<HloInstruction>
-HloGradientAccumulatorAdd::CloneWithNewOperandsImpl(
+HloGradientAccumulatorAddWithScale::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
-  CHECK_EQ(new_operands.size(), 2);
-  return absl::make_unique<HloGradientAccumulatorAdd>(new_operands[0],
-                                                      new_operands[1]);
+  CHECK_EQ(new_operands.size(), 3);
+  return absl::make_unique<HloGradientAccumulatorAddWithScale>(
+      new_operands[0], new_operands[1], new_operands[2]);
 }
 
 std::vector<std::string>
-HloGradientAccumulatorAdd::ExtraPoplarAttributesToStringImpl(
+HloGradientAccumulatorAddWithScale::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   return {};
 }
 
-std::unique_ptr<HloInstruction> CreateGradientAccumulatorAdd(
-    HloInstruction* const accumulator, HloInstruction* const gradient) {
-  return absl::make_unique<HloGradientAccumulatorAdd>(accumulator, gradient);
+std::unique_ptr<HloInstruction> CreateGradientAccumulatorAddWithScale(
+    HloInstruction* const accumulator, HloInstruction* const gradient,
+    HloInstruction* const accumulator_scale) {
+  return absl::make_unique<HloGradientAccumulatorAddWithScale>(
+      accumulator, gradient, accumulator_scale);
 }
 
 HloGradientAccumulatorSink::HloGradientAccumulatorSink(
@@ -581,15 +591,17 @@ static HloPoplarInstructionFactory gradient_accumulator_creator_factory(
     PoplarOp::GradientAccumulatorCreate,
     HloGradientAccumulatorCreateFactoryFunc);
 
-StatusOr<std::unique_ptr<HloInstruction>> HloGradientAccumulatorAddFactoryFunc(
-    HloCustomCallInstruction* call) {
-  CHECK_EQ(call->operand_count(), 2);
-  return CreateGradientAccumulatorAdd(call->mutable_operand(0),
-                                      call->mutable_operand(1));
+StatusOr<std::unique_ptr<HloInstruction>>
+HloGradientAccumulatorAddWithScaleFactoryFunc(HloCustomCallInstruction* call) {
+  CHECK_EQ(call->operand_count(), 3);
+  return CreateGradientAccumulatorAddWithScale(call->mutable_operand(0),
+                                               call->mutable_operand(1),
+                                               call->mutable_operand(2));
 }
 
 static HloPoplarInstructionFactory gradient_accumulator_add_factory(
-    PoplarOp::GradientAccumulatorAdd, HloGradientAccumulatorAddFactoryFunc);
+    PoplarOp::GradientAccumulatorAddWithScale,
+    HloGradientAccumulatorAddWithScaleFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>> HloGradientAccumulatorSinkFactoryFunc(
     HloCustomCallInstruction* call) {
