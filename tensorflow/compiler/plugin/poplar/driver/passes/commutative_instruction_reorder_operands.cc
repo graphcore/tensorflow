@@ -127,6 +127,8 @@ StatusOr<bool> CommutativeInstructionReorderOperands::Run(HloModule* module) {
       continue;
     }
 
+    auto reachability_map = HloReachabilityMap::Build(comp);
+
     std::vector<HloInstruction*> to_reorder;
     for (auto* inst : comp->MakeInstructionPostOrder()) {
       if (!IsElementwiseBinaryCommutative(inst)) {
@@ -148,7 +150,6 @@ StatusOr<bool> CommutativeInstructionReorderOperands::Run(HloModule* module) {
       // Check whether the lhs can still be live after this instruction
       // executes, but rhs is not live. Swap them to allow this operation to be
       // inplace.
-      auto reachability_map = HloReachabilityMap::Build(comp);
       auto is_live_after =
           [&inst, &reachability_map](const HloInstruction* input) -> bool {
         for (const HloInstruction* user : input->users()) {
