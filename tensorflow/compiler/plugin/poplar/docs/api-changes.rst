@@ -137,6 +137,8 @@ ____________________
     will trigger a deprecation warning.
   - 'IPUMultiWorkerStrategy' is in the process of being deprecated. Using 'IPUMultiWorkerStrategy'
     will trigger a deprecation warning.
+  - The flag `save_interval_report` from `TF_POPLAR_FLAGS` is now deprecated. Please
+    use LIBPVA instead.
 
 
 Release 2.3
