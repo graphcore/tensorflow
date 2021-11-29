@@ -188,7 +188,10 @@ StatusOr<poplar::program::Sequence> IpuInterCopyOp::Creator(
   // For each source Shard, store information about copies it is about to
   // perform.
   using ShardCopyInfos = std::map<int64, DestinationShardCopyInfos>;
-  ShardCopyInfos copy_informations;
+  // For each source element type, store information about shard copies it is
+  // about to perform.
+  using TypeShardCopyInfos = std::map<poplar::Type, ShardCopyInfos>;
+  TypeShardCopyInfos copy_informations;
   std::vector<int64> operand_shardings;
 
   // Construct the information about the source and destination copies.
@@ -218,7 +221,8 @@ StatusOr<poplar::program::Sequence> IpuInterCopyOp::Creator(
 
         TF_CHECK_OK(AddOutputTensor(tensor_map, inst, flat_tuple_index,
                                     copy_info.output));
-        copy_informations[src_shard][dst_shard].push_back(copy_info);
+        auto dtype = copy_info.input.elementType();
+        copy_informations[dtype][src_shard][dst_shard].push_back(copy_info);
       } else if (operand_tensors[index].IsOpaque()) {
         TF_CHECK_OK(AddOutput(tensor_map, inst, flat_tuple_index,
                               operand_tensors[index]));
@@ -239,27 +243,29 @@ StatusOr<poplar::program::Sequence> IpuInterCopyOp::Creator(
   // Insert the copies.
   poplar::program::Sequence inter_ipu_copies({}, debug_info);
   poplar::program::Sequence intra_ipu_copies({}, debug_info);
-  for (auto& src_to_dst : copy_informations) {
-    const int64 src_shard = src_to_dst.first;
+  for (auto& type_to_src_to_dst : copy_informations) {
+    for (auto& src_to_dst : type_to_src_to_dst.second) {
+      const int64 src_shard = src_to_dst.first;
 
-    for (auto& dst_to_copy_infos : src_to_dst.second) {
-      const int64 dst_shard = dst_to_copy_infos.first;
-      auto& infos = dst_to_copy_infos.second;
+      for (auto& dst_to_copy_infos : src_to_dst.second) {
+        const int64 dst_shard = dst_to_copy_infos.first;
+        auto& infos = dst_to_copy_infos.second;
 
-      VLOG(2) << "Adding copies from shard " << src_shard << " to "
-              << dst_shard;
-      poplar::program::Sequence& prog =
-          src_shard == dst_shard ? intra_ipu_copies : inter_ipu_copies;
+        VLOG(2) << "Adding copies from shard " << src_shard << " to "
+                << dst_shard;
+        poplar::program::Sequence& prog =
+            src_shard == dst_shard ? intra_ipu_copies : inter_ipu_copies;
 
-      std::vector<poplar::Tensor> inputs(infos.size());
-      std::vector<poplar::Tensor> outputs(infos.size());
-      for (int64 i = 0; i != infos.size(); ++i) {
-        inputs[i] = infos[i].input_for_copy;
-        outputs[i] = infos[i].output_for_copy;
+        std::vector<poplar::Tensor> inputs(infos.size());
+        std::vector<poplar::Tensor> outputs(infos.size());
+        for (int64 i = 0; i != infos.size(); ++i) {
+          inputs[i] = infos[i].input_for_copy;
+          outputs[i] = infos[i].output_for_copy;
+        }
+        prog.add(poplar::program::Copy(poplar::concat(inputs),
+                                       poplar::concat(outputs), false,
+                                       {debug_info}));
       }
-      prog.add(poplar::program::Copy(poplar::concat(inputs),
-                                     poplar::concat(outputs), false,
-                                     {debug_info}));
     }
   }
 
