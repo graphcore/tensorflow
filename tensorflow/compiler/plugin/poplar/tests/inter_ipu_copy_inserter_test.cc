@@ -16,6 +16,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_compiler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -841,6 +843,75 @@ cluster_1  {
   EXPECT_TRUE(
       IsPoplarInstruction(PoplarOp::ExecutionCounter)(root->operand(1)));
   EXPECT_THAT(root->operand(1)->sharding().GetUniqueDevice(), 1);
+}
+
+/*
+ * Tests poplar compiling an inter-ipu-copy of a tuple containing multiple
+ * types.
+ *
+ * An inter-ipu-copy op should be inserted between t0 and t1 in the HLO graph
+ * below to copy the tuple containing f32 and s32 elements from IPU0 to IPU1.
+ * This should then compile successfully.
+ */
+TEST_F(InterIpuCopyInserterTest, IpuCopyTuple) {
+  std::string hlo_string = R"(
+HloModule top
+
+cluster_1  {
+  in0 = f32[4] parameter(0), sharding={maximal device=0}
+  index0 = s32[] constant(0), sharding={maximal device=0}
+  t0 = (f32[4], s32[]) tuple(in0, index0), sharding={{maximal device=0}, {maximal device=0}}
+  t1 = (f32[4], s32[]) copy((f32[4], s32[]) t0), sharding={{maximal device=1}, {maximal device=1}}
+  in1 = f32[4] get-tuple-element(t1), index=0, sharding={maximal device=1}
+  index1 = s32[] get-tuple-element(t1), index=1, sharding={maximal device=1}
+  index1tens = s32[1] reshape(index1), sharding={maximal device=1}
+  slice = f32[1] dynamic-slice(in1, index1tens), dynamic_slice_sizes={1}, sharding={maximal device=1}
+  ROOT tuple = (f32[1]) tuple(slice),
+      sharding={{maximal device=1}}
+}
+  )";
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+  config.set_argument_input_indices({0});
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string, config));
+
+  // Check initial graph as expected
+  auto* entry = module->entry_computation();
+  auto* slice = entry->GetInstructionWithName("slice");
+
+  EXPECT_EQ(entry->instruction_count(), 9);
+
+  InterIpuCopyInserter inserterPass;
+  EXPECT_TRUE(inserterPass.Run(module.get()).ValueOrDie());
+
+  // Check that new ipu-copy has been inserted before the copy op (t1)
+  EXPECT_EQ(entry->instruction_count(), 10);
+  auto* ipucopy0 = slice->operand(0)->operand(0)->operand(0);
+  auto* ipucopy1 = slice->operand(1)->operand(0)->operand(0)->operand(0);
+
+  // check that the ipu copy op is the same op
+  EXPECT_EQ(ipucopy0, ipucopy1);
+  // check copy is inserted where t0 used to be
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::IpuInterCopy)(ipucopy0));
+
+  auto* platform = dynamic_cast<PoplarPlatform*>(
+      se::MultiPlatformManager::PlatformWithName("Poplar").ConsumeValueOrDie());
+
+  IpuOptions opts;
+
+  opts.add_device_config()->set_auto_count(2);
+  opts.set_creator_id(IpuOptionsCreator::IPU_UTILS);
+
+  EXPECT_TRUE(platform->ConfigurePoplarDevices(opts).ok());
+
+  auto* stream_executor = platform->ExecutorForDevice(0).ConsumeValueOrDie();
+
+  PoplarCompiler compiler;
+
+  // Test compile is successful
+  EXPECT_IS_OK(
+      compiler.RunBackend(std::move(module), stream_executor, nullptr));
 }
 
 }  // namespace
