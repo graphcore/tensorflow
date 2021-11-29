@@ -35,7 +35,7 @@ StatusOr<bool> DeadControlDependenciesElimination::Run(HloModule* module) {
 
     for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
       if (inst->user_count() == 0 && comp->root_instruction() != inst &&
-          inst->opcode() != HloOpcode::kParameter && !inst->HasSideEffect()) {
+          !inst->HasSideEffect()) {
         VLOG(2) << "Dropping control dependencies for " << inst->ToString();
         // To preserve topological constraints, make sure that control
         // predecessors are copied to control successors.
@@ -44,9 +44,13 @@ StatusOr<bool> DeadControlDependenciesElimination::Run(HloModule* module) {
             TF_RETURN_IF_ERROR(predecessor->AddControlDependencyTo(successor));
           }
         }
+        changed = inst->control_successors().size() ||
+                  inst->control_predecessors().size();
+
         TF_RETURN_IF_ERROR(inst->DropAllControlDeps());
-        CHECK(comp->IsSafelyRemovable(inst));
-        changed = true;
+        if (inst->opcode() != HloOpcode::kParameter) {
+          CHECK(comp->IsSafelyRemovable(inst));
+        }
       }
     }
   }
