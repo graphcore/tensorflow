@@ -35,8 +35,6 @@ class DumpPoplarInfo(xla_test.XLATestCase):
 
       tempdir = tempfile.mkdtemp('report_dir')
       os.environ['TF_POPLAR_FLAGS'] = ('--save_vertex_graph=' + tempdir + " " +
-                                       '--save_interval_report=' + tempdir +
-                                       " " +
                                        os.environ.get('TF_POPLAR_FLAGS', ''))
 
       def my_model(pa, pb, pc):
@@ -60,9 +58,7 @@ class DumpPoplarInfo(xla_test.XLATestCase):
       self.assertAllClose(result, [6.] * 2048)
 
       vertex_graphs = glob.glob(os.path.join(tempdir, "*.vertex_graph"))
-      interval_reports = glob.glob(os.path.join(tempdir, "*.csv"))
       self.assertEqual(len(vertex_graphs), 1)
-      self.assertEqual(len(interval_reports), 1)
 
 
 if __name__ == "__main__":

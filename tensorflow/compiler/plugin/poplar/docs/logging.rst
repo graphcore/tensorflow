@@ -58,28 +58,6 @@ The Graphviz ``dot`` command can be used to convert this data to an image.
 More information on the XLA flags can be found in the definition of the XLA proto here:
 https://github.com/tensorflow/tensorflow/blob/master/tensorflow/compiler/xla/xla.proto
 
-
-Dumping auxiliary Poplar information
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Two environment variable flags are available to get to extra Poplar
-information: ``--save_vertex_graph`` and ``--save_interval_report``.
-
-Poplar vertex graph
-___________________
-
-The Poplar vertex graph is a DOT file containing a complete description of the
-lowered Poplar graph.  Each node in the graph represents one vertex in the
-Poplar graph operating on one region of a tensor.
-
-Poplar interval report
-______________________
-
-The interval report is a CSV file describing the number of tiles executing,
-exchanging and syncing on each instruction cycle.
-
-:ref:`env-var-section` describes how to set the environment flags.
-
 .. _xla_file_naming:
 
 XLA graph file naming

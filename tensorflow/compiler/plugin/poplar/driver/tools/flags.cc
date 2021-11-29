@@ -143,8 +143,7 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
 
 PoplarXlaFlags::PoplarXlaFlags() {
   // Struct for deprecated flags.
-  struct DeprecatedFlags {
-  };
+  struct DeprecatedFlags {};
 
   DeprecatedFlags deprecated_flags;
   auto flag_usage = GetFlagUsage();
@@ -216,6 +215,11 @@ PoplarXlaFlags::PoplarXlaFlags() {
     LOG(FATAL) << "The flag \"synthetic_data_initializer\" can only be used "
                   "in combination with \"use_synthetic_data\" or "
                   "\"synthetic_data_categories\".";
+  }
+
+  if (!save_interval_report.empty()) {
+    LOG(INFO) << "The flag \"save_interval_report\" is deprecated. Please use "
+                 "LIBPVA instead.";
   }
 
   // Hash all the flags which affect the graph generation and compilation only.
