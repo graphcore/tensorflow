@@ -216,7 +216,7 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'build': build_model_rnn1,
           'counters': {
-              'Copy': 35 if TF1 else 33,
+              'Copy': 35 if TF1 else 32,
               'host-exchange-local-copy': 2
           },
           'total_memory': 4544890 if TF1 else 3893674,

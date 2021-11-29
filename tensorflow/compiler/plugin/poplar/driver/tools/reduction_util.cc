@@ -136,8 +136,7 @@ StatusOr<popops::Operation> GetPoplibsReductionOperation(
 
   switch (inst->opcode()) {
     case HloOpcode::kFusion:
-      if (IsPopOpsFusion(inst, "reduction_fp16_input") ||
-          IsPopOpsFusion(inst, "reduction_scaled")) {
+      if (IsPopOpsFusion(inst, "reduction_fp16_input")) {
         reduction_comp = inst->fused_instructions_computation()
                              ->root_instruction()
                              ->to_apply();

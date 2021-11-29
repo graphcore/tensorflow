@@ -24,6 +24,7 @@ limitations under the License.
 #include <popops/Reduce.hpp>
 #include <poputil/TileMapping.hpp>
 #include <poputil/Util.hpp>
+
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -285,25 +286,23 @@ StatusOr<poplar::program::Sequence> CreateSimpleReduction(
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   return CreateSimpleReduction(res, inst, inst, output_shape, tensor_map,
-                               /*with_scale=*/false, debug_name_and_id);
+                               debug_name_and_id);
 }
 
 StatusOr<poplar::program::Sequence> CreateSimpleReduction(
     CompilerResources& res, const HloInstruction* inst,
     const HloInstruction* reduce_inst, const xla::Shape& output_shape,
-    TensorMap& tensor_map, bool with_scale,
-    const poplar::DebugNameAndId& debug_name_and_id) {
+    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   TF_ASSIGN_OR_RETURN(popops::Operation reduction_operation,
                       GetPoplibsReductionOperation(reduce_inst));
   return CreateSimpleReduction(res, reduction_operation, inst, reduce_inst,
-                               output_shape, tensor_map, with_scale,
-                               debug_name_and_id);
+                               output_shape, tensor_map, debug_name_and_id);
 }
 
 StatusOr<poplar::program::Sequence> CreateSimpleReduction(
     CompilerResources& res, popops::Operation reduction_operation,
     const HloInstruction* inst, const HloInstruction* reduce_inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map, bool with_scale,
+    const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
   poplar::Tensor out;
@@ -352,7 +351,7 @@ StatusOr<poplar::program::Sequence> CreateSimpleReduction(
 
       // Map the reduce output to the same number of tiles preventing subatomic
       // stores.
-      const auto get_lcm = [](uint32 a, uint32 b) {
+      auto get_lcm = [](uint32 a, uint32 b) {
         if (a > b) {
           return (a / tensorflow::MathUtil::GCD<uint32>(a, b)) * b;
         } else if (a < b) {
@@ -375,21 +374,12 @@ StatusOr<poplar::program::Sequence> CreateSimpleReduction(
       poputil::mapTensorLinearly(graph, out, 0, grain_size);
     }
 
-    popops::ReduceParams reduce_params(reduction_operation);
-    if (with_scale) {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor scale,
-                          FindInstructionInput(tensor_map, res, inst, 2, seq,
-                                               debug_name_and_id));
-      reduce_params = popops::ReduceParams(reduction_operation, false, scale);
-    }
-
     popops::reduceWithOutput(graph, to_reduce, out, reduction_dims,
-                             reduce_params, seq, {debug_name_and_id});
+                             reduction_operation, seq, {debug_name_and_id});
 
     // Apply initial value
     Literal identity_literal =
         GetIdentityConstantLiteral(root, inst->shape().element_type());
-
     auto* init_inst = inst->operand(1);
     if (!(init_inst->IsConstant() &&
           init_inst->literal() == identity_literal)) {
