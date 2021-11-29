@@ -1576,8 +1576,13 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       if (resources.recomputation_enabled) {
         pipeline.AddPass<FlattenCallGraph>();
       }
-      pipeline.AddPass<DeadControlDependenciesElimination>();
-      pipeline.AddPass<HloDCE>();
+      {
+        auto& dce_pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+            "dead-code-and-control-deps-elimination",
+            pipeline_compiler_stats.get());
+        dce_pass.AddPass<DeadControlDependenciesElimination>();
+        dce_pass.AddPass<HloDCE>();
+      }
       // Beyond this point non of the passes in the pipeline are allowed to
       // modify the instructions in the HloModule.
 

@@ -85,6 +85,28 @@ ENTRY c1 {
   EXPECT_THAT(log->control_successors(), ::testing::ElementsAre(add));
 }
 
+TEST_F(DeadControlDependenciesEliminationTest, TestParameters) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  arg0 = f32[] parameter(0)
+  arg1 = f32[] parameter(1)
+  ROOT log = f32[] log(arg0)
+  arg2 = f32[] parameter(2), control-predecessors={log, arg1}
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(hlo, GetModuleConfigForTest()));
+  EXPECT_TRUE(
+      DeadControlDependenciesElimination().Run(module.get()).ValueOrDie());
+
+  HloInstruction* arg2 = FindInstruction(module.get(), "arg2");
+
+  EXPECT_TRUE(arg2->control_predecessors().empty());
+  EXPECT_TRUE(arg2->control_successors().empty());
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
