@@ -1605,10 +1605,14 @@ StatusOr<std::size_t> PoplarExecutor::AttachToPoplarDevice(
     absl::Span<const poplar::Device> device_list, int32 ordinal,
     bool wait_for_device) {
   TENSORFLOW_TRACEPOINT();
+  const std::string error_probable_causes =
+      " Common causes of this error include: incorrect "
+      "configuration of your V-IPU partition, requesting more IPUs than are "
+      "available on your system, or IPUs being used by another program.";
   if (device_list.empty()) {
     return InvalidArgumentStrCat(
         "No device matches the requested configuration for ordinal ", ordinal,
-        ".");
+        ".", error_probable_causes);
   }
 
   const uint64 on_demand_device_poll_time =
@@ -1617,7 +1621,6 @@ StatusOr<std::size_t> PoplarExecutor::AttachToPoplarDevice(
       on_demand_device_poll_time * 1000ULL;
   const uint64 on_demand_device_timeout =
       PoplarXlaFlags::Get().on_demand_device_timeout;
-
   tensorflow::Env* env = tensorflow::Env::Default();
   auto start_time = std::chrono::steady_clock::now();
 
@@ -1643,7 +1646,7 @@ StatusOr<std::size_t> PoplarExecutor::AttachToPoplarDevice(
       if (elapsed_time.count() > on_demand_device_timeout) {
         return InternalErrorStrCat(
             "Timed out trying to find an available device for ordinal ",
-            ordinal, ".");
+            ordinal, ".", error_probable_causes);
       } else {
         if (!logged_message) {
           LOG(INFO) << "Currently there is no available device for ordinal ",
@@ -1654,7 +1657,8 @@ StatusOr<std::size_t> PoplarExecutor::AttachToPoplarDevice(
       }
     } else {
       return InternalErrorStrCat(
-          "Could not find an available device for ordinal ", ordinal, ".");
+          "Could not find an available device for ordinal ", ordinal, ".",
+          error_probable_causes);
     }
   }
 }
