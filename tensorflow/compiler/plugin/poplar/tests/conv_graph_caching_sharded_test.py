@@ -67,7 +67,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Note how there are two convolutions
     ok = [
-        '__seed*', '*OnTileCopy*', 'vs/conv2d/Conv2D/convolution.*',
+        '*OnTileCopy*', 'vs/conv2d/Conv2D/convolution.*',
         'Copy_vs/conv2d/Conv2D/convolution.*',
         'vs/conv2d_1/Conv2D/convolution.*'
     ]

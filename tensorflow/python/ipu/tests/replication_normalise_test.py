@@ -55,7 +55,6 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
     # pylint: disable=line-too-long
     ok = [
         'setStochasticRounding',
-        '__seed',
         'IpuReplicationNormalise/replication-normalise*/replication_normalise/Op/Mul',
     ]
     # pylint: enable=line-too-long
@@ -88,10 +87,8 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
     # pylint: disable=line-too-long
     ok = [
         'setStochasticRounding',
-        '__seed*',
         'IpuReplicationNormalise/replication-normalise*/replication_normalise/Op/Mul',
         'add/add*/Add',
-        '[cC]opy_',
     ]
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)

@@ -79,7 +79,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Would fail if there were two batch norms in the graph
     ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Copy_',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
     ]
@@ -122,8 +121,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Matches two convolutions
     ok = [
-        '__seed*',
-        'host-exchange-local-copy-',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
         'vs/Cast/convert.*/Cast',
@@ -169,7 +166,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Matches two convolutions
     ok = [
-        '__seed*', 'host-exchange-local-copy-',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
         'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
@@ -230,8 +226,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     # (note that we don't cache gradient application)
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
-        'Copy*',
         'vs/conv1/Conv2D/convolution.*/Conv_1x1',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-training.*/',
         'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
@@ -301,7 +295,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Would fail if there were two batch norms in the graph
     ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Copy_',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/PopnnGroupNormInference/group-norm-inference*/'
     ]
@@ -362,7 +355,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Would fail if there were two batch norms in the graph
     ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Copy_',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/PopnnGroupNormStatistics/group-norm-statistics*/',
         'vs/PopnnGroupNormInference/group-norm-inference*/'
@@ -416,7 +408,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Would fail if there were two batch norms in the graph
     ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Copy_',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/PopnnGroupNormInference/group-norm-inference*/',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
@@ -491,9 +482,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     # One GN for forwards and one GN for grad
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
-        'host-exchange-local-copy-',
-        'Copy_',
         'vs/conv1/Conv2D/convolution*/Conv_1x1',
         'vs/PopnnGroupNormTraining/group-norm-training*/Norm',
         'vs/PopnnGroupNormTraining/group-norm-training*/iStdDev',
@@ -558,8 +546,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     self.assert_max_tile_memory(report, 132230, tolerance=0.2)
     # Would fail if there were two batch norms in the graph
     ok = [
-        '__seed*',
-        '*[cC]opy',
         'moments/SquaredDifference/square',
         'moments/SquaredDifference/subtract',
         'a/batch-norm-inference',

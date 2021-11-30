@@ -51,7 +51,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Check that there are no casts to float at the beginning.
     ok = [
-        '__seed*', 'host-exchange-local-copy-',
         'Sum/reduce*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
         'Sum/reduce*/ReduceFinalStage/IntermediateToOutput/Reduce'
     ]
@@ -95,7 +94,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*',
         'Sum/reduce*/Reduce',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
@@ -124,10 +122,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, 7.5)
 
     report = pva.openReport(report_helper.find_report())
-    ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Sum/reduce*/Reduce',
-        'Sum_1/reduce*/Reduce', 'add/add'
-    ]
+    ok = ['Sum/reduce*/Reduce', 'Sum_1/reduce*/Reduce', 'add/add']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testNoCastsF16ToF32ToF16(self):
@@ -170,8 +165,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*', 'host-exchange-local-copy-', 'add/*/expression/Cast',
-        'add/*/expression/Op/Add', 'Cast_1/convert.*/Cast'
+        'add/*/expression/Cast', 'add/*/expression/Op/Add',
+        'Cast_1/convert.*/Cast'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -194,8 +189,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Mean/fusion/Reduce',
-        'Mean/fusion*/Op/Multiply', 'Mean/convert*/Cast'
+        'Mean/fusion/Reduce', 'Mean/fusion*/Op/Multiply', 'Mean/convert*/Cast'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -218,10 +212,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [val, val])
 
     report = pva.openReport(report_helper.find_report())
-    ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Max/reduce*/Reduce',
-        'Cast/convert*/Cast'
-    ]
+    ok = ['Max/reduce*/Reduce', 'Cast/convert*/Cast']
     self.assert_all_compute_sets_and_list(report, ok)
 
 

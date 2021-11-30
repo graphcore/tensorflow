@@ -156,10 +156,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
                                                           fmt)))
 
       report = pva.openReport(report_helper.find_report())
-      ok = [
-          '__seed*', 'host-exchange-local-copy-',
-          'cnv4*/convolution.*/Conv_8x8_stride4x4', 'ba4*/fusion/Op/Add'
-      ]
+      ok = ['cnv4*/convolution.*/Conv_8x8_stride4x4', 'ba4*/fusion/Op/Add']
       self.assert_all_compute_sets_and_list(report, ok)
 
   def testConv1x1_WithBias(self):
@@ -195,10 +192,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
         self.assertAllClose(result, np.zeros(self._ip_shp([1, 1, 1, 16], fmt)))
 
       report = pva.openReport(report_helper.find_report())
-      ok = [
-          '__seed*', 'Copy_', 'cnv5*/convolution.*/Conv_1x1',
-          'ba5*/fusion/Op/Add'
-      ]
+      ok = ['cnv5*/convolution.*/Conv_1x1', 'ba5*/fusion/Op/Add']
       self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvBackpropInput(self):
@@ -230,8 +224,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
-        'Copy_',
         'Conv2DBackpropInput/conv-with-reverse/Conv_2x2',
     ]
     # pylint: enable=line-too-long
@@ -265,8 +257,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*',
-        '[cC]opy',
         'Conv2DBackpropFilter/convolution.*/Conv_8x8',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
@@ -297,10 +287,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
                     [[43, 36, 33, 25, 19, 10], [61, 51, 45, 34, 25, 13]]]])
 
     report = pva.openReport(report_helper.find_report())
-    ok = [
-        '__seed*', 'host-exchange-local-copy-',
-        'depthwise/convolution.*/Conv_1x1', 'add/fusion*/Add'
-    ]
+    ok = ['depthwise/convolution.*/Conv_1x1', 'add/fusion*/Add']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testDepthwiseConv3x1(self):
@@ -329,10 +316,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
-    ok = [
-        '__seed*', 'host-exchange-local-copy-',
-        'depthwise/convolution.*/Conv_1x1', 'add/fusion*/Add'
-    ]
+    ok = ['depthwise/convolution.*/Conv_1x1', 'add/fusion*/Add']
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -361,7 +345,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
-        '__seed*', 'copy*OnTileCopy-',
         'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/Conv_3x3/Convolve',
         'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/Conv_3x3/WeightsTranspose'
     ]
@@ -393,7 +376,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
         'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/*Transpose',
         'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/Conv_1x1',
     ]
