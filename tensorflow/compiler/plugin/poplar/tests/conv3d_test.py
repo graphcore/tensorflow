@@ -148,7 +148,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Copy_',
+        '__seed*', 'host-exchange-local-copy-',
         'Conv3D/convolution.*/Conv_1x1', 'add/fusion/Op/Add'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
