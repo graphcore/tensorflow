@@ -98,8 +98,6 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         'add/add*/Op/Add',
         'Sigmoid/sigmoid/Nonlinearity',
         'sub/subtract*/Op/Subtract',
-        '__seed',
-        '[cC]opy',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
     self.assert_total_tile_memory(report, 204616, tolerance=0.1)
@@ -171,8 +169,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     # pylint: disable=line-too-long
     ok = [
         'MatMul/dot*/Conv_1', 'add/add*/Op/Add',
-        'Sigmoid/sigmoid/Nonlinearity', 'sub/subtract*/Op/Subtract', '__seed',
-        '[cC]opy', 'SparseSoftmaxCrossEntropyWithLogits',
+        'Sigmoid/sigmoid/Nonlinearity', 'sub/subtract*/Op/Subtract',
+        'SparseSoftmaxCrossEntropyWithLogits',
         'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',
         'gradients/sub_grad/Neg/negate*/Op/Negate',
         'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad*/NonLinearityGrad',
@@ -259,8 +257,6 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     # cached.
     # pylint: disable=line-too-long
     ok = [
-        '__seed/set/setMasterSeed',
-        '__seed/get/getSeeds',
         'matmul/dot*/Conv_1',
         'add_0/fusion/Op/Add',
         'Sigmoid/sigmoid/Nonlinearity',
@@ -272,7 +268,6 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         'GradientDescent/update_1/w/ResourceApplyGradientDescent/scaled-inplace',
         'GradientDescent/update_2/bias/ResourceApplyGradientDescent/scaled-inplace',
         'GradientDescent/update_2/w/ResourceApplyGradientDescent/scaled-inplace',
-        '[cC]opy',
         '/Transpose',
         'gradients/matmul_grad/MatMul/dot',
         'gradients/matmul_grad/MatMul_1/dot',
@@ -368,8 +363,6 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         'slice_7*/add.*/Op/Add',
         'slice_8*/add.*/Op/Add',
         'slice_9*/add.*/Op/Add',
-        '__seed',
-        '[cC]opy',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
     self.assert_total_tile_memory(report, 6415442, tolerance=0.1)
@@ -420,8 +413,6 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     ok = [
         'Relu/relu/Nonlinearity',
         'Relu/relu.*/Nonlinearity',
-        '__seed',
-        '[cC]opy',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -464,7 +455,6 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     report = pva.openReport(report_helper.find_report())
     ok = [
         'Relu/relu*/Nonlinearity',
-        '__seed',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -541,8 +531,6 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         '*/slice-apply*/Op/Add',
         'Sigmoid/sigmoid/Nonlinearity',
         'sub/subtract*/Op/Subtract',
-        '__seed',
-        '[cC]opy',
         'Transpose',
         'SparseSoftmaxCrossEntropyWithLogits',
         'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',

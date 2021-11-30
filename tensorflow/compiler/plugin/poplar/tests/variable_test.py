@@ -280,7 +280,6 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       self.assertAllClose(o, 2.0, 0.2, 0.2)
 
       ok = [
-          '__seed*',
           'vs/z1/Initializer/random_normal/RandomStandardNormal/fusion/normal'
       ]
       self.assert_all_compute_sets_and_list(report, ok)
@@ -307,7 +306,6 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       self.assertAllClose(o, [2.0, 2.0], 0.2, 0.2)
 
       ok = [
-          '__seed*',
           'vs/z1/Initializer/random_normal/RandomStandardNormal/fusion/normal'
       ]
       self.assert_all_compute_sets_and_list(report, ok)
@@ -355,7 +353,6 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
 
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
         'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal',
         'z1/Initializer/truncated_normal/mul',
         'z1/Initializer/truncated_normal/add'
@@ -388,7 +385,6 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
 
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
         'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal',
         'z1/Initializer/truncated_normal/scaled-inplace',
     ]
@@ -420,7 +416,6 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
 
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
         'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal'
     ]
     # pylint: enable=line-too-long
@@ -451,7 +446,6 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
 
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
         'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal'
     ]
     # pylint: enable=line-too-long
@@ -480,7 +474,6 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       self.assertAllClose(o, 0.0, 2.0, 2.0)
 
       ok = [
-          '__seed*',
           'vs/z1/Initializer/random_uniform/RandomUniform/fusion/uniform'
       ]
       self.assert_all_compute_sets_and_list(report, ok)
@@ -508,7 +501,6 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       self.assertAllClose(o, [0.0, 0.0], 2.0, 2.0)
 
       ok = [
-          '__seed*',
           'vs/z1/Initializer/random_uniform/RandomUniform/fusion/uniform'
       ]
       self.assert_all_compute_sets_and_list(report, ok)

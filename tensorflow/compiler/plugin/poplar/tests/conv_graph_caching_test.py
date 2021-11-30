@@ -75,8 +75,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     # Would fail if there were two convolutions in the graph as they would be
     # called conv2d and conv2d_1
     ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Copy_',
-        'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'Copy_'
+        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -118,9 +117,6 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Matches two convolutions
     ok = [
-        '__seed*',
-        'host-exchange-local-copy-',
-        'Copy_',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/Cast/convert.*/Cast',
         'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
@@ -162,7 +158,6 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Matches two convolutions
     ok = [
-        '__seed*', 'host-exchange-local-copy-',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
     ]
@@ -204,7 +199,6 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Matches two convolutions
     ok = [
-        '__seed*', 'host-exchange-local-copy-', 'Copy_',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
         'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
     ]
@@ -260,8 +254,6 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     # Both BackpropFilter should be shared
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
-        'copy*/OnTileCopy',
         'vs/conv1/Conv2D/convolution.*/Conv_1x1',
         'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
         'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
@@ -323,9 +315,6 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     # Both BackpropFilter should be shared
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
-        'host-exchange-local-copy-',
-        'Copy_',
         'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
         'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
         'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
@@ -493,7 +482,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     self.assert_max_tile_memory(report, 401526, tolerance=0.2)
 
     # Would fail if there were two convolutions in the graph
-    ok = ['__seed*', 'a/convolution', '[cC]opy']
+    ok = ['a/convolution']
     self.assert_all_compute_sets_and_list(report, ok)
 
 

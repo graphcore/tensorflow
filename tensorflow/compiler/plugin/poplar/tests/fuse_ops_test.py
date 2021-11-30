@@ -64,7 +64,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [0.002473, 0.5, 0.997527])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'Sigmoid/sigmoid/Nonlinearity']
+    ok = ['Sigmoid/sigmoid/Nonlinearity']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testSigmoidNotInplace(self):
@@ -85,7 +85,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
-    ok = ['__seed*', 'Sigmoid/sigmoid/Nonlinearity', 'add/add.*/Add']
+    ok = ['Sigmoid/sigmoid/Nonlinearity', 'add/add.*/Add']
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -107,7 +107,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [2.0, 0.25, 0.0])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'SigmoidGrad/sigmoid-grad/NonLinearityGrad']
+    ok = ['SigmoidGrad/sigmoid-grad/NonLinearityGrad']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testRelu(self):
@@ -127,7 +127,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [0.0, 0.0, 6.0])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'Relu/relu/Nonlinearity']
+    ok = ['Relu/relu/Nonlinearity']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testReluExpr(self):
@@ -167,8 +167,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*',
-        '/OnTileCopy',
         'GradientDescent/update_vs',
         'Sum/reduce',
         'Maximum/relu/Nonlinearity',
@@ -197,7 +195,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
-    ok = ['__seed*', 'Relu/relu/Nonlinearity', 'add/add.*/Add']
+    ok = ['Relu/relu/Nonlinearity', 'add/add.*/Add']
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -221,7 +219,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
-    ok = ['__seed*', 'Relu/relu/Nonlinearity']
+    ok = ['Relu/relu/Nonlinearity']
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -243,7 +241,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [0.0, 0.5, 1.0])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'ReluGrad/relu-grad/NonLinearityGrad']
+    ok = ['ReluGrad/relu-grad/NonLinearityGrad']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testMaxPool(self):
@@ -270,7 +268,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, np.ones([1, 1, 5, 5]))
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'max/max-pool*/maxPool5x5']
+    ok = ['max/max-pool*/maxPool5x5']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testFwdAndBwdMaxPool(self):
@@ -312,7 +310,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*', '[cC]opy*', 'MaxPool/max-pool*/maxPool2x2/',
+        'MaxPool/max-pool*/maxPool2x2/',
         'MaxPoolGrad/max-pool-grad*/maxPool2x2'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
@@ -336,7 +334,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [4.0, 4.5, 7.0])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo']
+    ok = ['add/scaled-inplace*/AddTo']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledSubtractFrom(self):
@@ -360,7 +358,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [0.0, -3.5, -5.0])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'host-exchange-local-copy-', 'sub/scaled-inplace*/AddTo']
+    ok = ['sub/scaled-inplace*/AddTo']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledAddToVariable(self):
@@ -382,7 +380,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [4.0, 4.5, 7.0])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo']
+    ok = ['add/scaled-inplace*/AddTo']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledSubtractFromVariable(self):
@@ -404,7 +402,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [0.0, -3.5, -5.0])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'host-exchange-local-copy-', 'sub/scaled-inplace*/AddTo']
+    ok = ['sub/scaled-inplace*/AddTo']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvolutionBiasApply(self):
@@ -444,7 +442,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
         'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.*/Reduce'
     ]
     # pylint: enable=line-too-long
@@ -485,7 +482,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
-        '__seed*', 'copy*/OnTileCopy-', 'vs/conv2d/BiasAdd/fusion*/Op/Add',
+        'vs/conv2d/BiasAdd/fusion*/Op/Add',
         'vs/conv2d_1/BiasAdd/fusion.1/Op/Add',
         'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion*/Reduce',
         'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion*/negate/Op/Negate',
@@ -533,7 +530,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, expected)
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'avg/avg-pool*/avgPool10x10']
+    ok = ['avg/avg-pool*/avgPool10x10']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testAvgPoolValidWithBroadcast(self):
@@ -568,7 +565,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, expected)
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'avg/avg-pool*/avgPool5x5']
+    ok = ['avg/avg-pool*/avgPool5x5']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testAvgPoolSameWithReshape(self):
@@ -610,7 +607,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, expected)
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'avg/avg-pool*/avgPool5x5']
+    ok = ['avg/avg-pool*/avgPool5x5']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testFullyConnectedWithBias(self):
@@ -635,10 +632,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(np.full([2, 2], 25), out)
 
     report = pva.openReport(report_helper.find_report())
-    ok = [
-        '__seed*', 'host-exchange-local-copy', 'xw_plus_b/MatMul/dot.*/Conv_1',
-        'xw_plus_b/fusion/Op/Add'
-    ]
+    ok = ['xw_plus_b/MatMul/dot.*/Conv_1', 'xw_plus_b/fusion/Op/Add']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testBatchedMatmulWithBias(self):
@@ -664,10 +658,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(np.full([2, 2, 2], 25), out)
 
     report = pva.openReport(report_helper.find_report())
-    ok = [
-        '__seed*', 'host-exchange-local-copy', '[cC]opy_', 'matmul/dot*/Conv',
-        'add/fusion/Op/Add'
-    ]
+    ok = ['matmul/dot*/Conv', 'add/fusion/Op/Add']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvWithBnAndRelu(self):
@@ -695,7 +686,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*', 'host-exchange-local-copy-',
         'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'vs/conv2d/BiasAdd',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
         'vs/Relu/relu/Nonlinearity'
@@ -836,10 +826,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*',
         '/negate/Op/Negate',
         'ExpandDims/input/multi-update-add*/multiUpdateAdd',
-        '[cC]opy*/OnTileCopy',
         'vs/Gather*/multi-slice',
         'vs/add/add*/Add',
         'vs/Sum/reduce*/Reduce',
@@ -902,10 +890,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*',
         '/negate/Op/Negate',
         'ExpandDims/input/multi-update-add*/multiUpdateAdd',
-        '[cC]opy*/OnTileCopy',
         'vs/Gather*/multi-slice',
         'vs/add/add*/Add',
         'vs/Sum/reduce*/Reduce',
@@ -961,7 +947,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
         'GradientDescent/update_vs/w/Neg/negate*/Op/Negate',
         'GradientDescent/update_vs/w/mul/fusion*/Op/Multiply',
         'GradientDescent/update_vs/w/ResourceScatterAdd/multi-update-add*/multiUpdateAdd',
@@ -1030,8 +1015,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
-        '[cC]opy',
-        '__seed*',
         'gradients/vs/absolute_difference/Abs_grad/Sign',
         'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
         '/negate/Op/Negate',
@@ -1065,7 +1048,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [7.0, 7.0, 11.0])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo']
+    ok = ['add/scaled-inplace*/AddTo']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledSubtractaXbY(self):
@@ -1112,7 +1095,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [7.0, 7.0, 11.0])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo']
+    ok = ['add/scaled-inplace*/AddTo']
     self.assert_all_compute_sets_and_list(report, ok)
 
   # Using a scale smaller than a float16 can represent
@@ -1143,7 +1126,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [7.0e-4, 7.0e-4, 11.0e-4])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo']
+    ok = ['add/scaled-inplace*/AddTo']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledAddToVariableFor2Scales(self):
@@ -1171,7 +1154,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [7.0, 7.0, 11.0])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo']
+    ok = ['add/scaled-inplace*/AddTo']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledSubtractFromVariableFor2Scales(self):
@@ -1198,7 +1181,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [1.0, -5.0, -7.0])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'host-exchange-local-copy-', 'sub/scaled-inplace*/AddTo']
+    ok = ['sub/scaled-inplace*/AddTo']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testPopOpNormScaleAddLiteralScalars(self):
@@ -1228,7 +1211,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     ok = [
         'random_normal/RandomStandardNormal/rng.*/normal',
-        'mul/multiply.*/Op/Multiply', 'add/add*/Op/Add', '__seed*'
+        'mul/multiply.*/Op/Multiply', 'add/add*/Op/Add'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -1249,7 +1232,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, 72)
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'Sum/fusion*/Reduce']
+    ok = ['Sum/fusion*/Reduce']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testSquareSumHalfs(self):
@@ -1272,10 +1255,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, np.float16(32770.0))
 
     report = pva.openReport(report_helper.find_report())
-    ok = [
-        '__seed*', 'Mean/fusion*/Reduce', 'Mean/multiply',
-        'Mean/convert*/Cast', 'copy*_host-exchange-local-copy-*/OnTileCopy-*'
-    ]
+    ok = ['Mean/fusion*/Reduce', 'Mean/multiply', 'Mean/convert*/Cast']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvolutionWithReverseWeights(self):
@@ -1340,8 +1320,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
-        'copy*/OnTileCopy-',
         'vs/conv2d_1/Conv2D/convolution*/Conv_1x1',
         'vs/conv2d/Conv2D/convolution*/Conv_2x2',
         'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion',

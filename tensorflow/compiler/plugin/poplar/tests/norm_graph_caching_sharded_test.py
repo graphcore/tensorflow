@@ -94,9 +94,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     # (note that we don't cache gradient application)
     # pylint: disable=line-too-long
     ok = [
-        '__seed*',
         '*OnTileCopy*',
-        'Copy_',
         'vs/conv1/Conv2D/convolution.*/Conv_1x1',
         'vs/conv3/Conv2D/convolution.*/Conv_1x1',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-training.*/',

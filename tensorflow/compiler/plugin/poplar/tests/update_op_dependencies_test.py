@@ -81,7 +81,6 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*', 'host-exchange-local-copy-',
         'Copy_XLA_Args/*_to_transpose/transpose', 'add/add.*/Op/Add',
         'truediv/divide.*/Op/Divide'
     ]
@@ -119,9 +118,8 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed', 'add_1/add.*/expression/Op/Add',
-        'add_1/add.*/expression/Op/Multiply', 'add/scaled-inplace-xb-y/AddTo',
-        'truediv/divide*/Op/Divide'
+        'add_1/add.*/expression/Op/Add', 'add_1/add.*/expression/Op/Multiply',
+        'add/scaled-inplace-xb-y/AddTo', 'truediv/divide*/Op/Divide'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -154,9 +152,8 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*', 'truediv/*/expression/Op/Add',
-        'truediv/*/expression/Op/Divide', 'add_1/add.*/Add',
-        'host-exchange-local-copy'
+        'truediv/*/expression/Op/Add', 'truediv/*/expression/Op/Divide',
+        'add_1/add.*/Add', 'host-exchange-local-copy'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -195,9 +192,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       self.assertAllClose(y, np.full([4], np.tanh(np.tanh(2))))
 
     report = pva.openReport(report_helper.find_report())
-    ok = [
-        '__seed*', 'Copy_*_to_*', 'Tanh/tanh*/Op/Tanh', 'Tanh_1/tanh*/Op/Tanh'
-    ]
+    ok = ['Copy_*_to_*', 'Tanh/tanh*/Op/Tanh', 'Tanh_1/tanh*/Op/Tanh']
     self.assert_all_compute_sets_and_list(report, ok)
 
 

@@ -111,8 +111,8 @@ class WideConstExpansionTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '__seed*', 'Copy_*_to_*', 'Slice/dynamic-slice*/dynamicSlice',
-        'Mean/reduce', 'Mean/multiply', 'add*/add', 'add_*/fusion/Op/Add'
+        'Copy_*_to_*', 'Slice/dynamic-slice*/dynamicSlice', 'Mean/reduce',
+        'Mean/multiply', 'add*/add', 'add_*/fusion/Op/Add'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
     self.assert_max_tile_memory(report, 1052184, tolerance=0.2)

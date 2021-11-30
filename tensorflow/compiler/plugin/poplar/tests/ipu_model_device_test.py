@@ -168,7 +168,7 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       self.assertAllClose(result, [[1., 2.], [6., 8.]])
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'my_ops/my_add_op/add']
+    ok = ['my_ops/my_add_op/add']
     self.assert_all_compute_sets_and_list(report, ok)
 
 

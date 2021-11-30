@@ -198,13 +198,14 @@ class TestCaseExtensions(object):
     high = int(expected * (1.0 + tolerance))
     self.assertAllInRange(actual, low, high)
 
-  def assert_all_compute_sets_and_list(self, report, ok):
+  def assert_all_compute_sets_and_list(self, report, ok, ignore_common=True):
     """Asserts all the compute sets match a pattern in the whitelist and also
     asserts that all the whitelist patterns match at least one compute set.
     """
     not_in_whitelist = []
     not_in_report = []
     whitelist = ['*' + x + '*' for x in ok]
+    common_compute_sets = ['*__seed*', '*host-exchange-*', '*[cC]opy_*']
 
     for expected in whitelist:
       if not any(
@@ -214,6 +215,11 @@ class TestCaseExtensions(object):
     for actual in report.compilation.computeSets:
       if not any(
           fnmatch.fnmatch(actual.name, expected) for expected in whitelist):
+        # Skip the common compute sets if enabled.
+        if ignore_common and any(
+            fnmatch.fnmatch(actual.name, c) for c in common_compute_sets):
+          continue
+
         not_in_whitelist.append(actual.name)
 
     error_msg = "\n"

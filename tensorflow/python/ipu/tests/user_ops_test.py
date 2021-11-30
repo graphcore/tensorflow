@@ -195,7 +195,6 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
     cfg.configure_ipu_system()
 
     ok = [
-        '__seed*',
         'add/add.*/Op/Add',
         'Stateful/Op/Add',
     ]
@@ -208,7 +207,6 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
     cfg.configure_ipu_system()
 
     ok = [
-        '__seed*',
         'add/add.*/Op/Add',
     ]
     return self.runCustomUserOpWithUnusedOutput("Stateless", ok)
