@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_evaluator.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
 
@@ -34,6 +35,63 @@ namespace pgf = poputil::graphfn;
 namespace xla {
 namespace poplarplugin {
 namespace {
+absl::optional<std::vector<unsigned>> GetConstantIndices(
+    HloInstruction* const indices) {
+  // For a given input Literal, this lambda reshapes the literal to
+  // be of rank-1, if possible.
+  auto get_val = [](const Literal& val) -> absl::optional<Literal> {
+    if (val.shape().rank() == 1) {
+      return absl::optional<Literal>(val.Clone());
+    }
+
+    if (val.shape().rank() == 0) {
+      return absl::optional<Literal>(val.Reshape({1}).ValueOrDie());
+    }
+
+    // If the product of the dims is equal to the number of elements,
+    // then the Literal can be reshaped to be rank-1.
+    const auto dims = val.shape().dimensions();
+    const auto max_dim = absl::c_max_element(dims);
+    if (max_dim == dims.end()) {
+      return absl::nullopt;
+    }
+
+    const auto dim_product =
+        absl::c_accumulate(dims, 1, std::multiplies<int64>());
+
+    if (*max_dim != dim_product) {
+      return absl::nullopt;
+    }
+
+    return absl::optional<Literal>(val.Reshape({*max_dim}).ValueOrDie());
+  };
+
+  if (indices->IsConstant()) {
+    auto val_opt = get_val(indices->literal());
+    if (!val_opt.has_value()) {
+      return absl::nullopt;
+    }
+
+    auto value = LiteralVectorToNativeType<unsigned>(val_opt.value());
+    return absl::optional<std::vector<unsigned>>(value.ValueOrDie());
+  }
+
+  auto cloned_indices = indices->Clone();
+  Literal result;
+  HloEvaluator evaluator(/*max_loop_iterations=*/0);
+
+  if (!evaluator.TryEvaluate(cloned_indices.get(), &result)) {
+    return absl::nullopt;
+  }
+
+  auto val_opt = get_val(result);
+  if (!val_opt.has_value()) {
+    return absl::nullopt;
+  }
+
+  auto value = LiteralVectorToNativeType<unsigned>(val_opt.value());
+  return absl::optional<std::vector<unsigned>>(value.ValueOrDie());
+}
 
 StatusOr<poplar::Tensor> CreateInputTensor(
     poplar::Graph& graph, const popops::SlicePlan& plan,
@@ -105,10 +163,19 @@ class MultiSliceOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                         GetSliceOptionsForInst(inst, res));
 
-    poplar::Tensor output = popops::multiSlice(
-        graph, input,
-        indices.flatten().expand({1}).reinterpret(poplar::UNSIGNED_INT), {0},
-        {1}, seq, *plan, opts, {debug_info, "output"});
+    const auto constant_indices = GetConstantIndices(inst->operands().at(1));
+
+    poplar::Tensor output;
+    if (!constant_indices.has_value()) {
+      output = popops::multiSlice(
+          graph, input,
+          indices.flatten().expand({1}).reinterpret(poplar::UNSIGNED_INT), {0},
+          {1}, seq, *plan, opts, {debug_info, "output"});
+    } else {
+      output = popops::multiSlice(graph, input, constant_indices.value(), {0},
+                                  seq, {debug_info, "output"});
+    }
+
     auto poplar_output_shape = PoplarShapeFromXlaShape(output_shape);
 
     // Unflatten the output:
@@ -177,9 +244,17 @@ Status MultiUpdateInternal(
     popops::multiUpdate(graph, operand, expanded_updates, unsigned_indices, {0},
                         {1}, prog, plan, opts, {debug_name_and_id});
   } else {
-    popops::multiUpdateAdd(graph, operand, expanded_updates, unsigned_indices,
-                           *scale, {0}, {1}, prog, plan, opts,
-                           {debug_name_and_id});
+    const auto constant_indices = GetConstantIndices(inst->operands().at(1));
+
+    if (constant_indices.has_value()) {
+      popops::multiUpdateAdd(graph, operand, expanded_updates,
+                             constant_indices.value(), *scale, 0, prog,
+                             {debug_name_and_id});
+    } else {
+      popops::multiUpdateAdd(graph, operand, expanded_updates, unsigned_indices,
+                             *scale, {0}, {1}, prog, plan, opts,
+                             {debug_name_and_id});
+    }
   }
 
   return Status::OK();

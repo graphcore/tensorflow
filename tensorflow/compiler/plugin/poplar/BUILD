@@ -2390,6 +2390,20 @@ xla_test(
 )
 
 xla_test(
+    name = "multi_slice_update_constant_indices_test",
+    size = "medium",
+    srcs = ["tests/multi_slice_update_constant_indices_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":test_utils",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "dynamic_slice_test",
     size = "medium",
     srcs = ["tests/dynamic_slice_test.cc"],
@@ -4725,6 +4739,7 @@ test_suite(
         "multi_ipu_test",
         "multi_run_test",
         "multi_slice_combiner_test",
+        "multi_slice_update_constant_indices_test",
         "multi_update_apply_test",
         "multi_update_combiner_test",
         "multi_update_scale_apply_test",
