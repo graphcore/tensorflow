@@ -288,8 +288,8 @@ const std::vector<std::pair<std::string, int>> assignments_0 = {
     {"c0", 2},
     {"gte_c", 2},
     {"d", 3},
-    {"ipu-inter-copy", 0},
-    {"ipu-inter-copy.1", 2}};
+    {"inter-ipu-copy", 0},
+    {"inter-ipu-copy.1", 2}};
 
 const string& expected_0 = R"(/print-tensor: 1
 /print-tensor.1: 2
@@ -379,9 +379,9 @@ const std::vector<std::pair<std::string, int>> assignments_1 = {
     {"gte_c", 2},
     {"d", 3},
     // Inter-IPU-copy between stage 0 and 1
-    {"ipu-inter-copy", 0},
+    {"inter-ipu-copy", 0},
     // Inter-IPU-copy between stage 2 and 3
-    {"ipu-inter-copy.1", 2}};
+    {"inter-ipu-copy.1", 2}};
 
 const string& expected_1 = R"(/print-tensor: 4
 /print-tensor: 4
@@ -462,9 +462,9 @@ const std::vector<std::pair<std::string, int>> assignments_2 = {
     {"gte_c", 2},
     {"d", 3},
     // Inter-ipu-copy between stage 0 and 1
-    {"ipu-inter-copy", 0},
+    {"inter-ipu-copy", 0},
     // Inter-ipu-copy between stage 2 and 3
-    {"ipu-inter-copy.1", 2},
+    {"inter-ipu-copy.1", 2},
     // FIFO after stage 0
     {"fifo", 0},
 };
@@ -554,9 +554,9 @@ const std::vector<std::pair<std::string, int>> assignments_3 = {
     {"gte_c", 2},
     {"d", 3},
     // Inter-ipu-copy between stage 0 and 1
-    {"ipu-inter-copy", 0},
+    {"inter-ipu-copy", 0},
     // Inter-ipu-copy between stage 2 and 3
-    {"ipu-inter-copy.1", 2},
+    {"inter-ipu-copy.1", 2},
     // FIFO after stage 0
     {"fifo", 0},
 };
@@ -667,9 +667,9 @@ ENTRY main {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
+      {entry_computation->GetInstructionWithName("inter-ipu-copy"), 0},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
+      {entry_computation->GetInstructionWithName("inter-ipu-copy.1"), 2},
       // FIFO after stage 0
       {entry_computation->GetInstructionWithName("fifo"), 0},
   };
@@ -864,19 +864,19 @@ ENTRY main {
       // FIFO after stage 0
       {entry_computation->GetInstructionWithName("fifo.1"), 1},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
+      {entry_computation->GetInstructionWithName("inter-ipu-copy"), 0},
       // Inter-ipu-copy between stage 1 and 2
-      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 1},
+      {entry_computation->GetInstructionWithName("inter-ipu-copy.1"), 1},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("ipu-inter-copy.2"), 2},
+      {entry_computation->GetInstructionWithName("inter-ipu-copy.2"), 2},
       // Inter-ipu-copy between stage 3 and 4
-      {entry_computation->GetInstructionWithName("ipu-inter-copy.3"), 3},
+      {entry_computation->GetInstructionWithName("inter-ipu-copy.3"), 3},
       // Inter-ipu-copy between stage 1 and 4
-      {entry_computation->GetInstructionWithName("ipu-inter-copy.4"), 1},
+      {entry_computation->GetInstructionWithName("inter-ipu-copy.4"), 1},
       // Inter-ipu-copy between stage 4 and 5
-      {entry_computation->GetInstructionWithName("ipu-inter-copy.5"), 4},
+      {entry_computation->GetInstructionWithName("inter-ipu-copy.5"), 4},
       // Inter-ipu-copy between stage 0 and 5
-      {entry_computation->GetInstructionWithName("ipu-inter-copy.6"), 0},
+      {entry_computation->GetInstructionWithName("inter-ipu-copy.6"), 0},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -1051,15 +1051,15 @@ const std::vector<std::pair<std::string, int>> assignments_5 = {
     {"gte_e", 4},
     {"d", 5},
     // Inter-ipu-copy between stage 0 and 1
-    {"ipu-inter-copy", 0},
+    {"inter-ipu-copy", 0},
     // Inter-ipu-copy between stage 1 and 2
-    {"ipu-inter-copy.1", 1},
+    {"inter-ipu-copy.1", 1},
     // Inter-ipu-copy between stage 2 and 3
-    {"ipu-inter-copy.2", 2},
+    {"inter-ipu-copy.2", 2},
     // Inter-ipu-copy between stage 3 and 4
-    {"ipu-inter-copy.3", 3},
+    {"inter-ipu-copy.3", 3},
     // Inter-ipu-copy between stage 4 and 5
-    {"ipu-inter-copy.4", 4},
+    {"inter-ipu-copy.4", 4},
 };
 
 const string& expected_5 = R"(/print-tensor: 0
@@ -1192,9 +1192,9 @@ const std::vector<std::pair<std::string, int>> assignments_4 = {
     {"gte_c", 2},
     {"d", 3},
     // Inter-ipu-copy between stage 0 and 1
-    {"ipu-inter-copy", 0},
+    {"inter-ipu-copy", 0},
     // Inter-ipu-copy between stage 2 and 3
-    {"ipu-inter-copy.1", 2},
+    {"inter-ipu-copy.1", 2},
     // FIFO after stage 0
     {"fifo", 0},
 };
@@ -1403,9 +1403,9 @@ const std::vector<std::pair<std::string, int>> assignments_6 = {
     {"gte_c", 2},
     {"d", 3},
     // Inter-IPU-copy between stage 0 and 1
-    {"ipu-inter-copy", 0},
+    {"inter-ipu-copy", 0},
     // Inter-IPU-copy between stage 2 and 3
-    {"ipu-inter-copy.1", 2},
+    {"inter-ipu-copy.1", 2},
 };
 
 // This tests that the print tensor statements get printed in the expected
@@ -1479,9 +1479,9 @@ const std::vector<std::pair<std::string, int>> assignments_7 = {
     {"gte_c", 2},
     {"d", 3},
     // Inter-IPU-copy between stage 0 and 1
-    {"ipu-inter-copy", 0},
+    {"inter-ipu-copy", 0},
     // Inter-IPU-copy between stage 2 and 3
-    {"ipu-inter-copy.1", 2},
+    {"inter-ipu-copy.1", 2},
 };
 
 const string& expected_7 = R"(/print-tensor: 4
@@ -1569,9 +1569,9 @@ const std::vector<std::pair<std::string, int>> assignments_8 = {
     {"gte_c", 2},
     {"d", 3},
     // Inter-ipu-copy between stage 0 and 1
-    {"ipu-inter-copy", 0},
+    {"inter-ipu-copy", 0},
     // Inter-ipu-copy between stage 2 and 3
-    {"ipu-inter-copy.1", 2},
+    {"inter-ipu-copy.1", 2},
 };
 
 const string& expected_8 = R"(/print-tensor: {306,6012}
@@ -1682,15 +1682,15 @@ const std::vector<std::pair<std::string, int>> assignments_9 = {
     {"gte_e", 4},
     {"d", 5},
     // Inter-ipu-copy between stage 0 and 1
-    {"ipu-inter-copy", 0},
+    {"inter-ipu-copy", 0},
     // Inter-ipu-copy between stage 1 and 2
-    {"ipu-inter-copy.1", 1},
+    {"inter-ipu-copy.1", 1},
     // Inter-ipu-copy between stage 2 and 3
-    {"ipu-inter-copy.2", 2},
+    {"inter-ipu-copy.2", 2},
     // Inter-ipu-copy between stage 3 and 4
-    {"ipu-inter-copy.3", 3},
+    {"inter-ipu-copy.3", 3},
     // Inter-ipu-copy between stage 4 and 5
-    {"ipu-inter-copy.4", 4},
+    {"inter-ipu-copy.4", 4},
 };
 
 const string& expected_9 = R"(/print-tensor: 0
@@ -1828,9 +1828,9 @@ const std::vector<std::pair<std::string, int>> assignments_10 = {
     {"gte_c", 2},
     {"d", 3},
     // Inter-IPU-copy between stage 0 and 1
-    {"ipu-inter-copy", 0},
+    {"inter-ipu-copy", 0},
     // Inter-IPU-copy between stage 2 and 3
-    {"ipu-inter-copy.1", 2},
+    {"inter-ipu-copy.1", 2},
 };
 
 const string& expected_10 = R"(/print-tensor: 1
@@ -1935,9 +1935,9 @@ const std::vector<std::pair<std::string, int>> assignments_11 = {
     {"gte_c", 2},
     {"d", 3},
     // Inter-IPU-copy between stage 0 and 1
-    {"ipu-inter-copy", 0},
+    {"inter-ipu-copy", 0},
     // Inter-IPU-copy between stage 2 and 3
-    {"ipu-inter-copy.1", 2},
+    {"inter-ipu-copy.1", 2},
 };
 
 const string& expected_11 = R"(/print-tensor: 4
@@ -2029,9 +2029,9 @@ const std::vector<std::pair<std::string, int>> assignments_12 = {
     {"gte_c", 2},
     {"d", 3},
     // Inter-ipu-copy between stage 0 and 1
-    {"ipu-inter-copy", 0},
+    {"inter-ipu-copy", 0},
     // Inter-ipu-copy between stage 2 and 3
-    {"ipu-inter-copy.1", 2},
+    {"inter-ipu-copy.1", 2},
     // FIFO after stage 0
     {"fifo", 0},
 };
