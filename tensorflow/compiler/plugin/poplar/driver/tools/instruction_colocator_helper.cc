@@ -664,15 +664,21 @@ class ReduceManyColocatorHelper : public InstructionColocatorHelper {
     std::vector<HloInstruction*> new_operands;
     std::vector<ReductionInfo> reductions_info;
     new_shapes.reserve(cluster_size);
-    new_operands.reserve(cluster_size * 2);
+    new_operands.reserve(cluster_size * 3);
     reductions_info.reserve(cluster_size);
     for (HloInstruction* old_reduce : to_combine) {
-      CHECK_EQ(old_reduce->operand_count(), 2);
+      const auto old_operand_count = old_reduce->operand_count();
+      const bool with_scale = old_operand_count == 3;
+      CHECK(old_operand_count == 2 || with_scale);
+
       new_shapes.push_back(old_reduce->shape());
       new_operands.push_back(old_reduce->mutable_operand(0));
       new_operands.push_back(old_reduce->mutable_operand(1));
+      if (with_scale) {
+        new_operands.push_back(old_reduce->mutable_operand(2));
+      }
       TF_ASSIGN_OR_RETURN(ReductionInfo reduction_info,
-                          GetReductionInfo(old_reduce));
+                          GetReductionInfo(old_reduce, with_scale));
       reductions_info.push_back(reduction_info);
     }
 

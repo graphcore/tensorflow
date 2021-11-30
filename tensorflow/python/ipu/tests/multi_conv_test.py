@@ -308,7 +308,7 @@ class MultiConvTest(test_util.TensorFlowTestCase):
     # Note how there is only one multiconv instruction.
     compute_sets = [
         '/multi-conv/MultiConv_',
-        'ipu/Mean*/reduce*/Reduce',
+        'ipu/Mean*/fusion*/Reduce',
         'ipu/add',
     ]
     _compare_ipu_to_cpu(self,

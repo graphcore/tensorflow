@@ -13,7 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/reduction_util.h"
-
 #include <popops/ExprOp.hpp>
 #include <popops/Operation.hpp>
 
@@ -26,7 +25,8 @@ namespace poplarplugin {
 ReductionInfo::ReductionInfo(const ReductionInfo& info)
     : reduction_dims(info.reduction_dims),
       identity_literal(info.identity_literal.Clone()),
-      reduction_op(info.reduction_op) {}
+      reduction_op(info.reduction_op),
+      with_scale(info.with_scale) {}
 
 StatusOr<popops::Operation> ToPopopsReductionOp(
     const ReductionOperation& op_type) {
@@ -100,8 +100,14 @@ StatusOr<popops::expr::BinaryOpType> ToBinaryOpType(
   }
 }
 
-StatusOr<ReductionInfo> GetReductionInfo(const HloInstruction* inst) {
+StatusOr<ReductionInfo> GetReductionInfo(const HloInstruction* inst,
+                                         bool with_scale) {
   ReductionInfo info;
+
+  const HloInstruction* reduce_inst = inst;
+  if (inst->opcode() == HloOpcode::kFusion) {
+    TF_ASSIGN_OR_RETURN(reduce_inst, GetReduceInstruction(inst));
+  }
 
   // Find reduction operation.
   // GetPoplibsReductionOperation handles reduce fusions properly.
@@ -110,22 +116,22 @@ StatusOr<ReductionInfo> GetReductionInfo(const HloInstruction* inst) {
   TF_ASSIGN_OR_RETURN(info.reduction_op,
                       FromPopopsReductionOps(poplibs_reduction_op));
   const HloInstruction* root;
+
   if (inst->opcode() == HloOpcode::kFusion) {
-    const HloInstruction* fusion_inner_reduce_inst =
-        inst->fused_instructions_computation()->root_instruction();
-    root = fusion_inner_reduce_inst->to_apply()->root_instruction();
+    root = reduce_inst->to_apply()->root_instruction();
     // Find reduction dims.
-    info.reduction_dims.assign(fusion_inner_reduce_inst->dimensions().begin(),
-                               fusion_inner_reduce_inst->dimensions().end());
+    info.reduction_dims.assign(reduce_inst->dimensions().begin(),
+                               reduce_inst->dimensions().end());
   } else {
-    root = inst->to_apply()->root_instruction();
+    root = reduce_inst->to_apply()->root_instruction();
     // Find reduction dims.
-    info.reduction_dims.assign(inst->dimensions().begin(),
-                               inst->dimensions().end());
+    info.reduction_dims.assign(reduce_inst->dimensions().begin(),
+                               reduce_inst->dimensions().end());
   }
   // Find identity literal.
   info.identity_literal =
       GetIdentityConstantLiteral(root, inst->shape().element_type());
+  info.with_scale = with_scale;
 
   return info;
 }
@@ -140,6 +146,10 @@ StatusOr<popops::Operation> GetPoplibsReductionOperation(
         reduction_comp = inst->fused_instructions_computation()
                              ->root_instruction()
                              ->to_apply();
+      } else if (IsPopOpsFusion(inst, "reduction_scaled")) {
+        TF_ASSIGN_OR_RETURN(const HloInstruction* reduce_inst,
+                            GetReduceInstruction(inst));
+        reduction_comp = reduce_inst->to_apply();
       } else if (IsPopOpsFusion(inst, "reduction_square_add")) {
         return popops::Operation::SQUARE_ADD;
       } else {
@@ -208,6 +218,33 @@ Literal GetIdentityConstantLiteral(const HloInstruction* inst,
           return LiteralUtil::Zero(dtype);
       }
   }
+}
+
+StatusOr<const HloInstruction*> GetReduceInstruction(
+    const HloInstruction* root_inst) {
+  const HloInstruction* reduce_instruction = nullptr;
+
+  if (root_inst->opcode() == HloOpcode::kReduce) {
+    reduce_instruction = root_inst->fused_expression_root();
+  }
+
+  for (const HloInstruction* candidate_instruction :
+       root_inst->fused_instructions()) {
+    if (candidate_instruction->opcode() == HloOpcode::kReduce) {
+      if (reduce_instruction) {
+        return xla::FailedPrecondition(
+            "More than one reduction instrucion in Simple Reduction fusion");
+      }
+      reduce_instruction = candidate_instruction;
+    }
+  }
+
+  if (reduce_instruction) {
+    return reduce_instruction;
+  }
+
+  return xla::NotFound(
+      "Reduction instruction not found in Simple Reduction fusion");
 }
 
 }  // namespace poplarplugin

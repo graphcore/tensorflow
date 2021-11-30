@@ -188,9 +188,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [val, val])
 
     report = pva.openReport(report_helper.find_report())
-    ok = [
-        'Mean/fusion/Reduce', 'Mean/fusion*/Op/Multiply', 'Mean/convert*/Cast'
-    ]
+    ok = ['Mean/fusion/Reduce', 'Mean/convert*/Cast']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testReduceMax(self):
