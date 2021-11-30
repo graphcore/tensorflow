@@ -20,7 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_ipu_copy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_conv.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
@@ -127,7 +127,7 @@ HloInstruction* FindOperand(HloInstruction* inst,
     } else if (IsPoplarInstruction(PoplarOp::Fifo)(source)) {
       // We look through FIFO ops
       source = source->mutable_operand(0);
-    } else if (IsPoplarInstruction(PoplarOp::InterIpuCopy)(source)) {
+    } else if (IsPoplarInstruction(PoplarOp::IpuInterCopy)(source)) {
       // We look through inter-ipu copy ops.
       source = source->mutable_operand(0);
     } else if (IsPopOpsFusion(source, "zero_pad")) {

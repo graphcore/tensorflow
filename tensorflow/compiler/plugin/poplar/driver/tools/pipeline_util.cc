@@ -21,7 +21,7 @@ limitations under the License.
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_ipu_copy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -1462,7 +1462,7 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
       if (!allow_communication_ops_) {
         return true;
       }
-      if (IsPoplarInstruction(PoplarOp::InterIpuCopy)(inst)) {
+      if (IsPoplarInstruction(PoplarOp::IpuInterCopy)(inst)) {
         // For an inter IPU copy we expect that the input is a chain like:
         // Stage -> GTE -> InterIPUCopy -> NextStage
         const HloInstruction* gte = inst->operand(0);

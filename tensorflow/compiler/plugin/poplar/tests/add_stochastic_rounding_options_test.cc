@@ -345,7 +345,7 @@ ENTRY test {
  fifo = f16[] custom-call(param), custom_call_target="Fifo", backend_config="{\"offload\":0, \"depth\":2}"
  tuple = (f16[], f16[]) tuple(fifo, constant)
  value = f16[] get-tuple-element(tuple), index=1
- ROOT copy = f16[] custom-call(value), custom_call_target="InterIpuCopy"
+ ROOT copy = f16[] custom-call(value), custom_call_target="IpuInterCopy"
 }
 )"};
 

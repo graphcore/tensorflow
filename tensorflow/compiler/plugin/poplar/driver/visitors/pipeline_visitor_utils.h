@@ -140,12 +140,12 @@ inline bool IsInterTilesetCopyOutInstruction(const HloInstruction* inst) {
 
 /**
  * Construct a unary predicate which checks if a given HloInstruction is an
- * HloInterIpuCopy.
+ * HloIpuInterCopy.
  *
  * @returns The unary predicate.
  */
-inline std::function<bool(const HloInstruction*)> IsInterIpuCopyInstruction() {
-  return IsPoplarInstruction(PoplarOp::InterIpuCopy);
+inline std::function<bool(const HloInstruction*)> IsIpuInterCopyInstruction() {
+  return IsPoplarInstruction(PoplarOp::IpuInterCopy);
 }
 
 /**

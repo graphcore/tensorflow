@@ -76,7 +76,7 @@ std::vector<HloInstruction*> SelectInterTilesetCopies(
     const std::vector<HloInstruction*>& insts) {
   std::vector<HloInstruction*> result;
   absl::c_copy_if(insts, std::back_inserter(result),
-                  IsPoplarInstruction(PoplarOp::InterIpuCopy));
+                  IsPoplarInstruction(PoplarOp::IpuInterCopy));
 
   return result;
 }

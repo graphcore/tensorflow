@@ -292,13 +292,13 @@ class AllReduceColocatorHelper : public InstructionColocatorHelper {
 };
 
 // Colocator helper which is used to combine multiple inter-IPU copies.
-class InterIpuCopyColocatorHelper : public InstructionColocatorHelper {
+class IpuInterCopyColocatorHelper : public InstructionColocatorHelper {
  public:
-  InterIpuCopyColocatorHelper()
+  IpuInterCopyColocatorHelper()
       : InstructionColocatorHelper(/*requires_matching_element_types=*/false) {}
 
   bool CanColocate(const HloInstruction* inst) const override {
-    return IsPoplarInstruction(PoplarOp::InterIpuCopy)(inst);
+    return IsPoplarInstruction(PoplarOp::IpuInterCopy)(inst);
   }
 
   bool CanColocateSharding(const HloInstruction* a,
@@ -788,7 +788,7 @@ class AllGatherColocatorHelper : public InstructionColocatorHelper {
 
 }  // namespace
 
-REGISTER_INSTRUCTION_COLOCATOR_HELPER(InterIpuCopyColocatorHelper)
+REGISTER_INSTRUCTION_COLOCATOR_HELPER(IpuInterCopyColocatorHelper)
 REGISTER_INSTRUCTION_COLOCATOR_HELPER(AllReduceColocatorHelper)
 REGISTER_INSTRUCTION_COLOCATOR_HELPER(ReduceScatterColocatorHelper)
 REGISTER_INSTRUCTION_COLOCATOR_HELPER(

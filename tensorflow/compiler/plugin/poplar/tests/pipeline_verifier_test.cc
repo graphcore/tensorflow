@@ -166,9 +166,9 @@ ENTRY main {
         {entry_computation->GetInstructionWithName("gte_c"), 2},
         {entry_computation->GetInstructionWithName("d"), 3},
         // Inter-IPU-copy between stage 0 and 1
-        {entry_computation->GetInstructionWithName("inter-ipu-copy"), 0},
+        {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
         // Inter-IPU-copy between stage 2 and 3
-        {entry_computation->GetInstructionWithName("inter-ipu-copy.1"), 2},
+        {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
     };
 
     auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
