@@ -56,6 +56,7 @@ limitations under the License.
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
 #include "tensorflow/core/lib/io/path.h"
+#include "tensorflow/core/lib/strings/stringprintf.h"
 #include "tensorflow/stream_executor/blas.h"
 #include "tensorflow/stream_executor/device_description.h"
 #include "tensorflow/stream_executor/device_memory_allocator.h"
@@ -82,10 +83,6 @@ enum PoplarProgramType {
 };
 
 class PoplarExecutable;
-
-std::string GetRandomNumberSeedStream();
-std::string GetInfeedCopyHandle(const std::string& name, int64 shape_index);
-std::string GetOutfeedCopyHandle(const std::string& name, int64 shape_index);
 
 xla::poplarplugin::PoplarXfeedManager* GetXfeedManager(int device_ordinal);
 

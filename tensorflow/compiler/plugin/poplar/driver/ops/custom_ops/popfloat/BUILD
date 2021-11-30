@@ -10,15 +10,22 @@ poplar_cc_library(
         "cast_to_gfloat.cc",
     ],
     deps = [
-        "//tensorflow/core:framework",
+        ":gfloat_ops_utils",
+        "//tensorflow/compiler/plugin/poplar/driver:tensor",
     ],
     alwayslink = True,
 )
 
 poplar_cc_library(
-    name = "ops",
-    srcs = [],
-    deps = [
-        ":cast_to_gfloat",
+    name = "gfloat_ops_utils",
+    srcs = [
+        "gfloat_ops_utils.cc",
     ],
+    hdrs = [
+        "gfloat_ops_utils.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver:tensor",
+    ],
+    alwayslink = True,
 )

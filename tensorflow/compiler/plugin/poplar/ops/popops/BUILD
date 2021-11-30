@@ -1,8 +1,8 @@
+load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")
+
 licenses(["restricted"])
 
 package(default_visibility = ["//tensorflow/compiler/plugin/poplar:__subpackages__"])
-
-load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")
 
 poplar_cc_library(
     name = "all_to_all",

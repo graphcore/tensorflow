@@ -1,7 +1,4 @@
-load(
-    "//tensorflow/core/platform:rules_cc.bzl",
-    "cc_library",
-)
+load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
 
 def poplar_cc_library(**kwargs):
   """ Wrapper for inserting poplar specific build options.

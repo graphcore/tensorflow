@@ -55,7 +55,7 @@ cc_library(
 # example.
 cc_library(
     name = "plugin_backend",
-    deps = if_poplar(["//tensorflow/compiler/plugin/poplar:poplar_backend"])
+    deps = if_poplar(["//tensorflow/compiler/plugin/poplar/driver:xla_ipu_backend"])
 )
 
 # This target is added purely for the purpose of ensuring that `:xla_device` is
