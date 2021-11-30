@@ -243,7 +243,7 @@ ENTRY entry () -> f32[2] {
   // Expect three inter IPU copies to have been inserted.
   EXPECT_EQ(body->instruction_count(), 15);
   ASSERT_THAT(body->instructions(),
-              ContainsNPoplarOps(PoplarOp::IpuInterCopy, 3));
+              ContainsNPoplarOps(PoplarOp::InterIpuCopy, 3));
 
   // Schedule and combine.
   auto scheduler = CreateLookAheadScheduler(
@@ -253,10 +253,10 @@ ENTRY entry () -> f32[2] {
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
   // Two IPU copies have been merged.
   EXPECT_THAT(body->instructions(),
-              ContainsNPoplarOps(PoplarOp::IpuInterCopy, 2));
+              ContainsNPoplarOps(PoplarOp::InterIpuCopy, 2));
   EXPECT_EQ(body->instruction_count(), 16);
 
-  // Combined IpuInterCopy and its GTEs will be inserted between add.1 and .2
+  // Combined InterIpuCopy and its GTEs will be inserted between add.1 and .2
   // to copy from output of add.1 (on device 0) to device 1.
   const HloSharding assign_device_1 = HloSharding::AssignDevice(1);
 
@@ -265,18 +265,18 @@ ENTRY entry () -> f32[2] {
     EXPECT_EQ(add_1->sharding(), HloSharding::AssignDevice(0));
 
     const auto& users = add_1->users();
-    std::vector<HloInstruction*> ipu_inter_copy_insts;
-    absl::c_copy_if(users, std::back_inserter(ipu_inter_copy_insts),
-                    IsPoplarInstruction(PoplarOp::IpuInterCopy));
-    EXPECT_EQ(ipu_inter_copy_insts.size(), 1)
-        << "The only user of `add.1` should be a single IpuInterCopy.";
+    std::vector<HloInstruction*> inter_ipu_copy_insts;
+    absl::c_copy_if(users, std::back_inserter(inter_ipu_copy_insts),
+                    IsPoplarInstruction(PoplarOp::InterIpuCopy));
+    EXPECT_EQ(inter_ipu_copy_insts.size(), 1)
+        << "The only user of `add.1` should be a single InterIpuCopy.";
 
     const Shape inner_shape = ShapeUtil::MakeShape(F32, {2});
     const Shape tuple_shape =
         ShapeUtil::MakeTupleShape({inner_shape, inner_shape});
     const HloSharding expected_sharding =
         HloSharding::Tuple(tuple_shape, {assign_device_1, assign_device_1});
-    EXPECT_THAT(ipu_inter_copy_insts, AllSharded(expected_sharding));
+    EXPECT_THAT(inter_ipu_copy_insts, AllSharded(expected_sharding));
   }
 
   {
@@ -1318,7 +1318,7 @@ TEST_F(CombineInstructionsAllGatherTest, TestCombineAllGatherOutputsIdentical) {
   }
 }
 
-class CombineInstructionsIpuInterCopyTest : public CombineInstructionsTest {
+class CombineInstructionsInterIpuCopyTest : public CombineInstructionsTest {
  private:
   void SetUp() override {
     HloModuleConfig config;
@@ -1350,19 +1350,19 @@ ENTRY %cluster_1 () -> s32[] {
   %constant.2 = s32[] constant(2), sharding={maximal device=0}
   %constant.1 = s32[] constant(1), sharding={maximal device=0}
   %multiply = s32[] multiply(s32[] %constant.2, s32[] %constant.1), sharding={maximal device=0}
-  %ipu-inter-copy = s32[] custom-call(s32[] %multiply), custom_call_target="IpuInterCopy", sharding={maximal device=1}
+  %inter-ipu-copy = s32[] custom-call(s32[] %multiply), custom_call_target="InterIpuCopy", sharding={maximal device=1}
   %multiply.1 = s32[] multiply(s32[] %constant.2.clone, s32[] %constant.1.clone), sharding={maximal device=1}
-  %ipu-inter-copy.1 = s32[] custom-call(s32[] %multiply.1), custom_call_target="IpuInterCopy", sharding={maximal device=2}
+  %inter-ipu-copy.1 = s32[] custom-call(s32[] %multiply.1), custom_call_target="InterIpuCopy", sharding={maximal device=2}
   %multiply.2 = s32[] multiply(s32[] %constant.2.clone.1, s32[] %constant.1.clone.1), sharding={maximal device=2}
   %add.1 = s32[] add(s32[] %multiply.2, s32[] %constant.2.clone.1), sharding={maximal device=2}
   %multiply.3 = s32[] multiply(s32[] %constant.2, s32[] %constant.1), sharding={maximal device=0}
-  %ipu-inter-copy.2 = s32[] custom-call(s32[] %multiply.3), custom_call_target="IpuInterCopy", sharding={maximal device=3}
-  %multiply.4 = s32[] multiply(s32[] %constant.2.clone.2, s32[] %ipu-inter-copy.2), sharding={maximal device=3}
+  %inter-ipu-copy.2 = s32[] custom-call(s32[] %multiply.3), custom_call_target="InterIpuCopy", sharding={maximal device=3}
+  %multiply.4 = s32[] multiply(s32[] %constant.2.clone.2, s32[] %inter-ipu-copy.2), sharding={maximal device=3}
   %add.2 = s32[] add(s32[] %multiply.4, s32[] %constant.2.clone.2), sharding={maximal device=3}
-  %ipu-inter-copy.3 = (s32[], s32[], s32[]) custom-call(s32[] %constant.2, s32[] %add.1, s32[] %add.2), custom_call_target="IpuInterCopy", sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
-  %get-tuple-element.2 = s32[] get-tuple-element((s32[], s32[], s32[]) %ipu-inter-copy.3), index=2, sharding={maximal device=0}
-  %get-tuple-element.1 = s32[] get-tuple-element((s32[], s32[], s32[]) %ipu-inter-copy.3), index=1, sharding={maximal device=0}
-  %get-tuple-element = s32[] get-tuple-element((s32[], s32[], s32[]) %ipu-inter-copy.3), index=0, sharding={maximal device=0}
+  %inter-ipu-copy.3 = (s32[], s32[], s32[]) custom-call(s32[] %constant.2, s32[] %add.1, s32[] %add.2), custom_call_target="InterIpuCopy", sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  %get-tuple-element.2 = s32[] get-tuple-element((s32[], s32[], s32[]) %inter-ipu-copy.3), index=2, sharding={maximal device=0}
+  %get-tuple-element.1 = s32[] get-tuple-element((s32[], s32[], s32[]) %inter-ipu-copy.3), index=1, sharding={maximal device=0}
+  %get-tuple-element = s32[] get-tuple-element((s32[], s32[], s32[]) %inter-ipu-copy.3), index=0, sharding={maximal device=0}
   %add.3 = s32[] add(s32[] %multiply.3, s32[] %constant.2), sharding={maximal device=0}
   %add.4 = s32[] add(s32[] %add.3, s32[] %get-tuple-element), sharding={maximal device=0}
   %add.5 = s32[] add(s32[] %add.4, s32[] %get-tuple-element.1), sharding={maximal device=0}
@@ -1377,11 +1377,11 @@ ENTRY %cluster_1 () -> s32[] {
   const unsigned _num_tiles_per_ipu = 32;
 };
 
-TEST_F(CombineInstructionsIpuInterCopyTest,
-       TestIpuInterCopyCombineMultipleSharding) {
+TEST_F(CombineInstructionsInterIpuCopyTest,
+       TestInterIpuCopyCombineMultipleSharding) {
   auto orig_instructions =
       _original_module->entry_computation()->instructions();
-  ASSERT_THAT(orig_instructions, ContainsNPoplarOps(PoplarOp::IpuInterCopy, 4));
+  ASSERT_THAT(orig_instructions, ContainsNPoplarOps(PoplarOp::InterIpuCopy, 4));
 
   auto module = _original_module->Clone();
 
@@ -1391,8 +1391,8 @@ TEST_F(CombineInstructionsIpuInterCopyTest,
   auto sequence = module->schedule().sequence(module->entry_computation());
   auto instructions = sequence.instructions();
 
-  // Ensure we now have two IpuInterCopy instructions
-  ASSERT_THAT(instructions, ContainsNPoplarOps(PoplarOp::IpuInterCopy, 2));
+  // Ensure we now have two InterIpuCopy instructions
+  ASSERT_THAT(instructions, ContainsNPoplarOps(PoplarOp::InterIpuCopy, 2));
 
   // Check the inplace instructions are all GTEs
   auto inplace_instructions = GetInplaceInstructions(module.get());
@@ -1402,13 +1402,13 @@ TEST_F(CombineInstructionsIpuInterCopyTest,
     EXPECT_LT(inplace_inst->tuple_index(), 3);
   }
 
-  std::vector<HloInstruction*> ipu_inter_copy_insts;
-  absl::c_copy_if(instructions, std::back_inserter(ipu_inter_copy_insts),
-                  IsPoplarInstruction(PoplarOp::IpuInterCopy));
+  std::vector<HloInstruction*> inter_ipu_copy_insts;
+  absl::c_copy_if(instructions, std::back_inserter(inter_ipu_copy_insts),
+                  IsPoplarInstruction(PoplarOp::InterIpuCopy));
 
   {
-    // The first IpuInterCopy should be combined
-    auto* inst = ipu_inter_copy_insts.front();
+    // The first InterIpuCopy should be combined
+    auto* inst = inter_ipu_copy_insts.front();
     ASSERT_TRUE(inst->has_sharding());
 
     const auto& sharding = inst->sharding();
@@ -1427,8 +1427,8 @@ TEST_F(CombineInstructionsIpuInterCopyTest,
   }
 
   {
-    // The second IpuInterCopy should remain untouched
-    auto* inst = ipu_inter_copy_insts[1];
+    // The second InterIpuCopy should remain untouched
+    auto* inst = inter_ipu_copy_insts[1];
     ASSERT_TRUE(inst->has_sharding());
 
     const auto& sharding = inst->sharding();
@@ -1437,8 +1437,8 @@ TEST_F(CombineInstructionsIpuInterCopyTest,
   }
 }
 
-TEST_F(CombineInstructionsIpuInterCopyTest,
-       TestIpuInterCopyCombineMultipleShardingRun) {
+TEST_F(CombineInstructionsInterIpuCopyTest,
+       TestInterIpuCopyCombineMultipleShardingRun) {
   auto device = CreateIpuModel(_num_ipus);
   auto resources = GetMockResources(device, _original_module.get());
 

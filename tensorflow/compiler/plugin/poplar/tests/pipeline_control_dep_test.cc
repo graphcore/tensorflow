@@ -41,7 +41,7 @@ std::vector<HloInstruction*> SelectInterIPUCopies(
     const std::vector<HloInstruction*>& insts) {
   std::vector<HloInstruction*> result;
   absl::c_copy_if(insts, std::back_inserter(result),
-                  IsPoplarInstruction(PoplarOp::IpuInterCopy));
+                  IsPoplarInstruction(PoplarOp::InterIpuCopy));
 
   return result;
 }

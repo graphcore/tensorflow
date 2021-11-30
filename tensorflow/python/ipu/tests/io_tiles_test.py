@@ -291,8 +291,8 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         # Find matmul operations.
         if t.id.startswith("dot"):
           matmuls.append(t)
-        # Find ipu-inter-copy operations.
-        elif t.id.startswith("ipu-inter-copy"):
+        # Find inter-ipu-copy operations.
+        elif t.id.startswith("inter-ipu-copy"):
           iics.append(t)
 
       self.assertEqual(len(matmuls), 2)
@@ -357,8 +357,8 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         # Find matmul operations.
         if t.id.startswith("dot"):
           matmuls.append(t)
-        # Find ipu-inter-copy operations.
-        elif t.id.startswith("ipu-inter-copy"):
+        # Find inter-ipu-copy operations.
+        elif t.id.startswith("inter-ipu-copy"):
           iics.append(t)
 
       self.assertEqual(len(matmuls), 2)

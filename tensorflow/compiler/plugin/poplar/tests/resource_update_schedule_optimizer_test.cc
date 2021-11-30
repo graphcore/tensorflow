@@ -133,7 +133,7 @@ ENTRY e {
   std::vector<HloInstruction*> copies;
   absl::c_copy_if(resource_update_comp->instructions(),
                   std::back_inserter(copies), [](HloInstruction* inst) -> bool {
-                    return IsPoplarInstruction(PoplarOp::IpuInterCopy)(inst);
+                    return IsPoplarInstruction(PoplarOp::InterIpuCopy)(inst);
                   });
   EXPECT_EQ(copies.size(), 1);
   EXPECT_THAT(arg0->control_predecessors(), ::testing::ElementsAre(copies[0]));
