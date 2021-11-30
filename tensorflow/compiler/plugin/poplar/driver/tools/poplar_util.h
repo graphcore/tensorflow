@@ -65,6 +65,10 @@ namespace poplarplugin {
 struct CompilerResources;
 class PoplarExecutor;
 
+std::string GetRandomNumberSeedStream();
+std::string GetInfeedCopyHandle(const std::string& name, int64 shape_index);
+std::string GetOutfeedCopyHandle(const std::string& name, int64 shape_index);
+
 Status SetVertexField(poplar::Graph& graph, const poplar::FieldRef& field,
                       const Literal& literal);
 

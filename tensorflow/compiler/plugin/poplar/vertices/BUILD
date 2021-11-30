@@ -25,3 +25,11 @@ genrule(
         echo ')"'>> $@
         """,
 )
+
+cc_library(
+    name = "tf_graph_sources",
+    hdrs = [
+        ":convert_tf_asm_graph_sources_to_literal",
+        ":convert_tf_cpp_graph_sources_to_literal",
+    ],
+)

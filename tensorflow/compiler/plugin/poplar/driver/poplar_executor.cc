@@ -120,18 +120,6 @@ namespace se = ::stream_executor;
 namespace xla {
 namespace poplarplugin {
 
-std::string GetRandomNumberSeedStream() { return "__seed_stream"; }
-
-std::string GetInfeedCopyHandle(const std::string& name, int64 shape_index) {
-  return tensorflow::strings::Printf("infeed_%s.%lld", name.c_str(),
-                                     shape_index);
-}
-
-std::string GetOutfeedCopyHandle(const std::string& name, int64 shape_index) {
-  return tensorflow::strings::Printf("outfeed_%s.%lld", name.c_str(),
-                                     shape_index);
-}
-
 se::host::HostStream* PoplarExecutor::AsPoplarStream(se::Stream* stream) {
   DCHECK(stream != nullptr);
   return dynamic_cast<se::host::HostStream*>(stream->implementation());

@@ -33,6 +33,10 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
+        "//tensorflow/compiler/plugin/poplar/driver:backend_config_py",
+        "//tensorflow/compiler/plugin/poplar/driver:pipeline_config_py",
+        "//tensorflow/compiler/plugin/poplar/driver:poplar_executable_protos_py",
+        "//tensorflow/compiler/plugin/poplar/driver:poplar_feed_config_py",
         "//tensorflow/compiler/plugin/poplar/ops:application_runtime_py",
         "//tensorflow/compiler/plugin/poplar/ops:dataset_benchmark_py",
         "//tensorflow/compiler/plugin/poplar/ops:functional_ops_py",
@@ -83,7 +87,6 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:backend_protos_py",
         "//tensorflow/compiler/plugin/poplar/ops:dataset_ops_py",
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/python/distribute:values",
@@ -163,7 +166,6 @@ py_library(
         ":dataset_extractor",
         ":ipu_ops_lib",
         ":ipu_grad_ops_lib",
-        "//tensorflow/compiler/plugin/poplar:backend_protos_py",
         "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:sendrecv_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",

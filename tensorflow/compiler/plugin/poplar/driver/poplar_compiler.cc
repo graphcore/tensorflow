@@ -67,6 +67,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/constant_nan.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/constant_slice_folding.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/conv_bwd_input_to_fwd_weights_transpose.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dead_control_dependencies_elimination.h"
