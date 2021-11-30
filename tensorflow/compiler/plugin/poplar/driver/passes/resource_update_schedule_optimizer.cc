@@ -44,7 +44,7 @@ StatusOr<bool> ResourceUpdateScheduleOptimizer::OptimizeResourceUpdate(
   absl::c_copy_if(comp->MakeInstructionPostOrder(),
                   std::back_inserter(inter_ipu_copies),
                   [](HloInstruction* inst) -> bool {
-                    return IsPoplarInstruction(PoplarOp::InterIpuCopy)(inst);
+                    return IsPoplarInstruction(PoplarOp::IpuInterCopy)(inst);
                   });
 
   // Find all the inputs to the computation.

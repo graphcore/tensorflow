@@ -93,7 +93,7 @@ class MultiIpuTest(xla_test.XLATestCase):
         '__seed*',
         'add*/add*/Add',
         'switchControlBroadcast2/*OnTileCopy',
-        'Copy_*/inter-ipu-copy*/OnTileCopy',
+        'Copy_*/ipu-inter-copy*/OnTileCopy',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -265,7 +265,7 @@ class MultiIpuTest(xla_test.XLATestCase):
       self.assertEqual(events_types[IpuTraceEvent.COMPILE_END], 1)
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_compute_sets_contain_list(report, ['*inter-ipu-copy*'])
+    self.assert_compute_sets_contain_list(report, ['*ipu-inter-copy*'])
 
   def testConvAndBiasAddDifferentIPUs(self):
     cfg = ipu.utils.IPUConfig()
@@ -314,7 +314,7 @@ class MultiIpuTest(xla_test.XLATestCase):
     # There is 1 piece of global exchange (apart from progId)
     expected_exchanges = [
         'switchControlBroadcast*/GlobalPre',
-        '*_to_/inter-ipu-copy*/GlobalPre',
+        '*_to_/ipu-inter-copy*/GlobalPre',
         '__seed/set/setMasterSeed',
     ]
     exchanges = [

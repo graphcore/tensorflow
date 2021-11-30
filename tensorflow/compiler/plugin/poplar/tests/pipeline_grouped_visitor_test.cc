@@ -158,9 +158,9 @@ ENTRY main {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("inter-ipu-copy"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.1"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
       // FIFO after stage 0
       {entry_computation->GetInstructionWithName("fifo"), 0},
   };
@@ -301,9 +301,9 @@ ENTRY main {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("inter-ipu-copy"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.1"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
       // FIFO after stage 0
       {entry_computation->GetInstructionWithName("fifo"), 0},
   };
@@ -505,19 +505,19 @@ ENTRY main {
       // FIFO after stage 0
       {entry_computation->GetInstructionWithName("fifo.1"), 1},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("inter-ipu-copy"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 1 and 2
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.1"), 1},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 1},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.2"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.2"), 2},
       // Inter-ipu-copy between stage 3 and 4
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.3"), 3},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.3"), 3},
       // Inter-ipu-copy between stage 1 and 4
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.4"), 1},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.4"), 1},
       // Inter-ipu-copy between stage 4 and 5
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.5"), 4},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.5"), 4},
       // Inter-ipu-copy between stage 0 and 5
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.6"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.6"), 0},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -715,15 +715,15 @@ ENTRY main {
       {entry_computation->GetInstructionWithName("gte_e"), 4},
       {entry_computation->GetInstructionWithName("d"), 5},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("inter-ipu-copy"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 1 and 2
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.1"), 1},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 1},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.2"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.2"), 2},
       // Inter-ipu-copy between stage 3 and 4
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.3"), 3},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.3"), 3},
       // Inter-ipu-copy between stage 4 and 5
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.4"), 4},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.4"), 4},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -929,9 +929,9 @@ ENTRY main {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("inter-ipu-copy"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("inter-ipu-copy.1"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
       // FIFO after stage 0
       {entry_computation->GetInstructionWithName("fifo"), 0},
   };

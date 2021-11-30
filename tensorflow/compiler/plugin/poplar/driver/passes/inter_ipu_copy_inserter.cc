@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_ipu_copy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/find_all_users.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -74,7 +74,7 @@ StatusOr<HloInstruction*> InsertInterIpuCopy(
       IsPoplarInstruction(PoplarOp::ExecutionCounter)(inst)) {
     new_inst = comp->AddInstruction(inst->Clone());
   } else {
-    new_inst = comp->AddInstruction(CreateInterIpuCopy({inst}));
+    new_inst = comp->AddInstruction(CreateIpuInterCopy({inst}));
   }
 
   new_inst->set_sharding(output_sharding);
@@ -96,7 +96,7 @@ StatusOr<bool> InterIpuCopyInserter::Run(HloModule* module) {
     // These ops are expected to have their input(s) on a different device to
     // their output(s).
     return inst->opcode() == HloOpcode::kAfterAll ||
-           IsPoplarInstruction(PoplarOp::InterIpuCopy)(inst);
+           IsPoplarInstruction(PoplarOp::IpuInterCopy)(inst);
   };
 
   for (auto* comp : module->MakeComputationPostOrder()) {

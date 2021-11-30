@@ -13,21 +13,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_INTER_IPU_COPY_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_INTER_IPU_COPY_H_
-
-#include <memory>
-#include <string>
-#include <vector>
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_IPU_INTER_COPY_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_IPU_INTER_COPY_H_
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 
 namespace xla {
 namespace poplarplugin {
 
-class HloInterIpuCopy : public HloPoplarInstruction {
+class HloIpuInterCopy : public HloPoplarInstruction {
  public:
-  explicit HloInterIpuCopy(absl::Span<HloInstruction* const> operands);
+  explicit HloIpuInterCopy(absl::Span<HloInstruction* const> operands);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -51,7 +47,7 @@ class HloInterIpuCopy : public HloPoplarInstruction {
       HloCloneContext*) const override;
 };
 
-std::unique_ptr<HloInstruction> CreateInterIpuCopy(
+std::unique_ptr<HloInstruction> CreateIpuInterCopy(
     absl::Span<HloInstruction* const> operands);
 
 }  // namespace poplarplugin

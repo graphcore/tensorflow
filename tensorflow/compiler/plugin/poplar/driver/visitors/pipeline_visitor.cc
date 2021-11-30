@@ -300,7 +300,7 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
 
   // Partition out the Inter IPU copies and also assign stage to their operands.
   auto inter_ipu_copies_end = std::stable_partition(
-      outfeeds_end, instructions.end(), util::IsInterIpuCopyInstruction());
+      outfeeds_end, instructions.end(), util::IsIpuInterCopyInstruction());
   for (auto itr = outfeeds_end; itr != inter_ipu_copies_end; ++itr) {
     HloInstruction* inst = *itr;
     std::queue<HloInstruction*> operands;
@@ -1067,7 +1067,7 @@ Status PipelineVisitor::HandleNonDeferredCustomCall(HloInstruction* hlo) {
     return HandleExecutionCounter(hlo);
   } else if (util::IsFifoInstruction()(hlo)) {
     return HandleFifo(hlo);
-  } else if (util::IsInterIpuCopyInstruction()(hlo)) {
+  } else if (util::IsIpuInterCopyInstruction()(hlo)) {
     return HandleInterIpuCopy(hlo);
   } else if (util::IsGradientAccumulatorSinkInstruction()(hlo)) {
     return HandleGradientAccumulatorSink(hlo);

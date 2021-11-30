@@ -23,7 +23,7 @@ enum PoplarOp {
   StatelessRandomUniformInt = 18;
   StatelessRandomNormal = 19;
   StatelessTruncatedNormal = 20;
-  InterIpuCopy = 21;
+  IpuInterCopy = 21;
   Dropout = 22;
   OneHot = 23;
   ReplicationFactor = 24;

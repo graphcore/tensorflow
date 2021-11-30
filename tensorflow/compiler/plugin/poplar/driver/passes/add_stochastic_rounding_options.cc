@@ -48,7 +48,7 @@ StatusOr<bool> NeedsSpecificSeedType(const HloInstruction* inst) {
       PoplarOp::CopyInto,
       PoplarOp::Fifo,
       PoplarOp::InterTilesetCopy,
-      PoplarOp::InterIpuCopy,
+      PoplarOp::IpuInterCopy,
       PoplarOp::StatefulNoop,
       PoplarOp::GradientAccumulatorCreate,
       PoplarOp::GradientAccumulatorSink};

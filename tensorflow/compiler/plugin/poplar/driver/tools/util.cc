@@ -23,7 +23,7 @@ limitations under the License.
 
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_ipu_copy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/xla/literal_util.h"
@@ -617,7 +617,7 @@ int64 GetFunctionNumberUnmodifiedRemoteBufferInputs(
 const HloInstruction* GetOperandLookThroughInterIpuCopy(
     const HloInstruction* inst, const int64 operand_idx) {
   const HloInstruction* operand = inst->operand(operand_idx);
-  return IsPoplarInstruction(PoplarOp::InterIpuCopy)(operand)
+  return IsPoplarInstruction(PoplarOp::IpuInterCopy)(operand)
              ? operand->operand(0)
              : operand;
 }

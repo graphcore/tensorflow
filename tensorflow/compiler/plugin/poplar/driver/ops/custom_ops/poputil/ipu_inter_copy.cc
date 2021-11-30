@@ -31,7 +31,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-class InterIpuCopyOp : public PoplarOpDef {
+class IpuInterCopyOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
@@ -170,11 +170,11 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
 }
 }  // namespace
 
-StatusOr<poplar::program::Sequence> InterIpuCopyOp::Creator(
+StatusOr<poplar::program::Sequence> IpuInterCopyOp::Creator(
     poplar::Graph&, CompilerResources& res, const HloInstruction* inst,
     const Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugContext& debug_context) {
-  PoplarOpDefDebugInfo debug_info(debug_context, "InterIpuCopyOp");
+  PoplarOpDefDebugInfo debug_info(debug_context, "IpuInterCopyOp");
   poplar::program::Sequence seq({}, debug_info);
 
   if (!inst->has_sharding()) {
@@ -274,7 +274,7 @@ StatusOr<poplar::program::Sequence> InterIpuCopyOp::Creator(
   return seq;
 }
 
-REGISTER_POPLAR_OP(InterIpuCopy, InterIpuCopyOp);
+REGISTER_POPLAR_OP(IpuInterCopy, IpuInterCopyOp);
 
 }  // namespace
 
