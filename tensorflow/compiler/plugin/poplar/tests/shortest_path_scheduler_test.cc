@@ -994,6 +994,80 @@ HloModule top
   EXPECT_EQ(seq[6]->name(), "tuple");
 }
 
+TEST_F(ShortestPathSchedulerTest, TestShortestPathParamsNoUsers) {
+  std::string hlo_string = R"(
+HloModule top
+
+%cluster_1  {
+  ROOT tuple = () tuple()
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  p2 = f32[] parameter(2)
+}
+  )";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
+
+  EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  ASSERT_EQ(seq.size(), 4);
+
+  EXPECT_EQ(seq[0]->name(), "tuple");
+  EXPECT_EQ(seq[1]->name(), "p0");
+  EXPECT_EQ(seq[2]->name(), "p1");
+  EXPECT_EQ(seq[3]->name(), "p2");
+}
+
+TEST_F(ShortestPathSchedulerTest, TestUnusedParametersControlDeps) {
+  std::string hlo_string = R"(
+HloModule top
+
+comp {
+  p0 = f32[10] parameter(0)
+  p1 = f32[10] parameter(1)
+  ROOT add = f32[10] add(f32[10] p0, f32[10] p1)
+  p2 = f32[10] parameter(2), control-predecessors={p0, p1, add}
+  p3 = f32[32,28,28,1] parameter(3), control-predecessors={p0, p1, add}
+  p4 = f32[3,3,1,10] parameter(4), control-predecessors={p0, p1, add}
+}
+  )";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
+
+  EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  ASSERT_EQ(seq.size(), 6);
+
+  EXPECT_EQ(seq[0]->name(), "p0");
+  EXPECT_EQ(seq[1]->name(), "p1");
+  EXPECT_EQ(seq[2]->name(), "add");
+  EXPECT_EQ(seq[3]->name(), "p2");
+  EXPECT_EQ(seq[4]->name(), "p3");
+  EXPECT_EQ(seq[5]->name(), "p4");
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
