@@ -124,12 +124,13 @@ StatusOr<poplar::program::Sequence> CreateSimpleReduction(
 StatusOr<poplar::program::Sequence> CreateSimpleReduction(
     CompilerResources& res, const HloInstruction* inst,
     const HloInstruction* reduce_inst, const xla::Shape& output,
-    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id);
+    TensorMap& tensor_map, bool with_scale,
+    const poplar::DebugNameAndId& debug_name_and_id);
 
 StatusOr<poplar::program::Sequence> CreateSimpleReduction(
     CompilerResources& res, popops::Operation reduction_operation,
     const HloInstruction* inst, const HloInstruction* reduce_inst,
-    const xla::Shape& output, TensorMap& tensor_map,
+    const xla::Shape& output, TensorMap& tensor_map, bool with_scale,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 StatusOr<poplar::program::Sequence> CreateSimpleWindowReduction(

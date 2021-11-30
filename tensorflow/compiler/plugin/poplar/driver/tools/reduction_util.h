@@ -48,13 +48,16 @@ struct ReductionInfo {
   std::vector<std::size_t> reduction_dims;
   Literal identity_literal;
   ReductionOperation reduction_op;
+  bool with_scale = false;
 };
 
-StatusOr<ReductionInfo> GetReductionInfo(const HloInstruction* inst);
+StatusOr<ReductionInfo> GetReductionInfo(const HloInstruction* inst,
+                                         bool with_scale);
 StatusOr<popops::Operation> ToPopopsReductionOp(const ReductionOperation&);
 StatusOr<ReductionOperation> FromPopopsReductionOp(const popops::Operation&);
 StatusOr<popops::expr::BinaryOpType> ToBinaryOpType(const ReductionOperation&);
-
+StatusOr<const HloInstruction*> GetReduceInstruction(
+    const HloInstruction* root_inst);
 StatusOr<popops::Operation> GetPoplibsReductionOperation(
     const HloInstruction* inst);
 

@@ -60,14 +60,20 @@ class ReduceManyOp : public PoplarOpDef {
     popops_reductions.reserve(num_reductions);
     output_tensors.reserve(num_reductions);
 
+    int reduction_input_id = 0;
+
     for (size_t i = 0; i != num_reductions; ++i) {
       // Find tensors and construct popops reductions.
       const ReductionInfo& info = reduce_many_inst->ReductionsInfo()[i];
-      // Get input 2 * i as each reduction has 2 inputs
+      // Get input reduction_input_id as each reduction has 2 or 3 inputs
       // (tensor_to_reduce and init_value).
-      TF_ASSIGN_OR_RETURN(poplar::Tensor in,
-                          FindInstructionInput(tensor_map, res, inst, 2 * i,
-                                               seq, {debug_info}));
+      const bool with_scale = info.with_scale;
+
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor in,
+          FindInstructionInput(tensor_map, res, inst, reduction_input_id, seq,
+                               {debug_info}));
+
       TF_ASSIGN_OR_RETURN(
           poplar::Tensor out,
           GetOutputTensor(graph, tensor_map, res, inst, i, {debug_info}));
@@ -76,31 +82,44 @@ class ReduceManyOp : public PoplarOpDef {
       TF_ASSIGN_OR_RETURN(popops::Operation popops_reduction_op,
                           ToPopopsReductionOp(info.reduction_op));
       popops::ReduceParams params(popops_reduction_op);
+      if (with_scale) {
+        TF_ASSIGN_OR_RETURN(
+            poplar::Tensor scale,
+            FindInstructionInput(tensor_map, res, inst, reduction_input_id + 2,
+                                 seq, {debug_info}));
+        params = popops::ReduceParams(popops_reduction_op, false, scale);
+      }
+
       popops_reductions.emplace_back(in, info.reduction_dims, params,
                                      out.elementType());
+      reduction_input_id += with_scale ? 3 : 2;
     }
     popops::reduceMany(graph, popops_reductions, output_tensors, seq,
                        {debug_info}, {});
 
+    int reduction_dims_id = 1;
     for (size_t i = 0; i != num_reductions; ++i) {
       // Apply initial value.
       const ReductionInfo& info = reduce_many_inst->ReductionsInfo()[i];
+      const bool with_scale = info.with_scale;
       poplar::Tensor out = output_tensors[i];
 
-      auto* init_inst = inst->operand(2 * i + 1);
+      auto* init_inst = inst->operand(reduction_dims_id);
       if (!(init_inst->IsConstant() &&
             init_inst->literal() == info.identity_literal)) {
-        // Get input 2 * i + 1 as each reduction has 2 inputs
+        // Get input reduction_dims_id as each reduction has 2 or 3 inputs
         // (tensor_to_reduce and init_value).
-        TF_ASSIGN_OR_RETURN(poplar::Tensor init_val,
-                            FindInstructionInput(tensor_map, res, inst,
-                                                 2 * i + 1, seq, debug_info));
+        TF_ASSIGN_OR_RETURN(
+            poplar::Tensor init_val,
+            FindInstructionInput(tensor_map, res, inst, reduction_dims_id, seq,
+                                 debug_info));
         TF_ASSIGN_OR_RETURN(
             init_val, BroadcastTensor(init_val, inst->shape().tuple_shapes(i)));
         TF_ASSIGN_OR_RETURN(popops::expr::BinaryOpType binary_op_type,
                             ToBinaryOpType(info.reduction_op));
         popops::mapInPlace(graph, binary_op_type, out, init_val, seq,
                            {debug_info, "initval"});
+        reduction_dims_id += with_scale ? 3 : 2;
       }
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, out));
     }

@@ -33,11 +33,11 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/reduction_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
-
 using ::absl::StrCat;
 
 namespace xla {
@@ -429,7 +429,7 @@ class ReductionFp16InputOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(
         poplar::program::Sequence prog,
         CreateSimpleReduction(res, inst, reduce_inst, output_shape, tensor_map,
-                              {debug_info}));
+                              /*with_scale=*/false, {debug_info}));
     return prog;
   }
 };
@@ -442,17 +442,37 @@ class ReductionSquareAddOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ReductionSquareAddOp");
-    const HloInstruction* reduce_inst = inst->fused_expression_root();
+    const bool with_scale = inst->operand_count() == 3;
+    TF_ASSIGN_OR_RETURN(const HloInstruction* reduce_inst,
+                        GetReduceInstruction(inst));
     TF_ASSIGN_OR_RETURN(
         poplar::program::Sequence prog,
         CreateSimpleReduction(res, popops::Operation::SQUARE_ADD, inst,
-                              reduce_inst, output_shape, tensor_map,
+                              reduce_inst, output_shape, tensor_map, with_scale,
                               {debug_info}));
     return prog;
   }
 };
 
 REGISTER_POPLAR_OP(Reduction_square_add, ReductionSquareAddOp)
+
+class ReductionScaledOp : public PoplarOpDef {
+  StatusOr<poplar::program::Sequence> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "ReductionScaledOp");
+    TF_ASSIGN_OR_RETURN(const HloInstruction* reduce_inst,
+                        GetReduceInstruction(inst));
+    TF_ASSIGN_OR_RETURN(
+        poplar::program::Sequence prog,
+        CreateSimpleReduction(res, inst, reduce_inst, output_shape, tensor_map,
+                              /*with_scale=*/true, {debug_info}));
+    return prog;
+  }
+};
+
+REGISTER_POPLAR_OP(Reduction_scaled, ReductionScaledOp)
 
 class ArithemticExpressionOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(

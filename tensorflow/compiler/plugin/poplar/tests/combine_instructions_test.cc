@@ -852,6 +852,75 @@ TEST_F(CombineInstructionsTest, TestCombineReduceFusionsIntoReduceMany) {
   ASSERT_EQ(absl::c_count_if(seq, IsReductionFusion), 0);
 }
 
+TEST_F(CombineInstructionsTest,
+       TestCombineReduceFusionsWithScaleIntoReduceMany) {
+  const char* reduction_fusion_hlo = R"(
+HloModule top
+
+add {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT add.1 = f32[] add(p0, p1)
+}
+
+multiply {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT multiply.1 = f32[] multiply(p0, p1)
+}
+
+_pop_op_reduction_fp16_input {
+  p0 = f16[512,8] parameter(0)
+  p1 = f32[] parameter(1)
+  convert = f32[512,8] convert(p0)
+  ROOT reduce = f32[512] reduce(convert, p1), dimensions={1}, to_apply=multiply
+}
+
+_pop_op_reduction_square_add {
+  p0 = f16[512,8] parameter(0)
+  p1 = f32[] parameter(1)
+  p2 = f32[] parameter(2)
+  m0 = f16[512,8] multiply(p0, p0)
+  convert = f32[512,8] convert(m0)
+  reduce = f32[512] reduce(convert, p1), dimensions={1}, to_apply=add
+  b0 = f32[512] broadcast(p2), dimensions={}
+  ROOT m1 = f32[512] multiply(reduce, b0)
+}
+
+cluster_1  {
+  arg0 = f16[512,8] parameter(0)
+  arg1 = f16[512,8] parameter(1)
+  c0 = f32[] constant(0)
+  c1 = f32[] constant(1)
+  c2 = f32[] constant(2)
+  r0 = f32[512] fusion(arg0, c0, c2), kind=kCustom, calls=_pop_op_reduction_square_add
+  r1 = f32[512] fusion(arg1, c1), kind=kCustom, calls=_pop_op_reduction_fp16_input
+  ROOT %tuple = (f32[512], f32[512]) tuple(r0, r1)
+}
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(reduction_fusion_hlo, config_));
+
+  CompilerAnnotations annotations(module.get());
+  auto* entry = module.get()->entry_computation();
+
+  ASSERT_EQ(absl::c_count_if(entry->instructions(), IsReductionFusion), 2);
+
+  static constexpr uint64 node_size = 4 * 512;  // float32 * 512.
+  // Schedule and combine.
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_reduce_many_buffer_size(2 * node_size));
+  EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(CombineInstructions().Run(module.get()).ValueOrDie());
+
+  auto s = module.get()->schedule().sequence(entry);
+  auto seq = s.instructions();
+
+  // Both reduce fusions should be combined into a ReduceMany.
+  ASSERT_THAT(seq, ContainsNPoplarOps(PoplarOp::ReduceMany, 1));
+  ASSERT_EQ(absl::c_count_if(seq, IsReductionFusion), 0);
+}
+
 TEST_F(CombineInstructionsTest, TestOutputOfCombinedReducesIntoReduceMany) {
   std::string hlo_string = R"(
 HloModule top
