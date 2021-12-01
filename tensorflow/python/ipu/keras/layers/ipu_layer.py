@@ -18,9 +18,14 @@ Base IPU Keras layer
 """
 
 from tensorflow.python.keras.engine.base_layer import Layer
+from tensorflow.python.util import deprecation
 
 
 class IPULayer(Layer):
+  @deprecation.deprecated(
+      None,
+      "The IPULayer keras layer has been moved to IPU TensorFlow Addons and "
+      "will be removed from TensorFlow in a future release.")
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
 

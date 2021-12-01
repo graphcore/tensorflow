@@ -26,6 +26,7 @@ from tensorflow.python.keras import initializers
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import array_ops
+from tensorflow.python.util import deprecation
 
 
 class Embedding(ipu_layer.IPULayer):
@@ -54,6 +55,10 @@ class Embedding(ipu_layer.IPULayer):
   """
 
   # pylint: disable=useless-super-delegation
+  @deprecation.deprecated(
+      None,
+      "The Embedding keras layer has been moved to IPU TensorFlow Addons and "
+      "will be removed from TensorFlow in a future release.")
   def __init__(self,
                input_dim,
                output_dim,

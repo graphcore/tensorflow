@@ -25,6 +25,7 @@ from tensorflow.python.keras import constraints
 from tensorflow.python.keras import initializers
 from tensorflow.python.keras import regularizers
 from tensorflow.python.ops import array_ops
+from tensorflow.python.util import deprecation
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 
@@ -58,6 +59,10 @@ class GroupNormalization(ipu_layer.IPULayer):
       if not produced with this unconventional implementation.
     trainable: Boolean, if `True` the variables will be marked as trainable.
   """
+  @deprecation.deprecated(
+      None,
+      "The GroupNormalization keras layer has been moved to IPU TensorFlow "
+      "Addons and will be removed from TensorFlow in a future release.")
   def __init__(self,
                groups=2,
                channels_axis=-1,
@@ -227,6 +232,10 @@ class InstanceNormalization(GroupNormalization):
     beta_initializer: Initializer for the beta weight.
     gamma_initializer: Initializer for the gamma weight.
   """
+  @deprecation.deprecated(
+      None,
+      "The InstanceNormalization keras layer has been moved to IPU TensorFlow "
+      "Addons and will be removed from TensorFlow in a future release.")
   def __init__(self,
                channels_axis=-1,
                center=True,
@@ -299,6 +308,10 @@ class LayerNormalization(GroupNormalization):
     gamma_constraint: Optional constraint for the gamma weight.
     trainable: Boolean, if `True` the variables will be marked as trainable.
   """
+  @deprecation.deprecated(
+      None,
+      "The LayerNormalization keras layer has been moved to IPU TensorFlow "
+      "Addons and will be removed from TensorFlow in a future release.")
   def __init__(self,
                axis=-1,
                epsilon=1e-3,

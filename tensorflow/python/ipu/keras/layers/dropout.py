@@ -22,6 +22,7 @@ from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import array_ops
+from tensorflow.python.util import deprecation
 
 
 class Dropout(Layer):
@@ -43,6 +44,10 @@ class Dropout(Layer):
       be used to seed the random number generator that generates the dropout
       mask.
   """
+  @deprecation.deprecated(
+      None,
+      "The Dropout keras layer has been moved to IPU TensorFlow Addons and "
+      "will be removed from TensorFlow in a future release.")
   def __init__(self, rate, noise_shape=None, seed=None, **kwargs):
     self.seed = seed
     self.rate = rate

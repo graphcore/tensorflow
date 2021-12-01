@@ -391,37 +391,6 @@ class IPUPipelineTest(test.TestCase):
       report_json.assert_num_host_to_device_transfer_events(6)
 
   @test_util.run_v2_only
-  def testTrainPipelineWithLstm(self):
-    cfg = IPUConfig()
-    tu.enable_ipu_events(cfg)
-    cfg.ipu_model.tiles_per_ipu = 8
-    cfg.auto_select_ipus = 2
-    cfg.configure_ipu_system()
-
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32),
-                                       dtype=dtypes.int32,
-                                       batch_size=1)
-
-      with ipu.keras.PipelineStage(0):
-        x = ipu.keras.layers.Embedding(8000, 128)(input_layer)
-
-      with ipu.keras.PipelineStage(1):
-        x = ipu.keras.layers.PopnnLSTM(128, dropout=0.2)(x)
-        x = keras.layers.Dense(1, activation='sigmoid')(x)
-
-      m = keras.Model(input_layer, x)
-      m.set_pipelining_options(gradient_accumulation_steps_per_replica=24)
-      m.compile('sgd', loss='mse', steps_per_execution=48)
-
-      # Fit the weights to the dataset
-      history = m.fit(test_language_dataset(length=96), epochs=3, verbose=0)
-
-      losses = history.history['loss']
-      self.assertTrue(losses[0] > losses[-1])
-
-  @test_util.run_v2_only
   def testFitWithMetrics(self):
     cfg = IPUConfig()
     cfg.ipu_model.tiles_per_ipu = 8

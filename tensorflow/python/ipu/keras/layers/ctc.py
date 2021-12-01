@@ -13,11 +13,12 @@
 # limitations under the License.
 # =============================================================================
 
-from tensorflow.python.keras import layers
+from tensorflow.python.framework import dtypes
 from tensorflow.python.ipu.ops import nn_ops
+from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
-from tensorflow.python.framework import dtypes
+from tensorflow.python.util import deprecation
 
 
 class CTCInferenceLayer(layers.Layer):
@@ -34,6 +35,10 @@ class CTCInferenceLayer(layers.Layer):
         (`True`) or log probabilities (`False`).
         Default value is `False`.
   """
+  @deprecation.deprecated(
+      None,
+      "The CTCInferenceLayer keras layer has been moved to IPU TensorFlow "
+      "Addons and will be removed from TensorFlow in a future release.")
   def __init__(self,
                blank_index=0,
                beam_width=100,
@@ -105,6 +110,10 @@ class CTCPredictionsLayer(layers.Layer):
         Default value is `False`.
 
   """
+  @deprecation.deprecated(
+      None,
+      "The CTCPredictionsLayer keras layer has been moved to IPU TensorFlow "
+      "Addons and will be removed from TensorFlow in a future release.")
   def __init__(self,
                blank_index=0,
                beam_width=100,

@@ -7,6 +7,13 @@ available in PopLibs. See the :ref:`api-section` for more details.
 LSTM and GRU
 ~~~~~~~~~~~~
 
+.. warning::
+
+  LSTM and GRU have been deprecated and will be removed in a future release.
+  They can now be found in IPU TensorFlow Addons.
+
+  See :ref:`layers-moved-to-addons` for more information.
+
 For recurrent neural networks, the custom LSTM
 (:py:class:`~tensorflow.python.ipu.rnn_ops.PopnnLSTM`) and GRU
 (:py:class:`~tensorflow.python.ipu.rnn_ops.PopnnGRU`) ops need to be used

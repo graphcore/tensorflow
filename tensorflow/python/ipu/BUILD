@@ -429,31 +429,6 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "keras_embedding_lookup_test",
-    size = "large",
-    srcs = ["tests/keras/keras_embedding_lookup_test.py"],
-    deps = [
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
-        "//third_party/py/numpy",
-    ],
-)
-
-tf_py_test(
-    name = "keras_rnn_test",
-    size = "large",
-    srcs = ["tests/keras/keras_rnn_test.py"],
-    shard_count = 5,
-    deps = [
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
-        "//third_party/py/numpy",
-    ],
-)
-
-tf_py_test(
     name = "keras_pipeline_test",
     size = "large",
     srcs = ["tests/keras/keras_pipeline_test.py"],
@@ -466,21 +441,6 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras",
         "//third_party/py/numpy",
-    ],
-)
-
-tf_py_test(
-    name = "keras_pipeline_recomputation_test",
-    size = "large",
-    srcs = ["tests/keras/keras_pipeline_recomputation_test.py"],
-    shard_count = 2,
-    tags = ["isolated_poplar_tests"],
-    deps = [
-        ":pipelining_test_util",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
     ],
 )
 
@@ -574,55 +534,6 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "keras_normalization_test",
-    size = "large",
-    srcs = ["tests/keras/keras_normalization_test.py"],
-    shard_count = 12,
-    deps = [
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
-        "//third_party/py/numpy",
-    ],
-)
-
-tf_py_test(
-    name = "keras_ctc_test",
-    size = "large",
-    srcs = ["tests/keras/keras_ctc_test.py"],
-    deps = [
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
-        "//third_party/py/numpy",
-    ],
-)
-
-tf_py_test(
-    name = "keras_dropout_test",
-    size = "medium",
-    srcs = ["tests/keras/keras_dropout_test.py"],
-    deps = [
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
-        "//third_party/py/numpy",
-    ],
-)
-
-tf_py_test(
-    name = "keras_effective_transformer_test",
-    size = "large",
-    srcs = ["tests/keras/keras_effective_transformer_test.py"],
-    shard_count = 12,
-    deps = [
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//third_party/py/numpy",
-    ],
-)
-
-tf_py_test(
     name = "keras_mnist_test",
     size = "large",
     srcs = ["tests/keras/examples/keras_mnist_test.py"],
@@ -686,20 +597,6 @@ tf_py_test(
         ":ipu_grad_ops_lib",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
-    ],
-)
-
-tf_py_test(
-    name = "math_layers_test",
-    size = "large",
-    srcs = ["tests/math_layers_test.py"],
-    shard_count = 12,
-    deps = [
-        ":ipu_grad_ops_lib",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras",
@@ -1599,39 +1496,11 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "keras_rnn_hw_test",
-    size = "large",
-    srcs = ["tests/keras_rnn_hw_test.py"],
-    tags = ["hw_poplar_test"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_py_test(
     name = "random_number_generation_test",
     size = "large",
     srcs = ["tests/random_number_generation_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 4,
-    tags = ["hw_poplar_test"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_py_test(
-    name = "assume_equal_test",
-    size = "large",
-    srcs = ["tests/assume_equal_test.py"],
     tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow:tensorflow_py",
@@ -2064,7 +1933,6 @@ test_suite(
         "application_compile_and_run_test",
         "application_compile_test",
         "application_runtime_test",
-        "assume_equal_test",
         "automatic_loss_scaling_optimizer_test",
         "candidate_sampler_test",
         "config_test",
@@ -2101,10 +1969,6 @@ test_suite(
         "iteration_counter_test",
         "keras_asynchronous_callbacks_test",
         "keras_automatic_loss_scaling_optimizer_test",
-        "keras_ctc_test",
-        "keras_dropout_test",
-        "keras_effective_transformer_test",
-        "keras_embedding_lookup_test",
         "keras_execution_parameters_test",
         "keras_feed_options_test",
         "keras_functional_model_test",
@@ -2112,14 +1976,10 @@ test_suite(
         "keras_model_replication_mnist_test",
         "keras_model_replication_test",
         "keras_models_comparison_test",
-        "keras_normalization_test",
         "keras_pipeline_model_replication_test",
-        "keras_pipeline_recomputation_test",
         "keras_pipeline_save_restore_test",
         "keras_pipeline_sequential_replication_test",
         "keras_pipeline_test",
-        "keras_rnn_hw_test",
-        "keras_rnn_test",
         "keras_sequential_pipeline_save_restore_test",
         "keras_sequential_pipeline_test",
         "keras_sequential_replication_test",
@@ -2127,7 +1987,6 @@ test_suite(
         "keras_synthetic_data_test",
         "keras_v2_optimizers_test",
         "map_gradient_optimizer_test",
-        "math_layers_test",
         "math_ops_test",
         "multi_conv_test",
         "nn_ops_test",

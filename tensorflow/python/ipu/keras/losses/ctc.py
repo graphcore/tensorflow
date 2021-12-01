@@ -17,6 +17,7 @@ from tensorflow.python.keras import layers
 from tensorflow.python.ipu.ops import nn_ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.util import deprecation
 
 
 class CTCLoss(layers.Layer):
@@ -57,6 +58,10 @@ class CTCLoss(layers.Layer):
         (`True`) or log probabilities (`False`).
         Default value is `False`.
   """
+  @deprecation.deprecated(
+      None,
+      "The CTCLoss keras layer has been moved to IPU TensorFlow Addons and "
+      "will be removed from TensorFlow in a future release.")
   def __init__(self, blank_index=0, from_logits=False, **kwargs):
     super().__init__(**kwargs)
     self.blank_index = blank_index

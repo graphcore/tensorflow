@@ -3049,48 +3049,6 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
-    name = "gru_size_test",
-    size = "large",
-    srcs = ["tests/size_speed_tests/gru_size_test.py"],
-    enabled_backends = ["poplar"],
-    shard_count = 6,
-    deps = [
-        ":test_utils_py",
-    ],
-)
-
-tf_xla_py_test(
-    name = "lstm_size_test",
-    size = "large",
-    srcs = ["tests/size_speed_tests/lstm_size_test.py"],
-    enabled_backends = ["poplar"],
-    shard_count = 4,
-    deps = [
-        ":test_utils_py",
-    ],
-)
-
-tf_xla_py_test(
-    name = "gru_training_test",
-    size = "large",
-    srcs = ["tests/training_tests/gru_training_test.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        ":test_utils_py",
-    ],
-)
-
-tf_xla_py_test(
-    name = "lstm_training_test",
-    size = "large",
-    srcs = ["tests/training_tests/lstm_training_test.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        ":test_utils_py",
-    ],
-)
-
-tf_xla_py_test(
     name = "while_loop_test",
     size = "medium",
     srcs = ["tests/while_loop_test.py"],
@@ -3324,67 +3282,6 @@ py_test(
         "--training-steps=4",
     ],
     tags = ["isolated_poplar_tests"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
-    name = "example_tf2_model_fit",
-    size = "large",
-    srcs = ["docs/example_tf2_model_fit.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
-    name = "example_tf2_fit",
-    size = "large",
-    srcs = ["docs/example_tf2_fit.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
-    name = "example_tf2_custom_training",
-    size = "large",
-    srcs = ["docs/example_tf2_custom_training.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-py_test(
-    name = "example_tf2_pipelined_model",
-    size = "large",
-    srcs = ["docs/example_tf2_pipelined_model.py"],
-    args = [
-        "--epochs=1",
-        "--steps-per-epoch=16",
-    ],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-py_test(
-    name = "example_tf2_pipeline_sequential",
-    size = "large",
-    srcs = ["docs/example_tf2_pipeline_sequential.py"],
-    args = [
-        "--epochs=1",
-        "--steps-per-epoch=2",
-    ],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -3995,18 +3892,8 @@ test_suite(
     name = "size_speed_tests",
     tests = [
         "combined_weights_test",
-        "gru_size_test",
-        "lstm_size_test",
         "matmul_size_test",
         "resnet_size_test",
-    ],
-)
-
-test_suite(
-    name = "training_tests",
-    tests = [
-        "gru_training_test",
-        "lstm_training_test",
     ],
 )
 
@@ -4015,10 +3902,6 @@ test_suite(
     tests = [
         "custom_add_inplace",
         "distributed_training_example",
-        "example_tf2_custom_training",
-        "example_tf2_fit",
-        "example_tf2_model_fit",
-        "example_tf2_pipelined_model",
         "function_block1",
         "function_block2",
         "function_block3",
@@ -4066,7 +3949,6 @@ test_suite(
         ":doc_examples",
         ":poplar_test_suite",
         ":size_speed_tests",
-        ":training_tests",
     ],
 )
 

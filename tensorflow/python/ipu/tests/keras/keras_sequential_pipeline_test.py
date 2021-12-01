@@ -101,16 +101,6 @@ def fixed_weight_pipeline(dtype=None):
   return m
 
 
-def pipeline_with_lstm():
-  m = keras.Sequential([
-      ipu.keras.layers.Embedding(8000, 128),
-      ipu.keras.layers.PopnnLSTM(128, dropout=0.2),
-      keras.layers.Dense(1, activation='sigmoid')
-  ])
-  m.set_pipeline_stage_assignment([0, 1, 1])
-  return m
-
-
 class BatchCallbackCounter(keras.callbacks.Callback):
   def __init__(self):
     super(BatchCallbackCounter, self).__init__()
@@ -354,25 +344,6 @@ class IPUSequentialPipelineTest(test.TestCase):
       # epoch.
       report_json.parse_log()
       report_json.assert_num_host_to_device_transfer_events(6)
-
-  @test_util.run_v2_only
-  def testTrainPipelineWithLstm(self):
-    cfg = IPUConfig()
-    cfg.ipu_model.tiles_per_ipu = 8
-    cfg.auto_select_ipus = 2
-    cfg.configure_ipu_system()
-
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      m = pipeline_with_lstm()
-      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8)
-      m.compile('sgd', loss='mse', steps_per_execution=16)
-
-      # Fit the weights to the dataset
-      history = m.fit(test_language_dataset(length=96), epochs=3, verbose=0)
-
-      losses = history.history['loss']
-      self.assertTrue(losses[0] > losses[-1])
 
   @test_util.run_v2_only
   def testFitWithMetrics(self):

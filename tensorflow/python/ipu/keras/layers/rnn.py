@@ -29,6 +29,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import state_ops
 from tensorflow.python.ipu.ops import op_util
+from tensorflow.python.util import deprecation
 
 from tensorflow.python.ops import rnn_cell
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
@@ -360,6 +361,10 @@ class PopnnLSTM(_PopnnRNN):
   _rnn_mode = POPNN_LSTM
   _num_gates_per_layer = POPNN_LSTM_NUM_GATES
 
+  @deprecation.deprecated(
+      None,
+      "The PopnnLSTM keras layer has been moved to IPU TensorFlow Addons and "
+      "will be removed from TensorFlow in a future release.")
   def __init__(
       self,
       units,
@@ -763,6 +768,10 @@ class PopnnGRU(_PopnnRNN):
   _rnn_mode = POPNN_GRU
   _num_gates_per_layer = POPNN_GRU_NUM_GATES
 
+  @deprecation.deprecated(
+      None,
+      "The PopnnGRU keras layer has been moved to IPU TensorFlow Addons and "
+      "will be removed from TensorFlow in a future release.")
   def __init__(
       self,
       units,

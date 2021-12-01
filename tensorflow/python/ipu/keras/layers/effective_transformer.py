@@ -29,6 +29,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
+from tensorflow.python.util import deprecation
 
 
 class EffectiveTransformer(Layer):
@@ -92,6 +93,10 @@ class EffectiveTransformer(Layer):
     output_bias_initializer: The initializer for the output layer additive
       bias. Defaults to 'zeros'.
   """
+  @deprecation.deprecated(
+      None,
+      "The EffectiveTransformer keras layer has been moved to IPU TensorFlow "
+      "Addons and will be removed from TensorFlow in a future release.")
   def __init__(self,
                output_layer_size,
                max_batch_size,

@@ -21,13 +21,14 @@ from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
+from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.layers import base as base_layer
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variable_scope as vs
 from tensorflow.python.platform import tf_logging as logging
-from tensorflow.python.ipu.ops import op_util
+from tensorflow.python.util import deprecation
 
 POPNN_LSTM = "lstm"
 POPNN_GRU = "gru"
@@ -256,6 +257,10 @@ class PopnnLSTM(_PopnnRNN):
   _rnn_mode = POPNN_LSTM
   _num_gates_per_layer = POPNN_LSTM_NUM_GATES
 
+  @deprecation.deprecated(
+      None,
+      "The PopnnLSTM layer has been moved to IPU TensorFlow Addons and will be "
+      "removed from TensorFlow in a future release.")
   def __init__(self,
                num_units,
                dtype=dtypes.float32,
@@ -413,6 +418,83 @@ class PopnnLSTM(_PopnnRNN):
 
 
 class PopnnDynamicLSTM(PopnnLSTM):
+  # pylint:disable=line-too-long
+  """XLA compatible, time-major Popnn implementation of an LSTM layer,
+	  with a sequence length input.
+
+  Below is a typical workflow:
+
+  .. code-block:: python
+
+    with tf.Graph().as_default():
+      lstm = PopnnDynamicLSTM(num_units, ...)
+
+      outputs, output_states = lstm(
+        inputs, seq_len, initial_state, training=True)
+
+  """
+  # pylint:enable=line-too-long
+
+  @deprecation.deprecated(
+      None,
+      "The PopnnDynamicLSTM layer has been moved to IPU TensorFlow Addons and "
+      "will be removed from TensorFlow in a future release.")
+  def __init__(self,
+               num_units,
+               dtype=dtypes.float32,
+               partials_dtype=dtypes.float32,
+               seed=None,
+               weights_initializer=None,
+               bias_initializer=None,
+               activation='tanh',
+               recurrent_activation='sigmoid',
+               name=None,
+               available_memory_proportion_fwd=None,
+               available_memory_proportion_bwd=None):
+    """Creates a PopnnDynamicLSTM model from model spec.
+
+    Args:
+      num_units: the number of units within the LSTM model.
+      dtype: tf.float16 or tf.float32
+      partials_dtype: the type used by Popnn to perform partial calculations.
+        Either tf.float16 or tf.float32.
+      seed: A Python integer. Used to create the default Glorot uniform
+        initializer weights_initializer.
+      weights_initializer: starting value to initialize the weights
+        (default is Glorot uniform initializer).
+      bias_initializer: starting value to initialize the bias
+        (default is all zeros).
+      activation: Activation function. Defaults to "tanh".
+        Accepted values: "tanh", "relu", "softmax", "sigmoid", "hard_sigmoid".
+      recurrent_activation: Recurrent activation function. Defaults to
+        "sigmoid". Must generate output in the [0,1] range.
+        Accepted values: "tanh", "softmax", "sigmoid", "hard_sigmoid".
+      name: VariableScope for the created subgraph; defaults to class name.
+        This only serves the default scope if later no scope is specified when
+        invoking ``__call__()``.
+      available_memory_proportion_fwd: Maximum fraction of IPU memory which can
+        be used as temporary scratch space during computation, for the forward
+        propagation layer. A value of -1. or None indicates that the default in
+        Popnn should be used. If available_memory_proportion_bwd is set to None,
+        then this value applies to both phases.
+      available_memory_proportion_bwd: Maximum fraction of IPU memory which can
+        be used as temporary scratch space during computation, for the backward
+        propagation layer. A value of -1. or None indicates that the default in
+        Popnn should be used.
+    """
+    super(PopnnDynamicLSTM, self).__init__(
+        num_units=num_units,
+        dtype=dtype,
+        partials_dtype=partials_dtype,
+        seed=seed,
+        weights_initializer=weights_initializer,
+        bias_initializer=bias_initializer,
+        activation=activation,
+        recurrent_activation=recurrent_activation,
+        name=name,
+        available_memory_proportion_fwd=available_memory_proportion_fwd,
+        available_memory_proportion_bwd=available_memory_proportion_bwd)
+
   #pylint: disable=W0223
   def call(self, inputs, seq_len, initial_state=None, training=True):
     #pylint: disable=W0221
@@ -501,6 +583,10 @@ class PopnnGRU(_PopnnRNN):
   _rnn_mode = POPNN_GRU
   _num_gates_per_layer = POPNN_GRU_NUM_GATES
 
+  @deprecation.deprecated(
+      None,
+      "The PopnnGRU layer has been moved to IPU TensorFlow Addons and will be "
+      "removed from TensorFlow in a future release.")
   def __init__(self,
                num_units,
                dtype=dtypes.float32,
@@ -676,6 +762,10 @@ class PopnnDynamicGRU(PopnnGRU):
   _rnn_mode = POPNN_DYNAMIC_GRU
   _num_gates_per_layer = POPNN_DYNAMIC_GRU_NUM_GATES
 
+  @deprecation.deprecated(
+      None,
+      "The PopnnDynamicGRU layer has been moved to IPU TensorFlow Addons and "
+      "will be removed from TensorFlow in a future release.")
   def __init__(self,
                num_units,
                dtype=dtypes.float32,
@@ -843,6 +933,9 @@ class PopnnAUGRU(PopnnGRU):
   _rnn_mode = POPNN_AUGRU
   _num_gates_per_layer = POPNN_AUGRU_NUM_GATES
 
+  @deprecation.deprecated(
+      None, "The PopnnAUGRU layer has been moved to IPU TensorFlow Addons and "
+      "will be removed from TensorFlow in a future release.")
   def __init__(self,
                num_units,
                dtype=dtypes.float32,

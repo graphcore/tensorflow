@@ -29,6 +29,7 @@ from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ipu.ops import math_ops as ipu_math_ops
+from tensorflow.python.util import deprecation
 
 
 class SerialDense(Layer):
@@ -99,6 +100,10 @@ class SerialDense(Layer):
     For instance, for a 2D input with shape `(batch_size, input_dim)`,
     the output would have shape `(batch_size, units)`.
   """
+  @deprecation.deprecated(
+      None,
+      "The SerialDense keras layer has been moved to IPU TensorFlow Addons and "
+      "will be removed from TensorFlow in a future release.")
   def __init__(self,
                units,
                serialization_factor,
