@@ -42,7 +42,7 @@ PoplarExecutableCore::PoplarExecutableCore(
     std::vector<std::vector<Literal>> constant_literal_output,
     bool is_remap_graph, bool is_scalar_elementwise_graph,
     bool loaded_from_cache, std::vector<uint64> remaped_output,
-    StreamInfos&& stream_infos, StreamMetaInfos&& stream_meta_info,
+    StreamInfos&& stream_infos, HostFunctionInfos&& host_function_infos,
     PoplarExecutableInfo&& info)
     : poplar_engine_(std::move(engine)),
       input_output_aliasing_map_(std::move(input_output_aliasing_map)),
@@ -53,7 +53,7 @@ PoplarExecutableCore::PoplarExecutableCore(
       loaded_from_cache_(loaded_from_cache),
       remaped_output_(std::move(remaped_output)),
       stream_infos_(std::move(stream_infos)),
-      stream_meta_infos_(std::move(stream_meta_info)),
+      host_function_infos_(std::move(host_function_infos)),
       info_(std::move(info)) {
   TENSORFLOW_TRACEPOINT();
   PopulateCollectiveBalanceReorderHostRerrangements();
@@ -421,7 +421,7 @@ PoplarExecutableCore::Deserialize(
           /*is_remap_graph=*/false,
           /*is_scalar_elementwise_graph=*/false,
           /*loaded_from_cache=*/true, std::vector<uint64>{}, StreamInfos{},
-          StreamMetaInfos{}, std::move(info));
+          HostFunctionInfos{}, std::move(info));
 
   return executable_core;
 }

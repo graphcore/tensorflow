@@ -617,9 +617,9 @@ The signature of the callback function is:
 
   extern "C"
   void Callback(
-      const std::vector<void*>& data,
+      const std::vector<const void*>& data,
       const std::vector<std::uint32_t>& number_of_elements,
-      std::vector<void*>& outputs,
+      const std::vector<void*>& outputs,
       const std::string& attributes,
       const std::string& name);
 
