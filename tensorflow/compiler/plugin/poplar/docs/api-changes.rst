@@ -1,6 +1,38 @@
 API changes
 -----------
 
+Release 2.5
+~~~~~~~~~~~
+
+The following changes have been made to the TensorFlow API in the Poplar SDK version 2.5.
+This may require you to change your code.
+
+Non-breaking changes
+____________________
+
+.. layers-moved-to-addons:
+
+Deprecated layers
+'''''''''''''''''
+
+TensorFlow layers from `tensorflow.python.ipu.ops.rnn_ops` have been moved to
+the `ipu_tensorflow_addons.layers` namespace in IPU TensorFlow Addons.
+
+The layers have been deprecated in TensorFlow and will be removed in a future
+release.
+
+The table below lists all of the deprecated layers, and their new locations:
+
++----------------------------------------------------+-------------------------------------------------------+
+| **TensorFlow**                                     | **IPU TensorFlow Addons**                             |
++====================================================+=======================================================+
+| tensorflow.python.ipu.ops.rnn_ops.PopnnAUGRU       | ipu_tensorflow_addons.layers.rnn_ops.PopnnAUGRU       |
+| tensorflow.python.ipu.ops.rnn_ops.PopnnDynamicGRU  | ipu_tensorflow_addons.layers.rnn_ops.PopnnDynamicGRU  |
+| tensorflow.python.ipu.ops.rnn_ops.PopnnDynamicLSTM | ipu_tensorflow_addons.layers.rnn_ops.PopnnDynamicLSTM |
+| tensorflow.python.ipu.ops.rnn_ops.PopnnGRU         | ipu_tensorflow_addons.layers.rnn_ops.PopnnGRU         |
+| tensorflow.python.ipu.ops.rnn_ops.PopnnLSTM        | ipu_tensorflow_addons.layers.rnn_ops.PopnnLSTM        |
++----------------------------------------------------+-------------------------------------------------------+
+
 Release 2.4
 ~~~~~~~~~~~
 

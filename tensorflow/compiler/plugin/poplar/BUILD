@@ -2900,48 +2900,6 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
-    name = "gru_size_test",
-    size = "large",
-    srcs = ["tests/size_speed_tests/gru_size_test.py"],
-    enabled_backends = ["poplar"],
-    shard_count = 6,
-    deps = [
-        ":test_utils_py",
-    ],
-)
-
-tf_xla_py_test(
-    name = "lstm_size_test",
-    size = "large",
-    srcs = ["tests/size_speed_tests/lstm_size_test.py"],
-    enabled_backends = ["poplar"],
-    shard_count = 4,
-    deps = [
-        ":test_utils_py",
-    ],
-)
-
-tf_xla_py_test(
-    name = "gru_training_test",
-    size = "large",
-    srcs = ["tests/training_tests/gru_training_test.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        ":test_utils_py",
-    ],
-)
-
-tf_xla_py_test(
-    name = "lstm_training_test",
-    size = "large",
-    srcs = ["tests/training_tests/lstm_training_test.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        ":test_utils_py",
-    ],
-)
-
-tf_xla_py_test(
     name = "while_loop_test",
     size = "medium",
     srcs = ["tests/while_loop_test.py"],
@@ -3661,18 +3619,8 @@ test_suite(
     name = "size_speed_tests",
     tests = [
         "combined_weights_test",
-        "gru_size_test",
-        "lstm_size_test",
         "matmul_size_test",
         "resnet_size_test",
-    ],
-)
-
-test_suite(
-    name = "training_tests",
-    tests = [
-        "gru_training_test",
-        "lstm_training_test",
     ],
 )
 
@@ -3717,7 +3665,6 @@ test_suite(
         ":doc_examples",
         ":poplar_test_suite",
         ":size_speed_tests",
-        ":training_tests",
     ],
 )
 
