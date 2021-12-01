@@ -130,25 +130,13 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
         {inst->name(), inst->EmbeddingId(), inst->operand(0)->shape(),
          output_shape, inst->SplittingStrategy()});
 
-    auto index_buffer = graph.addDeviceToHostFIFO(
-        inst->name() + inst->EmbeddingId() + "_indices", indices.elementType(),
-        indices.numElements());
+    auto lookup_fn = graph.addHostFunction(
+        /* handle = */ inst->name() + inst->EmbeddingId(),
+        /* inputs = */ {{indices.elementType(), indices.numElements()}},
+        /* outputs = */ {{output.elementType(), output.numElements()}});
 
-    auto activation_fifo = graph.addHostToDeviceFIFO(
-        inst->name() + inst->EmbeddingId() + "_activations",
-        output.elementType(), output.numElements());
-
-    // Send the indices to the host.
-    seq.add(poplar::program::Copy(indices, index_buffer, false,
-                                  {debug_name_and_id}));
-
-    // Sync to avoid any stream merging due to host-side data dependecy.
-    seq.add(
-        poplar::program::Sync(poplar::SyncType::INTERNAL, {debug_name_and_id}));
-
-    // Read the values from the host.
-    seq.add(poplar::program::Copy(activation_fifo, output, false,
-                                  {debug_name_and_id}));
+    seq.add(poplar::program::Call(lookup_fn, {indices}, {output},
+                                  {debug_name_and_id, "call"}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
@@ -417,18 +405,15 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
         {inst->name(), inst->EmbeddingId(), inst->operand(2)->shape(),
          inst->operand(1)->shape()});
 
-    auto index_buffer = graph.addDeviceToHostFIFO(
-        inst->name() + inst->EmbeddingId() + "_indices", indices.elementType(),
-        indices.numElements());
+    auto update_fn = graph.addHostFunction(
+        /* handle = */ inst->name() + inst->EmbeddingId(),
+        /* inputs = */
+        {{indices.elementType(), indices.numElements()},
+         {grads.elementType(), grads.numElements()}},
+        /* outputs = */ {});
 
-    auto grad_fifo =
-        graph.addDeviceToHostFIFO(inst->name() + inst->EmbeddingId() + "_grads",
-                                  grads.elementType(), grads.numElements());
-
-    seq.add(poplar::program::Copy(indices, index_buffer, false,
-                                  {debug_name_and_id}));
-    seq.add(
-        poplar::program::Copy(grads, grad_fifo, false, {debug_name_and_id}));
+    seq.add(poplar::program::Call(update_fn, {indices, grads}, {},
+                                  {debug_name_and_id, "call"}));
 
     return seq;
   }
