@@ -560,15 +560,43 @@ Status ReorderOutputEdgesWithResources(Graph* g, Node* n,
   return Status::OK();
 }
 
+// Begin IPU specific changes.
+// Extends the 'types' vector with the DataTypes for all the original tensor
+// ArgDefs to the node 'n'.
+// When registering an OpDef, an .Input/.Output call (ArgDef) can provide either
+// a single or variadic number of tensors all with potentially differing types.
+// This function provides the DataType being used by the node 'n' for every
+// tensor input/output across all the provided 'arg_defs'.
+Status GetOriginalNodeTypes(
+    Node* n, const protobuf::RepeatedPtrField<OpDef::ArgDef>& arg_defs,
+    std::vector<DataType>& types) {
+  for (const OpDef::ArgDef& arg_def : arg_defs) {
+    bool is_arg_list;  // ignored
+    DataTypeVector arg_def_types;
+    TF_RETURN_IF_ERROR(
+        ArgNumType(n->attrs(), arg_def, &is_arg_list, &arg_def_types));
+    types.reserve(types.size() + arg_def_types.size());
+    types.insert(types.end(), arg_def_types.begin(), arg_def_types.end());
+  }
+  return Status::OK();
+}
+
+// XLA requires all DT_RESOURCES to be at the end of the input/output list.
+// We need to rearrange any resources that are not at the end of these lists.
 Status MaybePoplarBackendFunctionalNode(
     std::function<Status(const NameAttrList&, const FunctionBody**)>
         get_function_body_fn,
     Graph* g, Node* n, FunctionLibraryDefinition* fld, bool* node_rewritten) {
-  // This node needs rewrite when either of these is true:
-  // 1) Tin has DT_RESOURCE which requires rearrange;
-  // 2) Tout has DT_RESOURCE which requires rearrange;
+
+  // Upstream relies on the assumption that While and If both have a Tin/Tout
+  // attr which describes all the input/output types. This might not be the case
+  // for other OpDefs which could have multiple Inputs with differing singular
+  // or variadic input type attrs, so we instead examine the ArgDefs on the
+  // parsed OpDef for all the input types.
+
+  // Get the original types for all the tensors in the Input ArgDefs.
   std::vector<DataType> in_types;
-  TF_RETURN_IF_ERROR(GetNodeAttr(n->def(), "Tin", &in_types));
+  TF_RETURN_IF_ERROR(GetOriginalNodeTypes(n, n->op_def().input_arg(), in_types));
   bool input_need_rearrange;
   int resource_input_count;
   std::vector<int> input_index_mapping;
@@ -576,8 +604,9 @@ Status MaybePoplarBackendFunctionalNode(
                                               &resource_input_count,
                                               &input_index_mapping));
 
+  // Get the original types for all the tensors in the Output ArgDefs.
   std::vector<DataType> out_types;
-  TF_RETURN_IF_ERROR(GetNodeAttr(n->def(), "Tout", &out_types));
+  TF_RETURN_IF_ERROR(GetOriginalNodeTypes(n, n->op_def().output_arg(), out_types));
   bool output_need_rearrange;
   int resource_output_count;
   std::vector<int> output_index_mapping;
@@ -646,6 +675,7 @@ Status MaybePoplarBackendFunctionalNode(
   }
   return Status::OK();
 }
+// End IPU specific changes.
 }  // namespace
 
 Status RearrangeFunctionArguments(
@@ -682,10 +712,12 @@ Status RearrangeFunctionArguments(
       bool node_rewritten;
       TF_RETURN_IF_ERROR(
           MaybeRewriteIfNode(get_function_body_fn, g, n, fld, &node_rewritten));
+    // Begin IPU specific changes.
     } else if (IsPoplarBackendFunctionalNode(n)) {
       bool node_rewritten;
       TF_RETURN_IF_ERROR(MaybePoplarBackendFunctionalNode(
           get_function_body_fn, g, n, fld, &node_rewritten));
+    // End IPU specific changes.
     }
   }
 
