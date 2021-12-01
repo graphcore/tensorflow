@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/core/lib/core/errors.h"
 
 #include <poplar/DebugContext.hpp>
+#include <popops/Cast.hpp>
 #include <popops/DynamicSlice.hpp>
 #include <popops/ElementWise.hpp>
 #include <poputil/GraphFunction.hpp>
@@ -247,8 +248,15 @@ Status MultiUpdateInternal(
     const auto constant_indices = GetConstantIndices(inst->operands().at(1));
 
     if (constant_indices.has_value()) {
+      poplar::Tensor scale_casted = *scale;
+      if (operand.elementType() == poplar::HALF &&
+          scale_casted.elementType() == poplar::HALF) {
+        VLOG(2) << "Casting static multi update scale to F32";
+        scale_casted = popops::cast(graph, scale_casted, poplar::FLOAT, prog,
+                                    {debug_name_and_id, "ScaleCast"});
+      }
       popops::multiUpdateAdd(graph, operand, expanded_updates,
-                             constant_indices.value(), *scale, 0, prog,
+                             constant_indices.value(), scale_casted, 0, prog,
                              {debug_name_and_id});
     } else {
       popops::multiUpdateAdd(graph, operand, expanded_updates, unsigned_indices,
