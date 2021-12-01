@@ -18,6 +18,8 @@ limitations under the License.
 
 #include <map>
 #include <set>
+#include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -198,28 +200,18 @@ struct StreamCopyInfo {
 // assosiated with that instruction.
 using StreamInfos = std::unordered_map<std::string, std::list<StreamCopyInfo>>;
 
-// Stream meta info contains the information relating to the setup of the output
-// streams. We need to know how many outputs there are and how much data to
-// allocate in each buffer.
-struct StreamCopyMetaInfo {
-  StreamCopyMetaInfo() {}
-  StreamCopyMetaInfo(const HloInstruction* inst, std::uint32_t input_count)
-      : parent_instruction(inst), num_inputs(input_count) {}
+struct HostFunctionInfo {
+  using FunctionType = std::function<void(const std::vector<const void*>& input,
+                                          const std::vector<void*>& outputs)>;
 
-  // The instruction the user op came from. We use this as a unique identifier
-  // for the inputs/outputs so we can sort the input/outputs by operation.
   const HloInstruction* parent_instruction;
-
-  // Track all of the output streams, we do this so we can allocate them in
-  // advance.
-  std::list<StreamCopyInfo*> output_stream_info;
-
-  // The number of inputs this operation has.
-  std::uint32_t num_inputs;
+  std::string handle;
+  std::vector<Shape> input_shapes;
+  std::vector<Shape> output_shapes;
+  FunctionType function;
 };
 
-// We track one metainfo struct for each stream copy which the user has added.
-using StreamMetaInfos = std::unordered_map<std::string, StreamCopyMetaInfo>;
+using HostFunctionInfos = std::unordered_map<std::string, HostFunctionInfo>;
 
 // This structure contains all information which we generate that pertains
 // to the XLA graph, as opposed to the poplar lowering of that graph.
@@ -235,8 +227,6 @@ struct CompilerAnnotations {
   CanonicalOutfeedInfos outfeed_infos;
 
   StreamInfos stream_infos;
-
-  StreamMetaInfos stream_meta_infos;
 
   SendRecvInfos send_infos;
   SendRecvInfos recv_infos;
@@ -265,6 +255,9 @@ struct CompilerAnnotations {
   OutputInfos entry_output_infos;
   // Feed output descriptions.
   OutputInfos feed_output_infos;
+
+  // Host function information.
+  HostFunctionInfos host_function_infos;
 };
 
 inline Status AddInfeedInfo(CompilerAnnotations& compiler_annotations,

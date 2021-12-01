@@ -255,107 +255,6 @@ poplar::Target CreateMultiReplicaDistributionTarget(
       global_num_ipus, target.getTargetArchString(), target.getTargetOptions());
 }
 
-struct UserOpsExecutionState {
-  explicit UserOpsExecutionState(const StreamMetaInfos& stream_meta_infos) {
-    // We add one call back to the stream which allocates the buffers and
-    // once all buffers have been allocated finally calls down to the user
-    // operation.
-    for (auto& pair : stream_meta_infos) {
-      StreamCopyMetaInfo infos = pair.second;
-
-      const HloInstruction* instruction = infos.parent_instruction;
-
-      out_buffer[instruction].resize(infos.output_stream_info.size());
-
-      // Resize the input vectors to be the number of inputs in advance.
-      in_buffers[instruction].resize(infos.num_inputs);
-      in_sizes[instruction].resize(infos.num_inputs);
-
-      // For each of the output stream copies allocate a buffer.
-      for (StreamCopyInfo* stream_copy : infos.output_stream_info) {
-        CHECK_LT(stream_copy->operand_number, infos.output_stream_info.size())
-            << "Operand ID is greater than the number of output streams "
-               "StreamCopyMetaInfo can see.";
-
-        const std::uint32_t total_size =
-            stream_copy->size_of_element * stream_copy->number_of_elements;
-        memory_buffer.push_back(std::unique_ptr<char[]>(new char[total_size]));
-
-        out_buffer[instruction][stream_copy->operand_number] =
-            static_cast<void*>(memory_buffer.back().get());
-      }
-    }
-  }
-
-  void ConnectStream(const StreamCopyInfo& info, poplar::Engine& engine) {
-    // If there is a functor then this is an input tensor, we will
-    // attach the callbacks to the stream otherwise just copy into the
-    // previously allocated pegged memory.
-    if (info.callback_to_register != nullptr) {
-      engine.connectStreamToCallback(info.stream_handle, CreateCallback(info));
-    } else {
-      // Connect the output stream to the correct pre-allocated buffer.
-      engine.connectStream(
-          info.stream_handle,
-          out_buffer[info.parent_instruction][info.operand_number]);
-    }
-  }
-
- private:
-  poplar::StreamCallbackHandle CreateCallback(const StreamCopyInfo& info) {
-    // Create a custom callback which we use to copy the inputs as
-    // these callbacks are called in a random order we have to work
-    // out which tensor we are writing into and we have to check how
-    // many inputs we have already initialized so we know to call the
-    // user provided operation once they have all been set up.
-    return [this, info](void* buffer) {
-      StreamCopyInfo::FunctionTy functor = info.callback_to_register;
-
-      std::vector<void*>& in_buffer = in_buffers[info.parent_instruction];
-      std::vector<std::uint32_t>& in_size = in_sizes[info.parent_instruction];
-      std::uint32_t& number_of_inputs_initialized =
-          numbers_of_inputs_initialized[info.parent_instruction];
-
-      // Allocate space for the input tensor and then memcopy into it.
-      // The 'buffer' pointer is only garunteed to be alive for the
-      // duration of this callback.
-      std::uint32_t totalSize = info.size_of_element * info.number_of_elements;
-      memory_buffer.push_back(std::unique_ptr<char[]>(new char[totalSize]));
-      in_buffer[info.operand_number] =
-          static_cast<void*>(memory_buffer.back().get());
-
-      // Copy into the newly allocated memory.
-      std::memcpy(in_buffer[info.operand_number], buffer, totalSize);
-      number_of_inputs_initialized++;
-
-      // Store the size of each input.
-      in_size[info.operand_number] = info.number_of_elements;
-
-      // These callbacks are called in a random order by poplar so we
-      // need to only call the user provided callback once, after all
-      // of the data has been initialized.
-      if (number_of_inputs_initialized == in_buffer.size()) {
-        functor(in_buffer, in_size, out_buffer[info.parent_instruction]);
-      }
-    };
-  }
-
-  // Create our own free list which we use to allocate all the memory used
-  // by all the tensors.
-  std::list<std::unique_ptr<char[]>> memory_buffer;
-
-  // Allocate the parameters for each of the functors, sorted by the user
-  // instruction which they are created for.
-  std::unordered_map<const HloInstruction*, std::vector<void*>> in_buffers;
-  std::unordered_map<const HloInstruction*, std::vector<std::uint32_t>>
-      in_sizes;
-  std::unordered_map<const HloInstruction*, std::vector<void*>> out_buffer;
-
-  // Track how many inputs have been initialized so far.
-  std::unordered_map<const HloInstruction*, uint32_t>
-      numbers_of_inputs_initialized;
-};
-
 std::string GetExecutableCachePath() {
   // Lazily find the path the first time it is requested.
   static const auto path = []() -> std::string {
@@ -728,19 +627,14 @@ Status PoplarExecutor::ConnectHostEmbeddingLookup(
 
   for (int replica = 0;
        replica < std::max<int64>(1, current_replication_factor_); ++replica) {
-    // Connect the indices callback.
-    current_engine_->connectStreamToCallback(
-        lookup_info.stream_handle + lookup_info.embedding_id + "_indices",
-        replica, [replica, indices_shape, embedding_interface](void* ptr) {
+    current_engine_->connectHostFunction(
+        lookup_info.stream_handle + lookup_info.embedding_id, replica,
+        [replica, indices_shape, embedding_interface](
+            poplar::ArrayRef<const void*> ins, poplar::ArrayRef<void*> outs) {
           embedding_interface->EnqueueLookupIndices(
-              replica, static_cast<int*>(ptr), indices_shape.num_elements());
-        });
-
-    // Connect the grads callback.
-    current_engine_->connectStreamToCallback(
-        lookup_info.stream_handle + lookup_info.embedding_id + "_activations",
-        replica, [replica, embedding_interface](void* ptr) {
-          embedding_interface->DequeueLookupActivations(replica, ptr);
+              replica, static_cast<const int*>(ins[0]),
+              indices_shape.num_elements());
+          embedding_interface->DequeueLookupActivations(replica, outs[0]);
         });
   }
 
@@ -766,19 +660,14 @@ Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
 
   for (int replica = 0;
        replica < std::max<int64>(1, current_replication_factor_); ++replica) {
-    // Connect the indices callback.
-    current_engine_->connectStreamToCallback(
-        update_info.stream_handle + update_info.embedding_id + "_indices",
-        replica, [replica, indices_shape, embedding_interface](void* ptr) {
+    current_engine_->connectHostFunction(
+        update_info.stream_handle + update_info.embedding_id, replica,
+        [replica, indices_shape, embedding_interface](
+            poplar::ArrayRef<const void*> ins, poplar::ArrayRef<void*> outs) {
           embedding_interface->EnqueueUpdateIndices(
-              replica, static_cast<int*>(ptr), indices_shape.num_elements());
-        });
-
-    // Connect the grads callback.
-    current_engine_->connectStreamToCallback(
-        update_info.stream_handle + update_info.embedding_id + "_grads",
-        replica, [replica, embedding_interface](void* ptr) {
-          embedding_interface->EnqueueUpdateGrads(replica, ptr);
+              replica, static_cast<const int*>(ins[0]),
+              indices_shape.num_elements());
+          embedding_interface->EnqueueUpdateGrads(replica, ins[1]);
         });
   }
 
@@ -3588,6 +3477,22 @@ Status TransformEvaluatorOutput(const Shape& layout, Literal& evaluator_output,
   }
   return Status::OK();
 }
+
+void AddHostFunction(poplar::Engine& engine, const HostFunctionInfo& info) {
+  std::vector<const void*> local_input_state(info.input_shapes.size());
+  std::vector<void*> local_output_state(info.output_shapes.size());
+
+  auto host_fn = [local_input_state, local_output_state, info](
+                     poplar::ArrayRef<const void*> ins,
+                     poplar::ArrayRef<void*> outs) mutable {
+    absl::c_copy(ins, local_input_state.begin());
+    absl::c_copy(outs, local_output_state.begin());
+
+    info.function(local_input_state, local_output_state);
+  };
+
+  engine.connectHostFunction(info.handle, 0, host_fn);
+}
 }  // namespace
 
 StatusOr<std::vector<std::vector<Literal>>>
@@ -3822,16 +3727,8 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
         ConnectOutfeedToStreamCallback(outfeed_infos);
       }
 
-      // Handle user ops.
-      UserOpsExecutionState user_ops_state(executable.GetStreamMetaInfos());
-      const StreamInfos& stream_infos = executable.GetStreamInfos();
-      for (auto& pair : stream_infos) {
-        const std::list<StreamCopyInfo>& list = pair.second;
-
-        // For all of the stream copies, both inputs and outputs.
-        for (const StreamCopyInfo& info : list) {
-          user_ops_state.ConnectStream(info, *current_engine_);
-        }
+      for (auto& host_function_info : executable.GetHostFunctionInfos()) {
+        AddHostFunction(*current_engine_, host_function_info.second);
       }
 
       // Launch the IO threads when we are not using synthetic data.
