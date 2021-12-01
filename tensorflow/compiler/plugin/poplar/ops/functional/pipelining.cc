@@ -24,7 +24,6 @@ namespace tensorflow {
 
 REGISTER_OP("Pipeline")
     .Input("inputs: Tin")
-    .Input("gradient_accumulation_count: int32")
     .Output("output: Tout")
     .Attr("to_apply: func")
     .Attr("Tin: list(type) >= 0")

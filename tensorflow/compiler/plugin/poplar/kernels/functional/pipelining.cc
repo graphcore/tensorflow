@@ -298,6 +298,12 @@ class PipelineOp : public XlaOpKernel {
   explicit PipelineOp(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("to_apply", &to_apply_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("Tin", &input_types_));
+    OP_REQUIRES(
+        ctx,
+        input_types_.size() >= 1 && input_types_.at(0) == DataType::DT_INT32,
+        errors::InvalidArgument(
+            "There must be at least one PipelineOp input type and the first"
+            " type must be int32 (the gradient accumulation count)"));
     DataTypeVector output_types;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("Tout", &output_types));
     OP_REQUIRES(ctx, output_types.size() == 0,
@@ -329,7 +335,7 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
 
-    CHECK_EQ(arguments.size(), ctx->num_inputs() - 1);
+    CHECK_EQ(arguments.size(), ctx->num_inputs());
     // Check all resources are after all other arguments
     CHECK(absl::c_is_partitioned(arguments, [](const XlaCompiler::Argument& a) {
       return (a.kind != XlaCompiler::Argument::kResource);
@@ -359,8 +365,9 @@ class PipelineOp : public XlaOpKernel {
     // Add the gradient accumulation count as the last input. Note that the
     // operand index is the XLA input index, and not the TF input index.
     // These may differ when any of the TF inputs are constants.
+    // The GA count is expected to be passed as the first input to the op.
     const int gradient_accumulation_operand_index = inputs.size();
-    inputs.emplace_back(ctx->Input(ctx->num_inputs() - 1));
+    inputs.emplace_back(ctx->Input(0));
 
     auto wrapped_pipeline =
         CreateInnerPipeline(ctx, inputs, result, num_constants);

@@ -1054,6 +1054,7 @@ def pipeline(computational_stages,
 
   with ops.name_scope(name) as scope:
     # pylint: disable=protected-access
+    # Must pass the gradient_accumulation_count as the first input.
     inputs = [gradient_accumulation_count] + inputs
     try:
       func_graph, captured_args, _ = functional_ops._compile_function(
@@ -1069,7 +1070,6 @@ def pipeline(computational_stages,
     with ops.control_dependencies(list(func_graph.control_captures)):
       output = gen_functional_ops.pipeline(
           captured_args,
-          gradient_accumulation_count,
           to_apply=util.create_new_tf_function(func_graph),
           Tout=func_graph.output_types,
           output_shapes=func_graph.output_shapes,
