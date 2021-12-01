@@ -1267,7 +1267,7 @@ xla_test(
 
 xla_test(
     name = "multi_slice_update_constant_indices_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/multi_slice_update_constant_indices_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],

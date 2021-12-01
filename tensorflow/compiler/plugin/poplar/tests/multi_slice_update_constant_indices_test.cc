@@ -26,94 +26,78 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-se::Platform* GetReferencePlatform() {
-  auto result = PlatformUtil::GetPlatform("interpreter");
-  return result.ValueOrDie();
+StatusOr<Literal> GetTestInputs(PrimitiveType type, bool updates = false) {
+  unsigned rows = updates ? 4 : 10;
+  auto input_shape = ShapeUtil::MakeShape(F32, {rows, 4});
+  Literal input(input_shape);
+  input.Populate<float>([](const xla::DimensionVector& index) {
+    return 1.0f * index[1] + index[0];
+  });
+
+  if (type != F32) {
+    TF_ASSIGN_OR_RETURN(input, input.Convert(type));
+  }
+  return input;
+}
+Literal GetTestIndices() {
+  auto indices_shape = ShapeUtil::MakeShape(S32, {4});
+  Literal indices(indices_shape);
+  indices.PopulateR1<int32>({0, 2, 4, 8});
+  return indices;
 }
 
-se::Platform* GetTestPlatform() {
-  auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
-  EXPECT_TRUE(platform.ok());
+StatusOr<Literal> GetScale(PrimitiveType type) {
+  auto scale_shape = ShapeUtil::MakeShape(F32, {1});
+  Literal scale(scale_shape);
+  scale.PopulateR1<float>({2.0});
 
-  auto* p = dynamic_cast<xp::PoplarPlatform*>(platform.ValueOrDie());
-
-  xla::poplarplugin::IpuOptions options;
-  options.set_creator_id(IpuOptionsCreator::IPU_UTILS);
-
-  EXPECT_EQ(p->ConfigurePoplarDevices(options), Status::OK());
-  return p;
+  if (type != F32) {
+    TF_ASSIGN_OR_RETURN(scale, scale.Convert(type));
+  }
+  return scale;
 }
 
-class MultiSliceUpdateConstantIndicesTest : public HloTestBase {
- public:
-  MultiSliceUpdateConstantIndicesTest()
-      : HloTestBase(GetTestPlatform(), GetReferencePlatform()) {}
+Status VerifySlices(const Literal& result) {
+  TF_ASSIGN_OR_RETURN(auto inputs, GetTestInputs(F32));
+  auto indices = GetTestIndices();
 
-  static Literal GetTestInputs(bool updates = false) {
-    unsigned rows = updates ? 4 : 10;
-    auto input_shape = ShapeUtil::MakeShape(F32, {rows, 4});
-    Literal input(input_shape);
-    input.Populate<float>([](const xla::DimensionVector& index) {
-      return 1.0f * index[1] + index[0];
-    });
-    return input;
-  }
+  ShapeUtil::ForEachIndex(
+      result.shape(), [&](absl::Span<const int64> output_index) {
+        auto value = result.Get<float>(output_index);
+        auto idx = indices.Get<int32>({output_index[0], 0});
+        auto input_value = inputs.Get<float>({idx, output_index[1]});
+        EXPECT_EQ(value, input_value);
+        return true;
+      });
+  return Status::OK();
+}
 
-  static Literal GetTestIndices() {
-    auto indices_shape = ShapeUtil::MakeShape(S32, {4});
-    Literal indices(indices_shape);
-    indices.PopulateR1<int32>({0, 2, 4, 8});
-    return indices;
-  }
+Status VerifyUpdates(const Literal& result) {
+  TF_ASSIGN_OR_RETURN(auto inputs, GetTestInputs(F32));
+  TF_ASSIGN_OR_RETURN(auto updates, GetTestInputs(F32, true));
+  TF_ASSIGN_OR_RETURN(auto scale, GetScale(F32));
+  auto indices = GetTestIndices();
+  auto scale_data = scale.Get<float>({0});
+  auto indices_data = indices.data<int>();
 
-  static Literal GetScale() {
-    auto scale_shape = ShapeUtil::MakeShape(F32, {1});
-    Literal scale(scale_shape);
-    scale.PopulateR1<float>({2.0});
-    return scale;
-  }
-
-  static void VerifySlices(const Literal& result) {
-    auto inputs = GetTestInputs();
-    auto indices = GetTestIndices();
-
-    const auto slice_shape = ShapeUtil::GetSubshape(result.shape(), {0});
-    ShapeUtil::ForEachIndex(
-        slice_shape, [&](absl::Span<const int64> output_index) {
-          EXPECT_EQ(output_index.size(), 2);
-          auto value = result.Get<float>(output_index, {0});
-          auto idx = indices.Get<int32>({output_index[0], 0});
-          auto input_value = inputs.Get<float>({idx, output_index[1]});
-          EXPECT_EQ(value, input_value);
-          return true;
-        });
-  }
-
-  static void VerifyUpdates(const Literal& result) {
-    auto inputs = GetTestInputs();
-    auto updates = GetTestInputs(true);
-    auto scale = GetScale().Get<float>({0});
-    auto indices = GetTestIndices();
-    auto indices_data = indices.data<int>();
-
-    const auto slice_shape = ShapeUtil::GetSubshape(result.shape(), {0});
-    ShapeUtil::ForEachIndex(
-        slice_shape, [&](absl::Span<const int64> output_index) {
-          EXPECT_EQ(output_index.size(), 2);
-          auto value = result.Get<float>(output_index, {0});
-          for (size_t i = 0; i < indices_data.size(); i++) {
-            auto idx = indices_data.at(i);
-            if (output_index[0] == idx) {
-              auto input_value = inputs.Get<float>({idx, output_index[1]});
-              auto update_value = updates.Get<float>({i, output_index[1]});
-              EXPECT_EQ(value, scale * update_value + input_value);
-              break;
-            }
+  ShapeUtil::ForEachIndex(
+      result.shape(), [&](absl::Span<const int64> output_index) {
+        auto value = result.Get<float>(output_index);
+        for (size_t i = 0; i < indices_data.size(); i++) {
+          auto idx = indices_data.at(i);
+          if (output_index[0] == idx) {
+            auto input_value = inputs.Get<float>({idx, output_index[1]});
+            auto update_value = updates.Get<float>({i, output_index[1]});
+            EXPECT_EQ(value, scale_data * update_value + input_value);
+            break;
           }
-          return true;
-        });
-  }
-};
+        }
+        return true;
+      });
+  return Status::OK();
+}
+
+using MultiSliceUpdateConstantIndicesTest = HloTestBase;
 
 TEST_F(MultiSliceUpdateConstantIndicesTest, SliceNonConstantIndices) {
   std::string hlo_string = R"(
@@ -122,8 +106,7 @@ HloModule main
 ENTRY main {
   input = f32[10,4] parameter(0)
   indices = s32[4] parameter(1)
-  slices = f32[4,4] custom-call(input, indices), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
-  ROOT t = (f32[4,4]) tuple(slices)
+  ROOT slices = f32[4,4] custom-call(input, indices), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
 }
 )";
 
@@ -138,7 +121,7 @@ ENTRY main {
   EXPECT_TRUE(custom_ops_replaced);
 
   // Input to be sliced and indices to slice at.
-  auto inputs = GetTestInputs();
+  TF_ASSERT_OK_AND_ASSIGN(auto inputs, GetTestInputs(F32));
   auto indices = GetTestIndices();
 
   // Execute.
@@ -148,10 +131,10 @@ ENTRY main {
           std::move(
               ParseAndReturnVerifiedModule(hlo_string, config).ValueOrDie()),
           {&inputs, &indices}));
-  ASSERT_TRUE(result.shape().IsTuple());
+  ASSERT_TRUE(result.shape().IsArray());
 
   // Verify output.
-  VerifySlices(result);
+  TF_ASSERT_OK(VerifySlices(result));
 }
 
 TEST_F(MultiSliceUpdateConstantIndicesTest, SliceConstantIndices) {
@@ -161,8 +144,7 @@ HloModule main
 ENTRY main {
   input = f32[10,4] parameter(0)
   indices = s32[4] constant({0, 2, 4, 8})
-  slices = f32[4,4] custom-call(input, indices), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
-  ROOT t = (f32[4,4]) tuple(slices)
+  ROOT slices = f32[4,4] custom-call(input, indices), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
 }
 )";
 
@@ -177,7 +159,7 @@ ENTRY main {
   EXPECT_TRUE(custom_ops_replaced);
 
   // Input to be sliced.
-  auto inputs = GetTestInputs();
+  TF_ASSERT_OK_AND_ASSIGN(auto inputs, GetTestInputs(F32));
 
   // Execute.
   TF_ASSERT_OK_AND_ASSIGN(
@@ -186,10 +168,10 @@ ENTRY main {
           std::move(
               ParseAndReturnVerifiedModule(hlo_string, config).ValueOrDie()),
           {&inputs}));
-  ASSERT_TRUE(result.shape().IsTuple());
+  ASSERT_TRUE(result.shape().IsArray());
 
   // Verify output.
-  VerifySlices(result);
+  TF_ASSERT_OK(VerifySlices(result));
 }
 
 TEST_F(MultiSliceUpdateConstantIndicesTest, UpdateNonConstantIndices) {
@@ -206,8 +188,7 @@ ENTRY main {
   big_zero = f32[10, 4] broadcast(zero), dimensions={}
   
   update = f32[10, 4] custom-call(big_zero, indices, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
-  sum = f32[10, 4] add(update, input)
-  ROOT t = (f32[10, 4]) tuple(sum)
+  ROOT sum = f32[10, 4] add(update, input)
 }
 )";
 
@@ -222,10 +203,10 @@ ENTRY main {
   EXPECT_TRUE(custom_ops_replaced);
 
   // Input to be sliced and indices to slice at.
-  auto inputs = GetTestInputs();
-  auto updates = GetTestInputs(true);
+  TF_ASSERT_OK_AND_ASSIGN(auto inputs, GetTestInputs(F32));
+  TF_ASSERT_OK_AND_ASSIGN(auto updates, GetTestInputs(F32, true));
+  TF_ASSERT_OK_AND_ASSIGN(auto scale, GetScale(F32));
   auto indices = GetTestIndices();
-  auto scale = GetScale();
 
   // Execute.
   TF_ASSERT_OK_AND_ASSIGN(
@@ -234,58 +215,80 @@ ENTRY main {
           std::move(
               ParseAndReturnVerifiedModule(hlo_string, config).ValueOrDie()),
           {&inputs, &indices, &updates, &scale}));
-  ASSERT_TRUE(result.shape().IsTuple());
+  ASSERT_TRUE(result.shape().IsArray());
 
   // Verify output.
-  VerifyUpdates(result);
+  TF_ASSERT_OK(VerifyUpdates(result));
 }
 
-TEST_F(MultiSliceUpdateConstantIndicesTest, UpdateConstantIndices) {
-  std::string hlo_string = R"(
+struct MultiUpdateAddTestSpec {
+  PrimitiveType element_type;
+
+  std::string GetHlo() const {
+    const std::string hlo_string = R"(
 HloModule main
 
 ENTRY main {
-  input = f32[10, 4] parameter(0)
-  updates = f32[4, 4] parameter(1)
-  scale = f32[] parameter(2)
+  input = $element_type[10, 4] parameter(0)
+  updates = $element_type[4, 4] parameter(1)
+  scale = $element_type[] parameter(2)
 
   indices = s32[4, 1] constant({{0}, {2}, {4}, {8}})
   
-  zero = f32[] constant(0)
-  big_zero = f32[10, 4] broadcast(zero), dimensions={}
+  zero = $element_type[] constant(0)
+  big_zero = $element_type[10, 4] broadcast(zero), dimensions={}
   
-  update = f32[10, 4] custom-call(big_zero, indices, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
-  sum = f32[10, 4] add(update, input)
-  ROOT t = (f32[10, 4]) tuple(sum)
+  update = $element_type[10, 4] custom-call(big_zero, indices, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
+  ROOT sum = $element_type[10, 4] add(update, input)
 }
 )";
+    return tensorflow::str_util::StringReplace(
+        hlo_string, "$element_type",
+        primitive_util::LowercasePrimitiveTypeName(element_type), true);
+  }
+};
 
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
+std::ostream& operator<<(std::ostream& os, const MultiUpdateAddTestSpec& spec) {
+  return os << "{element_type: " << spec.element_type << "}";
+}
 
+class MultiUpdateAddTest
+    : public HloTestBase,
+      public ::testing::WithParamInterface<MultiUpdateAddTestSpec> {};
+
+INSTANTIATE_TEST_SUITE_P(
+    MultiUpdateAddTestCases, MultiUpdateAddTest,
+    ::testing::ValuesIn(std::vector<MultiUpdateAddTestSpec>{{F32}, {F16}}));
+
+TEST_P(MultiUpdateAddTest, DoTest) {
+  auto param = GetParam();
   TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo_string, config));
+                          ParseAndReturnVerifiedModule(param.GetHlo()));
 
   TF_ASSERT_OK_AND_ASSIGN(bool custom_ops_replaced,
                           CustomOpReplacer().Run(module.get()));
   EXPECT_TRUE(custom_ops_replaced);
 
   // Input to be sliced and indices to slice at.
-  auto inputs = GetTestInputs();
-  auto updates = GetTestInputs(true);
-  auto scale = GetScale();
+  TF_ASSERT_OK_AND_ASSIGN(auto inputs, GetTestInputs(param.element_type));
+  TF_ASSERT_OK_AND_ASSIGN(auto updates,
+                          GetTestInputs(param.element_type, /*update=*/true));
+  TF_ASSERT_OK_AND_ASSIGN(auto scale, GetScale(param.element_type));
 
   // Execute.
   TF_ASSERT_OK_AND_ASSIGN(
       Literal result,
       Execute(
-          std::move(
-              ParseAndReturnVerifiedModule(hlo_string, config).ValueOrDie()),
+          std::move(ParseAndReturnVerifiedModule(param.GetHlo()).ValueOrDie()),
           {&inputs, &updates, &scale}));
-  ASSERT_TRUE(result.shape().IsTuple());
+  ASSERT_TRUE(result.shape().IsArray());
+
+  if (param.element_type != F32) {
+    TF_ASSERT_OK_AND_ASSIGN(result, result.Convert(F32));
+  }
 
   // Verify output.
-  VerifyUpdates(result);
+  TF_ASSERT_OK(VerifyUpdates(result));
 }
 
 }  // namespace
