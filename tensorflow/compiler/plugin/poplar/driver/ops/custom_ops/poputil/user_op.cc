@@ -71,9 +71,9 @@ class UserOpImpl : public PoplarOpDef {
     // the operation on the host by reading the raw bytes, executing the on the
     // host, then copying back.
     void (*as_function_host_rw_ptr)(
-        const std::vector<void*>& data,
+        const std::vector<const void*>& data,
         const std::vector<std::uint32_t>& number_of_elements,
-        std::vector<void*>& outputs, const std::string& attributes,
+        const std::vector<void*>& outputs, const std::string& attributes,
         const std::string& debugPrefix);
 
     // Convert the function pointer to each of the types of function we could
@@ -113,61 +113,33 @@ class UserOpImpl : public PoplarOpDef {
     // stream we create the StreamCopyInfo structures to communicate with
     // poplar_executor which does the actual linking of the streams.
     if (is_user_read_write) {
-      // A wrapper around the user functor which we finally call down to.
-      auto functor = [=](std::vector<void*>& data,
-                         std::vector<std::uint32_t>& number_of_elements,
-                         std::vector<void*>& outputs) {
-        as_function_host_rw_ptr(data, number_of_elements, outputs, attributes,
-                                instruction_name);
-      };
+      auto& host_function_info =
+          res.annotations.host_function_infos[instruction_name];
+      host_function_info.parent_instruction = user_op_inst;
+      host_function_info.handle = instruction_name;
 
-      // We add a map of user ops to their owned streams.
-      res.annotations.stream_infos.insert({instruction_name, {}});
-      std::list<StreamCopyInfo>& info_list =
-          res.annotations.stream_infos[instruction_name];
+      std::vector<poplar::Tensor> inputs;
+      std::vector<poplar::Graph::HostFunctionArgument> in_args;
+      std::vector<poplar::Graph::HostFunctionArgument> out_args;
+      std::vector<std::uint32_t> in_args_elems;
+      inputs.resize(user_op_inst->NumInputs());
+      outputs.resize(number_of_outputs);
 
-      // Allocate a stream info
-      res.annotations.stream_meta_infos[instruction_name] = {inst,
-                                                             number_of_inputs};
-      StreamCopyMetaInfo& meta_info =
-          res.annotations.stream_meta_infos[instruction_name];
-
+      // Collect the input tensors and input arg descriptions.
       for (std::uint32_t i = 0; i < user_op_inst->NumInputs(); ++i) {
         // Get the poplar tensor.
         TF_ASSIGN_OR_RETURN(poplar::Tensor in,
                             FindInstructionInput(tensor_map, res, inst, i, seq,
                                                  {debug_info}, false));
 
-        // Give each input a stream identifier based on the instruction name.
-        const std::string stream_name =
-            instruction_name + "_read_" + std::to_string(i);
+        in_args.emplace_back(in.elementType(), in.numElements());
+        in_args_elems.push_back(in.numElements());
+        host_function_info.input_shapes.push_back(inst->operand(i)->shape());
 
-        // Create a datastream for the input tensor.
-        poplar::DataStream stream = graph.addDeviceToHostFIFO(
-            stream_name, in.elementType(), in.numElements());
-
-        // Allocate this structure to communicate to the executor, which
-        // callbacks to register to which input tensors.
-        const uint32_t num_elements = static_cast<uint32_t>(in.numElements());
-        const uint32_t type_size = static_cast<uint32_t>(
-            graph.getTarget().getTypeSize(in.elementType()));
-        StreamCopyInfo info{inst,      stream_name, num_elements,
-                            type_size, i,           functor};
-        info_list.push_back(info);
-
-        // Copy from the tensor into the host stream. We will later attach a
-        // callback to this.
-        seq.add(poplar::program::Copy(in, stream, false, {debug_info}));
+        inputs[i] = in;
       }
 
-      // Add an ontile sync to stop the copies from host being merged with the
-      // above as there is an invisble dependency in the callback.
-      seq.add(poplar::program::Sync(poplar::SyncType::INTERNAL, {debug_info}));
-
-      outputs.resize(number_of_outputs);
-
-      // Now go over and add a copy from the device back to the host for each
-      // output.
+      // Collect the output tensors and output arg descriptions.
       for (std::uint32_t output_index = 0; output_index != number_of_outputs;
            output_index++) {
         xla::Shape shape = output_shape.tuple_shapes()[output_index];
@@ -177,36 +149,27 @@ class UserOpImpl : public PoplarOpDef {
             AddTensor(graph, TensorLocation{inst, output_index}, shape, res,
                       tensor_map, {debug_info, "output"}));
 
-        // Add stream ID for each output tensor.
-        const std::string stream_name =
-            instruction_name + "_write_" + std::to_string(output_index);
-
-        // Copy from the host into these new tensors.
-        poplar::DataStream stream =
-            graph.addHostToDeviceFIFO(stream_name, output_tensor.elementType(),
-                                      output_tensor.numElements());
-
-        // Allocate this structure to communicate to the executor so the
-        // executor knows how much memory to allocate for the callback to write
-        // into.
-        const uint32_t num_elements =
-            static_cast<uint32_t>(output_tensor.numElements());
-        const uint32_t type_size = static_cast<uint32_t>(
-            graph.getTarget().getTypeSize(output_tensor.elementType()));
-        StreamCopyInfo info{inst, stream_name, num_elements, type_size,
-                            output_index};
-        info_list.push_back(std::move(info));
-
-        // Store a reference to this stream copy info.
-        StreamCopyInfo* ref = &info_list.back();
-        meta_info.output_stream_info.push_back(ref);
-
-        // Add the copy to the graph.
-        seq.add(
-            poplar::program::Copy(stream, output_tensor, false, {debug_info}));
-
+        out_args.emplace_back(output_tensor.elementType(),
+                              output_tensor.numElements());
+        host_function_info.output_shapes.push_back(shape);
         outputs[output_index] = output_tensor;
       }
+
+      host_function_info.function = [as_function_host_rw_ptr, in_args_elems,
+                                     attributes, instruction_name](
+                                        const std::vector<const void*>& input,
+                                        const std::vector<void*>& outputs) {
+        as_function_host_rw_ptr(input, in_args_elems, outputs, attributes,
+                                instruction_name);
+      };
+
+      // Create the host function
+      auto user_fn_device =
+          graph.addHostFunction(instruction_name, in_args, out_args);
+
+      // Add the device call to the host function.
+      seq.add(
+          poplar::program::Call(user_fn_device, inputs, outputs, debug_info));
     } else {
       if (!is_gradient) {
         std::vector<poplar::Tensor> inputs(user_op_inst->NumInputs());

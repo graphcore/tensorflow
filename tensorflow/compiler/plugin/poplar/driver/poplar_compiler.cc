@@ -1967,7 +1967,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           is_scalar_elementwise_graph,
           /*loaded_from_cache=*/false, std::move(remaped_output),
           std::move(resources.annotations.stream_infos),
-          std::move(resources.annotations.stream_meta_infos),
+          std::move(resources.annotations.host_function_infos),
           PoplarExecutableInfo{
               num_IPUs,
               target_type,

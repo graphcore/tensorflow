@@ -81,7 +81,7 @@ class PoplarExecutableCore {
       std::vector<std::vector<Literal>> constant_literal_output,
       bool is_remap_graph, bool is_scalar_elementwise_graph,
       bool loaded_from_cache, std::vector<uint64> remaped_output,
-      StreamInfos&& stream_infos, StreamMetaInfos&& stream_meta_info,
+      StreamInfos&& stream_infos, HostFunctionInfos&& host_function_infos,
       PoplarExecutableInfo&& info);
 
   ~PoplarExecutableCore();
@@ -120,6 +120,10 @@ class PoplarExecutableCore {
     return info_.remote_parameter_infos;
   }
 
+  const HostFunctionInfos& GetHostFunctionInfos() const {
+    return host_function_infos_;
+  }
+
   const RemoteParameterHostRearrangements&
   GetRemoteParameterHostRearrangements() const {
     return info_.remote_parameter_host_rearrangements;
@@ -132,10 +136,6 @@ class PoplarExecutableCore {
   }
 
   const StreamInfos& GetStreamInfos() const { return stream_infos_; }
-
-  const StreamMetaInfos& GetStreamMetaInfos() const {
-    return stream_meta_infos_;
-  }
 
   const SendRecvInfos& GetSendInfos() const { return info_.send_infos; }
 
@@ -202,7 +202,7 @@ class PoplarExecutableCore {
 
   // User op info that is not serialized.
   StreamInfos stream_infos_;
-  StreamMetaInfos stream_meta_infos_;
+  HostFunctionInfos host_function_infos_;
 
   // All the other info that is serialized.
   PoplarExecutableInfo info_;
@@ -273,12 +273,12 @@ class PoplarExecutable : public Executable {
     return executable_core_->GetRemoteParameterInfos();
   }
 
-  const StreamInfos& GetStreamInfos() const {
-    return executable_core_->GetStreamInfos();
+  const HostFunctionInfos& GetHostFunctionInfos() const {
+    return executable_core_->GetHostFunctionInfos();
   }
 
-  const StreamMetaInfos& GetStreamMetaInfos() const {
-    return executable_core_->GetStreamMetaInfos();
+  const StreamInfos& GetStreamInfos() const {
+    return executable_core_->GetStreamInfos();
   }
 
   const SendRecvInfos& GetSendInfos() const {
