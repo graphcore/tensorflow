@@ -263,17 +263,10 @@ TEST_F(ExtractOutsideCompilationPassTest, PipelineRepeatCount) {
     NameAttrList to_apply;
     to_apply.set_name(pipeline_function_name);
 
-    Node* constant_node;
-    TF_CHECK_OK(NodeBuilder("Const", "Const")
-                    .Attr("dtype", DT_INT32)
-                    .Attr("value", Tensor(1))
-                    .Finalize(&g, &constant_node));
-
     Node* pipeline_node;
     TF_CHECK_OK(
         NodeBuilder("pipeline", "Pipeline")
             .Input(std::vector<NodeBuilder::NodeOut>{})
-            .Input(constant_node)
             .Attr("repeat_count", pipeline_repeat_count)
             .Attr("output_shapes", std::vector<TensorShape>{})
             .Attr("pipeline_poplar_config", "")
