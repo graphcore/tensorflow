@@ -317,17 +317,46 @@ StatusOr<poplar::program::Sequence> CreateCopy(
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
 
+  CHECK_EQ(inst->operand_count(), 1);
   poplar::Graph& graph = GetGraph(res, inst);
+  auto& shape = inst->operand(0)->shape();
   auto inputs =
-      FindInstructionInputs(tensor_map, res, inst, 0, seq, debug_name_and_id);
+      FindInstructionInputs(tensor_map, res, inst, 0, seq, debug_name_and_id,
+                            /*expand_aliasing=*/false);
 
-  for (int64 tuple_idx = 0; tuple_idx != static_cast<int64>(inputs.size());
-       ++tuple_idx) {
+  TF_ASSIGN_OR_RETURN(auto clone_method_tree, GetCopyCloneMethod(inst));
+  CHECK_EQ(clone_method_tree.leaf_count(), inputs.size());
+
+  int64 tuple_idx = 0;
+  for (auto& leaf : clone_method_tree.leaves()) {
     if (inputs[tuple_idx].IsTensor()) {
-      poplar::Tensor out = poputil::duplicate(
-          graph, inputs[tuple_idx], seq,
-          {debug_name_and_id, std::to_string(tuple_idx)},
-          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+      auto input = inputs[tuple_idx].AsTensor();
+      poplar::Tensor out;
+      const auto clone_method = leaf.second;
+      switch (clone_method) {
+        case CloneMethod_PreserveOrderAndAliases: {
+          out = poputil::duplicate(
+              graph, input, seq, {debug_name_and_id, std::to_string(tuple_idx)},
+              poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+          break;
+        }
+        case CloneMethod_PreserveOrderUnlessAliases: {
+          out = TensorCloneAndRebalanceAliasing(graph, res, input,
+                                                {debug_name_and_id});
+          seq.add(
+              poplar::program::Copy(input, out, false, {debug_name_and_id}));
+          break;
+        }
+        case CloneMethod_Bypass: {
+          out = input;
+          break;
+        }
+        default:
+          return xla::FailedPrecondition(
+              "Found invalid clone method for a copy instruction '%s' at input "
+              "%d.",
+              inst->name(), tuple_idx);
+      }
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, out));
     } else if (inputs[tuple_idx].IsOpaque()) {
       TF_CHECK_OK(
@@ -338,6 +367,7 @@ StatusOr<poplar::program::Sequence> CreateCopy(
           "at input %d.",
           inst->name(), tuple_idx);
     }
+    ++tuple_idx;
   }
   return seq;
 }

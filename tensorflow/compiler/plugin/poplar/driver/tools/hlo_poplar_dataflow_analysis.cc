@@ -514,7 +514,6 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
   HANDLE_AS_NOT_INPLACE(HandleConstant);
   HANDLE_AS_NOT_INPLACE(HandleConvert);
   HANDLE_AS_NOT_INPLACE(HandleConvolution);
-  HANDLE_AS_NOT_INPLACE(HandleCopy);
   HANDLE_AS_NOT_INPLACE(HandleDomain);
   HANDLE_AS_NOT_INPLACE(HandleDot);
   HANDLE_AS_NOT_INPLACE(HandleDynamicSlice);
@@ -677,6 +676,34 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
           /*locality=*/BufferLocality::kDeviceMemory);
       analysis_->SetInstructionBufferSetOutput(inst, indexed_shape.index,
                                                HloPoplarBufferSet({buffer}));
+    }
+    return Status::OK();
+  }
+
+  Status HandleCopy(HloInstruction* inst) override {
+    TF_ASSIGN_OR_RETURN(auto clone_method_tree, GetCopyCloneMethod(inst));
+    auto clone_method_it = clone_method_tree.leaf_begin();
+    for (auto& indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
+      auto clone_method = (*clone_method_it++).second;
+      if (clone_method != CloneMethod_Bypass) {
+        HloPoplarBuffer* buffer = analysis_->NewHloPoplarBuffer(
+            inst, indexed_shape.index,
+            /*locality=*/BufferLocality::kDeviceMemory);
+        analysis_->SetInstructionBufferSetOutput(inst, indexed_shape.index,
+                                                 HloPoplarBufferSet({buffer}));
+      } else {
+        const HloPoplarPosition input_position{inst->mutable_operand(0),
+                                               indexed_shape.index};
+        const HloPoplarPosition output_position{inst, indexed_shape.index};
+
+        HloPoplarBufferSet buffer_set = analysis_->GetBufferSet(input_position);
+
+        VLOG(3) << "Forwarding buffer set " << buffer_set << " from "
+                << input_position << " to " << output_position;
+
+        analysis_->SetInstructionBufferSetOutput(inst, indexed_shape.index,
+                                                 buffer_set);
+      }
     }
     return Status::OK();
   }

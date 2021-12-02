@@ -973,6 +973,43 @@ ENTRY top {
                     body_instruction_set));
 }
 
+TEST_F(HloPoplarDataflowAnalysisTest, TestCopy) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY main {
+  arg0 = f32[] parameter(0)
+  arg1 = f32[] parameter(1)
+  arg2 = f32[] parameter(2)
+
+  tuple = (f32[], f32[], f32[]) tuple(arg0, arg1, arg2)
+  ROOT copy = (f32[], f32[], f32[]) copy(tuple), backend_config="{\"copy_config\":{\"clone_method\": [\"CloneMethod_PreserveOrderAndAliases\", \"CloneMethod_PreserveOrderUnlessAliases\", \"CloneMethod_Bypass\"]}}"
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  EXPECT_THAT(analysis->buffer_count(), 5);
+
+  HloInstruction* arg0 = FindInstruction(m.get(), "arg0");
+  HloInstruction* arg1 = FindInstruction(m.get(), "arg1");
+  HloInstruction* arg2 = FindInstruction(m.get(), "arg2");
+  HloInstruction* copy = FindInstruction(m.get(), "copy");
+
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(arg0));
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(arg1));
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(arg2));
+
+  auto copy_buffer_set = analysis->GetInstructionBufferSet(copy);
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(copy, {0}));
+  EXPECT_TRUE(analysis->BufferIsDefinedAt(copy, {1}));
+  EXPECT_FALSE(analysis->BufferIsDefinedAt(copy, {2}));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

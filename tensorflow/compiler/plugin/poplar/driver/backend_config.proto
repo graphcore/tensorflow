@@ -103,6 +103,12 @@ enum Tileset {
   TILESET_IO_TILES = 1;
 };
 
+enum CloneMethod {
+  CloneMethod_PreserveOrderAndAliases = 0;
+  CloneMethod_PreserveOrderUnlessAliases = 1;
+  CloneMethod_Bypass = 2;
+}
+
 enum StochasticRoundingMethod {
   StochasticRoundingMethod_Undefined = 0;
   StochasticRoundingMethod_DifferingSeeds = 1;
@@ -113,6 +119,10 @@ enum StochasticRoundingMethod {
 
 // Backend specific HloInstruction config
 message PoplarBackendConfig {
+  // Copy config for a copy instruction
+  message CopyConfig {
+    repeated CloneMethod clone_method = 1;
+  };
   // Instruction config for a fusion instruction
   message FusionConfig {
     // Convolutions
@@ -204,6 +214,7 @@ message PoplarBackendConfig {
   oneof Config {
     FusionConfig fusion_config = 1;
     CallConfig call_config = 2;
+    CopyConfig copy_config = 14;
   }
 
   bool is_inplace = 3;

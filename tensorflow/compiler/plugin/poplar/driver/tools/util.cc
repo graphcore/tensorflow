@@ -1292,5 +1292,23 @@ StatusOr<HloInstruction*> AddParametersToCall(
   return new_call;
 }
 
+StatusOr<ShapeTree<CloneMethod>> GetCopyCloneMethod(
+    const HloInstruction* inst) {
+  TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
+                      inst->backend_config<PoplarBackendConfig>());
+  ShapeTree<CloneMethod> clone_method_tree(inst->operand(0)->shape());
+  auto& clone_method_proto = poplar_backend_config.copy_config().clone_method();
+  if (!clone_method_proto.empty()) {
+    std::size_t tuple_idx = 0;
+    for (auto& leaf : clone_method_tree.leaves()) {
+      leaf.second =
+          static_cast<CloneMethod>(clone_method_proto.at(tuple_idx++));
+    }
+
+    CHECK_EQ(clone_method_tree.leaf_count(), tuple_idx);
+  }
+  return clone_method_tree;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla
