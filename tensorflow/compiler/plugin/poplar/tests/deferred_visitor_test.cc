@@ -20,6 +20,7 @@ limitations under the License.
 #include <popops/codelets.hpp>
 #include <poprand/RandomGen.hpp>
 #include <poprand/codelets.hpp>
+#include <poputil/TileMapping.hpp>
 
 #include "absl/memory/memory.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
@@ -32,6 +33,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -1049,6 +1051,112 @@ ENTRY main (arg0.1: f32[2,2], arg1.2: f32[2,2], arg2.3: f32[2,2], arg3.4: pred[]
   // False case:
   EXPECT_EQ(gte2_3_tensor.getContiguousRegions(),
             get_tuple_element_21_tensor.getContiguousRegions());
+}
+
+TEST_F(DeferredVisitorTest, TestCopyCloneMethod) {
+  const string& hlo_string = R"(
+
+HloModule module
+ENTRY cluster {
+  p0 = f32[256] parameter(0)
+  p1 = f32[128] parameter(1)
+  const = f32[] constant(1)
+  bcast = f32[256] broadcast(f32[] const), dimensions={}
+  concat = f32[256] concatenate(p1, p1), dimensions={0}
+  copy.1 = f32[256] copy(p0), backend_config="{\"copy_config\":{\"clone_method\": \"CloneMethod_PreserveOrderUnlessAliases\"}}"
+  copy.2 = f32[256] copy(bcast), backend_config="{\"copy_config\":{\"clone_method\": \"CloneMethod_PreserveOrderUnlessAliases\"}}"
+  copy.3 = f32[256] copy(concat)
+  ROOT tuple = (f32[256], f32[256], f32[256], f32[256]) tuple(copy.1, copy.2, copy.3)
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto device = CreateIpuModel(/*num_ipus=*/1, /*num_tiles=*/4);
+  auto resources = GetMockResources(device, module.get());
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  // Verify that aliases have been expanded and verify default behaviour hasn't
+  // changed.
+  auto tensor_map = resources->tensor_maps.GetTensorMapForComputation(
+      entry_computation->name());
+  auto root = entry_computation->root_instruction();
+  auto copy1 = root->operand(0);
+  auto copy2 = root->operand(1);
+  auto copy3 = root->operand(2);
+  poplar::Tensor copy1_output =
+      FindInstructionOutputs(tensor_map, *resources.get(), copy1)[0];
+  poplar::Tensor copy2_output =
+      FindInstructionOutputs(tensor_map, *resources.get(), copy2)[0];
+  poplar::Tensor copy3_output =
+      FindInstructionOutputs(tensor_map, *resources.get(), copy3)[0];
+
+  EXPECT_TRUE(copy1_output.isParallelWriteable());
+  EXPECT_TRUE(copy2_output.isParallelWriteable());
+  EXPECT_TRUE(!copy3_output.isParallelWriteable());
+
+  // Check that expanded broadcast didn't end on tile 0.
+  auto& graph = GetGraph(*resources, copy2);
+  auto copy2_mapping = graph.getTileMapping(copy2_output);
+  CHECK_EQ(poputil::getTileImbalance(copy2_mapping), 1);
+}
+
+TEST_F(DeferredVisitorTest, TestCopyTupleCloneMethod) {
+  const string& hlo_string = R"(
+
+HloModule module
+ENTRY cluster {
+  p0 = f32[256] parameter(0)
+  p1 = f32[128] parameter(1)
+  const = f32[] constant(1)
+  bcast = f32[256] broadcast(f32[] const), dimensions={}
+  concat = f32[256] concatenate(p1, p1), dimensions={0}
+  tuple = (f32[256], f32[256], f32[256], f32[256]) tuple(p0, bcast, concat, p0)
+  ROOT copy = (f32[256], f32[256], f32[256], f32[256]) copy(tuple), backend_config="{\"copy_config\":{\"clone_method\": [\"CloneMethod_PreserveOrderUnlessAliases\", \"CloneMethod_PreserveOrderUnlessAliases\", \"CloneMethod_PreserveOrderAndAliases\", \"CloneMethod_Bypass\"]}}"
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto device = CreateIpuModel(/*num_ipus=*/1, /*num_tiles=*/4);
+  auto resources = GetMockResources(device, module.get());
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  // Verify that aliases have been expanded and verify default behaviour hasn't
+  // changed.
+  auto tensor_map = resources->tensor_maps.GetTensorMapForComputation(
+      entry_computation->name());
+  auto root = entry_computation->root_instruction();
+  poplar::Tensor copy1_output =
+      FindInstructionOutputs(tensor_map, *resources.get(), root)[0];
+  poplar::Tensor copy2_output =
+      FindInstructionOutputs(tensor_map, *resources.get(), root)[1];
+  poplar::Tensor copy3_output =
+      FindInstructionOutputs(tensor_map, *resources.get(), root)[2];
+  poplar::Tensor copy4_output =
+      FindInstructionOutputs(tensor_map, *resources.get(), root)[3];
+  poplar::Tensor copy4_input = FindInstructionOutputs(
+      tensor_map, *resources.get(), root->operand(0)->operand(3))[0];
+
+  EXPECT_TRUE(copy1_output.isParallelWriteable());
+  EXPECT_TRUE(copy2_output.isParallelWriteable());
+  // This should be false, it's because tuple always expands its aliasing.
+  EXPECT_TRUE(copy3_output.isParallelWriteable());
+  EXPECT_TRUE(copy4_output.isParallelWriteable());
+
+  // Check that expanded broadcast didn't end on tile 0.
+  auto& graph = GetGraph(*resources, root);
+  auto copy2_mapping = graph.getTileMapping(copy2_output);
+  CHECK_EQ(poputil::getTileImbalance(copy2_mapping), 1);
+
+  // Check bypass
+  CHECK_EQ(copy4_input, copy4_output);
 }
 
 }  // namespace

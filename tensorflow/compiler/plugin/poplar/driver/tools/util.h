@@ -31,6 +31,7 @@ limitations under the License.
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/xla/shape_tree.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
@@ -384,6 +385,8 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
 StatusOr<HloInstruction*> AddParametersToCall(
     HloInstruction* call,
     const std::vector<HloInstruction*>& parameters_to_add);
+
+StatusOr<ShapeTree<CloneMethod>> GetCopyCloneMethod(const HloInstruction* inst);
 
 }  // namespace poplarplugin
 }  // namespace xla
