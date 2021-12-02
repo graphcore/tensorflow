@@ -51,7 +51,7 @@ def multi_input_functional():
   return keras.Model([input_1, input_2, input_3], output)
 
 
-@keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+@keras_parameterized.run_with_all_model_types()
 @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                          always_skip_v1=True)
 class SimpleBiasTest(keras_parameterized.TestCase):

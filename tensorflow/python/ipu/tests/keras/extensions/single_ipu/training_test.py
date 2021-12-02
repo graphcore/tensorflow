@@ -66,7 +66,7 @@ class TrainingTest(keras_parameterized.TestCase):
     self._ipu_strategy_scope.__exit__(None, None, None)
     super(TrainingTest, self).tearDown()
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   def test_model_instrumentation(self):
@@ -80,7 +80,7 @@ class TrainingTest(keras_parameterized.TestCase):
     self.assertTrue(model._instrumented_keras_model_class)  # pylint: disable=protected-access
     self.assertFalse(model._instrumented_keras_layer_class)  # pylint: disable=protected-access
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   def test_fit_training_arg(self):
@@ -175,7 +175,7 @@ class TrainingTest(keras_parameterized.TestCase):
     # The validation loss should be 1.0.
     self.assertAllClose(history.history['val_loss'][0], 1.0)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   def test_target_dtype_matches_output(self):
@@ -195,7 +195,7 @@ class TrainingTest(keras_parameterized.TestCase):
     model.test_on_batch(inputs, targets)
     self.assertEqual(model.predict(inputs).dtype, np.float16)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   def test_fit_and_validate_nested_training_arg(self):
@@ -684,14 +684,15 @@ class TrainingTest(keras_parameterized.TestCase):
         return inputs * 2
 
     model = SubclassedModel()
-    dataset_one = dataset_ops.Dataset.range(2).batch(2, drop_remainder=True)
-    dataset_two = dataset_ops.Dataset.range(3, 10).batch(2,
-                                                         drop_remainder=True)
+    dataset_one = dataset_ops.Dataset.range(2).batch(
+        2, drop_remainder=True).map(lambda x: math_ops.cast(x, np.float32))
+    dataset_two = dataset_ops.Dataset.range(3, 10).batch(
+        2, drop_remainder=True).map(lambda x: math_ops.cast(x, np.float32))
     self.assertAllEqual([[0], [2]], model.predict(dataset_one, steps=1))
     self.assertAllEqual([[6], [8], [10], [12]],
                         model.predict(dataset_two, steps=2))
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   @parameterized.named_parameters(
@@ -719,7 +720,7 @@ class TrainingTest(keras_parameterized.TestCase):
               callbacks=[val_counter])
     self.assertEqual(val_counter.val_runs, expected_runs)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   def test_layer_with_variable_output(self):
@@ -740,7 +741,7 @@ class TrainingTest(keras_parameterized.TestCase):
 
     self.assertLen(model.trainable_variables, 3)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   @testing_utils.enable_v2_dtype_behavior
@@ -763,7 +764,7 @@ class TrainingTest(keras_parameterized.TestCase):
       model.test_on_batch(x, y)
       model(x)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   @testing_utils.enable_v2_dtype_behavior
@@ -1312,7 +1313,7 @@ class MaskingTest(keras_parameterized.TestCase):
     model.compile(loss='mse', optimizer=RMSPropOptimizer(learning_rate=0.001))
     return model
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   def test_masking(self):
     model = self._get_model(input_shape=(2, 1))
     x = np.array([[[1], [1]], [[0], [0]]])
@@ -1356,7 +1357,7 @@ class MaskingTest(keras_parameterized.TestCase):
     model.train_on_batch(x, y)
 
 
-@keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+@keras_parameterized.run_with_all_model_types()
 class TestDynamicTrainability(keras_parameterized.TestCase):
   def setUp(self):
     super(TestDynamicTrainability, self).setUp()
@@ -1941,7 +1942,7 @@ class TestTrainingWithMetrics(keras_parameterized.TestCase):
     model.train_on_batch(x, y)
     model.test_on_batch(x, y)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   def test_add_metric_in_layer_call(self):
@@ -2417,7 +2418,7 @@ class TestAutoUpdates(keras_parameterized.TestCase):
     self._ipu_strategy_scope.__exit__(None, None, None)
     super(TestAutoUpdates, self).tearDown()
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @parameterized.named_parameters(('bare_update', BareUpdateLayer),
                                   ('lambda_update', LambdaUpdateLayer),
                                   ('nested_update', NestedUpdateLayer))
@@ -2430,7 +2431,7 @@ class TestAutoUpdates(keras_parameterized.TestCase):
     model.fit(x, y, batch_size=2, epochs=1)
     self.assertEqual(self.evaluate(layer.counter), 5)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   def test_lambda_updates_trainable_false(self):
     x, y = np.ones((10, 10)), np.ones((10, 1))
     layer = LambdaUpdateLayer()
@@ -2444,7 +2445,7 @@ class TestAutoUpdates(keras_parameterized.TestCase):
     model.fit(x, y, batch_size=2, epochs=1)
     self.assertEqual(self.evaluate(layer.counter), 5)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   def test_subgraph_updates_in_model(self):
     layer = SubgraphUpdateLayer()
     x, y = np.ones((10, 10)), np.ones((10, 1))
@@ -2475,7 +2476,7 @@ class TestAutoUpdates(keras_parameterized.TestCase):
     self.evaluate(y)
     self.assertEqual(self.evaluate(layer.counter), 1)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   def test_batchnorm_trainable_false(self):
     bn = layers_module.BatchNormalization()
     model = testing_utils.get_model_from_layers(

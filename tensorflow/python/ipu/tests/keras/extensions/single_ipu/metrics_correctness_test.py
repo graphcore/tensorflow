@@ -315,7 +315,7 @@ class TestMetricsCorrectnessMultiIO(keras_parameterized.TestCase):
                         self.expected_batch_result_with_weights_output_2, 1e-3)
 
 
-@keras_parameterized.run_with_all_model_types(exclude_models=['subclass'])
+@keras_parameterized.run_with_all_model_types()
 @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                          always_skip_v1=True)
 class TestMetricsCorrectnessSingleIO(keras_parameterized.TestCase):

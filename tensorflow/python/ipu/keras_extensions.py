@@ -19,8 +19,10 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.keras.engine import base_layer
 from tensorflow.python.ipu.keras.extensions import functional_extensions
 from tensorflow.python.ipu.keras.extensions import sequential_extensions
+from tensorflow.python.ipu.keras.extensions import model_extensions
 from tensorflow.python.keras.engine import functional
 from tensorflow.python.keras.engine import sequential
+from tensorflow.python.keras.engine import training
 
 
 class KerasExtensions:
@@ -39,6 +41,8 @@ class KerasExtensions:
                                    sequential_extensions.SequentialExtension)
     self._register_keras_extension(functional.Functional,
                                    functional_extensions.FunctionalExtension)
+    self._register_keras_extension(training.Model,
+                                   model_extensions.ModelExtension)
 
   def _enable_dataset_iterators(self):
     return context.executing_eagerly() and self._enable_iterators

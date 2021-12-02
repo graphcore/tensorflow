@@ -42,7 +42,7 @@ def _get_model(compile_metrics):
   return model
 
 
-@keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+@keras_parameterized.run_with_all_model_types()
 @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                          always_skip_v1=True)
 class ResetStatesTest(keras_parameterized.TestCase):

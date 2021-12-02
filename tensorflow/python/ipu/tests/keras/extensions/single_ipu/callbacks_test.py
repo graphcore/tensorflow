@@ -94,7 +94,7 @@ def _get_numpy():
   return np.ones((10, 10)), np.ones((10, 1))
 
 
-@keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+@keras_parameterized.run_with_all_model_types()
 @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                          always_skip_v1=True)
 class CallbackCountsTest(keras_parameterized.TestCase):
@@ -209,7 +209,7 @@ class KerasCallbacksTest(keras_parameterized.TestCase):
                   run_eagerly=testing_utils.should_run_eagerly())
     return model
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   def test_progbar_logging(self):
@@ -293,7 +293,7 @@ class KerasCallbacksTest(keras_parameterized.TestCase):
       model.fit(dataset, epochs=2, steps_per_epoch=10)
       self.assertRegex(printed.contents(), expected_log)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   def test_progbar_logging_validation_data(self):
@@ -311,7 +311,7 @@ class KerasCallbacksTest(keras_parameterized.TestCase):
       model.fit(training_dataset, epochs=2, validation_data=val_dataset)
       self.assertRegex(printed.contents(), expected_log)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   def test_progbar_logging_validation_split(self):
@@ -327,7 +327,7 @@ class KerasCallbacksTest(keras_parameterized.TestCase):
       model.fit(x, y, batch_size=10, epochs=2, validation_split=0.2)
       self.assertRegex(printed.contents(), expected_log)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   @keras_parameterized.run_all_keras_modes(always_skip_eager=True,
                                            always_skip_v1=True)
   def test_progbar_logging_training_validation(self):
@@ -362,7 +362,7 @@ class KerasCallbacksTest(keras_parameterized.TestCase):
                 validation_steps=10)
       self.assertRegex(printed.contents(), expected_log)
 
-  @keras_parameterized.run_with_all_model_types(exclude_models='subclass')
+  @keras_parameterized.run_with_all_model_types()
   def test_ModelCheckpoint(self):
     if h5py is None:
       return  # Skip test if models cannot be saved.

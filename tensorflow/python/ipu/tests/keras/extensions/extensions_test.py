@@ -323,6 +323,65 @@ class KerasExtensionsTest(test.TestCase):
         model.predict([1.], batch_size=1)
 
   @test_util.run_v2_only
+  def testModel(self):
+    cfg = config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+
+      class MakeFunctionsOverrideModel(training_module.Model):  # pylint: disable=abstract-method
+        def __init__(self, dense_layers):
+          super(MakeFunctionsOverrideModel, self).__init__()
+          self.dense_layers = dense_layers
+
+        def make_train_function(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().make_train_function(*args, **kwargs)
+
+        def make_test_function(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().make_test_function(*args, **kwargs)
+
+        def make_predict_function(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().make_predict_function(*args, **kwargs)
+
+        def call(self, inputs):  # pylint: disable=arguments-differ
+          x = inputs
+          for layer in self.dense_layers:
+            x = layer(x)
+          return x
+
+      model = MakeFunctionsOverrideModel([layers.Dense(1)])
+      model.compile(loss='mse')
+      with self.assertRaisesRegex(RuntimeError,
+                                  "The function `make_train_function`"):
+        model.fit([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError,
+                                  "The function `make_test_function`"):
+        model.evaluate([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError,
+                                  "The function `make_predict_function`"):
+        model.predict([1.], batch_size=1)
+
+      class CallOverrideModel(training_module.Model):  # pylint: disable=abstract-method
+        def call(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().call(*args, **kwargs)
+
+      model = CallOverrideModel([layers.Dense(1)])
+      model.compile(loss='mse')
+      self.assertRaises(NotImplementedError,
+                        lambda: model.set_pipeline_stage_assignment([0]))
+      with self.assertRaisesRegex(RuntimeError,
+                                  "you should implement a `call` method"):
+        model.fit([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError,
+                                  "you should implement a `call` method"):
+        model.evaluate([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError,
+                                  "you should implement a `call` method"):
+        model.predict([1.], batch_size=1)
+
+  @test_util.run_v2_only
   def testInputValidation(self):
     class TwoInTwoOutIdentity(layers.Layer):
       def __init__(self, **layer_args):

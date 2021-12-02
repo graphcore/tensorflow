@@ -24,6 +24,7 @@ from tensorflow.python.keras.engine import data_adapter
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.util import nest
+from tensorflow.python.ops import variables
 
 
 class IPUDataHandler(data_adapter.DataHandler):
@@ -50,7 +51,10 @@ class IPUDataHandler(data_adapter.DataHandler):
     self._model = model
 
     if steps_per_execution is None:
-      self._steps_per_execution = 1
+      self._steps_per_execution = variables.Variable(
+          1,
+          dtype='int64',
+          aggregation=variables.VariableAggregationV2.ONLY_FIRST_REPLICA)
       self._steps_per_execution_value = 1
     else:
       self._steps_per_execution = steps_per_execution

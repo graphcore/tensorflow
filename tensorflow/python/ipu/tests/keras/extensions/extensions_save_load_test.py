@@ -14,6 +14,8 @@
 # ==============================================================================
 """Test for KerasExtension interface."""
 import tempfile
+import numpy as np
+from tensorflow.python import ipu
 
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu.keras import extensions
@@ -25,6 +27,12 @@ from tensorflow.python.keras.engine import training as training_module
 from tensorflow.python.keras import layers
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import test
+from tensorflow.python.data.ops import dataset_ops
+
+IN_SHAPE = (10, 32)
+OUT_CHANNELS = 16
+NUM_SAMPLES = 4
+BATCH_SIZE = 2
 
 
 class KerasExtensionsSaveLoadTest(test.TestCase):
@@ -150,6 +158,67 @@ class KerasExtensionsSaveLoadTest(test.TestCase):
       # Test json.
       loaded_model = models.model_from_json(model.to_json())
       self.assertTrue(model.test_option)
+
+  @test_util.run_v2_only
+  def testModelExtension(self):
+    # Model subclasses do not support get_config()/from_config() by default,
+    # unless they subclass Functional.
+
+    np.random.seed(42)
+    strategy = ipu_strategy.IPUStrategyV1()
+
+    # We have to run the model first to be able to save it.
+    cfg = ipu.config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    def create_dataset(shape, num_samples, batch_size):
+      data = np.random.uniform(size=(num_samples,) + shape).astype(np.float32)
+      return dataset_ops.Dataset.from_tensor_slices(data).batch(
+          batch_size, drop_remainder=True)
+
+    class TestModel(training_module.Model):  # pylint: disable=abstract-method
+      def __init__(self, in_channels=32, out_channels=16):
+        super(TestModel, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.dense_layers = [
+            layers.Dense(in_channels, activation="relu"),
+            layers.Dense(out_channels, activation="softmax")
+        ]
+
+      def call(self, inputs):  # pylint: disable=arguments-differ
+        x = inputs
+        for layer in self.dense_layers:
+          x = layer(x)
+        return x
+
+    with strategy.scope():
+      # Replace the extension with the test version.
+      # pylint: disable=protected-access
+      strategy._register_keras_extension(
+          training_module.Model, extensions.model_extensions.ModelExtension)
+
+      dataset = create_dataset(IN_SHAPE, NUM_SAMPLES, BATCH_SIZE)
+
+      model = TestModel()
+      self.assertIsInstance(model, training_module.Model)
+      self.assertIsInstance(model, extensions.model_extensions.ModelExtension)
+      model.predict(dataset)  # Compile and run the model.
+
+      # We shouldn't be able to save this model's config, because it is not
+      # defined in this example.
+      self.assertFalse(model._get_config_supported())  # pylint: disable=protected-access
+      self.assertRaises(NotImplementedError, model.get_config)
+      self.assertRaises(NotImplementedError, model.to_json)
+
+      # Test save/load (including SavedModel).
+      with tempfile.TemporaryDirectory() as temp_dir:
+        model.save(temp_dir)
+        loaded_model = save.load_model(temp_dir,
+                                       custom_objects={"TestModel": TestModel})
+        loaded_model.compile()
 
 
 if __name__ == '__main__':
