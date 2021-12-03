@@ -1928,12 +1928,16 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   target_hash.push_back(ipu_.Target().getNumWorkerContexts());
   target_hash.push_back(ipu_.Target().getTilesPerIPU());
   target_hash.push_back(ipu_.Target().getNumIPUs());
+  target_hash.push_back(ipu_.Target().getInstanceSize());
   target_hash.push_back(static_cast<int64>(ipu_.Target().getTargetType()));
   target_hash.push_back(
       static_cast<int64>(ipu_.Target().getIpuLinkConfiguration()));
   target_hash.push_back(ipu_.Target().getIpuLinkDomainSize());
   target_hash.push_back(static_cast<int64>(ipu_.Target().getIpuLinkTopology()));
   target_hash.push_back(ipu_.Target().getGatewayMode());
+  target_hash.push_back(ipu_.Target().getMinIPUSyncDelay());
+  target_hash.push_back(ipu_.Target().getMaxIPUSyncDelay());
+  target_hash.push_back(ipu_.Target().getGlobalSyncCycles());
 
   if (ipu_.Target().getTargetType() == poplar::TargetType::IPU) {
     target_hash.push_back(

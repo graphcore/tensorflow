@@ -3005,17 +3005,33 @@ tf_xla_py_test(
     ],
 )
 
-poprun_py_test(
-    name = "poprun_basic_test",
-    size = "large",
-    srcs = ["tests/poprun_basic_test.py"],
-    main = "tests/poprun_basic_test.py",
-    num_instances = 2,
-    num_replicas = 4,
-    deps = [
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
+[
+    poprun_py_test(
+        name = "poprun_basic_%d_instances_%d_replicas_test_" % (N, M),
+        size = "large",
+        srcs = ["tests/poprun_basic_test.py"],
+        main = "tests/poprun_basic_test.py",
+        num_instances = N,
+        num_replicas = M,
+        deps = [
+            "//tensorflow/python/ipu:ipu_lib",
+        ],
+    )
+    for N, M in [
+        [
+            1,
+            4,
+        ],
+        [
+            2,
+            4,
+        ],
+        [
+            4,
+            4,
+        ],
+    ]
+]
 
 tf_xla_py_test(
     name = "device_connection_test",
@@ -3543,7 +3559,9 @@ test_suite(
         "poplar_algebraic_simplifier_test",
         "poplar_executable_runner_test",
         "poplar_replica_groups_test",
-        "poprun_basic_test",
+        "poprun_basic_1_instances_4_replicas_test_",
+        "poprun_basic_2_instances_4_replicas_test_",
+        "poprun_basic_4_instances_4_replicas_test_",
         "post_serialize_gradient_accumulation_test",
         "pre_compile_test",
         "prng_seed_state_test",

@@ -69,7 +69,8 @@ class PoprunBasicTest(test_util.TensorFlowTestCase):  # pylint: disable=abstract
       replica_offset = popdist.getReplicaIndexOffset()
       self.assertAllEqual(
           dequeued,
-          np.arange(replica_offset, replica_offset + num_local_replicas))
+          np.squeeze(
+              np.arange(replica_offset, replica_offset + num_local_replicas)))
       self.assertEqual(res, np.sum(np.arange(num_total_replicas)))
 
 
