@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 
+import unittest
 from absl.testing import parameterized
 from functools import partial
 import numpy as np
@@ -2658,6 +2659,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*PIPELINE_COMPARE_TEST_CASES)
   @test_util.deprecated_graph_mode_only
+  @unittest.skip("Skipped as test is affected by bug T48804.")
   def testPipelineCompareParStages(self, opt_type, opt_args):
     # Resnet like network.
     def dataset_fn():
