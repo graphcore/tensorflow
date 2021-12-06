@@ -646,7 +646,10 @@ class EngineResource {
                  PoplarExecutableProto& proto)
       : engine_name_(engine_name),
         device_(std::move(device)),
-        engine_(std::move(executable)),
+        // Setting streamCallbacks.maxLookahead because we can't control the
+        // user data inputs in the application runtime. This means we can't
+        // gaurantee to poplar it can lookahead arbitrarily.
+        engine_(std::move(executable), {{"streamCallbacks.maxLookahead", "0"}}),
         communication_manager_(proto, timeout_us) {}
 
   poplar::Engine& GetEngine() { return engine_; }
