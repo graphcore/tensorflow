@@ -217,7 +217,7 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
 )
 
 tf_py_test(
@@ -246,7 +246,7 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     shard_count = 10,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
 )
 
 tf_py_test(
@@ -290,7 +290,7 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     shard_count = 4,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
 )
 
 tf_py_test(
@@ -313,7 +313,7 @@ tf_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
     ],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
 )
 
 tf_py_test(
@@ -325,7 +325,7 @@ tf_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
     ],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
 )
 
 tf_py_test(
@@ -344,7 +344,7 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
 )
 
 tf_py_test(
@@ -376,7 +376,7 @@ tf_py_test(
         "//tensorflow/python/keras:layers",
     ],
     shard_count = 12,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
 )
 
 tf_py_test(
@@ -431,7 +431,7 @@ tf_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
 )
 
 tf_py_test(
@@ -476,7 +476,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
     ],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
 )
 
 tf_py_test(
@@ -614,7 +614,7 @@ tf_py_test(
         "//tensorflow/python:variables",
     ],
     shard_count = 8,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
 )
 
 tf_py_test(
@@ -647,7 +647,7 @@ tf_py_test(
     ],
     shard_count = 4,
     tags = [
-        "hw_poplar_test",
+        "hw_poplar_test_4_ipus",
         "isolated_poplar_tests",
     ],
 )
@@ -697,7 +697,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/compiler/xla:xla_data_proto_py",
     ],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
 )
 
 tf_py_test(
@@ -732,7 +732,7 @@ py_test(
     name = "popops_cross_replica_mean_test",
     size = "large",
     srcs = ["tests/popops_cross_replica_mean_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
@@ -749,7 +749,7 @@ py_test(
     size = "medium",
     srcs = ["tests/replication_normalise_test.py"],
     srcs_version = "PY2AND3",
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1020,7 +1020,7 @@ tf_py_test(
         "//tensorflow/python:variables",
     ],
     shard_count = 16,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
 )
 
 tf_py_test(
@@ -1208,7 +1208,7 @@ tf_py_test(
     ],
     # Shard count needs to match the number of tests.
     shard_count = 11,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
 )
 
 tf_py_test(
@@ -1271,7 +1271,7 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     shard_count = 7,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
 )
 
 tf_py_test(
@@ -1285,7 +1285,7 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
 )
 
 tf_py_test(
@@ -1299,7 +1299,7 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
 )
 
 tf_py_test(
@@ -1313,7 +1313,7 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
 )
 
 tf_py_test(
@@ -1329,7 +1329,7 @@ tf_py_test(
     ],
     # Shard count needs to match the number of tests.
     shard_count = 4,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
 )
 
 tf_py_test(
@@ -1343,7 +1343,7 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
 )
 
 tf_py_test(
@@ -1359,7 +1359,7 @@ tf_py_test(
     ],
     # Shard count needs to match the number of tests.
     shard_count = 12,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
 )
 
 tf_py_test(
@@ -1373,7 +1373,7 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
 )
 
 tf_py_test(
@@ -1387,7 +1387,7 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
 )
 
 tf_py_test(
@@ -1403,7 +1403,7 @@ tf_py_test(
     ],
     # Shard count needs to match the number of tests.
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
 )
 
 tf_py_test(
@@ -1419,7 +1419,7 @@ tf_py_test(
     ],
     # Shard count needs to match the number of tests.
     shard_count = 4,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
 )
 
 tf_py_test(
@@ -1434,7 +1434,7 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_8_ipus"],
 )
 
 tf_py_test(
@@ -1449,7 +1449,7 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
 )
 
 tf_py_test(
@@ -1465,7 +1465,7 @@ tf_py_test(
     ],
     # Shard count needs to match the number of tests.
     shard_count = 5,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
 )
 
 tf_py_test(
@@ -1481,7 +1481,7 @@ tf_py_test(
     ],
     # Shard count needs to match the number of tests.
     shard_count = 11,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
 )
 
 tf_py_test(
@@ -1498,7 +1498,7 @@ tf_py_test(
     ],
     # Shard count needs to match the number of tests.
     shard_count = 7,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_8_ipus"],
 )
 
 tf_py_test(
@@ -1515,7 +1515,7 @@ tf_py_test(
     ],
     # Shard count needs to match the number of tests.
     shard_count = 4,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
 )
 
 tf_py_test(
@@ -1532,7 +1532,7 @@ tf_py_test(
     ],
     # Shard count needs to match the number of tests.
     shard_count = 10,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_8_ipus"],
 )
 
 poprun_py_test(
@@ -1567,7 +1567,7 @@ tf_py_test(
         "//third_party/py/numpy",
     ],
     shard_count = 4,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
 )
 
 tf_py_test(
@@ -1602,24 +1602,6 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
     ],
     shard_count = 8,
-)
-
-tf_py_test(
-    name = "keras_gradient_accumulation_test",
-    size = "large",
-    srcs = ["tests/keras/keras_gradient_accumulation_test.py"],
-    additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:control_flow_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-    ],
-    shard_count = 8,
-    tags = ["hw_poplar_test"],
 )
 
 tf_py_test(

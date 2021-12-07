@@ -47,7 +47,7 @@ def poprun_py_test(
         # is a race condition in which another test could acquire a device
         # between the parent device configuration (by poprun) and the child
         # device acquisition (by the instances).
-        tags = tags + ["exclusive", "hw_poplar_test"],
+        tags = tags + ["exclusive", "hw_poplar_test_16_ipus"],
         args = [
             "$(location @local_config_poplar//poplar:mpirun)",
             "$(location @local_config_poplar//poplar:poprun)",

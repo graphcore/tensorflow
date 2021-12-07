@@ -614,7 +614,7 @@ xla_test(
     srcs = ["tests/combine_instructions_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         ":poplar_test_base",
         ":test_utils",
@@ -927,7 +927,8 @@ xla_test(
     srcs = ["tests/prng_seed_state_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
-    tags = ["hw_poplar_test"],
+    shard_count = 4,
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         ":poplar_test_base",
         ":test_utils",
@@ -1015,7 +1016,7 @@ tf_xla_py_test(
     size = "small",
     srcs = ["tests/random_ops.py"],
     enabled_backends = ["poplar"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         ":test_utils_py",
         "//tensorflow/python:array_ops",
@@ -2038,7 +2039,7 @@ xla_test(
     srcs = ["tests/graph_caching_with_remote_buffer_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -2411,7 +2412,7 @@ tf_xla_py_test(
     srcs = ["tests/multi_run_test.py"],
     enabled_backends = ["poplar"],
     shard_count = 3,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         ":test_utils_py",
     ],
@@ -2463,7 +2464,7 @@ tf_xla_py_test(
     srcs = ["tests/distributed_batch_norm_test.py"],
     enabled_backends = ["poplar"],
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_8_ipus"],
     deps = [
         ":test_utils_py",
     ],
@@ -2474,7 +2475,7 @@ xla_test(
     srcs = ["tests/replicated_resource_update_elementwise_clustering_hw_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -2999,7 +3000,7 @@ tf_xla_py_test(
     ],
     enabled_backends = ["poplar"],
     shard_count = 8,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         ":test_utils_py",
     ],
@@ -3132,7 +3133,7 @@ py_test(
         "--replicas=2",
     ],
     main = "ipu_estimator_example.py",
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
