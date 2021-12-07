@@ -152,7 +152,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(loss, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 25260426)
+    self.assert_total_tile_memory(report, 25260426, tolerance=0.1)
 
   def testTraining(self):
     cfg = ipu.utils.IPUConfig()
@@ -218,7 +218,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 41885999)
+    self.assert_total_tile_memory(report, 41885999, tolerance=0.1)
 
   def testTrainingInLoop(self):
     cfg = ipu.utils.IPUConfig()
@@ -259,7 +259,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 40593174)
+    self.assert_total_tile_memory(report, 40593174, tolerance=0.1)
 
   def testTrainingMomentumInLoop(self):
     cfg = ipu.utils.IPUConfig()
@@ -299,7 +299,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 40676194)
+    self.assert_total_tile_memory(report, 40676194, tolerance=0.1)
 
   def testTrainingInLoopWithGradientAccumulation(self):
     cfg = ipu.utils.IPUConfig()
@@ -341,7 +341,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 43300476)
+    self.assert_total_tile_memory(report, 43958868, tolerance=0.1)
 
   def testTrainingMomentumInLoopWithGradientAccumulation(self):
     cfg = ipu.utils.IPUConfig()
@@ -382,7 +382,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 43552736)
+    self.assert_total_tile_memory(report, 43552736, tolerance=0.1)
 
 
 if __name__ == "__main__":
