@@ -21,6 +21,7 @@ from __future__ import print_function
 import collections
 import copy
 import functools
+import inspect
 import itertools
 import threading
 import warnings
@@ -3353,32 +3354,63 @@ def extension_delegate(func):
       A wrapped function which can delegate to an extension.
   """
 
-  def wrapper(self, *args, **kwargs):
+  def wrapper(obj, *args, **kwargs):
     key_name = "__extension_delegate"
     enable_extension_delegate = kwargs.get(key_name, True)
     kwargs.pop(key_name, None)
     prefix = "" if func.__name__.startswith("_") else "_"
-    if enable_extension_delegate and isinstance(self, KerasExtension):
+
+    func_is_classmethod = False
+    if isinstance(obj, type):
+      # obj is a (class) type, not an instance; is func a classmethod?
+      for cls in inspect.getmro(obj):
+        try:
+          if isinstance(cls.__dict__[func.__name__], classmethod):
+            func_is_classmethod = True
+            break
+        except KeyError:
+          pass
+
+    obj_is_patched = isinstance(obj, KerasExtension)
+    extension = None
+    if func_is_classmethod:
+      strategy = ds_context.get_strategy()
+      if hasattr(strategy, "_get_keras_extension"):
+        # Find the extension for this class.
+        for cls in inspect.getmro(obj):
+          extension = strategy._get_keras_extension(cls)
+          if extension is not None:
+            break
+        obj_is_patched = bool(extension)
+
+    if enable_extension_delegate and obj_is_patched:
       supported_func_name = prefix + func.__name__ + "_supported"
       delegate_func_name = prefix + func.__name__ + "_delegate"
 
-      if (hasattr(self, supported_func_name) and
-          hasattr(self, delegate_func_name)):
+      def lookup_func(func_name):
+        # If we're talking about a classmethod, we need to find the delegate on
+        # the extension rather than the class we're given.
+        maybe_func = getattr(extension if extension else obj, func_name, None)
+        if hasattr(maybe_func, "__func__"):
           # Strip the boundness of the method.
-          supported_func = getattr(self, supported_func_name).__func__
-          delegate_func = getattr(self, delegate_func_name).__func__
+          maybe_func = maybe_func.__func__
+        return maybe_func
 
-          # Make sure that the delegate function has the same signature/spec.
-          func_spec = tf_inspect.getfullargspec(func)
-          delegate_func_spec = tf_inspect.getfullargspec(delegate_func)
+      supported_func = lookup_func(supported_func_name)
+      delegate_func = lookup_func(delegate_func_name)
 
-          # Call the delegate function if the specs match and arguments are
-          # supported.
-          if (func_spec == delegate_func_spec and
-              supported_func(self, *args, **kwargs)):
-            return delegate_func(self, *args, **kwargs)
+      if supported_func and delegate_func:
+        # Make sure that the delegate function has the same signature/spec.
+        func_spec = tf_inspect.getfullargspec(func)
+        delegate_func_spec = tf_inspect.getfullargspec(delegate_func)
 
-    return func(self, *args, **kwargs)
+        # Call the delegate function if the specs match and arguments are
+        # supported.
+        if (func_spec == delegate_func_spec and
+            supported_func(obj, *args, **kwargs)):
+          return delegate_func(obj, *args, **kwargs)
+
+    return func(obj, *args, **kwargs)
 
   return wrapper
 

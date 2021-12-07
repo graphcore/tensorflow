@@ -54,6 +54,12 @@ class KerasExtensions:
   def _register_keras_extension(self, class_type, extension):
     self._keras_extensions[class_type] = extension
 
+  def _get_keras_extension(self, class_type):
+    try:
+      return self._keras_extensions[class_type]
+    except KeyError:
+      return None
+
   def _delete_keras_extension(self, class_type):
     self._keras_extensions.pop(class_type, None)
 

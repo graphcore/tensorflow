@@ -121,6 +121,75 @@ class KerasExtensionsTest(test.TestCase):
     inner_test(110., TestExtension5)
 
   @test_util.run_v2_only
+  def testExtensionWithClassMethod(self):
+    # Ensure we can provide a delegate for a class method
+
+    class TestLayer(base_layer.Layer):
+      @classmethod
+      @base_layer.extension_delegate
+      def my_classmethod(cls, x, **kwargs):  # pylint: disable=unused-argument
+        cls.method_was_called_times += 1
+        self.assertIs(cls, TestLayer)
+        return x * 123
+
+    class TestLayer2(TestLayer):
+      @classmethod
+      def my_classmethod(cls, x, **kwargs):
+        cls.method_was_called_times += 1
+        self.assertIs(cls, TestLayer2)
+
+        x = cls.__base__.my_classmethod(x)
+        return x * 2
+
+    class TestExtension(base_layer.KerasExtension):
+      @classmethod
+      def _my_classmethod_supported(cls, *args, **kwargs):  # pylint: disable=unused-argument
+        return True
+
+      @classmethod
+      def _my_classmethod_delegate(cls, x, **kwargs):  # pylint: disable=unused-argument
+        __class__.method_was_called_times += 1
+        return x * cls.my_classmethod(x, __extension_delegate=False)
+
+    def reset_spies():
+      TestLayer.method_was_called_times = 0
+      TestLayer2.method_was_called_times = 0
+      TestExtension.method_was_called_times = 0
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    strategy._register_keras_extension(TestLayer, TestExtension)  # pylint: disable=protected-access
+    with strategy.scope():
+      reset_spies()
+      output = TestLayer.my_classmethod(2)
+      self.assertEqual(TestLayer.method_was_called_times, 1)
+      self.assertEqual(TestLayer2.method_was_called_times, 0)
+      self.assertEqual(TestExtension.method_was_called_times, 1)
+      self.assertEqual(output, 492)
+
+      # Ensure we can provide a delegate even on a subclass.
+      reset_spies()
+      output = TestLayer2.my_classmethod(2)
+      self.assertEqual(TestLayer.method_was_called_times, 1)
+      self.assertEqual(TestLayer2.method_was_called_times, 1)
+      self.assertEqual(TestExtension.method_was_called_times, 1)
+      self.assertEqual(output, 984)
+
+    # And we don't call the extension delegate outside the IPUStrategy.
+    reset_spies()
+    output = TestLayer.my_classmethod(1)
+    self.assertEqual(TestLayer.method_was_called_times, 1)
+    self.assertEqual(TestLayer2.method_was_called_times, 0)
+    self.assertEqual(TestExtension.method_was_called_times, 0)
+    self.assertEqual(output, 123)
+
+    reset_spies()
+    output = TestLayer2.my_classmethod(1)
+    self.assertEqual(TestLayer.method_was_called_times, 1)
+    self.assertEqual(TestLayer2.method_was_called_times, 1)
+    self.assertEqual(TestExtension.method_was_called_times, 0)
+    self.assertEqual(output, 246)
+
+  @test_util.run_v2_only
   def testKerasModelExtensions(self):
     cfg = config.IPUConfig()
     cfg.auto_select_ipus = 1
