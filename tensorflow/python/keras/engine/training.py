@@ -2249,10 +2249,12 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
     }
     return model_config
 
+  @base_layer.extension_delegate
   def get_config(self):
     raise NotImplementedError
 
   @classmethod
+  @base_layer.extension_delegate
   def from_config(cls, config, custom_objects=None):
     # Since only FunctionalModel produces config, the model can only
     # be constructed for FunctionalModel

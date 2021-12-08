@@ -61,6 +61,29 @@ def simple_functional_model():
   return keras.Model(d, x)
 
 
+class SimpleSubclassedModel(keras.engine.training.Model):
+  def __init__(self, hidden_units):
+    super(SimpleSubclassedModel, self).__init__()
+    self.hidden_units = hidden_units
+    self.dense_layers = [
+        keras.layers.Dense(u,
+                           activation='softmax',
+                           kernel_initializer=keras.initializers.Constant(0.5),
+                           bias_initializer='zeros') for u in hidden_units
+    ]
+
+  def get_config(self):
+    config = super().get_config()
+    config["hidden_units"] = self.hidden_units
+    return config
+
+  def call(self, inputs):  # pylint: disable=arguments-differ
+    x = keras.layers.Flatten()(inputs)
+    for layer in self.dense_layers:
+      x = layer(x)
+    return x
+
+
 class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
   TESTCASES = [{
       "testcase_name":
@@ -108,13 +131,24 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
       gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
   }, {
       "testcase_name":
-      "sequential_reduce_sum",
+      "subclassed",
       "model_fn":
-      simple_sequential_model,
+      lambda: SimpleSubclassedModel([10, 20, 10]),
       "replication_factor":
       1,
       "optimizer":
       "sgd",
+      "reduction_method":
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
+  }, {
+      "testcase_name":
+      "subclassed_replicated",
+      "model_fn":
+      lambda: SimpleSubclassedModel([10, 20, 10]),
+      "replication_factor":
+      2,
+      "optimizer":
+      gradient_descent.GradientDescentOptimizer(0.001),
       "reduction_method":
       gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
   }]

@@ -15,6 +15,7 @@
 """Test for KerasExtension interface."""
 import tempfile
 import numpy as np
+from absl.testing import parameterized
 from tensorflow.python import ipu
 
 from tensorflow.python.ipu import ipu_strategy
@@ -35,7 +36,7 @@ NUM_SAMPLES = 4
 BATCH_SIZE = 2
 
 
-class KerasExtensionsSaveLoadTest(test.TestCase):
+class KerasExtensionsSaveLoadTest(test.TestCase, parameterized.TestCase):
   @test_util.run_v2_only
   def testFunctionalExtension(self):
     strategy = ipu_strategy.IPUStrategyV1()
@@ -159,11 +160,41 @@ class KerasExtensionsSaveLoadTest(test.TestCase):
       loaded_model = models.model_from_json(model.to_json())
       self.assertTrue(model.test_option)
 
-  @test_util.run_v2_only
-  def testModelExtension(self):
-    # Model subclasses do not support get_config()/from_config() by default,
-    # unless they subclass Functional.
+  class TestModel(training_module.Model):  # pylint: disable=abstract-method
+    def __init__(self, in_channels=32, out_channels=16):
+      super(__class__, self).__init__()
+      self.in_channels = in_channels
+      self.out_channels = out_channels
+      self.dense_layers = [
+          layers.Dense(in_channels, activation="relu"),
+          layers.Dense(out_channels, activation="softmax")
+      ]
 
+    def call(self, inputs):  # pylint: disable=arguments-differ
+      x = inputs
+      for layer in self.dense_layers:
+        x = layer(x)
+      return x
+
+  class TestModelWithGetConfig(TestModel):
+    def get_config(self):
+      config = super().get_config()
+      config.update({
+          "in_channels": self.in_channels,
+          "out_channels": self.out_channels
+      })
+      return config
+
+  @parameterized.named_parameters(
+      {
+          'testcase_name': 'WithoutGetConfig',
+          'model_cls': TestModel
+      }, {
+          'testcase_name': 'WithGetConfig',
+          'model_cls': TestModelWithGetConfig
+      })
+  @test_util.run_v2_only
+  def testModelExtension(self, model_cls):
     np.random.seed(42)
     strategy = ipu_strategy.IPUStrategyV1()
 
@@ -178,47 +209,93 @@ class KerasExtensionsSaveLoadTest(test.TestCase):
       return dataset_ops.Dataset.from_tensor_slices(data).batch(
           batch_size, drop_remainder=True)
 
-    class TestModel(training_module.Model):  # pylint: disable=abstract-method
-      def __init__(self, in_channels=32, out_channels=16):
-        super(TestModel, self).__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.dense_layers = [
-            layers.Dense(in_channels, activation="relu"),
-            layers.Dense(out_channels, activation="softmax")
-        ]
+    class TestExtension(extensions.model_extensions.ModelExtension):  # pylint: disable=abstract-method
+      def __init__(self):
+        extensions.model_extensions.ModelExtension.__init__(self)
+        self.test_option = False
 
-      def call(self, inputs):  # pylint: disable=arguments-differ
-        x = inputs
-        for layer in self.dense_layers:
-          x = layer(x)
-        return x
+      @property
+      def test_option(self):
+        return self._test_option
+
+      @test_option.setter
+      def test_option(self, value):
+        self._test_option = value
+
+      def _get_config_supported(self):
+        return True
+
+      def _get_config_delegate(self):
+        config = super()._get_config_delegate()
+        config["test_option"] = self.test_option
+        return config
+
+      @classmethod
+      def _from_config_supported(cls, config, custom_objects=None):
+        del config
+        return True
+
+      @classmethod
+      def _from_config_delegate(cls, config, custom_objects=None):
+        self = cls()
+        self.test_option = config.get("test_option", self.test_option)
+        return self
 
     with strategy.scope():
       # Replace the extension with the test version.
       # pylint: disable=protected-access
-      strategy._register_keras_extension(
-          training_module.Model, extensions.model_extensions.ModelExtension)
+      strategy._register_keras_extension(training_module.Model, TestExtension)
 
       dataset = create_dataset(IN_SHAPE, NUM_SAMPLES, BATCH_SIZE)
 
-      model = TestModel()
+      model = model_cls()
       self.assertIsInstance(model, training_module.Model)
-      self.assertIsInstance(model, extensions.model_extensions.ModelExtension)
+      self.assertIsInstance(model, TestExtension)
+      model.test_option = True
+      self.assertTrue(model.test_option)
       model.predict(dataset)  # Compile and run the model.
 
-      # We shouldn't be able to save this model's config, because it is not
-      # defined in this example.
-      self.assertFalse(model._get_config_supported())  # pylint: disable=protected-access
-      self.assertRaises(NotImplementedError, model.get_config)
-      self.assertRaises(NotImplementedError, model.to_json)
+      # Test get_config/from_config.
+      model_config = model.get_config()
+      self.assertTrue(model_config["test_option"])
+      loaded_model = model_cls.from_config(model_config)
+      self.assertTrue(model.test_option)
 
       # Test save/load (including SavedModel).
       with tempfile.TemporaryDirectory() as temp_dir:
         model.save(temp_dir)
-        loaded_model = save.load_model(temp_dir,
-                                       custom_objects={"TestModel": TestModel})
+        loaded_model = save.load_model(
+            temp_dir, custom_objects={model_cls.__name__: model_cls})
+
+        self.assertTrue(loaded_model.test_option)
         loaded_model.compile()
+
+  @test_util.run_v2_only
+  def testModelIncorrectOverrideError(self):
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+
+      class ModelWithIncorrectGetConfigOverride(training_module.Model):
+        def get_config(self):
+          # I don't call super().get_config()!
+          return {}
+
+        def call(self, inputs):  # pylint: disable=arguments-differ
+          return inputs
+
+      model = ModelWithIncorrectGetConfigOverride()
+      model.predict([1.], batch_size=1)
+
+      with tempfile.TemporaryDirectory() as temp_dir:
+        model.save(temp_dir)
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"get_config\(\) has been overridden on a subclassed Model"):
+          save.load_model(temp_dir,
+                          custom_objects={
+                              "ModelWithIncorrectGetConfigOverride":
+                              ModelWithIncorrectGetConfigOverride
+                          })
 
 
 if __name__ == '__main__':

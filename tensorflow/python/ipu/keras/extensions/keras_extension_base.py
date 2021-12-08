@@ -1227,6 +1227,26 @@ class KerasExtensionBase(base_layer.KerasExtension):
 
     return config
 
+  @staticmethod
+  def _strip_base_config(config):
+    config_new = copy.deepcopy(config)
+    base_config_keys = [
+        "gradient_accumulation_steps_per_replica",
+        "experimental_gradient_accumulation_normalize_gradients",
+        "pipelining_gradient_accumulation_steps_per_replica",
+        "pipelining_accumulate_outfeed",
+        "experimental_pipelining_normalize_gradients",
+        "asynchronous_callbacks", "infeed_kwargs", "outfeed_kwargs"
+    ]
+
+    for key in base_config_keys:
+      try:
+        del config_new[key]
+      except KeyError:
+        pass
+
+    return config_new
+
   @trackable.no_automatic_dependency_tracking
   def _from_base_config(self, config):
     self._gradient_accumulation_steps_per_replica = config.get(

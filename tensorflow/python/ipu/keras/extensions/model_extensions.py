@@ -29,32 +29,64 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
     keras_extension_base.KerasExtensionBase.__init__(self)
     self._pipeline_stage_assignment_valid = False
     self._pipeline_stage_assignment = []
+    self._get_config_has_been_called = False
 
     # Runtime values
     self._pipeline_maximum_stage = None
+
+    self._has_been_revived = False
 
   def _is_pipelined(self):
     return bool(self._pipeline_stage_assignment)
 
   def _get_config_supported(self):
-    # Determine if the user has overridden `get_config`, in which case, the
-    # model supports `get_config`.
-    return self._get_config_overridden()
+    # Regardless of whether the user has overridden get_config, we need to
+    # override it to maintain our pipeline stage assignments and gradient
+    # accumulation options when reviving from SavedModel.
+    return True
+
+  def _get_config_delegate(self):
+    # Get the KerasExtensionBase config.
+    config = self._get_base_config()
+    # Marker to ensure the user has not incorrectly overridden this method.
+    config["get_config_has_been_called"] = True
+    return config
+
+  def _verify_get_config_override(self, config):
+    if self.get_config.__func__ != training.Model.get_config and not config.get(
+        "get_config_has_been_called", False):
+      raise RuntimeError(
+          "get_config() has been overridden on a subclassed Model but "
+          "IPU-specific properties have not been saved since the "
+          "implementation does not call super().get_config(). "
+          "In the get_config() override, add `config = super().get_config()` "
+          "and merge your configuration with this config dict to ensure these "
+          "options are saved along with the rest of your model.")
 
   def _deserialize_from_config_supported(self, config):
     del config
-    # Subclassed models do not support `from_config`.
-    return False
+    return True
 
-  @trackable.no_automatic_dependency_tracking
   def _deserialize_from_config_delegate(self, config):
-    ModelExtension.__init__(self)
-    self._from_base_config(config)
-    # Extract pipelining options.
-    self._pipeline_stage_assignment_valid = config.get(
-        "pipeline_stage_assignment_valid", False)
-    self._pipeline_stage_assignment = [
-    ]  # TODO: support pipeline stage assignments
+    self._from_base_config(config)  # pylint: disable=protected-access
+    self._verify_get_config_override(config)
+    return config
+
+  @classmethod
+  def _from_config_supported(cls, config, custom_objects=None):
+    del config
+    del custom_objects
+    # Bypass delegate only if from_config() is called on the Model class, but
+    # not a subclassed Model.
+    return cls is not training.Model
+
+  @classmethod
+  @trackable.no_automatic_dependency_tracking
+  def _from_config_delegate(cls, config, custom_objects=None):
+    del custom_objects
+    instance = cls(**__class__.__base__._strip_base_config(config))  # pylint: disable=protected-access
+    instance._verify_get_config_override(config)  # pylint: disable=protected-access
+    return instance
 
   def set_asynchronous_callbacks(self, asynchronous=False):
     """Sets the asynchronous callbacks options when calling `fit()`, `evaluate()`
@@ -143,7 +175,12 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
         values are not saved. When restoring/loading a model, please call
         `set_gradient_accumulation_options` again.
     """
-    raise NotImplementedError
+    # pylint:enable=line-too-long
+    self._set_gradient_accumulation_options_impl(
+        gradient_accumulation_steps_per_replica,
+        experimental_normalize_gradients,
+        gradient_accumulation_reduction_method,
+        gradient_accumulation_optimizer_kwargs)
 
   @deprecation.deprecated_args(
       None, '`experimental_normalize_gradients=True` has been '
@@ -290,6 +327,3 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
 
   def _call_function_overridden(self):
     return True  # the call function *must* be overriden for subclassed `Model`s.
-
-  def _get_config_overridden(self):
-    return self.get_config.__func__ != training.Model.get_config
