@@ -41,6 +41,7 @@ from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import optimizer
 from tensorflow.python.util import nest
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 
 
 class PipelineSchedule(IntEnum):
@@ -342,33 +343,36 @@ class PipelineStageOptions:
 _ALL_DEVICES = -1
 
 
-def pipeline(computational_stages,
-             gradient_accumulation_count=None,
-             gradient_accumulation_dtype=None,
-             repeat_count=1,
-             batch_serialization_iterations=1,
-             inputs=None,
-             infeed_queue=None,
-             outfeed_queue=None,
-             optimizer_function=None,
-             device_mapping=None,
-             pipeline_schedule=None,
-             recomputation_mode=None,
-             forward_propagation_stages_poplar_options=None,
-             backward_propagation_stages_poplar_options=None,
-             weight_update_poplar_options=None,
-             offload_weight_update_variables=None,
-             replicated_optimizer_state_sharding=False,
-             offload_activations=None,
-             offload_gradient_accumulation_buffers=None,
-             replicated_weight_sharding=None,
-             offload_weights=None,
-             continuous_weight_updates=False,
-             outfeed_loss=False,
-             accumulate_outfeed=False,
-             accumulate_outfeed_dtype=None,
-             outfeed_mask=None,
-             name=None):
+def pipeline(
+    computational_stages,
+    gradient_accumulation_count=None,
+    gradient_accumulation_dtype=None,
+    repeat_count=1,
+    batch_serialization_iterations=1,
+    inputs=None,
+    infeed_queue=None,
+    outfeed_queue=None,
+    optimizer_function=None,
+    device_mapping=None,
+    pipeline_schedule=None,
+    recomputation_mode=None,
+    forward_propagation_stages_poplar_options=None,
+    backward_propagation_stages_poplar_options=None,
+    weight_update_poplar_options=None,
+    offload_weight_update_variables=None,
+    replicated_optimizer_state_sharding=False,
+    offload_activations=None,
+    offload_gradient_accumulation_buffers=None,
+    replicated_weight_sharding=None,
+    offload_weights=None,
+    continuous_weight_updates=False,
+    outfeed_loss=False,
+    accumulate_outfeed=False,
+    accumulate_outfeed_dtype=None,
+    outfeed_mask=None,
+    reduction_method=gradient_accumulation_optimizer.
+    GradientAccumulationReductionMethod.SUM,  # pylint: disable=line-too-long
+    name=None):
   """
   Sets up a series of computational stages, where the outputs of one stage are
   the inputs to the next one. These stages are then executed in parallel across
@@ -689,6 +693,15 @@ def pipeline(computational_stages,
       outfeed queue, and if it is set to `True` it is not enqueued. Cannot be
       set when `outfeed_loss` is set. Can only be used when `optimizer_function`
       has been set.
+    reduction_method: Reduction method to use when accumulating gradients.
+      During the iterations in each optimizer step, the computed gradients
+      can either be directly summed up or scaled such that we compute a mean
+      of all gradients for each variable. Computing a mean avoids potential
+      issues with overflow during accumulation especially when using
+      float16, but gives smaller gradients and might require adjusting
+      the learning-rate accordingly.
+      Defaults to `GradientAccumulationReductionMethod.SUM`
+      (see :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
     name: name of this pipeline.
 
   Returns:
@@ -710,6 +723,17 @@ def pipeline(computational_stages,
   gradient_accumulation_count = math_ops.cast(
       ops.convert_to_tensor(gradient_accumulation_count,
                             dtype_hint=dtypes.int32), dtypes.int32)
+
+  if optimizer_function is not None and reduction_method is None:
+    raise ValueError('reduction_method must be set to SUM, MEAN or '
+                     'RUNNING_MEAN in training mode')
+
+  reduction_method = op_util.parse_gradient_accumulation_method(
+      reduction_method)
+  if reduction_method != \
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM:
+    raise ValueError('Only GradientAccumulationReductionMethod.SUM is '
+                     'supported at the moment')
 
   # Ensure inputs is a list, without casting inputs to a boolean. Casting
   # a tf.Tensor to a boolean will be interpreted as an operation in the
