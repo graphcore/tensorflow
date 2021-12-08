@@ -29,6 +29,7 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import scopes
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.ops import math_grad
 from tensorflow.python.ops import nn_grad
@@ -292,6 +293,22 @@ def bool_to_three_state(value, default=None):
   elif value:
     return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_ON)
   return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_OFF)
+
+
+def parse_gradient_accumulation_method(reduction_method):
+  if isinstance(
+      reduction_method,
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod):
+    return reduction_method
+  elif isinstance(reduction_method, str):
+    if reduction_method.upper() == 'SUM':
+      return gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM  # pylint: disable=line-too-long
+    elif reduction_method.upper() == 'MEAN':
+      return gradient_accumulation_optimizer.GradientAccumulationReductionMethod.MEAN  # pylint: disable=line-too-long
+    elif reduction_method.upper() == 'RUNNING_MEAN':
+      return gradient_accumulation_optimizer.GradientAccumulationReductionMethod.RUNNING_MEAN  # pylint: disable=line-too-long
+
+  raise ValueError('reduction_method must be set to SUM, MEAN or RUNNING_MEAN')
 
 
 def accumulate_gradients(grads_and_vars, gradient_accumulation_dtype):

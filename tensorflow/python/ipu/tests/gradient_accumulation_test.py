@@ -680,6 +680,119 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
       sess.run(infeed_queue.deleter)
       sess.run(grad_outfeed_queue.deleter)
 
+  def __makeGATestNetwork(self, reduction_method):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        img = value / 7
+        label = value[0][0][0][0]
+        return img, label
+
+      return dataset.map(dataset_parser)
+
+    num_batches_to_accumulate = 20
+    repeat_count = 2
+    optimizer = adam.AdamOptimizer()
+
+    def fwd_fn(c, img, label):
+      with variable_scope.variable_scope("part1", use_resource=True):
+        y = layers.Conv2D(
+            2,
+            1,
+            use_bias=True,
+            kernel_initializer=init_ops.constant_initializer(0.5),
+            bias_initializer=init_ops.constant_initializer(0.5),
+            name='conv1')(img)
+      y = y * 20
+      y = layers.Dense(2,
+                       kernel_initializer=init_ops.constant_initializer(0.5),
+                       bias_initializer=init_ops.constant_initializer(0.5))(y)
+      return math_ops.reduce_sum(
+          layers.Dense(2,
+                       kernel_initializer=init_ops.constant_initializer(0.5),
+                       bias_initializer=init_ops.constant_initializer(0.5))
+          (y)) + c + label
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return [array_ops.placeholder(np.float32, shape=[])]
+
+    g = ops.Graph()
+
+    repeat_count = 2
+    num_batches_to_accumulate = 4
+
+    num_iterations = repeat_count * num_batches_to_accumulate
+
+    with g.as_default(), self.test_session(graph=g):
+      dataset = dataset_fn()
+      inputs = inputs_fn()
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+      with variable_scope.variable_scope("ipu", use_resource=True,
+                                         reuse=False):
+
+        def model(*args):
+          loss = fwd_fn(*functional_ops._convert_to_list(args))  # pylint: disable=W0212,E1120
+          enqueue_op = outfeed_queue.enqueue(loss)
+          opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
+              optimizer,
+              num_batches_to_accumulate,
+              reduction_method=reduction_method)
+          outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
+          outs.append(enqueue_op)
+          outs.append(opt.minimize(loss))
+          return outs
+
+        def my_net(*args):
+          return loops.repeat(num_iterations,
+                              model,
+                              inputs=args,
+                              infeed_queue=infeed_queue)
+
+      with ops.device("/device:IPU:0"):
+        ipu_compiler.compile(my_net, inputs=inputs)
+
+  @test_util.deprecated_graph_mode_only
+  def testGAReduceMethodNone(self):
+    with self.assertRaisesRegex(
+        ValueError, 'reduction_method must be set to SUM, MEAN or '
+        'RUNNING_MEAN'):
+      self.__makeGATestNetwork(None)
+
+  @parameterized.parameters([
+      'SUM', 'sum',
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
+  ])
+  @test_util.deprecated_graph_mode_only
+  def testGAReduceMethodSupported(self, reduction_method):
+    with ops.device("/device:IPU:0"):
+      self.__makeGATestNetwork(reduction_method)
+
+  @parameterized.parameters([
+      'MEAN', 'mean', 'RUNNING_MEAN', 'running_mean',
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.MEAN,
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.
+      RUNNING_MEAN
+  ])
+  @test_util.deprecated_graph_mode_only
+  def testGAReduceMethodUnsupported(self, reduction_method):
+    with self.assertRaisesRegex(
+        ValueError, 'Only GradientAccumulationReductionMethod.SUM is '
+        'supported at the moment'):
+      self.__makeGATestNetwork(reduction_method)
+
+  @parameterized.parameters(['Exp', 10])
+  @test_util.deprecated_graph_mode_only
+  def testGAReduceMethodInvalid(self, reduction_method):
+    with self.assertRaisesRegex(
+        ValueError, 'reduction_method must be set to SUM, MEAN '
+        'or RUNNING_MEAN'):
+      self.__makeGATestNetwork(reduction_method)
+
 
 if __name__ == "__main__":
   googletest.main()

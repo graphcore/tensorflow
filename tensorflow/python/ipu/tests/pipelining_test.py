@@ -49,6 +49,7 @@ from tensorflow.python.ipu import normalization_ops
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.ipu.optimizers import map_gradient_optimizer
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
@@ -2719,6 +2720,97 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         self,
         61059,
         device_mapping=[[0, 1], 0, 1])
+
+  def __makePipelineGATestNetwork(self, reduction_method):
+    dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
+    dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+    def dataset_parser(value):
+      a = value
+      b = (value + 10.) / 2.0
+      return {"a": a, "b": b}
+
+    dataset = dataset.map(dataset_parser)
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def stage1(**kwargs):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          kernel_initializer=init_ops.ones_initializer(),
+                          name='conv1')(kwargs["a"])
+        return y + kwargs["b"]
+
+    def stage2(x):
+      return math_ops.reduce_sum(x)
+
+    def optimizer_function(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01)
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+    def my_net():
+      return pipelining_ops.pipeline(
+          [stage1, stage2],
+          10,
+          inputs=[],
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          optimizer_function=optimizer_function,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential,
+          reduction_method=reduction_method)
+
+    return my_net
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineGAReduceMethodNone(self):
+    my_net = self.__makePipelineGATestNetwork(None)
+
+    with ops.device("/device:IPU:0"):
+      with self.assertRaisesRegex(
+          ValueError, 'reduction_method must be set to SUM, MEAN or '
+          'RUNNING_MEAN in training mode'):
+        ipu_compiler.compile(my_net, inputs=[])
+
+  @parameterized.parameters([
+      'SUM',
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
+  ])
+  @test_util.deprecated_graph_mode_only
+  def testPipelineGAReduceMethodSupported(self, reduction_method):
+    my_net = self.__makePipelineGATestNetwork(reduction_method)
+
+    with ops.device("/device:IPU:0"):
+      ipu_compiler.compile(my_net, inputs=[])
+
+  @parameterized.parameters([
+      'MEAN',
+      'RUNNING_MEAN',
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.MEAN,  # pylint: disable=line-too-long
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.
+      RUNNING_MEAN  # pylint: disable=line-too-long
+  ])
+  @test_util.deprecated_graph_mode_only
+  def testPipelineGAReduceMethodUnsupported(self, reduction_method):
+    my_net = self.__makePipelineGATestNetwork(reduction_method)
+
+    with ops.device("/device:IPU:0"):
+      with self.assertRaisesRegex(
+          ValueError, 'Only GradientAccumulationReductionMethod.SUM is '
+          'supported at the moment'):
+        ipu_compiler.compile(my_net, inputs=[])
+
+  @parameterized.parameters(['Exp', 10])
+  @test_util.deprecated_graph_mode_only
+  def testPipelineGAReduceMethodInvalid(self, reduction_method):
+    my_net = self.__makePipelineGATestNetwork(reduction_method)
+
+    with ops.device("/device:IPU:0"):
+      with self.assertRaisesRegex(
+          ValueError, 'reduction_method must be set to SUM, MEAN '
+          'or RUNNING_MEAN'):
+        ipu_compiler.compile(my_net, inputs=[])
 
 
 if __name__ == "__main__":

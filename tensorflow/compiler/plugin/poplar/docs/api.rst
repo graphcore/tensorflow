@@ -303,9 +303,25 @@ In addition to the `tensorflow.python.ipu.optimizers` namespace, it is also poss
 
 .. note:: The `ipu.optimizers` optimizer classes can only be used with subclasses of `tensorflow.compat.v1.train.Optimizer`.
 
+:class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2` and :class:`~tensorflow.python.ipu.optimizers.CrossReplicaGradientAccumulationOptimizerV2`
+can be configured with a optional reduction method on how to accumulate gradients (see enumerated class :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)
+
+  +---------------------------+-------------------------------------------------------------------------------+
+  | Reduction method          | Behaviour                                                                     |
+  +===========================+===============================================================================+
+  | `SUM`                     | Sum gradients across the mini-batch.                                      |
+  +---------------------------+-------------------------------------------------------------------------------+
+  | `MEAN`                    | Sum gradients across the mini-batch after scaling them                    |
+  |                           | by (1 / mini-batch-size)                                                      |
+  +---------------------------+-------------------------------------------------------------------------------+
+  | `RUNNING_MEAN`            | Compute a running mean of gradients across the mini-batch                  |
+  |                           | using the expression `acc <- acc*n/(n+1) + grad/(n+1)` for the nth iteration  |
+  |                           | within the mini-batch.                                                        |
+  +---------------------------+-------------------------------------------------------------------------------+
+
 .. automodule:: tensorflow.python.ipu.optimizers
-  :members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
-  :imported-members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
+  :members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, GradientAccumulationReductionMethod, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
+  :imported-members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, GradientAccumulationReductionMethod, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
   :special-members: __init__
 
 .. _sharding-api:
