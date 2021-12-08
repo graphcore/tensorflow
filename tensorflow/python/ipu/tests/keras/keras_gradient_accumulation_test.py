@@ -23,6 +23,7 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 
 
 def get_mnist_dataset(batch_size):
@@ -62,30 +63,66 @@ def simple_functional_model():
 
 class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
   TESTCASES = [{
-      "testcase_name": "sequential",
-      "model_fn": simple_sequential_model,
-      "replication_factor": 1,
-      "optimizer": "sgd"
+      "testcase_name":
+      "sequential",
+      "model_fn":
+      simple_sequential_model,
+      "replication_factor":
+      1,
+      "optimizer":
+      "sgd",
+      "reduction_method":
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
   }, {
-      "testcase_name": "sequential_replicated",
-      "model_fn": simple_sequential_model,
-      "replication_factor": 2,
-      "optimizer": "sgd"
+      "testcase_name":
+      "sequential_replicated",
+      "model_fn":
+      simple_sequential_model,
+      "replication_factor":
+      2,
+      "optimizer":
+      "sgd",
+      "reduction_method":
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
   }, {
-      "testcase_name": "functional",
-      "model_fn": simple_functional_model,
-      "replication_factor": 1,
-      "optimizer": "sgd"
+      "testcase_name":
+      "functional",
+      "model_fn":
+      simple_functional_model,
+      "replication_factor":
+      1,
+      "optimizer":
+      "sgd",
+      "reduction_method":
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
   }, {
-      "testcase_name": "functional_replicated",
-      "model_fn": simple_functional_model,
-      "replication_factor": 2,
-      "optimizer": gradient_descent.GradientDescentOptimizer(0.001)
+      "testcase_name":
+      "functional_replicated",
+      "model_fn":
+      simple_functional_model,
+      "replication_factor":
+      2,
+      "optimizer":
+      gradient_descent.GradientDescentOptimizer(0.001),
+      "reduction_method":
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
+  }, {
+      "testcase_name":
+      "sequential_reduce_sum",
+      "model_fn":
+      simple_sequential_model,
+      "replication_factor":
+      1,
+      "optimizer":
+      "sgd",
+      "reduction_method":
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
   }]
 
   @parameterized.named_parameters(*TESTCASES)
   @test_util.run_v2_only
-  def testModels(self, model_fn, replication_factor, optimizer):
+  def testModels(self, model_fn, replication_factor, optimizer,
+                 reduction_method):
     tu.skip_if_not_enough_ipus(self, replication_factor)
 
     cfg = ipu.config.IPUConfig()
@@ -118,7 +155,8 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
       m.set_gradient_accumulation_options(
           gradient_accumulation_steps_per_replica=
           gradient_accumulation_steps_per_replica,
-          experimental_normalize_gradients=True)
+          experimental_normalize_gradients=True,
+          gradient_accumulation_reduction_method=reduction_method)
       m.fit(get_mnist_dataset(batch_size),
             steps_per_epoch=steps_per_epoch,
             epochs=epochs)
@@ -136,6 +174,9 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
             gradient_accumulation_steps_per_replica)
         self.assertEqual(
             m._experimental_gradient_accumulation_normalize_gradients, True)  # pylint: disable=protected-access
+        self.assertEqual(
+            m._gradient_accumulation_reduction_method,  # pylint: disable=protected-access
+            reduction_method)
         self.assertFalse(m._gradient_accumulation_optimizer_kwargs)  # pylint: disable=protected-access
 
 

@@ -68,6 +68,18 @@ The table below lists all of the deprecated layers, and their new locations:
 | tensorflow.python.ipu.ops.rnn_ops.PopnnLSTM                                               | ipu_tensorflow_addons.v1.layers.rnn_ops.PopnnLSTM                                         |
 +-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
 
+.. deprecated_pipeline_ga_options:
+
+Deprecated pipeline and gradient_accumulation options
+'''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+The `experimental_normalize_gradients` parameter when setting gradient accumulation options
+(`Model.set_gradient_accumulation_options()`) and pipeline options (`Model.set_pipelining_options()`)
+is being deprecated and will be removed in future. This feature will be provided by new mean reduction
+methods being added via the `reduction_method` parameter
+(`tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`).
+
+
 Release 2.4
 ~~~~~~~~~~~
 

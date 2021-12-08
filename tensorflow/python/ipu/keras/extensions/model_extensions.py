@@ -17,8 +17,10 @@ IPU specific Keras Model subclass extensions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 from tensorflow.python.ipu.keras.extensions import keras_extension_base
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.keras.engine import training
 from tensorflow.python.training.tracking import base as trackable
+from tensorflow.python.util import deprecation
 
 
 class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disable=abstract-method
@@ -73,10 +75,18 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
     """
     self._set_asynchronous_callbacks_impl(asynchronous)
 
+  @deprecation.deprecated_args(
+      None, '`experimental_normalize_gradients=True` has been '
+      'deprecated and will be replaced in a future release with '
+      'the use of mean reduction when accumulating gradients. '
+      'Please update your optimizer settings.',
+      'experimental_normalize_gradients')
   def set_gradient_accumulation_options(
       self,
       gradient_accumulation_steps_per_replica=None,
       experimental_normalize_gradients=None,
+      gradient_accumulation_reduction_method=gradient_accumulation_optimizer.
+      GradientAccumulationReductionMethod.SUM,
       **gradient_accumulation_optimizer_kwargs):
     # pylint:disable=line-too-long
     """Sets the gradient accumulation options for non-pipelined models which are
@@ -115,6 +125,15 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
         before being added to the gradient accumulation buffer. Note that this
         option is experimental and the behavior might change in future releases.
         This value is saved/loaded when the model is saved/loaded.
+      reduction_method: Reduction method to use when accumulating gradients.
+        During the iterations in each optimizer step, the computed gradients
+        can either be directly summed up or scaled such that we compute a mean
+        of all gradients for each variable. Computing a mean avoids potential
+        issues with overflow during accumulation especially when using
+        float16, but gives smaller gradients and might require adjusting
+        the learning-rate accordingly.
+        Defaults to `GradientAccumulationReductionMethod.SUM`
+        (see :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
       gradient_accumulation_optimizer_kwargs: All remaining keyword arguments
         are forwarded to
         :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2`.
@@ -126,12 +145,21 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
     """
     raise NotImplementedError
 
-  def set_pipelining_options(self,
-                             gradient_accumulation_steps_per_replica=None,
-                             device_mapping=None,
-                             accumulate_outfeed=None,
-                             experimental_normalize_gradients=None,
-                             **pipelining_kwargs):
+  @deprecation.deprecated_args(
+      None, '`experimental_normalize_gradients=True` has been '
+      'deprecated and will be replaced in a future release with '
+      'the use of mean reduction when accumulating gradients. '
+      'Please update your pipeline settings.',
+      'experimental_normalize_gradients')
+  def set_pipelining_options(
+      self,
+      gradient_accumulation_steps_per_replica=None,
+      device_mapping=None,
+      accumulate_outfeed=None,
+      experimental_normalize_gradients=None,
+      gradient_accumulation_reduction_method=gradient_accumulation_optimizer.
+      GradientAccumulationReductionMethod.SUM,
+      **pipelining_kwargs):
     """Sets the pipelining options, including gradient accumulation options,
     for pipelined models.
 
@@ -191,6 +219,15 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
         before being added to the gradient accumulation buffer. Note that this
         option is experimental and the behavior might change in future releases.
         This value is saved/loaded when the model is saved/loaded.
+      reduction_method: Reduction method to use when accumulating gradients.
+        During the iterations in each optimizer step, the computed gradients
+        can either be directly summed up or scaled such that we compute a mean
+        of all gradients for each variable. Computing a mean avoids potential
+        issues with overflow during accumulation especially when using
+        float16, but gives smaller gradients and might require adjusting
+        the learning-rate accordingly.
+        Defaults to `GradientAccumulationReductionMethod.SUM`
+        (see :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
       pipelining_kwargs: All remaining keyword arguments are forwarded to
         :func:`~tensorflow.python.ipu.pipelining_ops.pipeline`. Note that this
         dictionary is not serializable, which means that when the model is

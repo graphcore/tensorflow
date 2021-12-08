@@ -312,6 +312,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
     self._pipelining_device_mapping = None
     self._pipelining_accumulate_outfeed = None
     self._experimental_pipelining_normalize_gradients = None
+    self._gradient_accumulation_reduction_method = \
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
     self._pipelining_kwargs = dict()
     self._asynchronous_callbacks = False
     self._infeed_kwargs = dict()
@@ -581,6 +583,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
       gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
           optimizer,
           gradient_accumulation_steps_per_replica,
+          reduction_method=self._gradient_accumulation_reduction_method,
           **self._gradient_accumulation_optimizer_kwargs)
 
     def train_step(data):
@@ -822,6 +825,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
             outfeed_queue=outfeed,
             optimizer_function=opt,
             outfeed_mask=outfeed_mask,
+            reduction_method=self._gradient_accumulation_reduction_method,
             **self._pipelining_kwargs)
 
     return pipeline_function
@@ -1013,10 +1017,19 @@ class KerasExtensionBase(base_layer.KerasExtension):
   @trackable.no_automatic_dependency_tracking
   def _set_gradient_accumulation_options_impl(
       self, gradient_accumulation_steps_per_replica,
-      experimental_normalize_gradients,
+      experimental_normalize_gradients, gradient_accumulation_reduction_method,
       gradient_accumulation_optimizer_kwargs):
     # The extension might need to be reset if any of the values are set.
     reset_extension = False
+
+    if experimental_normalize_gradients:
+      # TODO(T46011) - Change experimental_normalize_gradients to False
+      # and set gradient_accumulation_reduction_method to MEAN?
+      gradient_accumulation_reduction_method = \
+        gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
+
+    self._gradient_accumulation_reduction_method = \
+      gradient_accumulation_reduction_method
 
     if gradient_accumulation_steps_per_replica is not None:
       if not isinstance(gradient_accumulation_steps_per_replica,
@@ -1063,9 +1076,19 @@ class KerasExtensionBase(base_layer.KerasExtension):
   def _set_pipelining_options_impl(
       self, pipelining_gradient_accumulation_steps_per_replica,
       pipelining_device_mapping, accumulate_outfeed,
-      experimental_normalize_gradients, pipelining_kwargs):
+      experimental_normalize_gradients, gradient_accumulation_reduction_method,
+      pipelining_kwargs):
     # The extension might need to be reset if any of the values are set.
     reset_extension = False
+
+    if experimental_normalize_gradients:
+      # TODO(T46014) - Change experimental_normalize_gradients to False
+      # and set gradient_accumulation_reduction_method to MEAN?
+      gradient_accumulation_reduction_method = \
+        gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
+
+    self._gradient_accumulation_reduction_method = \
+      gradient_accumulation_reduction_method
 
     if pipelining_gradient_accumulation_steps_per_replica is not None:
       if not isinstance(
@@ -1175,6 +1198,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
       self._experimental_gradient_accumulation_normalize_gradients
     config["experimental_pipelining_normalize_gradients"] = \
       self._experimental_pipelining_normalize_gradients
+    config["gradient_accumulation_reduction_method"] = \
+      self._gradient_accumulation_reduction_method.value
     config["asynchronous_callbacks"] = self._asynchronous_callbacks
 
     if self._gradient_accumulation_optimizer_kwargs:
@@ -1212,6 +1237,13 @@ class KerasExtensionBase(base_layer.KerasExtension):
         "pipelining_gradient_accumulation_steps_per_replica", None)
     self._pipelining_device_mapping = config.get("pipelining_device_mapping",
                                                  None)
+
+    reduction_method_int = \
+      config.get("gradient_accumulation_reduction_method",
+                 gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM.value)  # pylint: disable=line-too-long
+    self._gradient_accumulation_reduction_method = \
+      gradient_accumulation_optimizer.GradientAccumulationReductionMethod(reduction_method_int)  # pylint: disable=line-too-long
+
     self._pipelining_accumulate_outfeed = config.get(
         "pipelining_accumulate_outfeed", None)
     self._experimental_pipelining_normalize_gradients = config.get(
