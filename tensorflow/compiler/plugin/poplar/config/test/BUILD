@@ -9,7 +9,7 @@ tf_cc_test(
     srcs = ["ipu_config_test.cc"],
     extra_copts = ["-fexceptions"],
     shard_count = 4,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_config",
         "//tensorflow/compiler/plugin/poplar:poplar_test_base",

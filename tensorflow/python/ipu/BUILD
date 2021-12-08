@@ -246,7 +246,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/gcl_test.py"],
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -275,7 +275,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/io_tiles_hw_test.py"],
     shard_count = 10,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -316,7 +316,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/dropout_test.py"],
     shard_count = 4,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -344,7 +344,7 @@ tf_py_test(
     name = "application_compile_and_run_test",
     size = "large",
     srcs = ["tests/application_compile_and_run_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -356,7 +356,7 @@ tf_py_test(
     name = "exception_test",
     size = "large",
     srcs = ["tests/exception_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -369,7 +369,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/application_runtime_test.py"],
     shard_count = 4,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -405,7 +405,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/embedding_lookup_test.py"],
     shard_count = 12,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         ":ipu_grad_ops_lib",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -552,7 +552,7 @@ tf_py_test(
     srcs = ["tests/keras/keras_synthetic_data_test.py"],
     # Shard count set equal to the number of tests as one process per test is
     # required
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         ":pipelining_test_util",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -568,7 +568,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/keras/keras_v2_optimizers_test.py"],
     shard_count = 8,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
@@ -631,7 +631,7 @@ tf_py_test(
     name = "fifo_test",
     size = "large",
     srcs = ["tests/fifo_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -679,7 +679,7 @@ tf_py_test(
     name = "host_embedding_lookup_test",
     size = "large",
     srcs = ["tests/host_embedding_lookup_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         ":ipu_grad_ops_lib",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -813,7 +813,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/ipu_estimator_replicated_test.py"],
     shard_count = 8,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -851,7 +851,7 @@ tf_py_test(
     srcs = ["tests/ipu_multi_worker_strategy_test.py"],
     shard_count = 4,
     tags = [
-        "hw_poplar_test",
+        "hw_poplar_test_4_ipus",
         "isolated_poplar_tests",
     ],
     deps = [
@@ -893,7 +893,7 @@ tf_py_test(
     name = "ipu_strategy_replicated_test",
     size = "large",
     srcs = ["tests/ipu_strategy_replicated_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -922,7 +922,7 @@ tf_py_test(
     name = "frontend_attributes_test",
     size = "medium",
     srcs = ["tests/frontend_attributes_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/xla:xla_data_proto_py",
@@ -964,7 +964,7 @@ py_test(
     name = "popops_cross_replica_mean_test",
     size = "large",
     srcs = ["tests/popops_cross_replica_mean_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
@@ -981,7 +981,7 @@ py_test(
     size = "medium",
     srcs = ["tests/replication_normalise_test.py"],
     srcs_version = "PY2AND3",
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1254,7 +1254,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/pipelining_sequential_recomputation_test.py"],
     shard_count = 16,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         ":ipu_lib",
         ":pipelining_test_util",
@@ -1391,7 +1391,7 @@ tf_py_test(
     srcs = ["tests/gradient_accumulation_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 11,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         ":ipu_lib",
         ":pipelining_test_util",
@@ -1458,7 +1458,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/candidate_sampler_test.py"],
     shard_count = 7,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1472,7 +1472,7 @@ tf_py_test(
     name = "seed_control_test",
     size = "large",
     srcs = ["tests/seed_control_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1486,7 +1486,7 @@ tf_py_test(
     name = "reductions_test",
     size = "large",
     srcs = ["tests/reductions_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1502,7 +1502,7 @@ tf_py_test(
     srcs = ["tests/random_number_generation_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 4,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1518,7 +1518,7 @@ tf_py_test(
     srcs = ["tests/replicated_graph_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 12,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1532,7 +1532,7 @@ tf_py_test(
     name = "replicated_index_test",
     size = "large",
     srcs = ["tests/replicated_index_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1546,7 +1546,7 @@ tf_py_test(
     name = "replicated_reduce_scatter_test",
     size = "large",
     srcs = ["tests/replicated_reduce_scatter_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1562,7 +1562,7 @@ tf_py_test(
     srcs = ["tests/replicated_seed_control_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1578,7 +1578,7 @@ tf_py_test(
     srcs = ["tests/replicated_stateful_gradient_accumulate_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 4,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1593,7 +1593,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/replication_all_to_all_test.py"],
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_8_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1608,7 +1608,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/replication_grouped_collectives_test.py"],
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1624,7 +1624,7 @@ tf_py_test(
     srcs = ["tests/sharded_and_replicated_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 5,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1640,7 +1640,7 @@ tf_py_test(
     srcs = ["tests/floating_point_control_bits_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 11,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1656,7 +1656,7 @@ tf_py_test(
     srcs = ["tests/dropout_hw_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 7,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_8_ipus"],
     deps = [
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
@@ -1673,7 +1673,7 @@ tf_py_test(
     srcs = ["tests/pipelining_batch_serial_sequential_hw_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 4,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
@@ -1690,7 +1690,7 @@ tf_py_test(
     srcs = ["tests/pipelining_hw_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 10,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_8_ipus"],
     deps = [
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
@@ -1725,7 +1725,7 @@ tf_py_test(
     srcs = ["tests/keras/keras_execution_parameters_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 13,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_8_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
@@ -1739,7 +1739,7 @@ tf_py_test(
     name = "keras_model_replication_mnist_test",
     size = "large",
     srcs = ["tests/keras/keras_model_replication_mnist_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
@@ -1754,7 +1754,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/keras/keras_model_replication_test.py"],
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
@@ -1769,7 +1769,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/keras/keras_models_comparison_test.py"],
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
@@ -1783,7 +1783,7 @@ tf_py_test(
     name = "keras_pipeline_model_replication_test",
     size = "large",
     srcs = ["tests/keras/keras_pipeline_model_replication_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
@@ -1797,7 +1797,7 @@ tf_py_test(
     name = "keras_pipeline_sequential_replication_test",
     size = "large",
     srcs = ["tests/keras/keras_pipeline_sequential_replication_test.py"],
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
@@ -1813,7 +1813,7 @@ tf_py_test(
     srcs = ["tests/keras/keras_sequential_replication_test.py"],
     # Shard count needs to match the number of tests.
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
@@ -1830,7 +1830,7 @@ tf_py_test(
         "tests/prng_stability_models_test.py",
     ],
     shard_count = 4,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
@@ -1879,7 +1879,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/keras/keras_gradient_accumulation_test.py"],
     shard_count = 2,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1897,7 +1897,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/keras/keras_asynchronous_callbacks_test.py"],
     shard_count = 6,
-    tags = ["hw_poplar_test"],
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
