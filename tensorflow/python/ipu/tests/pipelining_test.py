@@ -2660,7 +2660,6 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*PIPELINE_COMPARE_TEST_CASES)
   @test_util.deprecated_graph_mode_only
-  @unittest.skip("Skipped as test is affected by bug T48804.")
   def testPipelineCompareParStages(self, opt_type, opt_args):
     # Resnet like network.
     def dataset_fn():
@@ -2756,7 +2755,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     def stage3(xa, xb, label):
       with variable_scope.variable_scope("stage3", use_resource=True):
-        x = xa + xb
+        x = xa - xb
         x = math_ops.reduce_mean(x, axis=[1, 2])
         x = fc(x, 100)
         loss = math_ops.reduce_mean(
