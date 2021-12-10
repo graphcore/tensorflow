@@ -291,6 +291,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/ops/popops:sequence_slice",
         "//tensorflow/compiler/plugin/poplar/ops/poprand:dropout_tf",
         "//tensorflow/compiler/plugin/poplar/ops/poputil:assume_equal_across_replicas",
+        "//tensorflow/compiler/plugin/poplar/ops/poputil:barrier",
         "//tensorflow/compiler/plugin/poplar/ops/poputil:codelet_expression",
         "//tensorflow/compiler/plugin/poplar/ops/poputil:device_sync",
         "//tensorflow/compiler/plugin/poplar/ops/poputil:execution_counter",

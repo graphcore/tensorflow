@@ -14,6 +14,7 @@ py_library(
     name = "ipu_ops_lib",
     srcs = [
         "ops/application_compile_op.py",
+        "ops/control_flow_ops.py",
         "ops/cross_replica_ops.py",
         "ops/embedded_runtime.py",
         "ops/embedding_ops.py",
@@ -52,6 +53,7 @@ py_library(
     name = "ipu_grad_ops_lib",
     srcs = [
         "ops/all_to_all_op_grad.py",
+        "ops/control_flow_ops_grad.py",
         "ops/cross_replica_ops_grad.py",
         "ops/embedding_ops_grad.py",
         "ops/experimental/popfloat_ops_grad.py",
@@ -149,6 +151,7 @@ py_library(
         "keras_extensions.py",
         "loops.py",
         "ops/all_to_all_op.py",
+        "ops/control_flow_ops.py",
         "ops/cross_replica_ops.py",
         "ops/custom_ops.py",
         "ops/embedding_ops.py",
@@ -1928,6 +1931,21 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "control_flow_ops_test",
+    size = "large",
+    srcs = [
+        "tests/control_flow_ops_test.py",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras",
+        "//third_party/py/numpy",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -1937,6 +1955,7 @@ test_suite(
         "automatic_loss_scaling_optimizer_test",
         "candidate_sampler_test",
         "config_test",
+        "control_flow_ops_test",
         "dataset_benchmark_test",
         "dataset_ops_test",
         "dropout_hw_test",
