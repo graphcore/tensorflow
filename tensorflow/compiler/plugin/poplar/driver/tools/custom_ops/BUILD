@@ -77,6 +77,19 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "barrier",
+    srcs = [
+        "barrier.cc",
+    ],
+    hdrs = [
+        "barrier.h",
+    ],
+    deps = [
+        ":custom_ops_dependencies",
+    ],
+)
+
+poplar_cc_library(
     name = "candidate_sampler",
     srcs = [
         "candidate_sampler.cc",
@@ -799,6 +812,7 @@ poplar_cc_library(
         ":arg_min_max",
         ":assert",
         ":assume_equal_across_replicas",
+        ":barrier",
         ":batch_norm_stats",
         ":candidate_sampler",
         ":cast_to_gfloat_hlo",

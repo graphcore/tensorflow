@@ -92,6 +92,7 @@ poplar_cc_library(
         "poprand/random_ops.cc",
         "poputil/assert.cc",
         "poputil/assume_equal_across_replicas.cc",
+        "poputil/barrier.cc",
         "poputil/codelet_expression.cc",
         "poputil/device_sync.cc",
         "poputil/execution_counter.cc",

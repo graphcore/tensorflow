@@ -165,6 +165,10 @@ It is also possible to access the operators via the
   :members:
   :imported-members:
 
+.. automodule:: tensorflow.python.ipu.control_flow_ops
+  :members:
+  :imported-members:
+
 .. automodule:: tensorflow.python.ipu.custom_ops
   :members:
   :imported-members:

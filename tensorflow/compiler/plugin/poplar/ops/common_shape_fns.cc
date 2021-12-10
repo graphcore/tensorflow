@@ -39,6 +39,17 @@ Status ShapeFromOutputShapeAttribute(InferenceContext* c) {
   }
   return Status::OK();
 }
+
+Status UnchangedTupleShape(InferenceContext* c) {
+  for (int64 i = 0; i != c->num_outputs(); ++i) {
+    c->set_output(i, c->input(i));
+    auto* handle_data = c->input_handle_shapes_and_types(i);
+    if (handle_data != nullptr) {
+      c->set_output_handle_shapes_and_types(i, *handle_data);
+    }
+  }
+  return Status::OK();
+}
 }  // namespace poplarplugin
 }  // namespace shape_inference
 }  // namespace tensorflow

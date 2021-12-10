@@ -69,6 +69,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poprand:random",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poputil:assert",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poputil:assume_equal_across_replicas",
+        "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poputil:barrier",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poputil:codelet_expression_op",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poputil:copy_into",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poputil:fifo",

@@ -17,6 +17,18 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "barrier",
+    srcs = [
+        "barrier.cc",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/ops:common_shape_fns",
+        "//tensorflow/core:framework",
+    ],
+    alwayslink = True,
+)
+
+poplar_cc_library(
     name = "codelet_expression",
     srcs = [
         "codelet_expression.cc",
@@ -165,6 +177,7 @@ poplar_cc_library(
     srcs = [],
     deps = [
         ":assume_equal_across_replicas",
+        ":barrier",
         ":codelet_expression",
         ":device_sync",
         ":execution_counter",

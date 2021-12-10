@@ -25,6 +25,9 @@ namespace poplarplugin {
 // Expects the context to have `output_shapes` attribute which is used to assign
 // the output shapes.
 Status ShapeFromOutputShapeAttribute(InferenceContext* c);
+
+// Like UnchangedShape, but handles tuples.
+Status UnchangedTupleShape(InferenceContext* c);
 }  // namespace poplarplugin
 }  // namespace shape_inference
 }  // namespace tensorflow

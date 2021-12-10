@@ -29,6 +29,18 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "barrier",
+    srcs = [
+        "barrier.cc",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver:tensor",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:barrier",
+    ],
+    alwayslink = True,
+)
+
+poplar_cc_library(
     name = "codelet_expression_op",
     srcs = [
         "codelet_expression_op.cc",
