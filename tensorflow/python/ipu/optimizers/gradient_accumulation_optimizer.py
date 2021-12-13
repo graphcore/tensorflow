@@ -140,14 +140,12 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
 
     self._dtype = dtype
 
-    if reduction_method is None:
-      raise ValueError(
-          'reduction_method must be set to SUM, MEAN or RUNNING_MEAN')
-
     self._reduction_method = op_util.parse_gradient_accumulation_method(
         reduction_method)
-    if self._reduction_method != GradientAccumulationReductionMethod.SUM:
-      raise ValueError('Only GradientAccumulationReductionMethod.SUM is '
+    if self._reduction_method != GradientAccumulationReductionMethod.SUM and \
+      self._reduction_method != GradientAccumulationReductionMethod.MEAN:
+      raise ValueError('Only GradientAccumulationReductionMethod.SUM and '
+                       'GradientAccumulationReductionMethod.MEAN are '
                        'supported at the moment')
 
   def apply_gradients(self, grads_and_vars, global_step=None, name=None):
@@ -168,8 +166,15 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
     Raises:
       ValueError: If the grads_and_vars is malformed.
     """
+    if self._reduction_method == GradientAccumulationReductionMethod.SUM:
+      grad_scale = None
+    elif self._reduction_method == GradientAccumulationReductionMethod.MEAN:
+      grad_scale = 1.0 / self._num_mini_batches
+    else:
+      raise ValueError('reduction_method must be set to SUM or MEAN')
+
     accumulated_grads_and_vars = op_util.accumulate_gradients(
-        grads_and_vars, self._dtype)
+        grads_and_vars, self._dtype, grad_scale)
 
     # Create an explicit function call for the apply gradients - note that we
     # allow external captures here.

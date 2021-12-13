@@ -44,7 +44,7 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
 
@@ -63,7 +63,8 @@ def _gradient_accumulation_loop(test_wrapper,
                                 replication_factor=1,
                                 minimum_remote_tensor_size=128,
                                 replicated_optimizer_state_sharding=False,
-                                assert_compute_sets_contain_list=None):
+                                assert_compute_sets_contain_list=None,
+                                reduction_method=None):
   g = ops.Graph()
 
   if num_iterations is None:
@@ -81,14 +82,17 @@ def _gradient_accumulation_loop(test_wrapper,
         loss = fwd_fn(*functional_ops._convert_to_list(args))  # pylint: disable=W0212
         enqueue_op = outfeed_queue.enqueue(loss)
         if replication_factor > 1:
-          opt = gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2(  # pylint: disable=line-too-long
+          opt = ga.CrossReplicaGradientAccumulationOptimizerV2(  # pylint: disable=line-too-long
               optimizer,
               num_batches_to_accumulate,
+              reduction_method=reduction_method,
               offload_weight_update_variables=replicated_optimizer_state_sharding or None,  # pylint: disable=line-too-long
               replicated_optimizer_state_sharding=replicated_optimizer_state_sharding)  # pylint: disable=line-too-long
         else:
-          opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
-              optimizer, num_batches_to_accumulate)
+          opt = ga.GradientAccumulationOptimizerV2(
+              optimizer,
+              num_batches_to_accumulate,
+              reduction_method=reduction_method)
         outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
         outs.append(enqueue_op)
         outs.append(opt.minimize(loss))
@@ -143,7 +147,8 @@ def _compare_to_cpu(test_wrapper,
                     replication_factor=1,
                     minimum_remote_tensor_size=128,
                     replicated_optimizer_state_sharding=False,
-                    assert_compute_sets_contain_list=None):
+                    assert_compute_sets_contain_list=None,
+                    reduction_method=None):
 
   ga_losses = _gradient_accumulation_loop(
       test_wrapper,
@@ -157,11 +162,18 @@ def _compare_to_cpu(test_wrapper,
       replication_factor=replication_factor,
       minimum_remote_tensor_size=minimum_remote_tensor_size,
       replicated_optimizer_state_sharding=replicated_optimizer_state_sharding,
-      assert_compute_sets_contain_list=assert_compute_sets_contain_list)
+      assert_compute_sets_contain_list=assert_compute_sets_contain_list,
+      reduction_method=reduction_method)
 
   cpu_losses = pipelining_test_util.PipelineTester._cpu_with_grad_accum(  # pylint: disable=protected-access
-      test_wrapper, [fwd_fn], inputs_fn, input_values, repeat_count,
-      num_batches_to_accumulate * replication_factor, dataset_fn, optimizer)
+      test_wrapper, [fwd_fn],
+      inputs_fn,
+      input_values,
+      repeat_count,
+      num_batches_to_accumulate * replication_factor,
+      dataset_fn,
+      optimizer,
+      reduction_method=reduction_method)
 
   cpu_losses = np.reshape(cpu_losses, np.shape(ga_losses))
   test_wrapper.assertAllClose(cpu_losses, ga_losses)
@@ -200,9 +212,16 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
     with self.assertRaisesRegex(
         errors.FailedPreconditionError,
         'Detected a gradient accumulation operation with 32'):
-      _gradient_accumulation_loop(self, model, inputs_fn, [10.01], 3, 32,
-                                  dataset_fn,
-                                  momentum.MomentumOptimizer(0.01, 0.9), 10)
+      _gradient_accumulation_loop(
+          self,
+          model,
+          inputs_fn, [10.01],
+          3,
+          32,
+          dataset_fn,
+          momentum.MomentumOptimizer(0.01, 0.9),
+          10,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)  # pylint: disable=line-too-long
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
@@ -219,7 +238,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
       return dataset.map(dataset_parser)
 
     num_batches_to_accumulate = 20
-    repeat_count = 2
+    repeat_count = 4
     optimizer = adam.AdamOptimizer()
 
     def fwd_fn(c, img, label):
@@ -245,8 +264,14 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
       with ops.device('cpu'):
         return [array_ops.placeholder(np.float32, shape=[])]
 
-    _compare_to_cpu(self, fwd_fn, inputs_fn, [10.01], repeat_count,
-                    num_batches_to_accumulate, dataset_fn, optimizer)
+    _compare_to_cpu(self,
+                    fwd_fn,
+                    inputs_fn, [10.01],
+                    repeat_count,
+                    num_batches_to_accumulate,
+                    dataset_fn,
+                    optimizer,
+                    reduction_method=ga.GradientAccumulationReductionMethod.MEAN)  # pylint: disable=line-too-long
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
@@ -341,8 +366,14 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
                                                         labels=label))
         return loss
 
-    _compare_to_cpu(self, fwd_fn, lambda: [], [], repeat_count,
-                    num_batches_to_accumulate, dataset_fn, optimizer)
+    _compare_to_cpu(self,
+                    fwd_fn,
+                    lambda: [], [],
+                    repeat_count,
+                    num_batches_to_accumulate,
+                    dataset_fn,
+                    optimizer,
+                    reduction_method=ga.GradientAccumulationReductionMethod.MEAN)  # pylint: disable=line-too-long
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
@@ -378,8 +409,14 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
                                                       labels=label))
       return loss
 
-    _compare_to_cpu(self, fwd_fn, lambda: [], [], repeat_count,
-                    num_batches_to_accumulate, dataset_fn, optimizer)
+    _compare_to_cpu(self,
+                    fwd_fn,
+                    lambda: [], [],
+                    repeat_count,
+                    num_batches_to_accumulate,
+                    dataset_fn,
+                    optimizer,
+                    reduction_method=ga.GradientAccumulationReductionMethod.MEAN)  # pylint: disable=line-too-long
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
@@ -447,8 +484,14 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
                                                       labels=label))
       return loss
 
-    _compare_to_cpu(self, fwd_fn, lambda: [], [], repeat_count,
-                    num_batches_to_accumulate, dataset_fn, optimizer)
+    _compare_to_cpu(self,
+                    fwd_fn,
+                    lambda: [], [],
+                    repeat_count,
+                    num_batches_to_accumulate,
+                    dataset_fn,
+                    optimizer,
+                    reduction_method=ga.GradientAccumulationReductionMethod.MEAN)  # pylint: disable=line-too-long
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
@@ -492,8 +535,14 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
                                                       labels=label))
       return loss
 
-    _compare_to_cpu(self, fwd_fn, lambda: [], [], repeat_count,
-                    num_batches_to_accumulate, dataset_fn, optimizer)
+    _compare_to_cpu(self,
+                    fwd_fn,
+                    lambda: [], [],
+                    repeat_count,
+                    num_batches_to_accumulate,
+                    dataset_fn,
+                    optimizer,
+                    reduction_method=ga.GradientAccumulationReductionMethod.MEAN)  # pylint: disable=line-too-long
 
   def _compare6(self, optimizer, replicated_optimizer_state_sharding=False):
     dataset_size = 10
@@ -554,7 +603,8 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
         minimum_remote_tensor_size=8,
         replicated_optimizer_state_sharding=replicated_optimizer_state_sharding,
         assert_compute_sets_contain_list=['/ReduceScatter/']
-        if replicated_optimizer_state_sharding else None)
+        if replicated_optimizer_state_sharding else None,
+        reduction_method=ga.GradientAccumulationReductionMethod.MEAN)  # pylint: disable=line-too-long
 
   @parameterized.parameters({'replicated_optimizer_state_sharding': False}, {
       'replicated_optimizer_state_sharding': True,
@@ -632,10 +682,11 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
         self.assertEqual(var, w)
         return gradient_accumulation_dtype
 
-      opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
+      opt = ga.GradientAccumulationOptimizerV2(
           CastingGradientDescent(self),
           gradient_accumulation_count,
-          dtype=dtype_getter)
+          dtype=dtype_getter,
+          reduction_method=ga.GradientAccumulationReductionMethod.SUM)  # pylint: disable=line-too-long
       return opt.minimize(loss)
 
     def model():
@@ -693,8 +744,11 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
       return dataset.map(dataset_parser)
 
     num_batches_to_accumulate = 20
-    repeat_count = 2
-    optimizer = adam.AdamOptimizer()
+    repeat_count = 4
+    optimizer = adam.AdamOptimizer(learning_rate=1.0,
+                                   epsilon=1.0,
+                                   beta1=0.5,
+                                   beta2=0.5)
 
     def fwd_fn(c, img, label):
       with variable_scope.variable_scope("part1", use_resource=True):
@@ -738,7 +792,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
         def model(*args):
           loss = fwd_fn(*functional_ops._convert_to_list(args))  # pylint: disable=W0212,E1120
           enqueue_op = outfeed_queue.enqueue(loss)
-          opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
+          opt = ga.GradientAccumulationOptimizerV2(
               optimizer,
               num_batches_to_accumulate,
               reduction_method=reduction_method)
@@ -764,8 +818,8 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
       self.__makeGATestNetwork(None)
 
   @parameterized.parameters([
-      'SUM', 'sum',
-      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
+      'SUM', 'sum', 'MEAN', 'mean', ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
   ])
   @test_util.deprecated_graph_mode_only
   def testGAReduceMethodSupported(self, reduction_method):
@@ -773,15 +827,14 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
       self.__makeGATestNetwork(reduction_method)
 
   @parameterized.parameters([
-      'MEAN', 'mean', 'RUNNING_MEAN', 'running_mean',
-      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.MEAN,
-      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.
-      RUNNING_MEAN
+      'RUNNING_MEAN', 'running_mean',
+      ga.GradientAccumulationReductionMethod.RUNNING_MEAN
   ])
   @test_util.deprecated_graph_mode_only
   def testGAReduceMethodUnsupported(self, reduction_method):
     with self.assertRaisesRegex(
-        ValueError, 'Only GradientAccumulationReductionMethod.SUM is '
+        ValueError, 'Only GradientAccumulationReductionMethod.SUM and '
+        'GradientAccumulationReductionMethod.MEAN are '
         'supported at the moment'):
       self.__makeGATestNetwork(reduction_method)
 
