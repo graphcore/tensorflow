@@ -37,7 +37,7 @@ from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import cross_replica_optimizer
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.keras.optimizers import ipu_wrappers
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour
 from tensorflow.compat.v1 import data as compat_v1_data
 
@@ -68,9 +68,16 @@ def _get_vars(session, scope):
 
 class PipelineTester(object):
   @staticmethod
-  def _cpu_with_grad_accum(test_wrapper, stages, inputs_fn, input_values,
-                           repeat_count, num_batches_to_accumulate, dataset_fn,
-                           optimizer_fn):
+  def _cpu_with_grad_accum(test_wrapper,
+                           stages,
+                           inputs_fn,
+                           input_values,
+                           repeat_count,
+                           num_batches_to_accumulate,
+                           dataset_fn,
+                           optimizer_fn,
+                           reduction_method=None):
+
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       dataset = dataset_fn()
@@ -109,8 +116,16 @@ class PipelineTester(object):
             assert len(grads_only) == len(trainable_variables)
             grads = [(g, v) for g, v in zip(grads_only, trainable_variables)]
 
+          if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+            grad_scale = 1.0
+          elif reduction_method == ga.GradientAccumulationReductionMethod.MEAN:
+            grad_scale = 1.0 / num_batches_to_accumulate
+          else:
+            raise ValueError('reduction_method must be SUM or MEAN')
+
           accum_ops = [
-              accum_vars[i].assign_add(gv[0]) for i, gv in enumerate(grads)
+              accum_vars[i].assign_add(gv[0] * grad_scale)
+              for i, gv in enumerate(grads)
           ]
           train_step = optimizer.apply_gradients([
               (accum_vars[i], gv[1]) for i, gv in enumerate(grads)
@@ -138,10 +153,16 @@ class PipelineTester(object):
   @staticmethod
   def run_on_cpu(test_wrapper, stages, inputs_fn, input_values, repeat_count,
                  gradient_accumulation_count, dataset_fn, optimizer_fn):
-    return PipelineTester._cpu_with_grad_accum(test_wrapper, stages, inputs_fn,
-                                               input_values, repeat_count,
-                                               gradient_accumulation_count,
-                                               dataset_fn, optimizer_fn)
+    return PipelineTester._cpu_with_grad_accum(
+        test_wrapper,
+        stages,
+        inputs_fn,
+        input_values,
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer_fn,
+        reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
   @staticmethod
   def _sharded_on_ipu(
@@ -160,7 +181,8 @@ class PipelineTester(object):
       merge_remote_buffers=MergeRemoteBuffersBehaviour.IF_BENEFICIAL,
       replicated_optimizer_state_sharding=False,
       minimum_remote_tensor_size=128,
-      return_vars=False):
+      return_vars=False,
+      reduction_method=None):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -199,16 +221,18 @@ class PipelineTester(object):
 
           if replication_factor > 1:
             opt = \
-              gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2(# pylint: disable=line-too-long
+              ga.CrossReplicaGradientAccumulationOptimizerV2(# pylint: disable=line-too-long
                   opt,
                   num_batches_to_accumulate,
-                  replicated_optimizer_state_sharding=replicated_optimizer_state_sharding) # pylint: disable=line-too-long
+                  replicated_optimizer_state_sharding=replicated_optimizer_state_sharding, # pylint: disable=line-too-long
+                  reduction_method=reduction_method)
           else:
             opt = \
-              gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
+              ga.GradientAccumulationOptimizerV2(
                   opt,
                   num_batches_to_accumulate,
-                  replicated_optimizer_state_sharding=replicated_optimizer_state_sharding)# pylint: disable=line-too-long
+                  replicated_optimizer_state_sharding=replicated_optimizer_state_sharding, # pylint: disable=line-too-long
+                  reduction_method=reduction_method)
 
           if is_v2:
             # Note that the V2 optimizer is wrapped in the V1 API
@@ -463,8 +487,16 @@ class PipelineTester(object):
     num_batches_to_accumulate = (gradient_accumulation_count *
                                  batch_serialization_iterations)
     cpu_losses = PipelineTester._cpu_with_grad_accum(
-        test_wrapper, stages, inputs_fn, input_values, repeat_count,
-        num_batches_to_accumulate, dataset_fn, optimizer_fn)
+        test_wrapper,
+        stages,
+        inputs_fn,
+        input_values,
+        repeat_count,
+        num_batches_to_accumulate,
+        dataset_fn,
+        optimizer_fn,
+        reduction_method=ga.GradientAccumulationReductionMethod.SUM)
+    # TODO(T46014) - Change to MEAN or passed in value
 
     test_wrapper.assertAllClose(cpu_losses, pipeline_losses)
 
@@ -546,6 +578,9 @@ class PipelineTester(object):
         merge_remote_buffers,
         replicated_optimizer_state_sharding[1],
         minimum_remote_tensor_size,
-        return_vars=True)
+        return_vars=True,
+        reduction_method=ga.GradientAccumulationReductionMethod.SUM)
+    # TODO(T46014) - Change to MEAN or passed in value
+
     test_wrapper.assertAllClose(sharded_losses, pipeline_losses)
     test_wrapper.assertAllClose(sharded_vars, pipeline_vars)

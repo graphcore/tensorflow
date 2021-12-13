@@ -311,7 +311,9 @@ def parse_gradient_accumulation_method(reduction_method):
   raise ValueError('reduction_method must be set to SUM, MEAN or RUNNING_MEAN')
 
 
-def accumulate_gradients(grads_and_vars, gradient_accumulation_dtype):
+def accumulate_gradients(grads_and_vars,
+                         gradient_accumulation_dtype,
+                         grad_scale=None):
   """
   Create ops that accumulate the gradients in `grads_and_vars`.
   Returns gradient accumulation ops which, when executed, accumulate gradients
@@ -322,6 +324,7 @@ def accumulate_gradients(grads_and_vars, gradient_accumulation_dtype):
       an optimizer's compute_gradients() function.
     gradient_accumulation_dtype: The data type used for the gradient
       accumulation buffer. One of:
+    grad_scale: Value to scale gradients with.
 
       - `None`: Use an accumulator of the same type as the variable type.
       - A `DType`: Use this type for all the accumulators.
@@ -337,9 +340,14 @@ def accumulate_gradients(grads_and_vars, gradient_accumulation_dtype):
         # Create an accumulator - variable is used as reference for shape/layout.
         accumulator = gen_poputil_ops.gradient_accumulator_create(
             var, output_type=dtype)
+
         # Add the gradients to the accumulator.
+        if grad_scale is not None:
+          grad = grad * math_ops.cast(grad_scale, grad.dtype)
+
         accumulator = gen_poputil_ops.gradient_accumulator_add_with_scale(
             accumulator, grad, math_ops.cast(1.0, dtype))
+
         # Sink the accumulators.
         grad = gen_poputil_ops.gradient_accumulator_sink(accumulator)
     # Use the accumulated gradients.

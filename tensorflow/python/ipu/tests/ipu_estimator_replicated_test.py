@@ -30,7 +30,7 @@ from tensorflow.python.ipu import ipu_session_run_hooks
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.ops import replication_ops
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
@@ -121,13 +121,21 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
     # loss is averaged across iterations per loop
     self.assertAllClose(loss_output, [14.0, 16.0, 18.0])
 
-  @parameterized.parameters(
-      {'use_gradient_accumulation': False},
-      {'use_gradient_accumulation': True},
-  )
+  @parameterized.named_parameters(
+      *test_util.generate_combinations_with_testcase_name(
+          use_gradient_accumulation=[False, True],
+          reduction_method=[
+              ga.GradientAccumulationReductionMethod.SUM,
+              ga.GradientAccumulationReductionMethod.MEAN
+          ]))
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
-  def testTrainReplicatedOnRegressionDataset(self, use_gradient_accumulation):
+  def testTrainReplicatedOnRegressionDataset(self, use_gradient_accumulation,
+                                             reduction_method):
+    if not use_gradient_accumulation and \
+        reduction_method != ga.GradientAccumulationReductionMethod.SUM:
+      return
+
     iterations_per_loop = 2
 
     def my_model_fn(features, labels, mode):
@@ -141,9 +149,10 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
       sharded_optimizer_obj = sharded_optimizer.ShardedOptimizer(optimizer)
 
       if use_gradient_accumulation:
-        cross_replica_optimizer_obj = gradient_accumulation_optimizer.\
-            CrossReplicaGradientAccumulationOptimizerV2(
-                sharded_optimizer_obj, iterations_per_loop)
+        cross_replica_optimizer_obj = \
+          ga.CrossReplicaGradientAccumulationOptimizerV2(
+              sharded_optimizer_obj, iterations_per_loop,
+              reduction_method=reduction_method)
       else:
         cross_replica_optimizer_obj = \
           cross_replica_optimizer.CrossReplicaOptimizer(sharded_optimizer_obj)

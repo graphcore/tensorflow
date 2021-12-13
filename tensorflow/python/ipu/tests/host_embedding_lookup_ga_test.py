@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+from absl.testing import parameterized
 import numpy as np
 import pva
 
@@ -34,7 +35,8 @@ from tensorflow.python.ipu import loops
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 
 
-class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
+class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase,
+                                parameterized.TestCase):
   @test_util.deprecated_graph_mode_only
   def testDIENShape(self):
     shape = [10000000, 20]  # 740MB at float32
@@ -232,8 +234,12 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
       # Check the indices are correct, but the real test is no timeout.
       self.assertAllClose(result[0][0], i_h)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testModel(self):
+  def testModel(self, reduction_method):
     shape = [1000, 256]
     lookup_count = 128
     lr = 1 / 2
@@ -248,7 +254,9 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
             lr, acc_factor))
 
     optimizer = ga.GradientAccumulationOptimizerV2(
-        gd.GradientDescentOptimizer(lr), acc_factor)
+        gd.GradientDescentOptimizer(lr),
+        acc_factor,
+        reduction_method=reduction_method)
 
     # A dummy model that has an embedding lookup and a matmul
     def model(i, w):
