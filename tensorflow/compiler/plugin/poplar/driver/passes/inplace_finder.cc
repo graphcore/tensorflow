@@ -67,6 +67,52 @@ bool AllowedComputation(CallGraph& call_graph, HloComputation* comp) {
   return context == CallContext::kSequential;
 }
 
+StatusOr<bool> ConvertToReallocatingCopy(HloInstruction* copy) {
+  bool changed = false;
+  TF_ASSIGN_OR_RETURN(auto clone_method, GetCopyCloneMethod(copy));
+  for (auto& leaf : clone_method.leaves()) {
+    switch (leaf.second) {
+      case CloneMethod_PreserveOrderAndAliases: {
+        leaf.second = CloneMethod_DeduceNewOrderOrPreserveAliases;
+        changed = true;
+        break;
+      }
+      case CloneMethod_PreserveOrderUnlessAliases: {
+        leaf.second = CloneMethod_DeduceNewOrderOrExpandAliases;
+        changed = true;
+        break;
+      }
+      default: { break; }
+    }
+  }
+  if (changed) {
+    TF_RETURN_IF_ERROR(SetCopyCloneMethod(copy, clone_method));
+  }
+  return changed;
+}
+
+StatusOr<bool> ConvertToReallocatingCopies(HloInstruction* inst) {
+  bool changed = false;
+  if (IsRepeatLoop(inst) || (inst->opcode() == HloOpcode::kWhile &&
+                             inst->operand(0)->opcode() == HloOpcode::kTuple)) {
+    HloInstruction* inputs =
+        IsRepeatLoop(inst) ? inst : inst->mutable_operand(0);
+    for (int64 op_idx = 0; op_idx < inputs->operand_count(); ++op_idx) {
+      HloInstruction* copy = inputs->mutable_operand(op_idx);
+      if (copy->opcode() == HloOpcode::kCopy) {
+        TF_ASSIGN_OR_RETURN(bool copy_changed, ConvertToReallocatingCopy(copy));
+        changed |= copy_changed;
+      }
+    }
+  } else if ((inst->opcode() == HloOpcode::kWhile &&
+              inst->operand(0)->opcode() == HloOpcode::kCopy)) {
+    TF_ASSIGN_OR_RETURN(bool copy_changed,
+                        ConvertToReallocatingCopy(inst->mutable_operand(0)));
+    changed |= copy_changed;
+  }
+  return changed;
+}
+
 bool IsInplaceCandidate(HloInstruction* instruction,
                         const HloPoplarDataflowAnalysis& dataflow) {
   // if any of the outputs could be inplaced consider instruction as a candidate
@@ -207,8 +253,6 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
     // which are using the inplace input.
     std::unique_ptr<HloReachabilityMap> reachability_map =
         HloReachabilityMap::Build(comp);
-    // Because we are using a map, we first inplace GTEs, then Read/Write and
-    // then Read-Only.
     const auto inplace_candidates = FindInplaceCandidates(comp, *dataflow);
 
     struct OperandToCopy {
@@ -223,6 +267,7 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
       if (HloPoplarInplaceDescription::ConvertToInplace(
               inst, reachability_map.get(), worklist)) {
         changed = true;
+        TF_RETURN_IF_ERROR(ConvertToReallocatingCopies(inst).status());
         VLOG(3) << "Inplaced " << inst->ToString();
         continue;
       }
@@ -324,6 +369,9 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
         TF_RETURN_IF_ERROR(inst->ReplaceOperandWith(op_index, copy));
         changed = true;
       }
+      TF_ASSIGN_OR_RETURN(bool copies_changed,
+                          ConvertToReallocatingCopies(inst));
+      changed |= copies_changed;
     }
   }
 

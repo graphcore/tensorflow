@@ -501,9 +501,19 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
   // that rather than creating a new layout and copying.
   auto entry_tensor_map = resources->tensor_maps.GetTensorMapForComputation(
       entry_computation->name());
-  auto entry_root_instruction = entry_computation->root_instruction();
-  auto entry_loop_input_tensors = FindInstructionOutputs(
-      entry_tensor_map, *resources.get(), entry_root_instruction->operand(0));
+  auto* entry_root_instruction = entry_computation->root_instruction();
+  auto* loop_input = entry_root_instruction->operand(0);
+  auto entry_loop_input_tensors =
+      FindInstructionOutputs(entry_tensor_map, *resources.get(), loop_input);
+
+  // Duplicate operands got reallocated.
+  auto* loop_input_1_copy = loop_input->operand(1);
+  EXPECT_EQ(loop_input_1_copy->opcode(), HloOpcode::kCopy);
+  TF_ASSERT_OK_AND_ASSIGN(auto clone_method,
+                          GetCopyCloneMethod(loop_input_1_copy));
+  for (auto& leaf : clone_method.leaves()) {
+    EXPECT_TRUE(leaf.second == CloneMethod_DeduceNewOrderOrPreserveAliases);
+  }
   auto entry_loop_tensors = FindInstructionOutputs(
       entry_tensor_map, *resources.get(), entry_root_instruction);
 
@@ -521,8 +531,7 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
 
   EXPECT_EQ(entry_loop_input_tensors.size(), loop_tuple_tensors.size());
   EXPECT_EQ(entry_loop_input_tensors[0], loop_tuple_tensors[0]);
-  // Duplicate operand gets reallocated.
-  EXPECT_NE(entry_loop_input_tensors[1], loop_tuple_tensors[1]);
+  EXPECT_EQ(entry_loop_input_tensors[1], loop_tuple_tensors[1]);
   EXPECT_EQ(entry_loop_input_tensors[2], loop_tuple_tensors[2]);
   EXPECT_EQ(entry_loop_input_tensors[3], loop_tuple_tensors[3]);
   EXPECT_EQ(entry_loop_input_tensors[4], loop_tuple_tensors[4]);
