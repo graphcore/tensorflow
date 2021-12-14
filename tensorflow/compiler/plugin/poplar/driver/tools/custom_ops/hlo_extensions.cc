@@ -200,17 +200,16 @@ void RegisterConvolutionExtensions(HloOpcode opcode) {
 REGISTER_HLO_INST_EXTENSIONS(kConvolution, RegisterConvolutionExtensions);
 
 void RegisterCallExtensions(HloOpcode opcode) {
-  auto do_find_consumers =
+  RegisterHloInstructionExtension<FindConsumersExtension>(
+      opcode,
       [](const HloInstruction* user,
          FindConsumersExtensionParams params) -> FindConsumersExtensionResults {
-    HloComputation* comp = user->to_apply();
-    HloInstruction* param = comp->parameter_instruction(params.op_index);
-    FindConsumersExtensionResults result{/*do_find_consumers=*/true, param,
-                                         params.index, params.permutation};
-    return result;
-  };
-  RegisterHloInstructionExtension<FindConsumersExtension>(opcode,
-                                                          do_find_consumers);
+        HloComputation* comp = user->to_apply();
+        HloInstruction* param = comp->parameter_instruction(params.op_index);
+        FindConsumersExtensionResults result{/*do_find_consumers=*/true, param,
+                                             params.index, params.permutation};
+        return result;
+      });
 }
 REGISTER_HLO_INST_EXTENSIONS(kCall, RegisterCallExtensions);
 
@@ -450,7 +449,7 @@ REGISTER_HLO_INST_EXTENSIONS(kWhile, [](HloOpcode opcode) {
         CHECK_EQ(inst->operand_count(), 1);
         return HloPoplarInplaceDescription(
             HloInstructionType::kInplaceReadWrite, /*inplace_operands=*/{0},
-            /*allow_non_inplace=*/true);
+            /*allow_non_inplace=*/false);
       });
 });
 
@@ -587,7 +586,7 @@ REGISTER_HLO_INST_EXTENSIONS(kCall, [](HloOpcode opcode) {
 
           return HloPoplarInplaceDescription(
               HloInstructionType::kInplaceReadWrite, std::move(indices),
-              /*allow_non_inplace=*/true);
+              /*allow_non_inplace=*/false);
         } else if (IsPipelineOp(inst) || IsResourceUpdate(inst)) {
           // Pipeline and ResourceUpdate operations are inplace on all
           // their inputs.

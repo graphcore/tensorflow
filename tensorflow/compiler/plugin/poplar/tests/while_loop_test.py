@@ -157,43 +157,51 @@ class WhileLoopTest(xla_test.XLATestCase):
     with self.session() as sess:
 
       def my_net(x):
-        def cond(i, x):
-          del x
+        def cond(i, *args):
+          del args
           return i < 3
 
-        def cond1(j, x):
-          del x
+        def cond1(j, *args):
+          del args
           return j < 2
 
-        def body1(j, x):
+        def body1(j, x, y):
           j = j + 1
           x = x * 2
-          return (j, x)
+          lhs = array_ops.reshape(x, [4, 1])
+          rhs = array_ops.reshape(y, [1, 4])
+          # This provides allocation targets for this computation.
+          y = math_ops.matmul(lhs, rhs)
+          y = math_ops.reduce_sum(y, axis=[0])
+          y = math_ops.divide(y, x)
+          y = array_ops.reshape(y, [4])
+          return (j, x, y)
 
-        def body(i, x):
+        def body(i, x, y):
           i = i + 1
           j = 0
-          _, x = control_flow_ops.while_loop(cond1,
-                                             body1, (j, x),
-                                             maximum_iterations=10)
-          return (i, x)
+          _, x, y = control_flow_ops.while_loop(cond1,
+                                                body1, (j, x, y),
+                                                maximum_iterations=10)
+          return (i, x, y)
 
         i = 0
-        a, b = control_flow_ops.while_loop(cond,
-                                           body, (i, x),
-                                           maximum_iterations=10)
-        return (a, b)
+        a, b, c = control_flow_ops.while_loop(cond,
+                                              body, (i, x, x),
+                                              maximum_iterations=10)
+        return (a, b, c)
 
       with ops.device('cpu'):
-        x = array_ops.placeholder(dtypes.int32, [4])
+        x = array_ops.placeholder(dtypes.float32, [4])
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[x])
 
       sess.run(variables.global_variables_initializer())
-      c, val = sess.run(r, {x: np.full([4], 2, dtype=np.int32)})
+      c, val, val2 = sess.run(r, {x: np.full([4], 2, dtype=np.float32)})
       self.assertEqual(c, 3)
       self.assertAllClose(val, np.full([4], 128))
+      self.assertAllClose(val2, np.full([4], 8192))
 
   def testFusionsInWhileLoops(self):
     with self.session() as sess:

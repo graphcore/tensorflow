@@ -216,30 +216,18 @@ StatusOr<poplar::program::Sequence> CreateWhileOp(
   CHECK_EQ(inputs.size(), 1);
   const HloInstruction* input_inst = inst->operand(0);
 
-  const bool reallocate_all_inputs =
-      !(IsLoweredInplace(inst) && IsLoweredInplace(input_inst));
   ReallocateInputsInfo reallocate_input_info(1);
-  reallocate_input_info[0] =
-      std::vector<bool>(inputs[0].size(), reallocate_all_inputs);
+  reallocate_input_info[0].resize(inputs[0].size());
 
-  // Reallocate any inputs which are copies or non-writeable.
-  if (input_inst->opcode() == HloOpcode::kTuple) {
-    for (int64 i = 0, flat_index = 0; i != input_inst->operand_count(); ++i) {
-      const HloInstruction* operand = input_inst->operand(i);
-      const int64 num_tensors = CountShapes(operand->shape());
-      if (operand->opcode() == HloOpcode::kCopy) {
-        std::fill_n(reallocate_input_info[0].begin() + flat_index, num_tensors,
-                    true);
+  auto inplace_description = GetInplaceDescription(inst);
+  auto& inplace_operand_set = inplace_description.GetInplaceOperandSet();
+  if (inplace_operand_set.contains(0)) {
+    for (std::size_t i = 0; i < inputs[0].size(); ++i) {
+      const auto& input = inputs[0][i];
+      if (input && input->IsTensor() &&
+          !input->AsTensor().isParallelWriteable()) {
+        reallocate_input_info[0][i] = true;
       }
-      flat_index += num_tensors;
-    }
-  }
-
-  for (std::size_t i = 0; i < inputs[0].size(); ++i) {
-    const auto& input = inputs[0][i];
-    if (input && input->IsTensor() &&
-        !input->AsTensor().isParallelWriteable()) {
-      reallocate_input_info[0][i] = true;
     }
   }
 
@@ -585,17 +573,19 @@ StatusOr<poplar::program::Sequence> CreateRepeatOp(
   VLOG(1) << "Processing " << inst->name();
   CHECK_EQ(inputs.size(), inst->operand_count());
 
-  const bool reallocate_all_inputs = !IsLoweredInplace(inst);
   ReallocateInputsInfo reallocate_input_info(inst->operand_count());
 
-  // Reallocate any inputs which are copies.
-  for (int64 i = 0; i != inst->operand_count(); ++i) {
-    const bool reallocate_input =
-        reallocate_all_inputs || inst->operand(i)->opcode() == HloOpcode::kCopy;
+  auto inplace_description = GetInplaceDescription(inst);
+  auto& inplace_operand_set = inplace_description.GetInplaceOperandSet();
 
+  // Reallocate any inputs which are inplace and non parallel-writeable
+  for (int64 i = 0; i != inst->operand_count(); ++i) {
     const auto& op_inputs = inputs[i];
-    reallocate_input_info[i] =
-        std::vector<bool>(op_inputs.size(), reallocate_input);
+    reallocate_input_info[i].resize(op_inputs.size());
+
+    if (!inplace_operand_set.contains(i)) {
+      continue;
+    }
 
     for (std::size_t j = 0; j < op_inputs.size(); ++j) {
       const auto& input = op_inputs[j];

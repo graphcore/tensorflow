@@ -676,10 +676,7 @@ DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst) {
 
   auto allowed_deferred_allocation_locations =
       GetAllowedDeferLocationsFromInputs(inst);
-  const bool is_lowered_inplace = IsLoweredInplace(inst);
 
-  auto inplace_description = GetInplaceDescription(inst);
-  const auto& inplace_indices_set = inplace_description.GetInplaceOperandSet();
   // Go through all the operands and get the input tensors for any input that
   // cannot be deferred.
   DeferredArgRBVectors inputs(inst->operand_count());
@@ -689,8 +686,6 @@ DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst) {
     auto shapes = FlattenedXlaShape(input_inst->shape());
 
     inputs[operand_idx].resize(shapes.size());
-    const bool inplace_operand = inplace_description.IsInplaceType() &&
-                                 inplace_indices_set.contains(operand_idx);
 
     // Go through all the tensors.
     for (size_t i = 0; i < shapes.size(); i++) {
@@ -699,10 +694,6 @@ DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst) {
       bool can_defer =
           deferred_allocation->IsDeferredAllocationLocation(input_location) &&
           allowed_deferred_allocation_locations[operand_idx][i];
-
-      if (inplace_operand) {
-        can_defer &= is_lowered_inplace;
-      }
 
       if (!can_defer) {
         // Cannot defer the allocation, hence get the output tensor for the
@@ -1865,20 +1856,22 @@ StatusOr<poplar::program::Sequence> InplaceDeferredVisitor::GetPreambleCopies(
     CHECK_EQ(callsite_inputs_[i].size(), computation_inputs_[i].size());
     CHECK_EQ(callsite_inputs_[i].size(), reallocate_inputs_info_[i].size());
     for (uint64 j = 0; j != callsite_inputs_[i].size(); ++j) {
-      if (callsite_inputs_[i][j] &&
-          *callsite_inputs_[i][j] != computation_inputs_[i][j]) {
+      auto& callsite_input = callsite_inputs_[i][j];
+      if (!callsite_input) {
+        continue;
+      }
+      if (callsite_input->IsTensor() &&
+          *callsite_input != computation_inputs_[i][j]) {
         // For inplace vistors, they should only differ if we allow relocation.
         if (!reallocate_inputs_info_[i][j]) {
           return FailedPrecondition("Input should have not been reallocated.");
         }
         VLOG(3) << "Adding a copy for input (" << i << ", " << j << ").";
-        if (callsite_inputs_[i][j]->IsTensor()) {
-          seq.add(poplar::program::Copy(callsite_inputs_[i][j]->AsTensor(),
-                                        computation_inputs_[i][j].AsTensor(),
-                                        false, debug_name_and_id));
-        } else {
-          *callsite_inputs_[i][j] = computation_inputs_[i][j].AsOpaque();
-        }
+        seq.add(poplar::program::Copy(callsite_input->AsTensor(),
+                                      computation_inputs_[i][j].AsTensor(),
+                                      false, debug_name_and_id));
+      } else if (callsite_input->IsOpaque()) {
+        *callsite_input = computation_inputs_[i][j].AsOpaque();
       }
     }
   }

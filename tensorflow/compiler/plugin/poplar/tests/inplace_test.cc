@@ -15,7 +15,10 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_into_poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
@@ -1202,7 +1205,7 @@ ENTRY c1 {
   auto* module0 = module.ValueOrDie().get();
 
   CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "while"),
-                                         true, true);
+                                         true, false);
   CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "add"), true,
                                          true);
   CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "slice"),
@@ -1221,6 +1224,158 @@ ENTRY c1 {
                                          true);
   CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "eq_c"),
                                          false, true);
+}
+
+struct InplaceFinderCopyTestSpec {
+  bool convert_to_repeat;
+};
+
+void PrintTo(const InplaceFinderCopyTestSpec& spec, std::ostream* os) {
+  *os << "{ convert_to_repeat: " << spec.convert_to_repeat << " }";
+}
+
+struct InplaceFinderCopyTest
+    : public HloTestBase,
+      public ::testing::WithParamInterface<InplaceFinderCopyTestSpec> {};
+
+TEST_P(InplaceFinderCopyTest, TestCopyDeduce) {
+  const char* const hlo = R"(
+HloModule top
+
+body {
+  p_b = (s32[], s32[20], s32[20]) parameter(0)
+  p0_b = s32[] get-tuple-element(p_b), index=0
+  p1_b = s32[20] get-tuple-element(p_b), index=1
+  p2_b = s32[20] get-tuple-element(p_b), index=2
+  i_b = s32[1] reshape(p0_b)
+  a_b = s32[1] dynamic-slice(p1_b, i_b), dynamic_slice_sizes={1}
+  t1_b = s32[1] dynamic-slice(p2_b, a_b), dynamic_slice_sizes={1}
+  t2_b = s32[1] dynamic-slice(p2_b, i_b), dynamic_slice_sizes={1}
+  u0_b = s32[20] dynamic-update-slice(p2_b, t2_b, a_b)
+  u1_b = s32[20] dynamic-update-slice(u0_b, t1_b, i_b)
+  concat = s32[40] concatenate(u0_b, u1_b), dimensions={0}
+  slice = s32[20] slice(concat), slice={[10:30]}
+  add = s32[20] add(u1_b, slice)
+  inc = s32[] constant(1)
+  p0_b_next = s32[] add(p0_b, inc)
+  ROOT root_b = (s32[], s32[20], s32[20]) tuple(p0_b_next, p1_b, add)
+}
+
+cond {
+  p_c = (s32[], s32[20], s32[20]) parameter(0)
+  p0_c = s32[] get-tuple-element(p_c), index=0
+  z_c = s32[] constant(20)
+  ROOT eq_c = pred[] compare(p0_c, z_c), direction=LE
+}
+
+ENTRY c1 {
+  c0 = s32[] constant(0)
+  p0 = s32[20] parameter(0)
+  t = (s32[], s32[20], s32[20]) tuple(c0, p0, p0)
+  ROOT while = (s32[], s32[20], s32[20]) while(t), condition=cond, body=body
+  }
+)";
+
+  auto module = ParseAndReturnVerifiedModule(hlo);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+  CompilerAnnotations annotations(module0);
+  const bool convert_to_repeat = GetParam().convert_to_repeat;
+  EXPECT_TRUE(CopyInserter().Run(module0).ValueOrDie());
+  if (convert_to_repeat) {
+    EXPECT_TRUE(WhileLoopToRepeatSimplify().Run(module0).ValueOrDie());
+  }
+  EXPECT_TRUE(InplaceFinder(annotations).Run(module0).ValueOrDie());
+  EXPECT_TRUE(AllocationFinder(annotations).Run(module0).ValueOrDie());
+  EXPECT_TRUE(ForwardAllocation(annotations).Run(module0).ValueOrDie());
+  EXPECT_EQ(annotations.tensor_allocation_map.size(),
+            convert_to_repeat ? 4 : 5);
+  HloInstruction* copy = FindInstruction(module0, "copy");
+  auto clone_methods = GetCopyCloneMethod(copy).ConsumeValueOrDie();
+  for (auto& clone_method : clone_methods.leaves()) {
+    EXPECT_EQ(clone_method.second, CloneMethod_DeduceNewOrderOrPreserveAliases);
+  }
+  // Allocation target is dynamic slice, so this copy will actually convert
+  // layout to sliceable.
+  auto t =
+      annotations.tensor_allocation_map.at(TensorLocation{copy->operand(0), 0});
+  EXPECT_EQ(t.tgt->opcode(), HloOpcode::kDynamicSlice);
+  EXPECT_EQ(t.input_index, 0);
+}
+
+INSTANTIATE_TEST_SUITE_P(InplaceFinderCopyTestCases, InplaceFinderCopyTest,
+                         ::testing::Values(InplaceFinderCopyTestSpec{true},
+                                           InplaceFinderCopyTestSpec{false}));
+
+TEST_P(InplaceFinderCopyTest, TestNonInplaceLoopReallocatingCopies) {
+  const char* const hlo = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[],f32[10],f32[10]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  const = s32[] constant(1)
+  add = s32[] add(p_body.0, const)
+  p_body.1 = s32[] get-tuple-element(p_body), index=1
+  p_body.2 = f32[10] get-tuple-element(p_body), index=2
+  p_body.3 = f32[10] get-tuple-element(p_body), index=3
+  add2 = f32[10] add(p_body.2, p_body.3)
+  ROOT root = (s32[],s32[],f32[10],f32[10]) tuple(add, p_body.1, add2, p_body.3)
+}
+
+condition {
+  p_cond = (s32[],s32[],f32[10],f32[10]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[] constant(10)
+  add_1 = s32[] add(const_0, const_1)
+  p0 = f32[10] parameter(0)
+  p1 = f32[10] parameter(1)
+  while_init = (s32[],s32[],f32[10],f32[10]) tuple(const_0, add_1, p0, p1)
+  while_output = (s32[],s32[],f32[10],f32[10]) while(while_init), condition=condition, body=body
+  ROOT root = (s32[], s32[], (s32[],s32[],f32[10],f32[10]), (s32[],s32[],f32[10],f32[10])) tuple(p0, while_init, while_output)
+}
+)";
+
+  auto module =
+      HloRunner::CreateModuleFromString(hlo, GetDebugOptionsForTest());
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  const bool convert_to_repeat = GetParam().convert_to_repeat;
+  if (convert_to_repeat) {
+    EXPECT_TRUE(WhileLoopToRepeatSimplify().Run(module0).ValueOrDie());
+  }
+
+  auto* entry = module0->entry_computation();
+  auto* root = entry->root_instruction();
+  auto* loop = root->operand(2);
+  CHECK_NOTNULL(loop);
+  EXPECT_TRUE(
+      InplaceFinder(CompilerAnnotations(module0)).Run(module0).ValueOrDie());
+
+  // Make sure both while and repeat wasn't lowered inplace.
+  EXPECT_TRUE(!IsLoweredInplace(loop));
+  int64 operand_n;
+  if (convert_to_repeat) {
+    EXPECT_TRUE(IsRepeatLoop(loop));
+  } else {
+    EXPECT_EQ(loop->opcode(), HloOpcode::kWhile);
+  }
+  for (const HloInstruction* op : loop->operands()) {
+    EXPECT_EQ(op->opcode(), HloOpcode::kCopy);
+    TF_ASSERT_OK_AND_ASSIGN(auto clone_method, GetCopyCloneMethod(op));
+    EXPECT_TRUE(absl::c_all_of(
+        clone_method.leaves(),
+        [](const std::pair<ShapeIndex, CloneMethod>& method) {
+          return method.second == CloneMethod_DeduceNewOrderOrExpandAliases;
+        }));
+  }
 }
 
 }  // namespace
