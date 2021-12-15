@@ -472,5 +472,10 @@ bool IsAllReduceMean(const HloInstruction* inst) {
                             m::Divide(m::Parameter(1), m::ConstantScalar())));
 }
 
+bool IsTriangularShapeInst(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kCholesky ||
+         inst->opcode() == HloOpcode::kTriangularSolve;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

@@ -2294,6 +2294,19 @@ xla_test(
 )
 
 xla_test(
+    name = "redundant_triangular_mask_remover_test",
+    size = "small",
+    srcs = ["tests/redundant_triangular_mask_remover_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "util_test",
     size = "small",
     srcs = ["tests/util_test.cc"],
@@ -3845,6 +3858,7 @@ test_suite(
         "recompute_casts_test",
         "recompute_suggestion_test",
         "reduce_test",
+        "redundant_triangular_mask_remover_test",
         "remapping_test",
         "remote_buffer_canonicalizer_test",
         "remote_parameter_parallel_combiner_test",
