@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -1926,6 +1927,114 @@ ENTRY e {
   EXPECT_EQ(gte1->sharding().GetUniqueDevice(), 1);
   HloInstruction* comp_root = comp->root_instruction();
   EXPECT_EQ(comp_root->sharding().GetUniqueDevice(), 1);
+}
+
+TEST_F(ShardingPassTest, TestBarrierPropagateFromUsers) {
+  std::string hlo_string = R"(
+HloModule top
+
+main {
+  p0 = f16[] parameter(0)
+  p1 = f16[] parameter(1)
+  p2 = f16[] parameter(2)
+  b = (f16[], f16[], f16[]) custom-call(p0, p1, p2), custom_call_target="Barrier"
+  g0 = f16[] get-tuple-element(b), index=0
+  g1 = f16[] get-tuple-element(b), index=1
+  g2 = f16[] get-tuple-element(b), index=2
+  c = f16[] cosine(g0), sharding={maximal device=1}
+  l0 = f16[] log(g1), sharding={maximal device=1}
+  a0 = f16[] add(c, l0)
+  l1 = f16[] log(g2), sharding={maximal device=0}
+  ROOT t = (f16[], f16[]) tuple(a0, l1)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+  ASSERT_TRUE(ShardingPass().Run(module.get()).ValueOrDie());
+
+  HloInstruction* p0 = FindInstruction(module.get(), "p0");
+  EXPECT_EQ(p0->sharding().GetUniqueDevice(), 1);
+  HloInstruction* p1 = FindInstruction(module.get(), "p1");
+  EXPECT_EQ(p1->sharding().GetUniqueDevice(), 1);
+  HloInstruction* p2 = FindInstruction(module.get(), "p2");
+  EXPECT_EQ(p2->sharding().GetUniqueDevice(), 0);
+  HloInstruction* barrier = FindInstruction(module.get(), "barrier");
+  EXPECT_EQ(barrier->sharding().tuple_elements()[0].GetUniqueDevice(), 1);
+  EXPECT_EQ(barrier->sharding().tuple_elements()[1].GetUniqueDevice(), 1);
+  EXPECT_EQ(barrier->sharding().tuple_elements()[2].GetUniqueDevice(), 0);
+  HloInstruction* g0 = FindInstruction(module.get(), "g0");
+  EXPECT_EQ(g0->sharding().GetUniqueDevice(), 1);
+  HloInstruction* g1 = FindInstruction(module.get(), "g1");
+  EXPECT_EQ(g1->sharding().GetUniqueDevice(), 1);
+  HloInstruction* g2 = FindInstruction(module.get(), "g2");
+  EXPECT_EQ(g2->sharding().GetUniqueDevice(), 0);
+  HloInstruction* c = FindInstruction(module.get(), "c");
+  EXPECT_EQ(c->sharding().GetUniqueDevice(), 1);
+  HloInstruction* l0 = FindInstruction(module.get(), "l0");
+  EXPECT_EQ(l0->sharding().GetUniqueDevice(), 1);
+  HloInstruction* a0 = FindInstruction(module.get(), "a0");
+  EXPECT_EQ(a0->sharding().GetUniqueDevice(), 1);
+  HloInstruction* l1 = FindInstruction(module.get(), "l1");
+  EXPECT_EQ(l1->sharding().GetUniqueDevice(), 0);
+  HloInstruction* t = FindInstruction(module.get(), "t");
+  EXPECT_EQ(t->sharding().tuple_elements()[0].GetUniqueDevice(), 1);
+  EXPECT_EQ(t->sharding().tuple_elements()[1].GetUniqueDevice(), 0);
+}
+
+TEST_F(ShardingPassTest, TestBarrierPropagateFromOperands) {
+  std::string hlo_string = R"(
+HloModule top
+
+main {
+  p0 = f16[] parameter(0)
+  p1 = f16[] parameter(1)
+  p2 = f16[] parameter(2)
+  c = f16[] cosine(p0), sharding={maximal device=1}
+  l0 = f16[] log(p1), sharding={maximal device=1}
+  l1 = f16[] log(p2), sharding={maximal device=0}
+  b = (f16[], f16[], f16[]) custom-call(c, l0, l1), custom_call_target="Barrier"
+  g0 = f16[] get-tuple-element(b), index=0
+  g1 = f16[] get-tuple-element(b), index=1
+  g2 = f16[] get-tuple-element(b), index=2
+  a0 = f16[] add(g0, g1)
+  ROOT t = (f16[], f16[]) tuple(a0, g2)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+  ASSERT_TRUE(ShardingPass().Run(module.get()).ValueOrDie());
+
+  HloInstruction* p0 = FindInstruction(module.get(), "p0");
+  EXPECT_EQ(p0->sharding().GetUniqueDevice(), 1);
+  HloInstruction* p1 = FindInstruction(module.get(), "p1");
+  EXPECT_EQ(p1->sharding().GetUniqueDevice(), 1);
+  HloInstruction* p2 = FindInstruction(module.get(), "p2");
+  EXPECT_EQ(p2->sharding().GetUniqueDevice(), 0);
+  HloInstruction* c = FindInstruction(module.get(), "c");
+  EXPECT_EQ(c->sharding().GetUniqueDevice(), 1);
+  HloInstruction* l0 = FindInstruction(module.get(), "l0");
+  EXPECT_EQ(l0->sharding().GetUniqueDevice(), 1);
+  HloInstruction* l1 = FindInstruction(module.get(), "l1");
+  EXPECT_EQ(l1->sharding().GetUniqueDevice(), 0);
+  HloInstruction* barrier = FindInstruction(module.get(), "barrier");
+  EXPECT_EQ(barrier->sharding().tuple_elements()[0].GetUniqueDevice(), 1);
+  EXPECT_EQ(barrier->sharding().tuple_elements()[1].GetUniqueDevice(), 1);
+  EXPECT_EQ(barrier->sharding().tuple_elements()[2].GetUniqueDevice(), 0);
+  HloInstruction* g0 = FindInstruction(module.get(), "g0");
+  EXPECT_EQ(g0->sharding().GetUniqueDevice(), 1);
+  HloInstruction* g1 = FindInstruction(module.get(), "g1");
+  EXPECT_EQ(g1->sharding().GetUniqueDevice(), 1);
+  HloInstruction* g2 = FindInstruction(module.get(), "g2");
+  EXPECT_EQ(g2->sharding().GetUniqueDevice(), 0);
+  HloInstruction* a0 = FindInstruction(module.get(), "a0");
+  EXPECT_EQ(a0->sharding().GetUniqueDevice(), 1);
+  HloInstruction* t = FindInstruction(module.get(), "t");
+  EXPECT_EQ(t->sharding().tuple_elements()[0].GetUniqueDevice(), 1);
+  EXPECT_EQ(t->sharding().tuple_elements()[1].GetUniqueDevice(), 0);
 }
 
 }  // namespace

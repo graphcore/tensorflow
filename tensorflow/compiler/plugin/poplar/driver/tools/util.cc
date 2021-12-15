@@ -84,6 +84,11 @@ bool IsSupportedSharding(const HloSharding& sharding) {
 
 // Get the sharding for a particular input operand of an instruction
 HloSharding GetShardingForOperand(const HloInstruction* inst, int operand) {
+  auto get_sub_sharding = [=]() {
+    auto s = inst->sharding();
+    return s.GetSubSharding(inst->shape(), {operand});
+  };
+
   switch (inst->opcode()) {
     case HloOpcode::kCall: {
       auto* comp = inst->to_apply();
@@ -102,10 +107,15 @@ HloSharding GetShardingForOperand(const HloInstruction* inst, int operand) {
       }
     }
     case HloOpcode::kTuple: {
-      auto s = inst->sharding();
-      return s.GetSubSharding(inst->shape(), {operand});
+      return get_sub_sharding();
     }
-    default: { return inst->sharding(); }
+    default: {
+      if (IsPoplarInstruction(PoplarOp::Barrier)(inst)) {
+        return get_sub_sharding();
+      } else {
+        return inst->sharding();
+      }
+    }
   }
 }
 
@@ -168,7 +178,8 @@ bool IsAllowedTupleSharding(const HloInstruction* inst) {
     case HloOpcode::kGetTupleElement:
       return true;
     case HloOpcode::kCustomCall:
-      return IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst);
+      return IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst) ||
+             IsPoplarInstruction(PoplarOp::Barrier)(inst);
     default:
       return false;
   }

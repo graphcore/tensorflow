@@ -21,6 +21,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/find_all_users.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -371,20 +372,28 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
       // Try to take sharding from operands
       if (!inst->has_sharding()) {
         switch (inst->opcode()) {
-          case HloOpcode::kGetTupleElement:
+          case HloOpcode::kGetTupleElement: {
             added_sharding = CopyGteShardingFromOperand(inst);
             break;
-          case HloOpcode::kTuple:
+          }
+          case HloOpcode::kTuple: {
             added_sharding = CopyTupleShardingFromOperands(inst);
             break;
+          }
           case HloOpcode::kCall:
           case HloOpcode::kWhile:
-          case HloOpcode::kConditional:
+          case HloOpcode::kConditional: {
             // These are dealt with by the computation level code
             break;
-          default:
-            added_sharding = CopyShardingFromOperands(inst);
+          }
+          default: {
+            if (IsPoplarInstruction(PoplarOp::Barrier)(inst)) {
+              added_sharding = CopyTupleShardingFromOperands(inst);
+            } else {
+              added_sharding = CopyShardingFromOperands(inst);
+            }
             break;
+          }
         }
       }
 
