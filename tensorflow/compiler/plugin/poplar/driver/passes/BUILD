@@ -1247,6 +1247,19 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "redundant_triangular_mask_remover",
+    srcs = [
+        "redundant_triangular_mask_remover.cc",
+    ],
+    hdrs = [
+        "redundant_triangular_mask_remover.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_matcher",
+    ],
+)
+
+poplar_cc_library(
     name = "remote_buffer_canonicalizer",
     srcs = [
         "remote_buffer_canonicalizer.cc",
@@ -1696,6 +1709,7 @@ poplar_cc_library(
         ":recomputation_input_remover",
         ":recompute_casts",
         ":recompute_instructions",
+        ":redundant_triangular_mask_remover",
         ":remote_buffer_canonicalizer",
         ":remote_buffer_merger",
         ":remote_parameter_parallel_combiner",

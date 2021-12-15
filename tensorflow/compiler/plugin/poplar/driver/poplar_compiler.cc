@@ -135,6 +135,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recomputation_input_remover.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_casts.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/redundant_triangular_mask_remover.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remote_buffer_canonicalizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remote_buffer_merger.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remote_parameter_parallel_combiner.h"
@@ -1452,6 +1453,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
                                           // PoplarAlgebraicSimplifier
       pipeline.AddPass<SerializeGradientAccumulation>();
       pipeline.AddPass<SliceOptimizer>(resources.annotations);
+      pipeline.AddPass<RedundantTriangularMaskRemover>(resources.annotations);
       pipeline.AddPass<FuseOpsLate>(resources.annotations);
       pipeline.AddPass<HloPassFix<FuseOpsIntoPoplarOps>>(resources.annotations);
       pipeline.AddPass<CommutativeInstructionReorderOperands>();
