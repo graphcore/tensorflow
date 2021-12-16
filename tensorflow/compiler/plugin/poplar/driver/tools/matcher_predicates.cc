@@ -111,6 +111,10 @@ bool IsScalarIntegerConstant(const HloInstruction* inst) {
   return IsScalarConstant(inst) && ShapeUtil::ElementIsIntegral(inst->shape());
 }
 
+bool IsAnyConstant(const HloInstruction* inst) {
+  return inst->IsConstant() || IsWideConstant(inst);
+}
+
 bool IsConvFilterTranspose(const HloInstruction* inst) {
   // If this reverse feeds a convolution and it is reversing the
   // spatial dimensions of the convolution, then we can use the

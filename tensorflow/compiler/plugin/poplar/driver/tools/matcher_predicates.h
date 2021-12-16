@@ -46,6 +46,7 @@ bool IsFloatScalar(const HloInstruction*);
 bool IsScalarConstant(const HloInstruction*);
 bool IsFloatScalarConstant(const HloInstruction*);
 bool IsScalarIntegerConstant(const HloInstruction*);
+bool IsAnyConstant(const HloInstruction*);
 bool IsConvFilterTranspose(const HloInstruction*);
 bool IsBiasReduce(const HloInstruction*);
 bool IsOutputFeed(const HloInstruction*);
