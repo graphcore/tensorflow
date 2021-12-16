@@ -24,6 +24,7 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import loops
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.util import function_utils
@@ -43,6 +44,7 @@ class IPUPipelineEstimatorSpec(
         'training_hooks',
         'evaluation_hooks',
         'prediction_hooks',
+        'reduction_method',
         'pipeline_op_kwargs',
     ])):
   """Ops and objects returned from a `model_fn` and passed to
@@ -58,6 +60,7 @@ class IPUPipelineEstimatorSpec(
               training_hooks=None,
               evaluation_hooks=None,
               prediction_hooks=None,
+              reduction_method=ga.GradientAccumulationReductionMethod.MEAN,
               **pipeline_op_kwargs):
     """Creates a validated `IPUPipelineEstimatorSpec` instance.
 
@@ -101,6 +104,15 @@ class IPUPipelineEstimatorSpec(
         during evaluation.
       prediction_hooks: List of instances of `tf.estimator.SessionRunHook` used
         during prediction.
+      reduction_method: Reduction method to use when accumulating gradients.
+        During the iterations in each optimizer step, the computed gradients
+        can either be directly summed up or scaled such that we compute a mean
+        of all gradients for each variable. Computing a mean avoids potential
+        issues with overflow during accumulation especially when using
+        float16, but gives smaller gradients and might require adjusting
+        the learning-rate accordingly.
+        Defaults to `GradientAccumulationReductionMethod.SUM`
+        (see :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
       pipeline_op_kwargs: All remaining keyword arguments are forwarded to
         :func:`~tensorflow.python.ipu.pipelining_ops.pipeline`.
 
@@ -141,6 +153,7 @@ class IPUPipelineEstimatorSpec(
         training_hooks=training_hooks,
         evaluation_hooks=evaluation_hooks,
         prediction_hooks=prediction_hooks,
+        reduction_method=reduction_method,
         pipeline_op_kwargs=pipeline_op_kwargs)
 
 
@@ -209,6 +222,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           outfeed_loss=True,
           accumulate_outfeed=True,
           accumulate_outfeed_dtype=spec.loss_accumulator_dtype,
+          reduction_method=spec.reduction_method,
           name="ipu_pipeline_estimator_train",
           **spec.pipeline_op_kwargs)
 

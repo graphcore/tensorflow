@@ -1176,7 +1176,14 @@ Status PipelineDataflowAnalysis::VerifyParameterUsage(
   // Get the shard for the pipeline stage.
   TF_ASSIGN_OR_RETURN(const int64 shard, GetShardForStage(stage_id));
   // Get the parameter value and check where it is used.
+
   const HloValue& parameter_value = GetValueSet(parameter).GetUniqueValue();
+
+  // The parameter is not used by any stage and it will be removed by DCE.
+  if (!used_by_stages_.contains(&parameter_value)) {
+    return Status::OK();
+  }
+
   for (const HloInstruction* user_stage :
        used_by_stages_.at(&parameter_value)) {
     TF_ASSIGN_OR_RETURN(StageID user_stage_id, GetStageID(user_stage));

@@ -34,6 +34,7 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu.ops import op_util
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
@@ -41,7 +42,6 @@ from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import optimizer
 from tensorflow.python.util import nest
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 
 
 class PipelineSchedule(IntEnum):
@@ -343,36 +343,34 @@ class PipelineStageOptions:
 _ALL_DEVICES = -1
 
 
-def pipeline(
-    computational_stages,
-    gradient_accumulation_count=None,
-    gradient_accumulation_dtype=None,
-    repeat_count=1,
-    batch_serialization_iterations=1,
-    inputs=None,
-    infeed_queue=None,
-    outfeed_queue=None,
-    optimizer_function=None,
-    device_mapping=None,
-    pipeline_schedule=None,
-    recomputation_mode=None,
-    forward_propagation_stages_poplar_options=None,
-    backward_propagation_stages_poplar_options=None,
-    weight_update_poplar_options=None,
-    offload_weight_update_variables=None,
-    replicated_optimizer_state_sharding=False,
-    offload_activations=None,
-    offload_gradient_accumulation_buffers=None,
-    replicated_weight_sharding=None,
-    offload_weights=None,
-    continuous_weight_updates=False,
-    outfeed_loss=False,
-    accumulate_outfeed=False,
-    accumulate_outfeed_dtype=None,
-    outfeed_mask=None,
-    reduction_method=gradient_accumulation_optimizer.
-    GradientAccumulationReductionMethod.SUM,  # pylint: disable=line-too-long
-    name=None):
+def pipeline(computational_stages,
+             gradient_accumulation_count=None,
+             gradient_accumulation_dtype=None,
+             repeat_count=1,
+             batch_serialization_iterations=1,
+             inputs=None,
+             infeed_queue=None,
+             outfeed_queue=None,
+             optimizer_function=None,
+             device_mapping=None,
+             pipeline_schedule=None,
+             recomputation_mode=None,
+             forward_propagation_stages_poplar_options=None,
+             backward_propagation_stages_poplar_options=None,
+             weight_update_poplar_options=None,
+             offload_weight_update_variables=None,
+             replicated_optimizer_state_sharding=False,
+             offload_activations=None,
+             offload_gradient_accumulation_buffers=None,
+             replicated_weight_sharding=None,
+             offload_weights=None,
+             continuous_weight_updates=False,
+             outfeed_loss=False,
+             accumulate_outfeed=False,
+             accumulate_outfeed_dtype=None,
+             outfeed_mask=None,
+             reduction_method=ga.GradientAccumulationReductionMethod.MEAN,
+             name=None):
   """
   Sets up a series of computational stages, where the outputs of one stage are
   the inputs to the next one. These stages are then executed in parallel across
@@ -730,10 +728,17 @@ def pipeline(
 
   reduction_method = op_util.parse_gradient_accumulation_method(
       reduction_method)
-  if reduction_method != \
-      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM:
-    raise ValueError('Only GradientAccumulationReductionMethod.SUM is '
+  if reduction_method != ga.GradientAccumulationReductionMethod.SUM and \
+      reduction_method != ga.GradientAccumulationReductionMethod.MEAN:
+    raise ValueError('Only GradientAccumulationReductionMethod.SUM and '
+                     'GradientAccumulationReductionMethod.MEAN are '
                      'supported at the moment')
+
+  if reduction_method != ga.GradientAccumulationReductionMethod.SUM and\
+    batch_serialization_iterations != 1:
+    raise ValueError('batch_serialization_iterations != 1 is only '
+                     'supported when reduction_method is '
+                     'GradientAccumulationReductionMethod.SUM')
 
   # Ensure inputs is a list, without casting inputs to a boolean. Casting
   # a tf.Tensor to a boolean will be interpreted as an operation in the
@@ -920,6 +925,15 @@ def pipeline(
 
     outfeed_sinks = []
 
+    def _grad_scale(gac):
+      one = np.float32(1.0)
+      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+        return None
+      elif reduction_method == ga.GradientAccumulationReductionMethod.MEAN:
+        return one / math_ops.cast(gac, dtypes.float32)
+      else:
+        raise ValueError('reduction_method must be SUM or MEAN')
+
     def _enqueue_or_accumulate(tensor_or_tensors):
       # Enqueue the outfeed data now or create accumulators for it
       # which will be enqueued later in the resource update.
@@ -927,11 +941,17 @@ def pipeline(
         control_outputs.append(outfeed_queue.enqueue(tensor_or_tensors))
       else:
         tensors = functional_ops._convert_to_list(tensor_or_tensors)  # pylint: disable=protected-access
+        grad_scale = _grad_scale(captured_gradient_accumulation_count)
         for tensor in tensors:
 
           def create_accumulate(t):
             # Find the data type for the outfeed accumulator.
             dtype = op_util.get_accumulator_dtype(t, accumulate_outfeed_dtype)
+
+            if grad_scale is not None:
+              gs = grad_scale if grad_scale.dtype == t.dtype else \
+                  math_ops.cast(grad_scale, t.dtype)
+              t = t * gs
             # Create a new t for the accumulator buffer.
             acc = gen_poputil_ops.gradient_accumulator_create_from_shape(
                 shape=t.shape, output_type=dtype)
@@ -1026,7 +1046,8 @@ def pipeline(
 
       # Insert gradient accumulation ops.
       accumulated_grads_and_vars = op_util.accumulate_gradients(
-          grads_and_vars, gradient_accumulation_dtype)
+          grads_and_vars, gradient_accumulation_dtype,
+          _grad_scale(captured_gradient_accumulation_count))
 
     elif not isinstance(outputs, ops.Operation) and accumulate_outfeed:
       # In inference, we never expect tensor outputs from the final stage,

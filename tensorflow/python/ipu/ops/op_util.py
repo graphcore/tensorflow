@@ -22,6 +22,7 @@ from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.eager import context

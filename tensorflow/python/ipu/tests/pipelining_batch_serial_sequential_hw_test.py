@@ -28,6 +28,7 @@ from tensorflow.python.platform import test
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import momentum
 from tensorflow.python.ipu import pipelining_ops
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour
 
@@ -38,8 +39,7 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
   def testInference(self):
     pipeline_depth = 18
     repeat_count = 4
-    batch_serialization_iterations = 2
-    size = pipeline_depth * repeat_count * batch_serialization_iterations
+    size = pipeline_depth * repeat_count
 
     def dataset_fn():
       return tu.create_single_increasing_dataset(size, shape=[2])
@@ -60,18 +60,23 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
         device_mapping=[0] * 5,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
         replication_factor=1,
-        batch_serialization_iterations=batch_serialization_iterations,
         offload_activations=None)
     self.assertAllClose(np.reshape(result, [size, 2]),
                         np.mgrid[0:size, 0:2][0])
 
-  @parameterized.parameters(
-      {'merge_remote_buffers': MergeRemoteBuffersBehaviour.NO_MERGING},
-      {'merge_remote_buffers': MergeRemoteBuffersBehaviour.MERGE},
-  )
+  @parameterized.named_parameters(
+      *test_util.generate_combinations_with_testcase_name(
+          merge_remote_buffers=[
+              MergeRemoteBuffersBehaviour.NO_MERGING,
+              MergeRemoteBuffersBehaviour.MERGE
+          ],
+          reduction_method=[
+              ga.GradientAccumulationReductionMethod.SUM,
+              ga.GradientAccumulationReductionMethod.MEAN
+          ]))
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare1(self, merge_remote_buffers):
+  def testPipelineCompare1(self, merge_remote_buffers, reduction_method):
     # Resnet like network.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[32, 32, 4])
@@ -147,8 +152,8 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
         replication_factor=1,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
         offload_activations=None,
-        batch_serialization_iterations=2,
-        merge_remote_buffers=merge_remote_buffers)
+        merge_remote_buffers=merge_remote_buffers,
+        reduction_method=reduction_method)
 
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
@@ -242,7 +247,7 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
         replication_factor=2,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
         offload_activations=None,
-        batch_serialization_iterations=3)
+        device_mapping=[0, 1, 1, 0, 0])
 
 
 if __name__ == "__main__":

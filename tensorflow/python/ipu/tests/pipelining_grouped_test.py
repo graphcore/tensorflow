@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from absl.testing import parameterized
 
 from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -37,13 +38,15 @@ from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import internal_ops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
 
 disable_v2_behavior()
 
 
-class PipeliningGroupedTest(test_util.TensorFlowTestCase):
+class PipeliningGroupedTest(test_util.TensorFlowTestCase,
+                            parameterized.TestCase):
   @test_util.deprecated_graph_mode_only
   def testPipelineNoOutfeedInference(self):
     def stage1(x):
@@ -270,7 +273,8 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=device_mapping,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped,
+          reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -342,7 +346,8 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=device_mapping,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped,
+          reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -411,7 +416,8 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           inputs=[c],
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped,
+          reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -774,8 +780,12 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         13821,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareSharedWeights(self):
+  def testPipelineCompareSharedWeights(self, reduction_method):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
 
@@ -863,7 +873,8 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         self,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Grouped,
-        device_mapping=[0, 1, 2, 3, 0])
+        device_mapping=[0, 1, 2, 3, 0],
+        reduction_method=reduction_method)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompareSharedWeights2(self):
@@ -933,7 +944,9 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         self,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Grouped,
-        device_mapping=[0, 1, 0, 2, 0])
+        device_mapping=[0, 1, 0, 2, 0],
+        rtol=1e-5,
+        atol=1e-5)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompareSharedWeights3(self):
@@ -1011,7 +1024,9 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         self,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Grouped,
-        device_mapping=[0, 1, 0, 2, 0])
+        device_mapping=[0, 1, 0, 2, 0],
+        rtol=1e-5,
+        atol=1e-5)
 
 
 if __name__ == "__main__":

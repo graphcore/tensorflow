@@ -442,7 +442,9 @@ class PipeliningGroupedOverlapTest(test_util.TensorFlowTestCase,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Grouped,
         device_mapping=[0, 1, 0, 2, 0],
-        number_of_io_tiles=number_of_io_tiles)
+        number_of_io_tiles=number_of_io_tiles,
+        rtol=1e-5,
+        atol=1e-5)
 
   @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
@@ -522,7 +524,9 @@ class PipeliningGroupedOverlapTest(test_util.TensorFlowTestCase,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Grouped,
         device_mapping=[0, 1, 0, 2, 0],
-        number_of_io_tiles=number_of_io_tiles)
+        number_of_io_tiles=number_of_io_tiles,
+        rtol=1e-5,
+        atol=1e-5)
 
   @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only

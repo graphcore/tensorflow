@@ -51,6 +51,7 @@ from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMirroredVariable
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategyV1
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUSyncOnReadVariable
 from tensorflow.python.ipu.ops import pipelining_ops
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.keras.layers.normalization import BatchNormalization
 from tensorflow.python.ops import array_ops
@@ -902,6 +903,7 @@ class IPUMultiWorkerStrategyV1MultiProcessTest(googletest.TestCase):
             infeed_queue=infeed_queue,
             outfeed_queue=outfeed_queue,
             optimizer_function=optimizer_function,
+            reduction_method=ga.GradientAccumulationReductionMethod.SUM,
             name="Pipeline")
         return pipeline_op
 
@@ -1015,6 +1017,7 @@ class IPUMultiWorkerStrategyV1MultiProcessTest(googletest.TestCase):
             infeed_queue=infeed_queue,
             outfeed_queue=outfeed_queue,
             optimizer_function=optimizer_function,
+            reduction_method=ga.GradientAccumulationReductionMethod.SUM,
             name="Pipeline")
         return pipeline_op
 
@@ -1161,7 +1164,8 @@ class IPUMultiWorkerStrategyV1MultiProcessTest(googletest.TestCase):
           mode=mode,
           computational_stages=[stage1, stage2],
           gradient_accumulation_count=gradient_accumulation_count,
-          optimizer_function=optimizer_function)
+          optimizer_function=optimizer_function,
+          reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
     def my_input_fn(input_context):
       self.assertEqual(task_id, input_context.input_pipeline_id)

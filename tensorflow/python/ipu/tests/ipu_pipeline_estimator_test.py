@@ -29,6 +29,7 @@ from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.ipu_pipeline_estimator import IPUPipelineEstimator
 from tensorflow.python.ipu.ipu_pipeline_estimator import IPUPipelineEstimatorSpec
 from tensorflow.python.ipu.ops import pipelining_ops
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import metrics_impl
@@ -239,13 +240,16 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
       estimator.train(input_fn=my_input_fn, steps=1)
 
   @combinations.generate(
-      combinations.combine(
-          gradient_accumulation_count=[4, 8],
-          num_weight_updates_per_loop=[1, 2],
-      ))
+      combinations.combine(gradient_accumulation_count=[4, 8],
+                           num_weight_updates_per_loop=[1, 2],
+                           reduction_method=[
+                               ga.GradientAccumulationReductionMethod.SUM,
+                               ga.GradientAccumulationReductionMethod.MEAN
+                           ]))
   def testTrainWithAnalyticalGradientReference(self,
                                                gradient_accumulation_count,
-                                               num_weight_updates_per_loop):
+                                               num_weight_updates_per_loop,
+                                               reduction_method):
     x = 1.5
     y = 1.0
     initial_w = 2.0
@@ -274,7 +278,8 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
           mode,
           computational_stages=[stage1, stage2],
           optimizer_function=optimizer_function,
-          gradient_accumulation_count=gradient_accumulation_count)
+          gradient_accumulation_count=gradient_accumulation_count,
+          reduction_method=reduction_method)
 
     def my_input_fn():
       num_batches = gradient_accumulation_count * num_weight_updates_per_loop
@@ -297,10 +302,17 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
       step_losses = []
       for _ in range(num_weight_updates_per_loop):
         # L(x) = w * x + y
-        step_losses.append(expected_w * x + y)
+        loss = expected_w * x + y
+        if reduction_method != ga.GradientAccumulationReductionMethod.SUM:
+          loss /= gradient_accumulation_count
+        step_losses.append(loss)
+
         # dL(x)/dw = x
         # w := w - learning_rate * x
-        expected_w -= gradient_accumulation_count * learning_rate * x
+        if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+          expected_w -= gradient_accumulation_count * learning_rate * x
+        else:
+          expected_w -= learning_rate * x
 
       expected_losses.append(np.mean(step_losses))
       self.assertEqual(expected_w, estimator.get_variable_value("w"))

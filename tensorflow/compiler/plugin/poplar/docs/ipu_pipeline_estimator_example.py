@@ -7,6 +7,7 @@ from tensorflow.keras.datasets import cifar10
 from tensorflow.keras.layers import Conv2D, MaxPooling2D
 from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten
 from tensorflow.python import ipu
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 
 NUM_CLASSES = 10
 
@@ -72,7 +73,8 @@ def model_fn(mode, params):
       computational_stages=[stage1, stage2],
       optimizer_function=optimizer_function,
       eval_metrics_fn=eval_metrics_fn,
-      gradient_accumulation_count=params["gradient_accumulation_count"])
+      gradient_accumulation_count=params["gradient_accumulation_count"],
+      reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
 
 def parse_args():

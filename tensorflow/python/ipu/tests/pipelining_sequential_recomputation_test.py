@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from absl.testing import parameterized
 import pva
 
 from tensorflow.keras import layers
@@ -36,13 +37,15 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
 
 disable_v2_behavior()
 
 
-class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
+class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase,
+                                     parameterized.TestCase):
   @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare1(self):
@@ -378,9 +381,13 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
         gradient_accumulation_count, dataset_fn, optimizer_fn, self, 6328,
         True, pipelining_ops.PipelineSchedule.Sequential)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
-  def testDistributedBatchNorm(self):
+  def testDistributedBatchNorm(self, reduction_method):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(128, shape=[1, 1, 1])
       dataset = dataset.batch(batch_size=1, drop_remainder=True)
@@ -432,7 +439,8 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential,
-          device_mapping=[0] * 3)
+          device_mapping=[0] * 3,
+          reduction_method=reduction_method)
 
     with self.test_session() as session:
       cfg = IPUConfig()
