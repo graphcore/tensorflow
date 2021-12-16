@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_HLO_POPLAR_BUFFER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_HLO_POPLAR_BUFFER_H_
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -341,6 +342,16 @@ class InstructionPoplarBufferSet {
 std::ostream& operator<<(
     std::ostream& out,
     const InstructionPoplarBufferSet& instruction_buffer_set);
+
+// Utilities for checking whether all the buffers in a HloPoplarBufferSet meet
+// some criteria.
+bool AllOfBufferSet(
+    const HloPoplarBufferSet& buffer_set,
+    const std::function<bool(const HloPoplarBuffer*)>& unary_pred);
+bool AllOfBufferSet(
+    const HloPoplarBufferSet& buffer_set,
+    const std::function<bool(const HloInstruction*)>& unary_pred);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

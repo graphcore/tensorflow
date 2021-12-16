@@ -18,6 +18,7 @@ limitations under the License.
 #include <algorithm>
 #include <utility>
 
+#include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
@@ -392,6 +393,21 @@ std::ostream& operator<<(
     const InstructionPoplarBufferSet& instruction_buffer_set) {
   out << instruction_buffer_set.ToString();
   return out;
+}
+
+bool AllOfBufferSet(
+    const HloPoplarBufferSet& buffer_set,
+    const std::function<bool(const HloPoplarBuffer*)>& unary_pred) {
+  return absl::c_all_of(buffer_set.buffers(), unary_pred);
+}
+
+bool AllOfBufferSet(
+    const HloPoplarBufferSet& buffer_set,
+    const std::function<bool(const HloInstruction*)>& unary_pred) {
+  return AllOfBufferSet(buffer_set,
+                        [&unary_pred](const HloPoplarBuffer* buffer) {
+                          return unary_pred(buffer->instruction());
+                        });
 }
 
 }  // namespace poplarplugin

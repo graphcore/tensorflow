@@ -19,6 +19,9 @@ limitations under the License.
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+
 namespace xla {
 namespace poplarplugin {
 namespace {
@@ -97,6 +100,124 @@ TEST_F(HloPoplarBufferTest, DifferentComputationOrder) {
   EXPECT_TRUE(buffer_set_c.AddBuffer(&buffer_arg1_0));
   EXPECT_FALSE(buffer_set_c.AddBuffer(&buffer_arg1_0));
   EXPECT_THAT(buffer_set_c.size(), 2);
+}
+
+struct AllBufferSetTest : HloPoplarBufferTest {
+  HloPoplarBuffer CreateHloPoplarBuffer(
+      HloInstruction* inst,
+      BufferLocality locality = BufferLocality::kDeviceMemory) {
+    return HloPoplarBuffer(++buffer_id_, {inst, {}}, locality);
+  }
+
+  HloPoplarBuffer::Id buffer_id_ = 0;
+};
+
+TEST_F(AllBufferSetTest, IsOpCode) {
+  std::string hlo = R"(
+ HloModule top
+  _pop_op_wide_const {
+    constant = f32[] constant(0.1)
+    ROOT broadcast = f32[3,3,4,12] broadcast(constant), dimensions={}
+  }
+
+ ENTRY test {
+  non_const1 = f32[] parameter(0)
+  const1 = f32[] constant(0)
+  const2 = f32[] constant(4)
+  ROOT wide_const1 = f32[3,3,4,12] fusion(), kind=kCustom, calls=_pop_op_wide_const
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  HloInstruction* non_const1 = FindInstruction(m.get(), "non_const1");
+  HloInstruction* const1 = FindInstruction(m.get(), "const1");
+  HloInstruction* const2 = FindInstruction(m.get(), "const2");
+  HloInstruction* wide_const1 = FindInstruction(m.get(), "wide_const1");
+
+  // Check that we can detect HloPoplarBufferSets which contain only constants.
+  auto non_const1_buffer = CreateHloPoplarBuffer(non_const1);
+  auto const1_buffer = CreateHloPoplarBuffer(const1);
+  auto const2_buffer = CreateHloPoplarBuffer(const2);
+  auto wide_const1_buffer = CreateHloPoplarBuffer(wide_const1);
+
+  HloPoplarBufferSet buffer_set(
+      {&const1_buffer, &const2_buffer, &wide_const1_buffer});
+  ASSERT_TRUE(AllOfBufferSet(buffer_set, IsAnyConstant));
+
+  buffer_set.AddBuffer(&non_const1_buffer);
+  ASSERT_FALSE(AllOfBufferSet(buffer_set, IsAnyConstant));
+}
+
+TEST_F(AllBufferSetTest, IsPoplarOp) {
+  std::string hlo = R"(
+ HloModule top
+ ENTRY test {
+  param0 = f32[2] parameter(0)
+  non_gradient_accu1 = f32[] parameter(1)
+  gradient_accu1 = f32[2] custom-call(param0), custom_call_target="GradientAccumulatorCreate", backend_config="{}"
+  gradient_accu2 = f32[2] custom-call(param0), custom_call_target="GradientAccumulatorCreate", backend_config="{}"
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  ASSERT_TRUE(CustomOpReplacer().Run(m.get()).ValueOrDie());
+
+  // Check that we can detect HloPoplarBufferSets which contain only gradient
+  // accumulator create.
+  HloInstruction* non_gradient_accu1 =
+      FindInstruction(m.get(), "non_gradient_accu1");
+  HloInstruction* gradient_accu1 =
+      FindInstruction(m.get(), "gradient-accumulator-create");
+  HloInstruction* gradient_accu2 =
+      FindInstruction(m.get(), "gradient-accumulator-create.1");
+
+  ASSERT_TRUE(gradient_accu1);
+  ASSERT_TRUE(gradient_accu2);
+
+  auto non_gradient_accu1_buffer = CreateHloPoplarBuffer(non_gradient_accu1);
+  auto gradient_accu1_buffer = CreateHloPoplarBuffer(gradient_accu1);
+  auto gradient_accu2_buffer = CreateHloPoplarBuffer(gradient_accu2);
+
+  HloPoplarBufferSet buffer_set(
+      {&gradient_accu1_buffer, &gradient_accu2_buffer});
+  ASSERT_TRUE(AllOfBufferSet(
+      buffer_set, IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)));
+
+  buffer_set.AddBuffer(&non_gradient_accu1_buffer);
+  ASSERT_FALSE(AllOfBufferSet(
+      buffer_set, IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)));
+}
+
+TEST_F(AllBufferSetTest, IsBufferType) {
+  std::string hlo = R"(
+ HloModule top
+ ENTRY test {
+  param0 = f32[] parameter(0)
+  param1 = f32[] parameter(1)
+  ROOT param2 = f32[] parameter(2)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  HloInstruction* param0 = FindInstruction(m.get(), "param0");
+  HloInstruction* param1 = FindInstruction(m.get(), "param1");
+  HloInstruction* param2 = FindInstruction(m.get(), "param2");
+
+  // Check that we can detect HloPoplarBufferSets which contain only remote
+  // buffers
+  auto remote_buffer1 =
+      CreateHloPoplarBuffer(param0, BufferLocality::kRemoteMemory);
+  auto remote_buffer2 =
+      CreateHloPoplarBuffer(param1, BufferLocality::kRemoteMemory);
+  auto local_buffer1 =
+      CreateHloPoplarBuffer(param2, BufferLocality::kDeviceMemory);
+
+  auto is_remote_pred = [](const HloPoplarBuffer* buffer) {
+    return buffer->locality() == BufferLocality::kRemoteMemory;
+  };
+
+  HloPoplarBufferSet buffer_set({&remote_buffer1, &remote_buffer2});
+  ASSERT_TRUE(AllOfBufferSet(buffer_set, is_remote_pred));
+
+  buffer_set.AddBuffer(&local_buffer1);
+  ASSERT_FALSE(AllOfBufferSet(buffer_set, is_remote_pred));
 }
 
 }  // namespace
