@@ -13,6 +13,8 @@
 # limitations under the License.
 # =============================================================================
 
+from absl.testing import parameterized
+
 import os
 import numpy as np
 from tensorflow.python import keras
@@ -30,6 +32,7 @@ from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.horovod.ipu_horovod_strategy import IPUHorovodStrategy
 from tensorflow.python.ipu.ops import pipelining_ops
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
@@ -40,7 +43,7 @@ from tensorflow.python.platform import test
 from tensorflow.python.training.gradient_descent import GradientDescentOptimizer
 
 
-class HorovodTest(test_util.TensorFlowTestCase):
+class HorovodTest(test_util.TensorFlowTestCase, parameterized.TestCase):
   @classmethod
   def setUpClass(cls):
     hvd.init()
@@ -128,8 +131,12 @@ class HorovodTest(test_util.TensorFlowTestCase):
         self.assertEqual(1.0 * hvd_size, strategy_sum.eval())
         self.assertEqual(1.0, strategy_mean.eval())
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def test_pipelining(self):
+  def test_pipelining(self, reduction_method):
     gradient_accumulation_count = 4
     local_batch_size = 2
 
@@ -177,6 +184,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
             repeat_count=2,
             outfeed_queue=outfeed_queue,
             optimizer_function=optimizer_function,
+            reduction_method=reduction_method,
             name="Pipeline")
         return pipeline_op
 

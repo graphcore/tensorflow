@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from absl.testing import parameterized
 
 from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -31,13 +32,15 @@ from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import pipelining_ops
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
 
 disable_v2_behavior()
 
 
-class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
+class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase,
+                                   parameterized.TestCase):
   @test_util.deprecated_graph_mode_only
   def testPipelineInvalidDeviceMapping(self):
     dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
@@ -83,7 +86,8 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
           outfeed_queue=outfeed_queue,
           device_mapping=[0, 1, 0],
           pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential,
-          batch_serialization_iterations=4)
+          batch_serialization_iterations=4,
+          reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
     # Wrong type:
     with self.assertRaisesRegex(
@@ -97,10 +101,15 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
           outfeed_queue=outfeed_queue,
           device_mapping=[0, 0, 0],
           pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped,
-          batch_serialization_iterations=4)
+          batch_serialization_iterations=4,
+          reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare1(self):
+  def testPipelineCompare1(self, reduction_method):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -160,10 +169,15 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         self,
         19826,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
-        batch_serialization_iterations=3)
+        batch_serialization_iterations=1,
+        reduction_method=reduction_method)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare2(self):
+  def testPipelineCompare2(self, reduction_method):
     # Resnet like network.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -268,7 +282,8 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         self,
         201295,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
-        batch_serialization_iterations=4)
+        batch_serialization_iterations=1,
+        reduction_method=reduction_method)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -324,7 +339,7 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         self,
         60107,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
-        batch_serialization_iterations=4)
+        batch_serialization_iterations=1)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompareSharedWeights(self):
@@ -412,8 +427,9 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         optimizer,
         self,
         21458,
+        device_mapping=[0, 1, 2, 3, 0],
         schedule=pipelining_ops.PipelineSchedule.Sequential,
-        batch_serialization_iterations=5)
+        batch_serialization_iterations=1)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompareSharedWeights2(self):
@@ -480,8 +496,11 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         optimizer,
         self,
         21458,
+        device_mapping=[0, 1, 0, 2, 0],
         schedule=pipelining_ops.PipelineSchedule.Sequential,
-        batch_serialization_iterations=3)
+        batch_serialization_iterations=1,
+        rtol=1e-5,
+        atol=1e-5)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompareSharedWeights3(self):
@@ -556,8 +575,11 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         optimizer,
         self,
         21458,
+        device_mapping=[0, 1, 0, 2, 0],
         schedule=pipelining_ops.PipelineSchedule.Sequential,
-        batch_serialization_iterations=2)
+        batch_serialization_iterations=1,
+        rtol=1e-5,
+        atol=1e-5)
 
 
 if __name__ == "__main__":

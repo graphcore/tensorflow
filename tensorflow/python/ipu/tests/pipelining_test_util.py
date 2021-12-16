@@ -20,6 +20,7 @@ import pva
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import standard_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
@@ -106,10 +107,12 @@ class PipelineTester(object):
         ]
         grads = optimizer.compute_gradients(loss, trainable_variables)
 
+        one = np.float32(1.0)
         if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
-          grad_scale = 1.0
+          grad_scale = one
         elif reduction_method == ga.GradientAccumulationReductionMethod.MEAN:
-          grad_scale = 1.0 / num_batches_to_accumulate
+          grad_scale = one / math_ops.cast(num_batches_to_accumulate,
+                                           np.float32)
         else:
           raise ValueError('reduction_method must be SUM or MEAN')
 
@@ -285,7 +288,8 @@ class PipelineTester(object):
       ipu_id=None,
       process_count=None,
       process_index=None,
-      cross_replica_optimizer_cls=None):
+      cross_replica_optimizer_cls=None,
+      reduction_method=ga.GradientAccumulationReductionMethod.MEAN):
 
     use_constant = number_of_io_tiles != 0
 
@@ -338,7 +342,8 @@ class PipelineTester(object):
               device_mapping=device_mapping,
               offload_activations=offload_activations,
               replicated_optimizer_state_sharding=
-              replicated_optimizer_state_sharding)
+              replicated_optimizer_state_sharding,
+              reduction_method=reduction_method)
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=inputs)
@@ -413,22 +418,26 @@ class PipelineTester(object):
       return out
 
   @staticmethod
-  def compare_pipeline_to_cpu(stages,
-                              inputs_fn,
-                              input_values,
-                              repeat_count,
-                              gradient_accumulation_count,
-                              dataset_fn,
-                              optimizer,
-                              test_wrapper,
-                              expected_max_tile_memory,
-                              recomp=False,
-                              schedule=None,
-                              device_mapping=None,
-                              batch_serialization_iterations=1,
-                              recomputation_mode=None,
-                              number_of_io_tiles=0,
-                              return_report=False):
+  def compare_pipeline_to_cpu(
+      stages,
+      inputs_fn,
+      input_values,
+      repeat_count,
+      gradient_accumulation_count,
+      dataset_fn,
+      optimizer,
+      test_wrapper,
+      expected_max_tile_memory,
+      recomp=False,
+      schedule=None,
+      device_mapping=None,
+      batch_serialization_iterations=1,
+      recomputation_mode=None,
+      number_of_io_tiles=0,
+      return_report=False,
+      reduction_method=ga.GradientAccumulationReductionMethod.MEAN,
+      rtol=1e-6,
+      atol=1e-6):
 
     if batch_serialization_iterations > 1:
       assert device_mapping is None
@@ -453,7 +462,8 @@ class PipelineTester(object):
         batch_serialization_iterations,
         recomputation_mode,
         number_of_io_tiles=number_of_io_tiles,
-        return_report=return_report)
+        return_report=return_report,
+        reduction_method=reduction_method)
 
     if return_report:
       pipeline_losses, report_json, report_helper = pipeline_losses
@@ -469,10 +479,12 @@ class PipelineTester(object):
         num_batches_to_accumulate,
         dataset_fn,
         optimizer,
-        reduction_method=ga.GradientAccumulationReductionMethod.SUM)
-    # TODO(T46014) - Change to MEAN or passed in value
+        reduction_method=reduction_method)
 
-    test_wrapper.assertAllClose(cpu_losses, pipeline_losses)
+    test_wrapper.assertAllClose(cpu_losses,
+                                pipeline_losses,
+                                rtol=rtol,
+                                atol=atol)
 
     if return_report:
       return report_json, report_helper
@@ -499,7 +511,8 @@ class PipelineTester(object):
       merge_remote_buffers=MergeRemoteBuffersBehaviour.IF_BENEFICIAL,
       replication_factor=1,
       replicated_optimizer_state_sharding=False,
-      minimum_remote_tensor_size=128):
+      minimum_remote_tensor_size=128,
+      reduction_method=ga.GradientAccumulationReductionMethod.MEAN):
     if batch_serialization_iterations > 1:
       assert device_mapping is None
       device_mapping = [0] * len(stages)
@@ -532,7 +545,8 @@ class PipelineTester(object):
         merge_remote_buffers,
         replicated_optimizer_state_sharding[0],
         minimum_remote_tensor_size,
-        return_vars=True)
+        return_vars=True,
+        reduction_method=reduction_method)
 
     num_batches_to_accumulate = (gradient_accumulation_count *
                                  batch_serialization_iterations)
@@ -553,8 +567,7 @@ class PipelineTester(object):
         replicated_optimizer_state_sharding[1],
         minimum_remote_tensor_size,
         return_vars=True,
-        reduction_method=ga.GradientAccumulationReductionMethod.SUM)
-    # TODO(T46014) - Change to MEAN or passed in value
+        reduction_method=reduction_method)
 
     test_wrapper.assertAllClose(sharded_losses, pipeline_losses)
     test_wrapper.assertAllClose(sharded_vars, pipeline_vars)

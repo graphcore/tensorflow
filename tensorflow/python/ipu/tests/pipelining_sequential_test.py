@@ -37,6 +37,7 @@ from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import internal_ops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
 
@@ -212,7 +213,8 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=device_mapping,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential,
+          reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
     with ops.device('cpu'):
       count = array_ops.placeholder(np.int32, shape=[])
@@ -287,7 +289,8 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=device_mapping,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential,
+          reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -357,7 +360,8 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
           inputs=[c],
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential,
+          reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -870,7 +874,9 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
         self,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
-        device_mapping=[0, 1, 0, 2, 0])
+        device_mapping=[0, 1, 0, 2, 0],
+        rtol=1e-5,
+        atol=1e-5)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompareSharedWeights3(self):
@@ -946,7 +952,9 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
         self,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
-        device_mapping=[0, 1, 0, 2, 0])
+        device_mapping=[0, 1, 0, 2, 0],
+        rtol=1e-5,
+        atol=1e-5)
 
 
 if __name__ == "__main__":

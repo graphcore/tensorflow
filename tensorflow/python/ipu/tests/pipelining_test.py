@@ -49,7 +49,7 @@ from tensorflow.python.ipu import normalization_ops
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.optimizers import map_gradient_optimizer
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
@@ -78,7 +78,11 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       return loss
 
     def my_net(x):
-      return pipelining_ops.pipeline([stage1, stage2], 10, inputs=[x])
+      return pipelining_ops.pipeline(
+          [stage1, stage2],
+          10,
+          inputs=[x],
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -114,7 +118,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           10,
           inputs=[x],
           optimizer_function=optimizer_function,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -160,7 +165,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           inputs=[c],
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -232,7 +238,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           # Invalid combination. RTS only operates on offloaded state.
           replicated_optimizer_state_sharding=True,
           offload_weight_update_variables=False,
-          optimizer_function=optimizer_function)
+          optimizer_function=optimizer_function,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with self.assertRaisesRegex(ValueError,
                                 'optimizer state must be offloaded'):
@@ -281,7 +288,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=1,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     # Too many values:
     with self.assertRaisesRegex(ValueError,
@@ -293,7 +301,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=list(range(4)),
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     # Not enough values:
     with self.assertRaisesRegex(ValueError,
@@ -305,7 +314,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=tuple(range(1)),
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithDeviceMapping(self):
@@ -345,7 +355,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=device_mapping,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -417,7 +428,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=device_mapping,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -488,7 +500,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           inputs=[c],
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -544,7 +557,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           10,
           inputs=[x],
           outfeed_queue=outfeed_queue,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -564,7 +578,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           [stage1],
           10,
           inputs=[x],
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -595,7 +610,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           12,
           inputs=[x, y],
           outfeed_queue=outfeed_queue,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -681,7 +697,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           optimizer_function=optimizer_function,
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -746,7 +763,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
             inputs=[],
             infeed_queue=infeed_queue,
             outfeed_queue=outfeed_queue,
-            name="Pipeline")
+            name="Pipeline",
+            reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
       return pipeline_op
 
     with tu.ipu_session() as sess:
@@ -770,8 +788,12 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       results = sess.run(outfeed_op)
       self.assertAllClose(results[0], [[0.], [2.], [8.], [18.], [32.], [0.]])
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare1(self):
+  def testPipelineCompare1(self, reduction_method):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -830,10 +852,15 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         optimizer,
         self,
         15500,
-        schedule=pipelining_ops.PipelineSchedule.Interleaved)
+        schedule=pipelining_ops.PipelineSchedule.Interleaved,
+        reduction_method=reduction_method)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare2(self):
+  def testPipelineCompare2(self, reduction_method):
     # Resnet like network.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -937,10 +964,15 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         optimizer,
         self,
         38555,
-        schedule=pipelining_ops.PipelineSchedule.Interleaved)
+        schedule=pipelining_ops.PipelineSchedule.Interleaved,
+        reduction_method=reduction_method)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare3(self):
+  def testPipelineCompare3(self, reduction_method):
     if utils.running_on_ipu_model():
       self.skipTest("Replicated top level graphs are not supported on the "
                     "IPU_MODEL target")
@@ -996,10 +1028,15 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         optimizer,
         self,
         12600,
-        schedule=pipelining_ops.PipelineSchedule.Interleaved)
+        schedule=pipelining_ops.PipelineSchedule.Interleaved,
+        reduction_method=reduction_method)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareSharedWeights(self):
+  def testPipelineCompareSharedWeights(self, reduction_method):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
 
@@ -1087,7 +1124,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           self,
           21458,
           schedule=pipelining_ops.PipelineSchedule.Interleaved,
-          device_mapping=[0, 1, [2, 3], 0])
+          device_mapping=[0, 1, [2, 3], 0],
+          reduction_method=reduction_method)
 
   @test_util.deprecated_graph_mode_only
   def testStageOptionsNotEnough(self):
@@ -1111,7 +1149,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
           forward_propagation_stages_poplar_options=[
               pipelining_ops.PipelineStageOptions()
-          ])
+          ],
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -1181,7 +1220,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
-          weight_update_poplar_options={"dead": "beaf"})
+          weight_update_poplar_options={"dead": "beaf"},
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -1205,19 +1245,23 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
       with self.assertRaisesRegex(ValueError,
                                   "An optimizer_function must be provided"):
-        pipelining_ops.pipeline([identity, identity, identity, identity],
-                                gradient_accumulation_count=4,
-                                inputs=[1.0],
-                                outfeed_queue=outfeed_queue,
-                                outfeed_loss=True)
+        pipelining_ops.pipeline(
+            [identity, identity, identity, identity],
+            gradient_accumulation_count=4,
+            inputs=[1.0],
+            outfeed_queue=outfeed_queue,
+            outfeed_loss=True,
+            reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
       with self.assertRaisesRegex(ValueError,
                                   "An outfeed_queue must be provided"):
-        pipelining_ops.pipeline([identity, identity, identity, identity],
-                                gradient_accumulation_count=4,
-                                inputs=[1.0],
-                                optimizer_function=optimizer_function,
-                                outfeed_loss=True)
+        pipelining_ops.pipeline(
+            [identity, identity, identity, identity],
+            gradient_accumulation_count=4,
+            inputs=[1.0],
+            optimizer_function=optimizer_function,
+            outfeed_loss=True,
+            reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedLoss(self):
@@ -1240,12 +1284,14 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       def my_net(x):
-        return pipelining_ops.pipeline([stage1, identity, identity, identity],
-                                       gradient_accumulation_count=8,
-                                       inputs=[10, x],
-                                       outfeed_queue=outfeed_queue,
-                                       optimizer_function=optimizer_function,
-                                       outfeed_loss=True)
+        return pipelining_ops.pipeline(
+            [stage1, identity, identity, identity],
+            gradient_accumulation_count=8,
+            inputs=[10, x],
+            outfeed_queue=outfeed_queue,
+            optimizer_function=optimizer_function,
+            outfeed_loss=True,
+            reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[0.0])
@@ -1276,30 +1322,36 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
       with self.assertRaisesRegex(ValueError,
                                   "An optimizer_function must be provided"):
-        pipelining_ops.pipeline([identity, identity, identity, identity],
-                                gradient_accumulation_count=4,
-                                inputs=[1.0],
-                                outfeed_queue=outfeed_queue,
-                                outfeed_mask=[False])
+        pipelining_ops.pipeline(
+            [identity, identity, identity, identity],
+            gradient_accumulation_count=4,
+            inputs=[1.0],
+            outfeed_queue=outfeed_queue,
+            outfeed_mask=[False],
+            reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
       with self.assertRaisesRegex(ValueError,
                                   r".*no outfeed_queue has been provided"):
-        pipelining_ops.pipeline([identity, identity, identity, identity],
-                                gradient_accumulation_count=4,
-                                inputs=[1.0],
-                                optimizer_function=optimizer_function,
-                                outfeed_mask=[False])
+        pipelining_ops.pipeline(
+            [identity, identity, identity, identity],
+            gradient_accumulation_count=4,
+            inputs=[1.0],
+            optimizer_function=optimizer_function,
+            outfeed_mask=[False],
+            reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
       with self.assertRaisesRegex(
           ValueError, "Only one of `outfeed_loss` and "
           "`outfeed_mask` can be set."):
-        pipelining_ops.pipeline([identity, identity, identity, identity],
-                                gradient_accumulation_count=4,
-                                inputs=[1.0],
-                                optimizer_function=optimizer_function,
-                                outfeed_queue=outfeed_queue,
-                                outfeed_mask=[False],
-                                outfeed_loss=True)
+        pipelining_ops.pipeline(
+            [identity, identity, identity, identity],
+            gradient_accumulation_count=4,
+            inputs=[1.0],
+            optimizer_function=optimizer_function,
+            outfeed_queue=outfeed_queue,
+            outfeed_mask=[False],
+            outfeed_loss=True,
+            reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedMask(self):
@@ -1321,12 +1373,14 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       def my_net(x):
-        return pipelining_ops.pipeline([stage1, stage, stage, stage],
-                                       gradient_accumulation_count=8,
-                                       inputs=[x],
-                                       outfeed_queue=outfeed_queue,
-                                       optimizer_function=optimizer_function,
-                                       outfeed_mask=[True, False])
+        return pipelining_ops.pipeline(
+            [stage1, stage, stage, stage],
+            gradient_accumulation_count=8,
+            inputs=[x],
+            outfeed_queue=outfeed_queue,
+            optimizer_function=optimizer_function,
+            outfeed_mask=[True, False],
+            reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
@@ -1358,10 +1412,12 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       def my_net():
-        return pipelining_ops.pipeline([stage1, stage2, stage2, stage2],
-                                       gradient_accumulation_count=8,
-                                       inputs=[42.0],
-                                       outfeed_queue=outfeed_queue)
+        return pipelining_ops.pipeline(
+            [stage1, stage2, stage2, stage2],
+            gradient_accumulation_count=8,
+            inputs=[42.0],
+            outfeed_queue=outfeed_queue,
+            reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net)
@@ -1379,8 +1435,12 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       actual = np.array(sess.run(outfed)).flatten()
       self.assertAllEqual(expected, actual)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testOutfeedLossAccumulated(self):
+  def testOutfeedLossAccumulated(self, reduction_method):
     """ Tests accumulating the loss from the optimizer function. """
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
@@ -1414,7 +1474,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                        outfeed_queue=outfeed_queue,
                                        optimizer_function=optimizer_function,
                                        outfeed_loss=True,
-                                       accumulate_outfeed=True)
+                                       accumulate_outfeed=True,
+                                       reduction_method=reduction_method)
 
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[0.0])
@@ -1426,7 +1487,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(pipeline)
       # Loss of '1' is accumulated 8 times.
-      self.assertAllEqual([8], sess.run(outfed))
+      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+        self.assertAllEqual([8], sess.run(outfed))
+      else:
+        self.assertAllEqual([1], sess.run(outfed))
 
     # There should be 2 GA-adds. One for the weight and one for the outfeed.
     report_json = pva.openReport(report_helper.find_report())
@@ -1435,8 +1499,12 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ]
     self.assert_compute_sets_contain_list(report_json, ok)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testOutfeedAccumulatedTraining(self):
+  def testOutfeedAccumulatedTraining(self, reduction_method):
     """
     Tests accumulating an output from the last computational stage when
     training.
@@ -1471,7 +1539,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                        inputs=[x],
                                        outfeed_queue=outfeed_queue,
                                        optimizer_function=optimizer_function,
-                                       accumulate_outfeed=True)
+                                       accumulate_outfeed=True,
+                                       reduction_method=reduction_method)
 
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
@@ -1483,7 +1552,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(pipeline)
       # '1' is accumulated 8 times.
-      self.assertAllEqual([[8]], sess.run(outfed))
+      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+        self.assertAllEqual([[8]], sess.run(outfed))
+      else:
+        self.assertAllEqual([[1]], sess.run(outfed))
 
     report_json = pva.openReport(report_helper.find_report())
     # There should be 2 GA-adds. One for the weight and one for the outfeed.
@@ -1492,8 +1564,12 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ]
     self.assert_compute_sets_contain_list(report_json, ok)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testOutfeedAccumulatedTrainingSetDtype(self):
+  def testOutfeedAccumulatedTrainingSetDtype(self, reduction_method):
     """
     Tests accumulating a float16 loss, setting the accumulator dtype to float32
     to avoid overflow.
@@ -1525,7 +1601,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                        outfeed_queue=outfeed,
                                        optimizer_function=optimizer_function,
                                        accumulate_outfeed=True,
-                                       accumulate_outfeed_dtype=dtype)
+                                       accumulate_outfeed_dtype=dtype,
+                                       reduction_method=reduction_method)
 
       with ops.device("/device:IPU:0"):
         pipeline_16 = ipu_compiler.compile(partial(my_net, None), inputs=[1.0])
@@ -1546,14 +1623,27 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(pipeline_16)
       # Buffer overflows float16
       val = sess.run(outfed)[0]
-      self.assertTrue(val > np.finfo(np.float16).max
-                      or val < np.finfo(np.float16).min)
+      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+        self.assertTrue(val > np.finfo(np.float16).max
+                        or val < np.finfo(np.float16).min)
+      else:
+        # With MEAN, we don't overflow, but we do see an underflow.
+        self.assertAllEqual([30000], val)
+
       sess.run(pipeline_32)
       # '1' is accumulated 8 times, + 24 ga count * 10000 addition to the loss
-      self.assertAllEqual([[240008]], sess.run(outfed2))
+      val = sess.run(outfed2)[0]
+      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+        self.assertAllEqual([[240008]], [val])
+      else:
+        self.assertAllEqual([[30001]], [val])
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testOutfeedAccumulatedTrainingMultipleOutputs(self):
+  def testOutfeedAccumulatedTrainingMultipleOutputs(self, reduction_method):
     """
     Tests accumulating two outputs from the last computational stage when
     training.
@@ -1589,7 +1679,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                        inputs=[x, y],
                                        outfeed_queue=outfeed_queue,
                                        optimizer_function=optimizer_function,
-                                       accumulate_outfeed=True)
+                                       accumulate_outfeed=True,
+                                       reduction_method=reduction_method)
 
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0, 2.0])
@@ -1601,7 +1692,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(pipeline)
       # '1' is accumulated 8 times, '2' is accumulated 8 times.
-      self.assertAllEqual([[8], [16]], sess.run(outfed))
+      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+        self.assertAllEqual([[8], [16]], sess.run(outfed))
+      else:
+        self.assertAllEqual([[1], [2]], sess.run(outfed))
 
     report_json = pva.openReport(report_helper.find_report())
     # There should be 3 GA-adds. One for the weight and one for each output.
@@ -1611,8 +1705,12 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ]
     self.assert_compute_sets_contain_list(report_json, ok)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testOutfeedAccumulatedInference(self):
+  def testOutfeedAccumulatedInference(self, reduction_method):
     """ Tests accumulating an output from the last computational stage. """
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
@@ -1635,7 +1733,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
             gradient_accumulation_count=8,
             inputs=[x],
             outfeed_queue=outfeed_queue,
-            accumulate_outfeed=True)
+            accumulate_outfeed=True,
+            reduction_method=reduction_method)
 
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
@@ -1647,15 +1746,22 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(pipeline)
       # '1' is accumulated 8 times.
-      self.assertAllEqual([[8]], sess.run(outfed))
+      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+        self.assertAllEqual([[8]], sess.run(outfed))
+      else:
+        self.assertAllEqual([[1]], sess.run(outfed))
 
     report_json = pva.openReport(report_helper.find_report())
     # There should be 1 GA-add for the outfeed.
     ok = ['GradientAccumulatorAddWithScale']
     self.assert_compute_sets_contain_list(report_json, ok)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testOutfeedAccumulatedInferenceMultipleOutputs(self):
+  def testOutfeedAccumulatedInferenceMultipleOutputs(self, reduction_method):
     """ Tests accumulating 2 outputs from the last computational stage. """
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
@@ -1678,7 +1784,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
             gradient_accumulation_count=8,
             inputs=[x, y],
             outfeed_queue=outfeed_queue,
-            accumulate_outfeed=True)
+            accumulate_outfeed=True,
+            reduction_method=reduction_method)
 
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0, 2.0])
@@ -1690,7 +1797,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(pipeline)
       # '1' is accumulated 8 times, '2' is accumulated 8 times.
-      self.assertAllEqual([[8], [16]], sess.run(outfed))
+      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+        self.assertAllEqual([[8], [16]], sess.run(outfed))
+      else:
+        self.assertAllEqual([[1], [2]], sess.run(outfed))
 
     report_json = pva.openReport(report_helper.find_report())
     # There should be a GA-add for each output from the last stage.
@@ -1717,7 +1827,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
             [identity, identity, identity, dictstage],
             gradient_accumulation_count=8,
             inputs=[x],
-            outfeed_queue=outfeed_queue)
+            outfeed_queue=outfeed_queue,
+            reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
@@ -1760,12 +1871,14 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.LAST)
 
     def my_net(x):
-      return pipelining_ops.pipeline([stage1, identity, identity, identity],
-                                     gradient_accumulation_count=8,
-                                     inputs=[x],
-                                     outfeed_queue=outfeed_queue,
-                                     optimizer_function=optimizer_function,
-                                     accumulate_outfeed=True)
+      return pipelining_ops.pipeline(
+          [stage1, identity, identity, identity],
+          gradient_accumulation_count=8,
+          inputs=[x],
+          outfeed_queue=outfeed_queue,
+          optimizer_function=optimizer_function,
+          accumulate_outfeed=True,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device("/device:IPU:0"):
       with self.assertRaisesRegex(
@@ -1801,11 +1914,13 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       def my_net(x):
-        return pipelining_ops.pipeline([stage1, stage2],
-                                       gradient_accumulation_count=4,
-                                       inputs=[x],
-                                       outfeed_queue=outfeed_queue,
-                                       optimizer_function=optimizer_function)
+        return pipelining_ops.pipeline(
+            [stage1, stage2],
+            gradient_accumulation_count=4,
+            inputs=[x],
+            outfeed_queue=outfeed_queue,
+            optimizer_function=optimizer_function,
+            reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
       with ops.device("/device:IPU:0"):
         ipu_compiler.compile(my_net, inputs=[0.0])
@@ -1845,12 +1960,14 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       def my_net(x):
-        return pipelining_ops.pipeline([stage1, identity, identity, identity],
-                                       gradient_accumulation_count=8,
-                                       inputs=[x],
-                                       outfeed_queue=outfeed_queue,
-                                       optimizer_function=optimizer_function,
-                                       outfeed_loss=True)
+        return pipelining_ops.pipeline(
+            [stage1, identity, identity, identity],
+            gradient_accumulation_count=8,
+            inputs=[x],
+            outfeed_queue=outfeed_queue,
+            optimizer_function=optimizer_function,
+            outfeed_loss=True,
+            reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
@@ -1909,11 +2026,13 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                    lambda: constant_op.constant(2.0))
 
     def my_net():
-      return pipelining_ops.pipeline([stage1, stage2, stage3],
-                                     6,
-                                     inputs=[],
-                                     infeed_queue=infeed_queue,
-                                     outfeed_queue=outfeed_queue)
+      return pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          6,
+          inputs=[],
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with tu.ipu_session() as sess:
       with ops.device("/device:IPU:0"):
@@ -2220,7 +2339,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           optimizer_function=optimizer_function,
-          name="Pipeline")
+          name="Pipeline",
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
       return pipeline_op
 
     def compiled_model():
@@ -2248,8 +2368,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       # L(x) = w * x + y
       # dL(x)/dw = x
       # This would overflow in fp16:
-      expected_accumulated_gradient = gradient_accumulation_count * x.astype(
-          gradient_accumulation_dtype)
+      expected_accumulated_gradient = x.astype(gradient_accumulation_dtype)
 
       self.assertAllEqual(expected_accumulated_gradient,
                           actual_accumulated_gradient)
@@ -2331,7 +2450,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           inputs=[indices],
           outfeed_queue=outfeed_queue,
           optimizer_function=optimizer_function,
-          name="Pipeline")
+          name="Pipeline",
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device("/device:IPU:0"):
       train_op = ipu_compiler.compile(model)
@@ -2377,7 +2497,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           inputs=[x],
           outfeed_queue=outfeed_queue,
           optimizer_function=optimizer_function,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped,
+          reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -2386,8 +2507,12 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       with self.assertRaisesRegex(ValueError, 'No variables to optimize.'):
         ipu_compiler.compile(my_net, inputs=[x])
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareMultiIPUStage(self):
+  def testPipelineCompareMultiIPUStage(self, reduction_method):
     # Resnet like network.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -2484,17 +2609,23 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
         [stage1, stage2, stage3],
-        lambda: [], [],
+        lambda: [],
+        [],
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
         53362,
-        device_mapping=[pipelining_ops._ALL_DEVICES, 0, 1])  # pylint: disable=W0212
+        device_mapping=[pipelining_ops._ALL_DEVICES, 0, 1],  # pylint: disable=W0212
+        reduction_method=reduction_method)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareParStages(self):
+  def testPipelineCompareParStages(self, reduction_method):
     # Resnet like network.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -2577,12 +2708,12 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     def stage2a(x, _):
       with variable_scope.variable_scope("stage2a", use_resource=True):
-        x = block("b", 2, 64, 2, x)
+        x = block("b", 2, 64, 1, x)
         return x
 
     def stage2b(x, label):
       with variable_scope.variable_scope("stage2b", use_resource=True):
-        x = block("b", 2, 64, 2, x)
+        x = block("b", 2, 64, 1, x)
         return x, label
 
     def stage3(xa, xb, label):
@@ -2604,10 +2735,15 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         optimizer,
         self,
         53362,
-        device_mapping=[0, [0, 1], 1])
+        device_mapping=[0, [0, 1], 1],
+        reduction_method=reduction_method)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareParStagesInfeed(self):
+  def testPipelineCompareParStagesInfeed(self, reduction_method):
     # Resnet like network.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -2718,7 +2854,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         optimizer,
         self,
         61059,
-        device_mapping=[[0, 1], 0, 1])
+        device_mapping=[[0, 1], 0, 1],
+        reduction_method=reduction_method)
 
   def __makePipelineGATestNetwork(self, reduction_method):
     dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
@@ -2773,8 +2910,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         ipu_compiler.compile(my_net, inputs=[])
 
   @parameterized.parameters([
-      'SUM',
-      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
+      'SUM', 'MEAN', ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
   ])
   @test_util.deprecated_graph_mode_only
   def testPipelineGAReduceMethodSupported(self, reduction_method):
@@ -2783,20 +2920,16 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with ops.device("/device:IPU:0"):
       ipu_compiler.compile(my_net, inputs=[])
 
-  @parameterized.parameters([
-      'MEAN',
-      'RUNNING_MEAN',
-      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.MEAN,  # pylint: disable=line-too-long
-      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.
-      RUNNING_MEAN  # pylint: disable=line-too-long
-  ])
+  @parameterized.parameters(
+      ['RUNNING_MEAN', ga.GradientAccumulationReductionMethod.RUNNING_MEAN])
   @test_util.deprecated_graph_mode_only
   def testPipelineGAReduceMethodUnsupported(self, reduction_method):
     my_net = self.__makePipelineGATestNetwork(reduction_method)
 
     with ops.device("/device:IPU:0"):
       with self.assertRaisesRegex(
-          ValueError, 'Only GradientAccumulationReductionMethod.SUM is '
+          ValueError, 'Only GradientAccumulationReductionMethod.SUM and '
+          'GradientAccumulationReductionMethod.MEAN are '
           'supported at the moment'):
         ipu_compiler.compile(my_net, inputs=[])
 

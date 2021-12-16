@@ -29,8 +29,8 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent as gd
 from tensorflow.python.ipu import embedding_ops
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu import loops
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 

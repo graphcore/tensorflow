@@ -88,17 +88,9 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         return [array_ops.placeholder(np.float32, shape=[])]
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4],
-        inputs_fn, [10.01],
-        repeat_count,
-        gradient_accumulation_count,
-        dataset_fn,
-        optimizer,
-        self,
-        19714,
-        True,
-        pipelining_ops.PipelineSchedule.Sequential,
-        batch_serialization_iterations=4)
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 19714, True,
+        pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -197,17 +189,9 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
-        [stage1, stage2, stage3],
-        lambda: [], [],
-        repeat_count,
-        gradient_accumulation_count,
-        dataset_fn,
-        optimizer,
-        self,
-        199241,
-        True,
-        pipelining_ops.PipelineSchedule.Sequential,
-        batch_serialization_iterations=5)
+        [stage1, stage2, stage3], lambda: [], [], repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 199241, True,
+        pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -254,17 +238,9 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4],
-        lambda: [], [],
-        repeat_count,
-        gradient_accumulation_count,
-        dataset_fn,
-        optimizer,
-        self,
-        60107,
-        True,
-        pipelining_ops.PipelineSchedule.Sequential,
-        batch_serialization_iterations=6)
+        [stage1, stage2, stage3, stage4], lambda: [], [], repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 60107, True,
+        pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare4(self):
@@ -320,17 +296,9 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         return [array_ops.placeholder(np.float32, shape=[])]
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4],
-        inputs_fn, [10.01],
-        repeat_count,
-        gradient_accumulation_count,
-        dataset_fn,
-        optimizer,
-        self,
-        19922,
-        True,
-        pipelining_ops.PipelineSchedule.Sequential,
-        batch_serialization_iterations=4)
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 19922, True,
+        pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare5(self):
@@ -377,17 +345,9 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         return [array_ops.placeholder(np.float32, shape=[])]
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4],
-        inputs_fn, [10.01],
-        repeat_count,
-        gradient_accumulation_count,
-        dataset_fn,
-        optimizer,
-        self,
-        8014,
-        True,
-        pipelining_ops.PipelineSchedule.Sequential,
-        batch_serialization_iterations=2)
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 8014, True,
+        pipelining_ops.PipelineSchedule.Sequential)
 
 
 if __name__ == "__main__":

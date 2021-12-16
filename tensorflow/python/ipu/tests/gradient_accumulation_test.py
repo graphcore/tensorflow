@@ -637,9 +637,13 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
     self._compare6(rmsprop.RMSPropOptimizer(0.01),
                    replicated_optimizer_state_sharding)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
-  def testGradientAccumulationDtype(self):
+  def testGradientAccumulationDtype(self, reduction_method):
     gradient_accumulation_count = 8
     gradient_accumulation_dtype = np.float32
 
@@ -686,7 +690,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
           CastingGradientDescent(self),
           gradient_accumulation_count,
           dtype=dtype_getter,
-          reduction_method=ga.GradientAccumulationReductionMethod.SUM)  # pylint: disable=line-too-long
+          reduction_method=reduction_method)
       return opt.minimize(loss)
 
     def model():
@@ -722,8 +726,11 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
       # L(x) = w * x + y
       # dL(x)/dw = x
       # This would overflow in fp16:
-      expected_accumulated_gradient = gradient_accumulation_count * x.astype(
-          gradient_accumulation_dtype)
+      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+        expected_accumulated_gradient = gradient_accumulation_count * x.astype(
+            gradient_accumulation_dtype)
+      else:
+        expected_accumulated_gradient = x.astype(gradient_accumulation_dtype)
 
       self.assertAllEqual(expected_accumulated_gradient,
                           actual_accumulated_gradient)
