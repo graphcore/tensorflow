@@ -99,6 +99,9 @@ struct TensorTarget {
 
 using TensorAllocationMap = std::map<TensorLocation, TensorTarget>;
 
+// Dumps tensor allocation map with given log level
+void DumpTensorAllocationMap(const TensorAllocationMap& map, int32 log_level);
+
 /**
  * This class finds all instructions that explicitly add tensors to the
  * graph.  For each one of them, it locates the downstream consumers of that

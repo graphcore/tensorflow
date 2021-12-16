@@ -774,6 +774,11 @@ StatusOr<bool> ForwardAllocation::Run(HloModule* module) {
     found_target |= found_dependent_target_in_computation;
   }
 
+  if (found_target) {
+    VLOG(2) << "After the ForwardAllocation:";
+    DumpTensorAllocationMap(tensor_allocation_map, 2);
+  }
+
   return found_target;
 }
 
