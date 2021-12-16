@@ -37,6 +37,33 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+void DumpTensorAllocationMap(const TensorAllocationMap& map, int32 log_level) {
+  if (!VLOG_IS_ON(log_level)) {
+    return;
+  }
+
+  VLOG(log_level) << "Tensor allocation map:";
+  if (map.empty()) {
+    VLOG(log_level) << " --empty--";
+    return;
+  }
+  const HloComputation* last_comp = nullptr;
+  for (auto& entry : map) {
+    auto& location = entry.first;
+    const auto* inst = location.instruction;
+    auto& target = entry.second;
+    auto* comp = inst->parent();
+    if (comp != last_comp) {
+      VLOG(log_level) << " Computation " << comp->name() << ":";
+      last_comp = comp;
+    }
+    VLOG(log_level) << "  " << inst->name() << ":"
+                    << location.flattened_output_tuple_index
+                    << ", target: " << target.tgt->name() << ":"
+                    << target.input_index;
+  }
+}
+
 namespace {
 
 struct AllocationLocation {
@@ -478,6 +505,9 @@ StatusOr<bool> AllocationFinder::Run(HloModule* module) {
       }
     }
   }
+
+  VLOG(2) << "After the AllocationFinder:";
+  DumpTensorAllocationMap(tensor_allocation_map, 2);
 
   return true;
 }
