@@ -220,6 +220,71 @@ TEST_F(AllBufferSetTest, IsBufferType) {
   ASSERT_FALSE(AllOfBufferSet(buffer_set, is_remote_pred));
 }
 
+struct BufferUseKindPropogationTest : HloPoplarBufferTest {
+  HloPoplarBuffer buffer0_ =
+      HloPoplarBuffer(0, {nullptr, {}}, BufferLocality::kRemoteMemory);
+  HloPoplarBuffer buffer1_ =
+      HloPoplarBuffer(1, {nullptr, {}}, BufferLocality::kRemoteMemory);
+  HloPoplarBuffer buffer2_ =
+      HloPoplarBuffer(2, {nullptr, {}}, BufferLocality::kRemoteMemory);
+};
+
+TEST_F(BufferUseKindPropogationTest, BufferSetConstruction) {
+  HloPoplarBufferSet read_only_buffer_set({&buffer0_, &buffer1_},
+                                          BufferUseKind::USE_ALIAS_READ_ONLY);
+
+  ASSERT_EQ(buffer0_.use_kind(), BufferUseKind::USE_ALIAS_READ_ONLY);
+  ASSERT_EQ(buffer1_.use_kind(), BufferUseKind::USE_ALIAS_READ_ONLY);
+
+  HloPoplarBufferSet no_alias_buffer_set({&buffer0_, &buffer1_, &buffer2_},
+                                         BufferUseKind::USE_NO_ALIAS);
+
+  // Make sure that higher USE_KINDS aren't overwritten.
+  ASSERT_EQ(buffer0_.use_kind(), BufferUseKind::USE_ALIAS_READ_ONLY);
+  ASSERT_EQ(buffer1_.use_kind(), BufferUseKind::USE_ALIAS_READ_ONLY);
+  ASSERT_EQ(buffer2_.use_kind(), BufferUseKind::USE_NO_ALIAS);
+}
+
+TEST_F(BufferUseKindPropogationTest, BufferSetAddUseKind) {
+  HloPoplarBufferSet read_only_buffer_set({&buffer0_, &buffer1_});
+  ASSERT_EQ(buffer0_.use_kind(), BufferUseKind::USE_NO_ALIAS);
+  ASSERT_EQ(buffer1_.use_kind(), BufferUseKind::USE_NO_ALIAS);
+
+  read_only_buffer_set.AddNewBufferUse(BufferUseKind::USE_ALIAS_READ_ONLY);
+  ASSERT_EQ(buffer0_.use_kind(), BufferUseKind::USE_ALIAS_READ_ONLY);
+  ASSERT_EQ(buffer1_.use_kind(), BufferUseKind::USE_ALIAS_READ_ONLY);
+
+  // Make sure that higher USE_KINDS aren't overwritten.
+  read_only_buffer_set.AddNewBufferUse(BufferUseKind::USE_NO_ALIAS);
+  ASSERT_EQ(buffer0_.use_kind(), BufferUseKind::USE_ALIAS_READ_ONLY);
+  ASSERT_EQ(buffer1_.use_kind(), BufferUseKind::USE_ALIAS_READ_ONLY);
+}
+
+TEST_F(BufferUseKindPropogationTest, BufferSetAddBuffer) {
+  ASSERT_NE(buffer0_.use_kind(), BufferUseKind::USE_ALIAS_READ_WRITE);
+
+  HloPoplarBufferSet read_write_buffer_set(BufferUseKind::USE_ALIAS_READ_WRITE);
+  read_write_buffer_set.AddBuffer(&buffer0_);
+  ASSERT_EQ(buffer0_.use_kind(), BufferUseKind::USE_ALIAS_READ_WRITE);
+}
+
+TEST_F(BufferUseKindPropogationTest, BufferSetUnion) {
+  HloPoplarBufferSet read_write_buffer_set({&buffer1_, &buffer2_},
+                                           BufferUseKind::USE_ALIAS_READ_WRITE);
+  HloPoplarBufferSet no_alias_buffer_set({&buffer0_},
+                                         BufferUseKind::USE_NO_ALIAS);
+
+  HloPoplarBufferSet union_set;
+  auto result =
+      union_set.AssignUnionOf({&read_write_buffer_set, &no_alias_buffer_set},
+                              BufferUseKind::USE_NO_ALIAS);
+  ASSERT_TRUE(result);
+
+  ASSERT_EQ(buffer0_.use_kind(), BufferUseKind::USE_ALIAS_READ_WRITE);
+  ASSERT_EQ(buffer1_.use_kind(), BufferUseKind::USE_ALIAS_READ_WRITE);
+  ASSERT_EQ(buffer2_.use_kind(), BufferUseKind::USE_ALIAS_READ_WRITE);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

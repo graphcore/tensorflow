@@ -220,6 +220,12 @@ HloPoplarBuffer::HloPoplarBuffer(HloPoplarBuffer::Id id,
                                  BufferLocality locality)
     : id_(id), defining_position_(defining_position), locality_(locality) {}
 
+void HloPoplarBuffer::AddUseKind(BufferUseKind use_kind) {
+  if (use_kind > use_kind_) {
+    use_kind_ = use_kind;
+  }
+}
+
 bool HloPoplarBuffer::operator==(const HloPoplarBuffer& other) const {
   const bool equal = defining_position() == other.defining_position();
   if (equal) {
@@ -244,9 +250,10 @@ std::ostream& operator<<(std::ostream& out, const HloPoplarBuffer& buffer) {
 }
 
 HloPoplarBufferSet::HloPoplarBufferSet(
-    absl::Span<const HloPoplarBuffer* const> buffers, BufferUseKind use_kind)
-    : buffers_(buffers.begin(), buffers.end()), use_kind_(use_kind) {
+    absl::Span<HloPoplarBuffer* const> buffers, BufferUseKind use_kind)
+    : buffers_(buffers.begin(), buffers.end()) {
   SortAndUniquifyBuffers();
+  AddNewBufferUse(use_kind);
 }
 
 const HloPoplarBuffer& HloPoplarBufferSet::GetUniqueBuffer() const {
@@ -254,11 +261,12 @@ const HloPoplarBuffer& HloPoplarBufferSet::GetUniqueBuffer() const {
   return *buffers_[0];
 }
 
-bool HloPoplarBufferSet::AddBuffer(const HloPoplarBuffer* buffer) {
+bool HloPoplarBufferSet::AddBuffer(HloPoplarBuffer* buffer) {
   // Find the position where to insert it.
   auto it = std::lower_bound(buffers_.begin(), buffers_.end(), buffer,
                              HloPoplarBuffer::IdLessThan);
   if (it == buffers_.end() || (*it)->id() != buffer->id()) {
+    buffer->AddUseKind(GetUseKind());
     buffers_.insert(it, buffer);
     return true;
   }
@@ -272,11 +280,11 @@ bool HloPoplarBufferSet::AssignUnionOf(
   for (const HloPoplarBufferSet* buffer_set : buffer_sets) {
     BufferUseKind buffer_set_use_kind = buffer_set->GetUseKind();
     union_set.AddNewBufferUse(buffer_set_use_kind);
-    for (const HloPoplarBuffer* buffer : buffer_set->buffers()) {
-      union_set.buffers_.push_back(buffer);
+    for (HloPoplarBuffer* buffer : buffer_set->buffers()) {
+      union_set.AddBuffer(buffer);
     }
   }
-  union_set.SortAndUniquifyBuffers();
+
   if (*this != union_set) {
     *this = union_set;
     return true;
@@ -290,6 +298,10 @@ void HloPoplarBufferSet::AddNewBufferUse(BufferUseKind use) {
   // modified before.
   if (use > this->use_kind_) {
     use_kind_ = use;
+
+    for (auto* buffer : buffers_) {
+      buffer->AddUseKind(use);
+    }
   }
 }
 

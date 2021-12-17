@@ -232,6 +232,12 @@ class HloPoplarBuffer {
     return defining_position().instruction;
   }
 
+  // Returns aggregated use kind
+  BufferUseKind use_kind() const { return use_kind_; }
+
+  // Adds a new use of the buffer
+  void AddUseKind(BufferUseKind use_kind);
+
   const ShapeIndex& index() const { return defining_position().index; }
 
   const Shape& shape() const { return instruction()->shape(); }
@@ -245,6 +251,8 @@ class HloPoplarBuffer {
   const Id id_;
   const HloPoplarPosition defining_position_;
   const BufferLocality locality_;
+
+  BufferUseKind use_kind_ = BufferUseKind::USE_NO_ALIAS;
 };
 
 std::ostream& operator<<(std::ostream& out, const HloPoplarBuffer& buffer);
@@ -256,14 +264,12 @@ class HloPoplarBufferSet {
   explicit HloPoplarBufferSet(
       BufferUseKind use_kind = BufferUseKind::USE_NO_ALIAS)
       : use_kind_(use_kind) {}
-  HloPoplarBufferSet(absl::Span<const HloPoplarBuffer* const> buffers,
+  HloPoplarBufferSet(absl::Span<HloPoplarBuffer* const> buffers,
                      BufferUseKind use_kind = BufferUseKind::USE_NO_ALIAS);
 
   // Return the vector of HloPoplarBuffer in the set. Buffers in the vector are
   // unique and stably sorted by buffer id.
-  const std::vector<const HloPoplarBuffer*>& buffers() const {
-    return buffers_;
-  }
+  const std::vector<HloPoplarBuffer*>& buffers() const { return buffers_; }
 
   int64 size() const { return buffers_.size(); }
 
@@ -277,7 +283,7 @@ class HloPoplarBufferSet {
   void AddNewBufferUse(BufferUseKind use);
 
   // Add a buffer to the current set - returns true iff a buffer was added.
-  bool AddBuffer(const HloPoplarBuffer* buffer);
+  bool AddBuffer(HloPoplarBuffer* buffer);
 
   // Sets this buffer set to the union of the given buffer sets. Returns whether
   // this value set changed.
@@ -295,9 +301,9 @@ class HloPoplarBufferSet {
   void SortAndUniquifyBuffers();
 
   // HloPoplarBuffers sorted by HloPoplarBuffer::Id.
-  std::vector<const HloPoplarBuffer*> buffers_;
+  std::vector<HloPoplarBuffer*> buffers_;
 
-  BufferUseKind use_kind_;
+  BufferUseKind use_kind_ = BufferUseKind::USE_NO_ALIAS;
 };
 
 std::ostream& operator<<(std::ostream& out,

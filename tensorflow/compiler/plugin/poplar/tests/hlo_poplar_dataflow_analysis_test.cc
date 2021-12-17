@@ -1010,6 +1010,73 @@ ENTRY main {
   EXPECT_FALSE(analysis->BufferIsDefinedAt(copy, {2}));
 }
 
+TEST_F(HloPoplarDataflowAnalysisTest, GlobalBufferUseKindDirect) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY main {
+  param0 = f32[] parameter(0)
+  param1 = f32[] parameter(1)
+  const0 = f32[] constant(1)
+  ROOT add = f32[] add(param0, const0)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  auto param0 = FindInstruction(m.get(), "param0");
+  auto param1 = FindInstruction(m.get(), "param1");
+
+  // Check that the BufferUseKind of the param0/1 HloPoplarBuffers reflects
+  // how they're used by the rest of the graph.
+  auto param0_buffer_set = analysis->GetBufferSet(param0);
+  ASSERT_EQ(param0_buffer_set.GetUseKind(), BufferUseKind::USE_NO_ALIAS);
+
+  auto param0_buffer = param0_buffer_set.GetUniqueBuffer();
+  ASSERT_EQ(param0_buffer.use_kind(), BufferUseKind::USE_ALIAS_READ_WRITE);
+
+  auto param1_buffer_set = analysis->GetBufferSet(param1);
+  ASSERT_EQ(param1_buffer_set.GetUseKind(), BufferUseKind::USE_NO_ALIAS);
+
+  auto param1_buffer = param1_buffer_set.GetUniqueBuffer();
+  ASSERT_EQ(param1_buffer.use_kind(), BufferUseKind::USE_NO_ALIAS);
+}
+
+TEST_F(HloPoplarDataflowAnalysisTest, GlobalBufferUseKindIndirect) {
+  std::string hlo = R"(
+HloModule top
+function {
+  fn_param0 = f32[] parameter(0)
+  const0 = f32[] constant(1)
+  add = f32[] add(fn_param0, const0)
+  ROOT tuple = (f32[]) tuple(add)
+}
+
+ENTRY main {
+  param0 = f32[] parameter(0)
+  param1 = f32[] parameter(1)
+  ROOT call0 = (f32[]) call(param0), to_apply=function, backend_config="{\"call_config\":{\"type\":\"Function\",\"function_config\":{\"num_modified_remote_buffer_inputs\":\"1\",\"num_unmodified_remote_buffer_inputs\":\"0\"}}}"
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  // Check that the BufferUseKind of param0s HloPoplarBuffer reflects
+  // how its used by the rest of the graph.
+  auto param0 = FindInstruction(m.get(), "param0");
+  auto param0_buffer_set = analysis->GetBufferSet(param0);
+  ASSERT_EQ(param0_buffer_set.GetUseKind(), BufferUseKind::USE_NO_ALIAS);
+
+  auto param0_buffer = param0_buffer_set.GetUniqueBuffer();
+  ASSERT_EQ(param0_buffer.use_kind(), BufferUseKind::USE_ALIAS_READ_WRITE);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
