@@ -845,6 +845,9 @@ class _ConfigBase(object):
   def to_dict(self):
     """
     Export the configuration stored within this configuration object to a dict.
+
+    Returns:
+      A dictionary containing the configuration.
     """
     dct = {}
     # Iterate over the user-facing attributes and their metadata.
@@ -862,6 +865,9 @@ class _ConfigBase(object):
   def from_dict(self, dct):
     """
     Restore configuration from a dict object.
+
+    Args:
+      dct: A dictionary containing a configuration.
     """
     # Iterate over the user-facing attributes and their metadata.
     for name, metadata in self._user_attributes.items():
@@ -885,13 +891,19 @@ class _ConfigBase(object):
   def to_json(self):
     """
     Export the configuration stored within this configuration object as a
-    string of JSON.
+    JSON string.
+
+    Returns:
+      A JSON string containing the configuration.
     """
     return json.dumps(self.to_dict())
 
   def from_json(self, json_cfg):
     """
-    Restore configuration from a string of JSON.
+    Restore configuration from a JSON string.
+
+    Args:
+      json_cfg: A JSON string containing a configuration.
     """
     return self.from_dict(json.loads(json_cfg))
 

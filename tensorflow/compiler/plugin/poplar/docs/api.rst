@@ -67,8 +67,12 @@ For example, this will not work:
 
 .. autoclass:: tensorflow.python.ipu.config.IPUConfig
 
-  .. automethod:: tensorflow.python.ipu.config.IPUConfig.get_attribute_metadata()
-  .. automethod:: tensorflow.python.ipu.config.IPUConfig.configure_ipu_system()
+  .. automethod:: tensorflow.python.ipu.config.IPUConfig.get_attribute_metadata(attr)
+  .. automethod:: tensorflow.python.ipu.config.IPUConfig.configure_ipu_system(device='cpu')
+  .. automethod:: tensorflow.python.ipu.config.IPUConfig.from_dict(dct)
+  .. automethod:: tensorflow.python.ipu.config.IPUConfig.to_dict()
+  .. automethod:: tensorflow.python.ipu.config.IPUConfig.from_json(json_cfg)
+  .. automethod:: tensorflow.python.ipu.config.IPUConfig.to_json()
 
 .. Looping utilities
 
