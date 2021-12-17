@@ -47,7 +47,7 @@ def build_cells(opts, cell_class, sizes):
 
 
 def build_tf_rnn1(opts, inputs):
-  rnn_layer = build_cells(opts, rnn_cell.BasicRNNCell, [256])[0]
+  rnn_layer = build_cells(opts, rnn_cell.BasicRNNCell, [opts.dim * 2])[0]
   _, rnn_layer = rnn.dynamic_rnn(cell=rnn_layer,
                                  inputs=inputs,
                                  dtype=inputs.dtype,
@@ -56,7 +56,7 @@ def build_tf_rnn1(opts, inputs):
 
 
 def build_tf_rnn2(opts, inputs):
-  rnn_layers = build_cells(opts, rnn_cell.BasicRNNCell, [128, 128])
+  rnn_layers = build_cells(opts, rnn_cell.BasicRNNCell, [opts.dim, opts.dim])
   multi_rnn_cell = rnn_cell.MultiRNNCell(rnn_layers)
   _, final_state = rnn.dynamic_rnn(cell=multi_rnn_cell,
                                    inputs=inputs,
@@ -66,7 +66,7 @@ def build_tf_rnn2(opts, inputs):
 
 
 def build_tf_lstm1(opts, inputs):
-  rnn_layers = build_cells(opts, rnn_cell.LSTMCell, [128, 384])
+  rnn_layers = build_cells(opts, rnn_cell.LSTMCell, [opts.dim, opts.dim * 3])
   multi_rnn_cell = rnn_cell.MultiRNNCell(rnn_layers)
   _, final_state = rnn.dynamic_rnn(cell=multi_rnn_cell,
                                    inputs=inputs,
@@ -76,7 +76,7 @@ def build_tf_lstm1(opts, inputs):
 
 
 def build_tf_gru1(opts, inputs):
-  rnn_layers = build_cells(opts, rnn_cell.GRUCell, [128, 64])
+  rnn_layers = build_cells(opts, rnn_cell.GRUCell, [opts.dim * 2, opts.dim])
   multi_rnn_cell = rnn_cell.MultiRNNCell(rnn_layers)
   _, final_state = rnn.dynamic_rnn(cell=multi_rnn_cell,
                                    inputs=inputs,
@@ -86,25 +86,25 @@ def build_tf_gru1(opts, inputs):
 
 
 def build_model_rnn1(opts, inputs):
-  net = SimpleRNN(256, input_shape=[opts.steps, opts.in_dim])(inputs)
+  net = SimpleRNN(opts.dim * 2, input_shape=[opts.steps, opts.in_dim])(inputs)
   net = Dropout(1 - opts.output_keep_prob)(net)
   net = Dense(units=opts.out_dim)(net)
   return net
 
 
 def build_model_rnn2(opts, inputs):
-  net = SimpleRNN(256,
+  net = SimpleRNN(opts.dim * 2,
                   input_shape=[opts.steps, opts.in_dim],
                   return_sequences=True)(inputs)
   net = Dropout(1 - opts.output_keep_prob)(net)
-  net = SimpleRNN(128)(net)
+  net = SimpleRNN(opts.dim)(net)
   net = Dropout(1 - opts.output_keep_prob)(net)
   net = Dense(units=opts.out_dim)(net)
   return net
 
 
 def build_model_cnn1(opts, inputs):
-  size = 64
+  size = opts.dim
   cnn = Conv1D(size,
                kernel_size=4,
                input_shape=[opts.steps, opts.in_dim],
@@ -133,13 +133,14 @@ class TestOptions:
     self.dtype = np.float32
     self.batch_size = 2
     self.steps = 5
+    self.dim = 256
     self.in_dim = 16
     self.out_dim = 16
     self.output_keep_prob = 0.75
 
 
 class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
-  def _run_test(self, opts, model_func, cs_counters, total_mem, max_mem):
+  def _run_test(self, opts, model_func, cycles, total_mem, max_mem):
     dataset = data.Dataset \
         .range((opts.iterations + 2) * opts.batches_per_step) \
         .map(lambda i: {
@@ -162,7 +163,9 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     # Configure the IPU
     cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
-    report_helper.set_autoreport_options(cfg)
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 4
     ipu.utils.configure_ipu_system(cfg)
     ipu.utils.move_variable_initialization_to_cpu()
 
@@ -175,79 +178,59 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(out)
 
     report = pva.openReport(report_helper.find_report())
-
-    self.assert_compute_sets_count(report, cs_counters)
-    self.assert_total_tile_memory(report, total_mem, tolerance=0.1)
-    self.assert_max_tile_memory(report, max_mem, tolerance=0.1)
+    self.assert_number_of_executions(report, 1)
+    self.assert_execution_report_cycles(report, 0, cycles, tolerance=0.01)
+    self.assert_total_tile_memory(report, total_mem, tolerance=0.01)
+    self.assert_max_tile_memory(report, max_mem, tolerance=0.01)
 
   @parameterized.parameters(
       {
           'build': build_tf_rnn1,
-          'counters': {
-              'Copy': 23 if TF1 else 21,
-              'host-exchange-local-copy': 1
-          },
-          'total_memory': 4232578 if TF1 else 3948575,
-          'max_memory': 542547 if TF1 else 509134
+          'cycles': 87610341 if TF1 else 87860863,
+          'total_memory': 12378522 if TF1 else 13129963,
+          'max_memory': 3117577 if TF1 else 3359730
       }, {
           'build': build_tf_rnn2,
-          'counters': {
-              'Copy': 34 if TF1 else 31,
-              'host-exchange-local-copy': 1
-          },
-          'total_memory': 2908764 if TF1 else 2864563,
-          'max_memory': 368781 if TF1 else 363662
+          'cycles': 62667061 if TF1 else 118460479,
+          'total_memory': 8634783 if TF1 else 8909938,
+          'max_memory': 2177166 if TF1 else 2292513
       }, {
           'build': build_tf_lstm1,
-          'counters': {
-              'Copy': 48 if TF1 else 41,
-              'host-exchange-local-copy': 1
-          },
-          'total_memory': 47341002,
-          'max_memory': 5923927
+          'cycles': 1086942603 if TF1 else 1102156072,
+          'total_memory': 151061717,
+          'max_memory': 37776657
       }, {
           'build': build_tf_gru1,
-          'counters': {
-              'Copy': 51 if TF1 else 58,
-              'host-exchange-local-copy': 1
-          },
-          'total_memory': 4744597 if TF1 else 4725345,
-          'max_memory': 616981 if TF1 else 594266
+          'cycles': 469429671 if TF1 else 586828276,
+          'total_memory': 58114499 if TF1 else 57145333,
+          'max_memory': 14563678 if TF1 else 14289524
       }, {
           'build': build_model_rnn1,
-          'counters': {
-              'Copy': 35 if TF1 else 32,
-              'host-exchange-local-copy': 2
-          },
-          'total_memory': 4544890 if TF1 else 3893674,
-          'max_memory': 572439 if TF1 else 490372
+          'cycles': 86929788 if TF1 else 80404544,
+          'total_memory': 12141874 if TF1 else 12359011,
+          'max_memory': 3044815 if TF1 else 3106806
       }, {
           'build': build_model_rnn2,
-          'counters': {
-              'Copy': 57 if TF1 else 51,
-              'host-exchange-local-copy': 2
-          },
-          'total_memory': 6082439 if TF1 else 6148616,
-          'max_memory': 777772 if TF1 else 786597
+          'cycles': 145986926 if TF1 else 133548944,
+          'total_memory': 18177930 if TF1 else 17409220,
+          'max_memory': 4550619 if TF1 else 4362290
       }, {
           'build': build_model_cnn1,
-          'counters': {
-              'Copy': 14
-          },
-          'total_memory': 1277668,
-          'max_memory': 160393,
+          'cycles': 144497392,
+          'total_memory': 13088427 if TF1 else 17369471,
+          'max_memory': 3275543 if TF1 else 4345119,
           'options': {
               'batch_size': 1,
               'steps': 32
           }
       })
   @test_util.deprecated_graph_mode_only
-  def test_rnn(self, build, counters, total_memory, max_memory, options=None):
+  def test_rnn(self, build, cycles, total_memory, max_memory, options=None):
     opts = TestOptions()
     if options:
       for key, value in options.items():
         setattr(opts, key, value)
-    self._run_test(opts, build, counters, total_memory, max_memory)
+    self._run_test(opts, build, cycles, total_memory, max_memory)
 
 
 if __name__ == "__main__":
