@@ -92,7 +92,9 @@ class GroupNormalization(ipu_layer.IPULayer):
     self.trainable = trainable
 
   def build(self, input_shape):
+    return self._build_impl(input_shape, input_shape)
 
+  def _build_impl(self, input_shape, parameter_shape=None):
     if self.built:
       return
 
@@ -121,20 +123,21 @@ class GroupNormalization(ipu_layer.IPULayer):
     else:
       raise ValueError('Unsupported data format, group norm only supports NCHW'
                        '(channel axis 1) and NHWC (channel axis -1).')
-    params_shape = [self.channels]
+
+    parameter_shape = parameter_shape if parameter_shape else [self.channels]
 
     if self.scale:
       self.gamma = self.add_weight("gamma",
                                    dtype=self.dtype,
                                    initializer=self.gamma_initializer,
-                                   shape=params_shape,
+                                   shape=parameter_shape,
                                    trainable=self.trainable)
 
     if self.center:
       self.beta = self.add_weight("beta",
                                   dtype=self.dtype,
                                   initializer=self.beta_initializer,
-                                  shape=params_shape,
+                                  shape=parameter_shape,
                                   trainable=self.trainable)
 
     self.built = True
@@ -159,11 +162,15 @@ class GroupNormalization(ipu_layer.IPULayer):
                                       dtype=self.dtype,
                                       shape=params_shape)
 
+    # Flatten beta and gamma as this operation is 2D.
+    beta = array_ops.reshape(self.beta, [-1])
+    gamma = array_ops.reshape(self.gamma, [-1])
+
     def group_norm_training():
       outputs, _, _ = gen_popnn_ops.popnn_group_norm_training(
           inputs=inputs,
-          gamma=self.gamma,
-          beta=self.beta,
+          gamma=gamma,
+          beta=beta,
           data_format=self.data_format,
           epsilon=self.epsilon,
           num_groups=self.groups,
@@ -181,8 +188,8 @@ class GroupNormalization(ipu_layer.IPULayer):
 
       outputs = gen_popnn_ops.popnn_group_norm_inference(
           inputs=inputs,
-          gamma=self.gamma,
-          beta=self.beta,
+          gamma=gamma,
+          beta=beta,
           mean=mean,
           inv_std_dev=inv_std_dev,
           data_format=self.data_format,
@@ -367,6 +374,10 @@ class LayerNormalization(GroupNormalization):
     for idx, x in enumerate(self.axis):
       if x < 0:
         self.axis[idx] = ndims + x
+
+    # Create the parameter shape before flattening the non-reduced dimensions.
+    parameter_shape = [input_shape[dim] for dim in self.axis]
+
     self.axis = sorted(self.axis)
 
     # Validate axes
@@ -394,7 +405,8 @@ class LayerNormalization(GroupNormalization):
                                        [input_shape[dim] for dim in self.axis],
                                        1)
 
-    super().build([None, self.num_reduced_elements])
+    inputs_shape = [None, self.num_reduced_elements]
+    super()._build_impl(inputs_shape, parameter_shape)
 
   # pylint: disable=useless-super-delegation
   def call(self, inputs, training=None):
