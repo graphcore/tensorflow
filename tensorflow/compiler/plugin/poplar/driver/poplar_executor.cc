@@ -1577,8 +1577,11 @@ Status PoplarExecutor::AttachToPoplarDevice() {
       ipu_.Device().getDriverVersion(mj, mn, pt);
       VLOG(1) << "Poplar driver: " << mj << "." << mn << "." << pt;
 
+      const auto num_local_ipus = ipu_.Device().getTarget().getNumIPUs();
       const auto& ids = ipu_.Device().getDriverIDs();
-      LOG(INFO) << "Device /device:IPU:" << ordinal_ << " attached to IPU"
+      LOG(INFO) << "TensorFlow device /device:IPU:" << ordinal_
+                << " attached to " << num_local_ipus << " IPU"
+                << (num_local_ipus > 1 ? "s" : "") << " with Poplar device ID"
                 << (ids.size() > 1 ? "s" : "") << ": "
                 << absl::StrJoin(ids, ",");
     }
