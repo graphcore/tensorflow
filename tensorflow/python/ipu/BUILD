@@ -368,6 +368,23 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "gelu_erf_test",
+    size = "medium",
+    srcs = ["tests/gelu_erf_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+    ],
+    shard_count = 8,
+)
+
+tf_py_test(
     name = "embedding_lookup_test",
     size = "large",
     srcs = ["tests/embedding_lookup_test.py"],
@@ -1663,6 +1680,7 @@ test_suite(
         "frontend_attributes_test",
         "functional_ops_test",
         "gcl_test",
+        "gelu_erf_test",
         "gradient_accumulation_test",
         "group_conv_test",
         "host_embedding_lookup_ga_test",
@@ -1687,7 +1705,6 @@ test_suite(
         "map_gradient_optimizer_test",
         "math_ops_test",
         "multi_conv_test",
-        "nn_ops_test",
         "op_util_test",
         "outfeed_ordinal_test",
         "pipelining_batch_serial_sequential_hw_test",

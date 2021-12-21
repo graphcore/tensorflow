@@ -463,6 +463,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_matcher",
         "//tensorflow/compiler/plugin/poplar/driver/tools:single_hlo_matcher",
         "//tensorflow/compiler/plugin/poplar/driver/tools:util",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:elementwise",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:non_linearity",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:scaled_inplace",
     ],

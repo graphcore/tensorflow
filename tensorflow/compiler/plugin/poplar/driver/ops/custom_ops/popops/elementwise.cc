@@ -121,6 +121,7 @@ REGISTER_INPLACE_HLO_OP(kTanh, UnaryElementwiseOp);
 REGISTER_POPLAR_OP(Inverse, UnaryElementwiseOp);
 REGISTER_POPLAR_OP(Square, UnaryElementwiseOp);
 REGISTER_POPLAR_OP(Erf, UnaryElementwiseOp);
+REGISTER_POPLAR_OP(GeluErf, UnaryElementwiseOp);
 
 struct NaryOutput {
   poplar::program::Sequence sequence;

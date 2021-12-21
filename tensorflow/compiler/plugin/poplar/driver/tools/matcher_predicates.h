@@ -36,6 +36,7 @@ bool IsCompareGreater(const HloInstruction*);
 bool IsCompareGreaterOrEqual(const HloInstruction*);
 bool IsConstantZero(const HloInstruction*);
 bool IsConstantOne(const HloInstruction*);
+std::function<bool(const HloInstruction* inst)> IsConstantF(float value);
 bool IsReductionFusion(const HloInstruction*);
 bool IsWideConstant(const HloInstruction*);
 bool IsWideConstantZero(const HloInstruction*);

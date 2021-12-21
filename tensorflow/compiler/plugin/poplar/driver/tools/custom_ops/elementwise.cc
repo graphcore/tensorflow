@@ -63,6 +63,27 @@ StatusOr<std::unique_ptr<HloInstruction>> HloErfInstructionFactoryFunc(
 
 static HloPoplarInstructionFactory erf_factory(PoplarOp::Erf,
                                                HloErfInstructionFactoryFunc);
+}  // namespace
+
+// GeluErf
+std::unique_ptr<HloInstruction> HloGeluErfInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return absl::make_unique<HloGeluErfInstruction>(new_operands[0]);
+}
+
+std::unique_ptr<HloInstruction> CreateGeluErf(HloInstruction* const operand) {
+  return absl::make_unique<HloGeluErfInstruction>(operand);
+}
+
+namespace {
+StatusOr<std::unique_ptr<HloInstruction>> HloGeluErfInstructionFactoryFunc(
+    HloCustomCallInstruction* call) {
+  return CreateGeluErf(call->mutable_operand(0));
+}
+
+static HloPoplarInstructionFactory gelu_erf_factory(
+    PoplarOp::GeluErf, HloGeluErfInstructionFactoryFunc);
 
 }  // namespace
 
