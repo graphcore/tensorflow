@@ -18,6 +18,7 @@ limitations under the License.
 #include <memory>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/elementwise.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/non_linearity.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/scaled_inplace.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -85,6 +86,38 @@ StatusOr<PatternInstructionOutputs> CreateScaledInplaceXbYFromMatch(
 
 // clang-format off
 static const std::vector<HloMatcherPattern> patterns = {
+  HloMatcherPattern(
+    PatternType("gelu_erf"),
+    PatternReplaceFn([](const HloMatcherMatched& matched) ->
+        StatusOr<PatternInstructionOutputs> {
+      auto inputs = matched.GetInputs();
+      if (inputs.size() != 1) {
+          return InternalError("GeluErf accepts only one argument");
+      }
+
+      return PatternInstructionOutputs{
+        matched.computation->AddInstruction(CreateGeluErf(inputs[0]))
+      };
+    }),
+    PatternMetaTarget(0),
+    PatternInputs({3}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloOpcode::kMultiply, NodeOperands({5, 1})},
+      {HloOpcode::kMultiply, NodeOperands({3, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({4})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16OrF32},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantF(0.5f)},
+      {HloOpcode::kAdd, NodeOperands({6, 7})},
+      {HloOpcode::kCustomCall, NodeOperands({9}),
+        IsPoplarInstruction(PoplarOp::Erf)},
+      {HloOpcode::kBroadcast, NodeOperands({8})},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantF(1.0f)},
+      {HloOpcode::kMultiply, NodeOperands({3, 10})},
+      {HloOpcode::kBroadcast, NodeOperands({11})},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantF(0.70710678118f)},
+    })),
+
   HloMatcherPattern(
     PatternType("relu"),
     PatternReplaceFn([](const HloMatcherMatched& matched)

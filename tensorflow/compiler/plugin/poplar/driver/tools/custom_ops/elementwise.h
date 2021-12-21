@@ -104,6 +104,19 @@ class HloErfInstruction : public HloElementwiseUnaryBase<PoplarOp::Erf> {
 };
 std::unique_ptr<HloInstruction> CreateErf(HloInstruction* const operand);
 
+// GeluErf
+class HloGeluErfInstruction
+    : public HloElementwiseUnaryBase<PoplarOp::GeluErf> {
+ public:
+  using HloElementwiseUnaryBase::HloElementwiseUnaryBase;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+std::unique_ptr<HloInstruction> CreateGeluErf(HloInstruction* const operand);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

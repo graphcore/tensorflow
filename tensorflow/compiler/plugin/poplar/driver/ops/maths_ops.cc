@@ -111,6 +111,9 @@ StatusOr<popops::expr::UnaryOpType> LookupUnaryFn(const HloInstruction* inst) {
       if (IsPoplarInstruction(PoplarOp::Erf, inst)) {
         return popops::expr::UnaryOpType::ERF;
       }
+      if (IsPoplarInstruction(PoplarOp::GeluErf)) {
+        return popops::expr::UnaryOpType::GELU_ERF;
+      }
       TF_FALLTHROUGH_INTENDED;
     }
     default:

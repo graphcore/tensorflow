@@ -119,6 +119,7 @@ enum PoplarOp {
   GradientAccumulationCount = 114;
   CollectiveReorder = 115;
   UndoCollectiveReorder = 116;
+  GeluErf = 117;
 
   // Supported Fusions.
   Conv_biasadd = 200;

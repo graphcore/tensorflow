@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
 #include <functional>
+#include <limits>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/norm.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
@@ -55,6 +56,42 @@ bool IsConstantZero(const HloInstruction* inst) {
 bool IsConstantOne(const HloInstruction* inst) {
   return inst->IsConstant() && !ShapeUtil::IsZeroElementArray(inst->shape()) &&
          inst->literal().IsAll(1);
+}
+
+std::function<bool(const HloInstruction* inst)> IsConstantF(float value) {
+  return [value](const HloInstruction* inst) -> bool {
+    if (inst->IsConstant() && !ShapeUtil::IsZeroElementArray(inst->shape())) {
+      if (inst->shape().element_type() == PrimitiveType::F32) {
+        return (std::fabs(inst->literal().GetFirstElement<float>() - value) <
+                std::numeric_limits<float>::epsilon());
+      }
+
+      if (inst->shape().element_type() == PrimitiveType::F16) {
+        // Store the fp16 epsilon. Does some casting to juggle the Eigen
+        // types.
+        //
+        // The value of the smallest positive normal number in fp16 is:
+        // S |   E   |      F      |  Hex
+        // --+-------+-------------+-------
+        // 0 | 00001 | 0000000000b = 0x4000
+        //
+        // We use 2x the smallest positive normal number as the epsilon for
+        // comparison.
+        // S |   E   |      F      |  Hex
+        // --+-------+-------------+-------
+        // 0 | 00010 | 0000000000b = 0x8000
+        //
+        // https://en.wikipedia.org/wiki/Half-precision_floating-point_format
+        const float fp16_epsilon = static_cast<float>(static_cast<Eigen::half>(
+            Eigen::half_impl::raw_uint16_to_half(0x0800)));
+        return std::fabs(static_cast<float>(
+                             inst->literal().GetFirstElement<Eigen::half>()) -
+                         value) < fp16_epsilon;
+      }
+    }
+
+    return false;
+  };
 }
 
 bool IsExternalPadding(const HloInstruction* inst) {
