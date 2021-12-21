@@ -325,17 +325,31 @@ some help for each option. The available options are described below:
 
       This option is a more selective alternative to ``--use_synthetic_data``;
       you shouldn't specify both.
-  * - ``--synthetic_data_initializer``
-    - When using synthetic data, the graph's transferred input tensors
-      will never be initialized and can therefore have undefined content. You
-      can use this option to prevent this by initializing these tensors on the
-      device.
-      The tensors can be initialized with a constant value *X*:
-      :samp:`--synthetic_data_initializer={X}`
-      or random values: ``--synthetic_data_initializer=random``.
+  * - :samp:`--synthetic_data_initializer={X}`
+    - When using synthetic data, by default, the graph's input tensors will not
+      be initialized and therefore will have undefined content.
+      You can use this option to initialize these tensors on the device.
 
-      For this option to have an effect, you must also specify
-      ``--use_synthetic_data`` **or** ``--synthetic_data_categories``.
+      The argument ``X`` can be set to ``uniform``, ``normal``, or a number.
+
+      When ``uniform`` is specified, each input tensor is initialized with
+      uniformly distributed random numbers (of the numerical type of the tensor).
+      The range of the uniform distribution is between the
+      minimum and maximum representable numbers for the specific numerical
+      type of each tensor (for example, for FP16, the range would be [-65504.0,
+      +65504.0], whereas for uint16, it would be [0,65535]).
+
+      When ``normal`` is specified, each input tensor is initialized with random
+      numbers drawn from the Gaussian distribution of mean 0 and
+      standard deviation 1, when the tensor type is floating point.
+      For integral types, a constant of value 1 is used instead.
+
+      Finally, when the argument ``X`` is a number, only its integer part is
+      used to initialize the tensors.
+
+      For the ``--synthetic_data_initializer`` option to have an effect, you
+      must also specify ``--use_synthetic_data`` **or**
+      ``--synthetic_data_categories``.
   * - :samp:`--while_loop_brute_force_max_trip_count={int}`
     - Sets the upper bound for how many iterations a while loop will be
       simulated for in order to brute force the number of times it will be
