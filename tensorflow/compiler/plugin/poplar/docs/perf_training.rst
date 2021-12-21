@@ -101,11 +101,46 @@ See entries in the :ref:`api-section` for more details.
 For a more practical example, the Graphcore tutorials repository contains a `detailed tutorial about using infeeds and outfeeds with TensorFlow <https://github.com/graphcore/tutorials/tree/sdk-release-2.4/tutorials/tensorflow2/infeed_outfeed>`_.
 
 
+.. _infeed-simplification:
+
+
+Optional simplification of infeeds and outfeeds
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You do not need to manually create the :class:`~tensorflow.python.ipu.IPUInfeedQueue`.
+Instead, provided you are inside an ``IPUStrategy``, you can simply wrap your ``Dataset``
+in a Python ``iterator``, like so:
+
+.. code-block:: python
+
+  dataset = create_dataset()
+  iterator = iter(dataset)
+
+This will then allow you to use :func:`next` within the on-device training loop to
+retrieve the next item of data:
+
+.. code-block:: python
+
+  def model_fn(...):
+    for _ in tf.range(steps_per_execution):
+      # Get the next input.
+      features, labels = next(iterator)
+
+Outfeeds are iterable objects. This means that you can use a ``for`` loop to
+dequeue elements, or use built-ins like :func:`sum` to aggregate the outputs.
+
+.. literalinclude:: outfeed_iterator_example.py
+  :language: python
+  :linenos:
+  :emphasize-lines: 12-13, 26-29
+  :start-at: strategy = ipu.ipu_strategy.IPUStrategy()
+  :end-at: print(f"Loss: {total / steps_per_execution}")
+
 Accessing outfeed queue results during execution
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-An ``IPUOutfeedQueue`` supports the results being fetched continuously during
-the execution of a model. This feature can be used to monitor the performance of
+An ``IPUOutfeedQueue`` allows a program to fetch results continuously during
+the execution of a model. You can use this feature to monitor the performance of
 the network, for example to check that the loss is decreasing, or to stream
 predictions for an inference model to achieve minimal latency for each sample.
 

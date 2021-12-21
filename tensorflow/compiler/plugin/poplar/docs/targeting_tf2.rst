@@ -109,7 +109,9 @@ using ``tf.range`` inside ``tf.function``; AutoGraph will convert this to a
 ``tf.while_loop`` for you.
 
 For example, the code below creates a custom training loop using an on-device
-loop to train a simple model:
+loop to train a simple model. It uses the syntactical shorthand for infeed
+creation and defines an iterator over the outfeed, as described in
+:numref:`infeed-simplification`.
 
 .. literalinclude:: targeting_tf2_example3.py
   :language: python

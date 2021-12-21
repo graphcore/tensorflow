@@ -3245,6 +3245,17 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "outfeed_iterator_example",
+    size = "large",
+    srcs = ["docs/outfeed_iterator_example.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 py_test(
     name = "distributed_training_example",
     size = "large",
@@ -3953,6 +3964,7 @@ test_suite(
         "keras_tf2_example10",
         "keras_porting_example",
         "outfeed_example",
+        "outfeed_iterator_example",
         "perf_training_example",
         "pre_compile_example_runner",
         "targeting_tf2_example1",
