@@ -95,8 +95,6 @@ def _tf_http_archive_impl(ctx):
         else:
             urls = ctx.attr.urls
 
-        patch_file = ctx.attr.patch_file
-        patch_file = ctx.path(Label(patch_file)) if patch_file else None
         ctx.download_and_extract(
             url = urls,
             sha256 = ctx.attr.sha256,
@@ -113,8 +111,12 @@ def _tf_http_archive_impl(ctx):
             _execute_and_check_ret_code(ctx,
                                         [create_mirror_script, archive_path, archive_name, mirror])
 
-        if patch_file:
-            ctx.patch(patch_file, strip = 1)
+        patch_files = ctx.attr.patch_file
+        if patch_files:
+            for patch_file in patch_files:
+                patch_file = ctx.path(Label(patch_file)) if patch_file else None
+                if patch_file:
+                    ctx.patch(patch_file, strip = 1)
 
     for dst, src in link_dict.items():
         ctx.delete(dst)
@@ -127,7 +129,7 @@ _tf_http_archive = repository_rule(
         "urls": attr.string_list(mandatory = True),
         "strip_prefix": attr.string(),
         "type": attr.string(),
-        "patch_file": attr.string(),
+        "patch_file": attr.string_list(),
         "build_file": attr.string(),
         "system_build_file": attr.string(),
         "link_files": attr.string_dict(),

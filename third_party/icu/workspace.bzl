@@ -15,5 +15,5 @@ def repo():
         ],
         build_file = "//third_party/icu:BUILD.bazel",
         system_build_file = "//third_party/icu:BUILD.system",
-        patch_file = "//third_party/icu:udata.patch",
+        patch_file = ["//third_party/icu:udata.patch"],
     )

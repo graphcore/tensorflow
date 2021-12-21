@@ -166,7 +166,7 @@ def _tf_repositories():
     tf_http_archive(
         name = "cudnn_frontend_archive",
         build_file = "//third_party:cudnn_frontend.BUILD",
-        patch_file = "//third_party:cudnn_frontend_header_fix.patch",
+        patch_file = ["//third_party:cudnn_frontend_header_fix.patch"],
         sha256 = "60b085e1412144e0b24f8b01809857d3a4491c9b2b1c58f0766f673b791d05ca",
         strip_prefix = "cudnn-frontend-51e60d891b689d618e7a623509a779c422a420f7",
         urls = [
@@ -213,7 +213,7 @@ def _tf_repositories():
         sha256 = "18011eb6dc999f030df609ff2b528e0067ab9f76921fa0b53e35859e06a0aa10",
         strip_prefix = "ComputeLibrary-21.05",
         build_file = "//third_party/compute_library:BUILD",
-        patch_file = "//third_party/compute_library:compute_library.patch",
+        patch_file = ["//third_party/compute_library:compute_library.patch"],
         urls = [
             "https://storage.googleapis.com/mirror.tensorflow.org/github.com/ARM-software/ComputeLibrary/archive/v21.05.tar.gz",
             "https://github.com/ARM-software/ComputeLibrary/archive/v21.05.tar.gz",
@@ -342,7 +342,7 @@ def _tf_repositories():
     tf_http_archive(
         name = "png",
         build_file = "//third_party:png.BUILD",
-        patch_file = "//third_party:png_fix_rpi.patch",
+        patch_file = ["//third_party:png_fix_rpi.patch"],
         sha256 = "ca74a0dace179a8422187671aee97dd3892b53e168627145271cad5b5ac81307",
         strip_prefix = "libpng-1.6.37",
         system_build_file = "//third_party/systemlibs:png.BUILD",
@@ -367,7 +367,7 @@ def _tf_repositories():
     tf_http_archive(
         name = "gif",
         build_file = "//third_party:gif.BUILD",
-        patch_file = "//third_party:gif_fix_strtok_r.patch",
+        patch_file = ["//third_party:gif_fix_strtok_r.patch"],
         sha256 = "31da5562f44c5f15d63340a09a4fd62b48c45620cd302f77a6d9acf0077879bd",
         strip_prefix = "giflib-5.2.1",
         system_build_file = "//third_party/systemlibs:gif.BUILD",
@@ -572,7 +572,7 @@ def _tf_repositories():
 
     tf_http_archive(
         name = "com_google_protobuf",
-        patch_file = "//third_party/protobuf:protobuf.patch",
+        patch_file = ["//third_party/protobuf:protobuf.patch"],
         sha256 = "cfcba2df10feec52a84208693937c17a4b5df7775e1635c1e3baffc487b24c9b",
         strip_prefix = "protobuf-3.9.2",
         system_build_file = "//third_party/systemlibs:protobuf.BUILD",
@@ -635,7 +635,7 @@ def _tf_repositories():
         sha256 = "b956598d8cbe168b5ee717b5dafa56563eb5201a947856a6688bbeac9cac4e1f",
         strip_prefix = "grpc-b54a5b338637f92bfcf4b0bc05e0f57a5fd8fadd",
         system_build_file = "//third_party/systemlibs:grpc.BUILD",
-        patch_file = "//third_party/grpc:generate_cc_env_fix.patch",
+        patch_file = ["//third_party/grpc:generate_cc_env_fix.patch"],
         system_link_files = {
             "//third_party/systemlibs:BUILD": "bazel/BUILD",
             "//third_party/systemlibs:grpc.BUILD": "src/compiler/BUILD",
@@ -749,7 +749,7 @@ def _tf_repositories():
     tf_http_archive(
         name = "nccl_archive",
         build_file = "//third_party:nccl/archive.BUILD",
-        patch_file = "//third_party/nccl:archive.patch",
+        patch_file = ["//third_party/nccl:archive.patch"],
         sha256 = "3ae89ddb2956fff081e406a94ff54ae5e52359f5d645ce977c7eba09b3b782e6",
         strip_prefix = "nccl-2.8.3-1",
         urls = [
