@@ -277,16 +277,43 @@ StatusOr<bool> EmbeddingPlansPreplanning::Run(HloModule* module) {
   HloComputation* entry_computation =
       resources_.annotations.flattened_module->entry_computation();
 
-  InputToSliceUsersMap slice_ops;
+  InputToSliceUsersMap slice_ops_map;
+  std::vector<const HloInstruction*> slice_ops;
 
   for (const HloInstruction* inst :
        entry_computation->MakeInstructionPostOrder()) {
     if (IsMultiSliceOrUpdate(inst)) {
-      slice_ops[inst->operand(0)].push_back(inst);
+      slice_ops.push_back(inst);
+      slice_ops_map[inst->operand(0)].push_back(inst);
     }
   }
 
-  TF_RETURN_IF_ERROR(PopulatePlans(slice_ops, resources_));
+  // Count slice ops in the current HloModule.
+  size_t non_flattened_slice_ops = 0;
+  for (auto* comp : module->computations()) {
+    for (const HloInstruction* inst : comp->instructions()) {
+      if (IsMultiSliceOrUpdate(inst)) {
+        const HloInstruction* flattened_slice_op =
+            resources_.annotations.flattened_inst_map_fwd.at(inst);
+        ++non_flattened_slice_ops;
+        // Check precise mappings if VLOG is enabled.
+        if (VLOG_IS_ON(1)) {
+          if (absl::c_find(slice_ops, flattened_slice_op) == slice_ops.end()) {
+            VLOG(1) << "Slice operation " << inst->ToString()
+                    << " does not exist in the flattened graph";
+          }
+        }
+      }
+    }
+  }
+  if (slice_ops.size() != non_flattened_slice_ops) {
+    return FailedPrecondition(
+        "%s flattened module with %d slice ops does not match HloModule with "
+        "%d slice ops",
+        name(), slice_ops.size(), non_flattened_slice_ops);
+  }
+
+  TF_RETURN_IF_ERROR(PopulatePlans(slice_ops_map, resources_));
   return false;
 }
 
