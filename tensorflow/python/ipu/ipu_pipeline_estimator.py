@@ -60,7 +60,7 @@ class IPUPipelineEstimatorSpec(
               training_hooks=None,
               evaluation_hooks=None,
               prediction_hooks=None,
-              reduction_method=ga.GradientAccumulationReductionMethod.MEAN,
+              reduction_method=ga.GradientAccumulationReductionMethod.SUM,
               **pipeline_op_kwargs):
     """Creates a validated `IPUPipelineEstimatorSpec` instance.
 
