@@ -307,7 +307,7 @@ def pipeline(computational_stages,
              accumulate_outfeed=False,
              accumulate_outfeed_dtype=None,
              outfeed_mask=None,
-             reduction_method=ga.GradientAccumulationReductionMethod.MEAN,
+             reduction_method=ga.GradientAccumulationReductionMethod.SUM,
              name=None):
   """
   Sets up a series of computational stages, where the outputs of one stage are
