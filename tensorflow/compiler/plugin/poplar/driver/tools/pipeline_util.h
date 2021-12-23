@@ -162,7 +162,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
 // the inlined root instruction.
 StatusOr<absl::flat_hash_map<HloInstruction*, HloInstruction*>>
 InlineComputation(HloInstruction* caller, HloComputation* comp_to_inline,
-                  bool copy_sharding = false);
+                  bool copy_sharding = false, bool replace_caller = true);
 
 // Get a schedule from a pipeline.
 StatusOr<PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>

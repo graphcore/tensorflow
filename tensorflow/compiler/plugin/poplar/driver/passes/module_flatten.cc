@@ -15,9 +15,9 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
-#include "tensorflow/compiler/xla/service/call_inliner.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 
 #include "tensorflow/core/lib/core/errors.h"
@@ -143,19 +143,29 @@ StatusOr<bool> ModuleFlatten::Run(HloModule* module) {
             if (caller->opcode() == HloOpcode::kCall) {
               TF_RETURN_IF_ERROR(caller->DropAllControlDeps());
               RemoveMapEntry(caller);
-              TF_ASSIGN_OR_RETURN(CallInliner::InlinedInstructionMap map,
-                                  CallInliner::Inline(caller));
+              // Inline the computation - do not replace the caller as it might
+              // elide inputs to the computation - instead do it manually.
+              TF_ASSIGN_OR_RETURN(auto map,
+                                  InlineComputation(caller, inlined_comp,
+                                                    /*copy_sharding=*/false,
+                                                    /*replace_caller=*/false));
+              HloInstruction* new_output =
+                  map.at(inlined_comp->root_instruction());
+              TF_RETURN_IF_ERROR(caller->DropAllControlDeps());
+              TF_RETURN_IF_ERROR(caller->ReplaceAllUsesWith(new_output));
+              TF_RETURN_IF_ERROR(caller->parent()->RemoveInstruction(caller));
 
-              CHECK(map.size() ==
-                    static_cast<size_t>(inlined_comp->instruction_count()));
+              CHECK_EQ(map.size(),
+                       static_cast<size_t>(inlined_comp->instruction_count()));
 
               // Remap/replace any instuctions which have been inlined
               for (auto inlined : map) {
                 auto* original =
                     annotations_.flattened_inst_map_bwd[inlined.first];
                 annotations_.flattened_inst_map_fwd[original] = inlined.second;
-                CHECK(annotations_.flattened_inst_map_bwd.erase(
-                          inlined.first) == 1);
+                CHECK_EQ(
+                    annotations_.flattened_inst_map_bwd.erase(inlined.first),
+                    1);
 
                 if (inlined.first->opcode() != HloOpcode::kParameter) {
                   annotations_.flattened_inst_map_bwd[inlined.second] =
