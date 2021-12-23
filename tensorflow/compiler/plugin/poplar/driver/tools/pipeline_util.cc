@@ -840,7 +840,7 @@ int64 InfeedUserCount(const HloInstruction* infeed, bool use_io_tiles) {
 
 StatusOr<absl::flat_hash_map<HloInstruction*, HloInstruction*>>
 InlineComputation(HloInstruction* caller, HloComputation* comp_to_inline,
-                  bool copy_sharding) {
+                  bool copy_sharding, bool replace_caller) {
   HloComputation* comp = caller->parent();
   // Hoist the computation out.
   absl::flat_hash_map<HloInstruction*, HloInstruction*> hoisting_map;
@@ -867,9 +867,11 @@ InlineComputation(HloInstruction* caller, HloComputation* comp_to_inline,
   }
   HloInstruction* new_root =
       hoisting_map.at(comp_to_inline->root_instruction());
-  // Replace all uses.
-  TF_RETURN_IF_ERROR(caller->DropAllControlDeps());
-  TF_RETURN_IF_ERROR(comp->ReplaceInstruction(caller, new_root));
+  if (replace_caller) {
+    // Replace all uses.
+    TF_RETURN_IF_ERROR(caller->DropAllControlDeps());
+    TF_RETURN_IF_ERROR(comp->ReplaceInstruction(caller, new_root));
+  }
   return hoisting_map;
 }
 

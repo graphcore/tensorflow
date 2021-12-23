@@ -707,6 +707,43 @@ cluster_1  {
             annotations.flattened_module->instruction_count());
 }
 
+TEST_F(ModuleFlattenTest, TestCallUnusedOperands) {
+  std::string hlo_string = R"(
+HloModule top
+
+adder {
+  a0 = f16[] parameter(0)
+  a1 = f16[] parameter(1)
+  a2 = f16[] parameter(2)
+  ROOT add = f16[] add(a0, a1)
+}
+
+cluster_1  {
+  arg0 = f16[] parameter(0)
+  arg1 = f16[] parameter(1)
+  arg2 = f16[] parameter(2)
+  d = f16[] sine(arg2)
+  ROOT c = f16[] call(arg0, arg1, d), to_apply=adder
+}
+  )";
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
+
+  ASSERT_TRUE(annotations.flattened_module.get() != nullptr);
+  EXPECT_EQ(annotations.flattened_module->computation_count(), 1);
+  // Add has been inlined and also the sine operations has not been elided.
+  EXPECT_EQ(
+      annotations.flattened_module->entry_computation()->instruction_count(),
+      5);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
