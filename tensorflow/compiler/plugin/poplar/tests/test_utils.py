@@ -391,18 +391,18 @@ class TestCaseExtensions(object):
       v = IntervalVisitor(f, t)
       step.program.accept(v)
 
-      def checkOverlap(low1, high1, low2, high2):
-        return low1 < high2 and low2 < high1
+    def checkOverlap(low1, high1, low2, high2):
+      return low1 < high2 and low2 < high1
 
-      def getOverlap(low1, high1, low2, high2):
-        overlap = min(high1, high2) - max(low1, low2)
-        return overlap
+    def getOverlap(low1, high1, low2, high2):
+      overlap = min(high1, high2) - max(low1, low2)
+      return overlap
 
-      overlap = 0
-      for compute in computeIntervals:
-        for stream in streamCopyIntervals:
-          if checkOverlap(compute[0], compute[1], stream[0], stream[1]):
-            overlap += getOverlap(compute[0], compute[1], stream[0], stream[1])
+    overlap = 0
+    for compute in computeIntervals:
+      for stream in streamCopyIntervals:
+        if checkOverlap(compute[0], compute[1], stream[0], stream[1]):
+          overlap += getOverlap(compute[0], compute[1], stream[0], stream[1])
 
     computeTotal, streamCopyTotal = (
         sum(i[1] - i[0] for i in intervals)
