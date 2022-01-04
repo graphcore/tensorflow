@@ -76,8 +76,7 @@ class IPUOutfeedQueue(collections_abc.Iterable):
   operation will in this case return a single element.
 
   """
-  def __init__(self, outfeed_mode=None, device_ordinal=None,
-               buffer_depth=None):
+  def __init__(self, outfeed_mode=None, device_ordinal=None, buffer_depth=1):
     """Creates an IPUOutfeedQueue object.
 
     Args:
@@ -88,8 +87,7 @@ class IPUOutfeedQueue(collections_abc.Iterable):
         be used. If not specified will try and deduce the IPU device from the
         current strategy and if that fails will default to "/device:IPU:0".
       buffer_depth: The maximum number of elements Poplar can buffer in
-        external memory before blocking the device. By default the buffer_depth
-        size is automatically determined (currently defaults to 4).
+        external memory before blocking the device.
 
     Raises:
       ValueError: if the types or values are incorrect
@@ -115,8 +113,6 @@ class IPUOutfeedQueue(collections_abc.Iterable):
 
     if device_ordinal < 0:
       raise ValueError('Device ordinal must be >= 0')
-
-    buffer_depth = buffer_depth if buffer_depth else 4
 
     if buffer_depth <= 0:
       raise ValueError('Outfeed buffer depth cannot be less than 1')

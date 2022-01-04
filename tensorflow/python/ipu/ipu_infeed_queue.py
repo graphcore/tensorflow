@@ -103,11 +103,12 @@ class IPUInfeedQueue:
       result = sess.run(res)
 
   """
-  def __init__(self,
-               dataset,
-               device_ordinal=None,
-               prefetch_depth=None,
-               **kwargs):
+  def __init__(
+      self,
+      dataset,
+      device_ordinal=None,
+      prefetch_depth=None,
+      **kwargs):
     """Creates an IPUInfeedQueue object.
 
     Args:
@@ -120,7 +121,7 @@ class IPUInfeedQueue:
       prefetch_depth: the number of elements Poplar will prefetch.
         The depth of the Poplar datastream buffer size which may be prefetched
         before being read by the device. By default the prefetch_depth size is
-        automatically determined (currently defaults to 4). Increasing the size
+        automatically determined (currently defaults to 1). Increasing the size
         of the prefetch_depth allows for prefetching of multiple entries,
         increasing the probability there will be a valid entry in the buffer for
         the device to read before falling back to synchronously fetching the
@@ -139,9 +140,8 @@ class IPUInfeedQueue:
       if not output_shape.is_fully_defined():
         raise ValueError("""Output shape {} is not fully defined. If using \
 tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
-
-    prefetch_depth = prefetch_depth if prefetch_depth else 4
-
+    if prefetch_depth is None:
+      prefetch_depth = 1
     if prefetch_depth <= 0:
       raise ValueError(
           "prefetch_depth must be greater than zero, but it is {}".format(

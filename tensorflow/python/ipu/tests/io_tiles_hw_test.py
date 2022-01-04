@@ -36,11 +36,11 @@ from tensorflow.python.platform import test
 class IoTilesHWTest(test_util.TensorFlowTestCase, parameterized.TestCase):
   def _check_overlap(self, report, use_io_tiles):
     if use_io_tiles:
-      self.assert_compute_io_overlap_percentage(report, 0.50)
+      self.assert_compute_io_overlap_percentage(report, 0.85)
     else:
       with self.assertRaisesRegex(AssertionError,
-                                  r"0\.0 not greater than 0\.5"):
-        self.assert_compute_io_overlap_percentage(report, 0.50)
+                                  r"0\.0 not greater than 0\.85"):
+        self.assert_compute_io_overlap_percentage(report, 0.85)
 
   def _configure_system(self, num_ipus, use_io_tiles, num_io_tiles):
     cfg = IPUConfig()
