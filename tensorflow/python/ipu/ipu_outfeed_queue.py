@@ -77,16 +77,16 @@ class IPUOutfeedQueue:
     """Creates an IPUOutfeedQueue object.
 
     Args:
-      feed_name: a user provided name for the outfeed operation. Must be
-        unique within all IPUOutfeedQueue and IPUInfeedQueue operations.
-      outfeed_mode: `ipu_outfeed_queue.IPUOutfeedMode` type used to control the
-        outfeed behaviour. If not specified then all elements will be returned
-        by the outfeed when the dequeue operation is run.
-      device_ordinal: ordinal of the IPU device on which this queue will be
-        used. By default the queue will be used on "/device/IPU:0".
-      buffer_depth: The maximum number of elements Poplar can buffer in
-        external memory before blocking the device. By default the buffer_depth
-        size is automatically determined (currently defaults to 4).
+        feed_name: a user provided name for the outfeed operation. Must be
+          unique within all IPUOutfeedQueue and IPUInfeedQueue
+          operations.
+        outfeed_mode: `ipu_outfeed_queue.IPUOutfeedMode` type used to control the
+          outfeed behaviour. If not specified then all elements will be
+          returned by the outfeed when the dequeue operation is run.
+        device_ordinal: ordinal of the IPU device on which this queue will be
+          used. By default the queue will be used on "/device/IPU:0".
+        buffer_depth: The maximum number of elements Poplar can buffer in
+          external memory before blocking the device.
 
     Raises:
       ValueError: if the types or values are incorrect
@@ -105,8 +105,6 @@ class IPUOutfeedQueue:
 
     if device_ordinal < 0:
       raise ValueError('Device ordinal must be >= 0')
-
-    buffer_depth = buffer_depth if buffer_depth else 4
 
     if buffer_depth <= 0:
       raise ValueError('Outfeed buffer depth cannot be less than 1')
