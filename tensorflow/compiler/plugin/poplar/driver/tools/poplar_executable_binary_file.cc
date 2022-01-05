@@ -28,20 +28,65 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+static StatusOr<popef::Anchor> ToPopEFAnchor(popef::TensorType type,
+                                             const std::string& name,
+                                             const std::string& handle,
+                                             const xla::Shape& shape) {
+  popef::Anchor anchor;
+  anchor.setName(name);
+  anchor.setHandle(handle);
+  std::vector<int64_t> popef_shape;
+  ToPopEFShape(shape, popef_shape);
+  anchor.tensorInfo().setShape(popef_shape);
+  TF_ASSIGN_OR_RETURN(popef::DataType shape_type,
+                      ToPopEFDataType(shape.element_type()));
+  anchor.tensorInfo().setDataType(shape_type);
+  anchor.setType(type);
+  return anchor;
+}
+
 template <class FeedInfos>
-static Status AddPopEFAnchors(const FeedInfos& infos, popef::TensorType type,
-                              popef::Metadata& metadata) {
+static Status AddPopEFFeedAnchors(const FeedInfos& infos,
+                                  popef::TensorType type,
+                                  popef::Metadata& metadata) {
   for (auto& info : infos) {
-    popef::Anchor anchor;
-    anchor.setName(UnmangleInputName(info.name));
-    anchor.setHandle(info.handle);
-    std::vector<int64_t> shape;
-    ToPopEFShape(info.shape, shape);
-    anchor.tensorInfo().setShape(shape);
-    TF_ASSIGN_OR_RETURN(popef::DataType shape_type,
-                        ToPopEFDataType(info.shape.element_type()));
-    anchor.tensorInfo().setDataType(shape_type);
-    anchor.setType(type);
+    auto add_shape = [&](int shape_idx, const xla::Shape& shape) -> Status {
+      auto handle =
+          (type == popef::TensorType::INPUT)
+              ? GetInfeedCopyHandle(info.config.feed_id(), shape_idx)
+              : GetOutfeedCopyHandle(info.config.feed_id(), shape_idx);
+      TF_ASSIGN_OR_RETURN(popef::Anchor anchor,
+                          ToPopEFAnchor(type, handle, handle, shape));
+      metadata.anchors().push_back(anchor);
+      return Status::OK();
+    };
+    if (info.shape.IsTuple()) {
+      auto shapes = &info.shape;
+      if (info.shape.tuple_shapes_size() == 2 &&
+          info.shape.tuple_shapes(0).IsTuple() &&
+          info.shape.tuple_shapes(1).IsToken()) {
+        shapes = &(info.shape.tuple_shapes(0));
+      }
+      for (int shape_idx = 0; shape_idx < shapes->tuple_shapes_size();
+           shape_idx++) {
+        TF_RETURN_IF_ERROR(
+            add_shape(shape_idx, shapes->tuple_shapes(shape_idx)));
+      }
+    } else {
+      TF_RETURN_IF_ERROR(add_shape(0, info.shape));
+    }
+  }
+  return Status::OK();
+}
+
+template <class FeedInfos>
+static Status AddPopEFEntryAnchors(const FeedInfos& infos,
+                                   popef::TensorType type,
+                                   popef::Metadata& metadata) {
+  for (auto& info : infos) {
+    TF_ASSIGN_OR_RETURN(popef::Anchor anchor,
+                        ToPopEFAnchor(type, UnmangleInputName(info.Name()),
+                                      info.Handles()[0], info.Shape()));
     metadata.anchors().push_back(anchor);
   }
   return Status::OK();
@@ -49,7 +94,7 @@ static Status AddPopEFAnchors(const FeedInfos& infos, popef::TensorType type,
 
 static StatusOr<popef::Metadata> ToPopEFMetadata(
     const std::string& executable_name, const PoplarExecutableInfo& info,
-    const poplar::OptionFlags& opts) {
+    const InputOutputAliasingMap& io_map, const poplar::OptionFlags& opts) {
   if (info.target_type != "IPU") {
     return tensorflow::errors::Internal("[PopEF][ToMetadata]: ",
                                         "Target type must be IPU");
@@ -84,21 +129,22 @@ static StatusOr<popef::Metadata> ToPopEFMetadata(
   flow.main().emplace_back(1);
   flow.save().emplace_back(2);
 
-  TF_RETURN_IF_ERROR(AddPopEFAnchors(info.feed_input_infos,
-                                     popef::TensorType::INPUT, metadata));
-  TF_RETURN_IF_ERROR(AddPopEFAnchors(info.feed_output_infos,
-                                     popef::TensorType::OUTPUT, metadata));
-  TF_RETURN_IF_ERROR(AddPopEFAnchors(info.entry_input_infos,
-                                     popef::TensorType::INPUT, metadata));
-  TF_RETURN_IF_ERROR(AddPopEFAnchors(info.entry_output_infos,
-                                     popef::TensorType::OUTPUT, metadata));
+  TF_RETURN_IF_ERROR(AddPopEFFeedAnchors(info.infeed_infos,
+                                         popef::TensorType::INPUT, metadata));
+  TF_RETURN_IF_ERROR(AddPopEFFeedAnchors(info.outfeed_infos,
+                                         popef::TensorType::OUTPUT, metadata));
+  TF_RETURN_IF_ERROR(AddPopEFEntryAnchors(io_map.GetEntryInputInfos(),
+                                          popef::TensorType::INPUT, metadata));
+  TF_RETURN_IF_ERROR(AddPopEFEntryAnchors(io_map.GetEntryOutputInfos(),
+                                          popef::TensorType::OUTPUT, metadata));
   return metadata;
 }
 
 Status PoplarExecutableBinaryFile::Write(
     const std::string& file_name,
     const ::tensorflow::protobuf::MessageLite& proto,
-    const PoplarExecutableInfo& info, const poplar::OptionFlags& opts,
+    const PoplarExecutableInfo& info, const InputOutputAliasingMap& io_map,
+    const poplar::OptionFlags& opts,
     std::function<void(std::ostream&)> serialize_executable,
     const std::string& executable_hash) {
   auto file = std::ofstream(file_name, std::ios::binary);
@@ -138,7 +184,7 @@ Status PoplarExecutableBinaryFile::Write(
   }
 
   TF_ASSIGN_OR_RETURN(popef::Metadata metadata,
-                      ToPopEFMetadata(exec_hash, info, opts));
+                      ToPopEFMetadata(exec_hash, info, io_map, opts));
   try {
     popef_writer->write(metadata);
   } catch (const std::exception& e) {

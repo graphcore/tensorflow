@@ -428,13 +428,14 @@ PoplarExecutableCore::Deserialize(
 
 /*static*/ Status PoplarExecutableCore::Serialize(
     const ModuleFilenames& filenames, const poplar::Executable& executable,
-    const poplar::OptionFlags& opts, const PoplarExecutableInfo& info) {
+    const poplar::OptionFlags& opts, const PoplarExecutableInfo& info,
+    const InputOutputAliasingMap& io_map) {
   TENSORFLOW_TRACEPOINT();
 
   const PoplarExecutableProto proto = ToProto(info, opts);
 
   return PoplarExecutableBinaryFile::Write(
-      filenames.CachedExecutableFilename(), proto, info, opts,
+      filenames.CachedExecutableFilename(), proto, info, io_map, opts,
       [&executable](std::ostream& out) { executable.serialize(out); },
       filenames.Name());
 }
@@ -518,7 +519,7 @@ Status PoplarExecutableCore::Serialize(const std::string& filepath) const {
   }
 
   return PoplarExecutableBinaryFile::Write(
-      filepath, ToProto(info_), info_, {},
+      filepath, ToProto(info_), info_, input_output_aliasing_map_, {},
       [this](std::ostream& out) { poplar_engine_->serializeExecutable(out); });
 }
 
