@@ -1919,7 +1919,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
                   annotations.feed_input_infos,
                   annotations.entry_output_infos,
                   annotations.feed_output_infos,
-                  logging_cycle_count}));
+                  logging_cycle_count},
+              annotations.input_output_aliasing_map));
 
           if (in_precompile_mode) {
             LOG(INFO) << "A pre-compiled Poplar program has been saved to "

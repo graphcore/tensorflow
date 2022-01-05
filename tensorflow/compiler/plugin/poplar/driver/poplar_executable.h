@@ -170,7 +170,8 @@ class PoplarExecutableCore {
   static Status Serialize(const ModuleFilenames& filenames,
                           const poplar::Executable& executable,
                           const poplar::OptionFlags& opts,
-                          const PoplarExecutableInfo& info);
+                          const PoplarExecutableInfo& info,
+                          const InputOutputAliasingMap& io_map);
 
   static Status Export(const ModuleFilenames& filenames,
                        const poplar::Executable& executable,

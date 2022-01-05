@@ -34,6 +34,7 @@ class PoplarExecutableBinaryFile {
   static Status Write(const std::string& file_name,
                       const ::tensorflow::protobuf::MessageLite& proto,
                       const PoplarExecutableInfo& info,
+                      const InputOutputAliasingMap& io_map,
                       const poplar::OptionFlags& opts,
                       std::function<void(std::ostream&)> serialize_executable,
                       const std::string& executable_hash = "");

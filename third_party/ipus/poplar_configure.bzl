@@ -82,6 +82,7 @@ def _poplar_autoconf_impl(repository_ctx):
 
             repository_ctx.symlink(poplar_base + "/popef/include", "poplar/popef/include")
             repository_ctx.symlink(poplar_base + "/popef/lib", "poplar/lib/popef")
+            repository_ctx.symlink(poplar_base + "/popef/lib/python", "poplar/lib/python")
             repository_ctx.symlink(poplar_base + "/poplar/include", "poplar/poplar/include")
             repository_ctx.symlink(poplar_base + "/poplibs/include", "poplar/poplibs/include")
             repository_ctx.symlink(poplar_base + "/poplar/bin", "poplar/poplar/bin")

@@ -18,12 +18,14 @@ import glob
 import multiprocessing
 import numpy as np
 import os
+import popef
 import tempfile
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_sendrecv_ops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
+from tensorflow.keras.layers import Dense, Flatten
 from tensorflow.python import ipu
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
@@ -33,8 +35,10 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
+from tensorflow.python.ipu.ops import application_compile_op
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import metrics_impl
+from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
 from tensorflow.python.summary import summary_iterator
@@ -466,6 +470,56 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       # Expect no second compilation as the executable should be cached
       self.assertEqual(num_reports_0, 1)
       self.assertEqual(num_reports_1, 0)
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
+  @test_util.deprecated_graph_mode_only
+  def test_export_with_cache(self):
+    cfg = ipu.config.IPUConfig()
+    _extra_ipu_config(cfg)
+
+    def export_model(poplar_exec_output_path):
+      cfg.configure_ipu_system()
+
+      dataset = dataset_ops.Dataset.from_tensors(
+          np.ones((64, 64), dtype=np.float16))
+      dataset = dataset.repeat(10)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+
+      def body(x):
+        x = Flatten()(x)
+        x = Dense(256)(x)
+        return outfeed_queue.enqueue(x)
+
+      def my_net():
+        return ipu.loops.repeat(10, body, [], infeed_queue)
+
+      with session.Session() as sess:
+        compile_op = application_compile_op.experimental_application_compile_op(
+            my_net,
+            output_path=poplar_exec_output_path,
+            freeze_variables=False)
+        sess.run(variables.global_variables_initializer())
+        sess.run(compile_op)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+      poplar_exec_precache = os.path.join(temp_dir, "precache.popef")
+      poplar_exec_postcache = os.path.join(temp_dir, "postcache.popef")
+      with _temporary_executable_cache():
+        self._run_in_new_process(lambda: export_model(poplar_exec_precache))
+        self._run_in_new_process(lambda: export_model(poplar_exec_postcache))
+      # Check the anchors are the same pre and post cache
+      r_precache = popef.Reader()
+      r_precache.parseFile(poplar_exec_precache)
+      self.assertEqual(len(r_precache.metadata()), 1)
+      anchor_names_precache = sorted(
+          a.name() for a in r_precache.metadata()[0].anchors())
+      r_postcache = popef.Reader()
+      r_postcache.parseFile(poplar_exec_postcache)
+      self.assertEqual(len(r_postcache.metadata()), 1)
+      anchor_names_postcache = sorted(
+          a.name() for a in r_postcache.metadata()[0].anchors())
+      self.assertEqual(anchor_names_precache, anchor_names_postcache)
 
 
 if __name__ == "__main__":
