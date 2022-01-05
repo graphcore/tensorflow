@@ -110,6 +110,7 @@ bool WhileLoopInvariantCodeMotion::NotWorthHoistingIndividually(
     case HloOpcode::kConstant:
       return !hoist_constants_;
 
+    case HloOpcode::kAfterAll:
     case HloOpcode::kBitcast:
     case HloOpcode::kBroadcast:
     case HloOpcode::kIota:
