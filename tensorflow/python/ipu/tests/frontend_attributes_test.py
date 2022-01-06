@@ -356,21 +356,22 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
     # This tests that the stochastic rounding state persists
     # as we lower code that invokes multiple visitors - one for the
     # outer my_net function and another for the loop.
-    def my_net(data, dummy):
+    def my_net(data0, data1, dummy):
       def body(data, _):
         with ipu.scopes.stochastic_rounding(True):
           data_f16 = math_ops.cast(data, dtype=np.float16)
           return (data, data_f16)
 
       with ipu.scopes.stochastic_rounding(False):
-        data_f16_no_sr = math_ops.cast(data, dtype=np.float16)
-        _, data_f16_sr = ipu.loops.repeat(2, body, inputs=[data, dummy])
+        data_f16_no_sr = math_ops.cast(data0, dtype=np.float16)
+        _, data_f16_sr = ipu.loops.repeat(2, body, inputs=[data1, dummy])
         return data_f16_no_sr, data_f16_sr
 
     data = random_ops.random_uniform([10, 10], dtype=np.float32, seed=1)
+    data2 = random_ops.random_uniform([10, 10], dtype=np.float32, seed=1)
     dummy = np.zeros([10, 10], dtype=np.float16)
     with ipu.scopes.ipu_scope("/device:IPU:0"):
-      res = ipu.ipu_compiler.compile(my_net, inputs=[data, dummy])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[data, data2, dummy])
 
     with self.session() as sess:
       data_f16_no_sr, data_f16_sr = sess.run(res)

@@ -44,7 +44,9 @@ HloStatefulGradientAccumulate::HloStatefulGradientAccumulate(
     PoplarOp op)
     : HloPoplarInstruction(GetShape(operands, op), operands, op,
                            num_mini_batches),
-      num_mini_batches_(num_mini_batches) {}
+      num_mini_batches_(num_mini_batches) {
+  set_custom_call_has_side_effect(true);
+}
 
 absl::flat_hash_set<int64> HloStatefulGradientAccumulate::AllocatingIndices()
     const {
