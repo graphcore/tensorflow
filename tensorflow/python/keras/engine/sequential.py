@@ -153,6 +153,7 @@ class Sequential(functional.Functional):
     return layers[:]
 
   @trackable.no_automatic_dependency_tracking
+  @base_layer.extension_delegate
   def add(self, layer):
     """Adds a layer instance on top of the layer stack.
 
@@ -241,6 +242,7 @@ class Sequential(functional.Functional):
     self._layer_call_argspecs[layer] = tf_inspect.getfullargspec(layer.call)
 
   @trackable.no_automatic_dependency_tracking
+  @base_layer.extension_delegate
   def pop(self):
     """Removes the last layer in the model.
 
@@ -467,6 +469,7 @@ class Sequential(functional.Functional):
     else:
       return (proba > 0.5).astype('int32')
 
+  @base_layer.extension_delegate
   def get_config(self):
     layer_configs = []
     for layer in super(Sequential, self).layers:
@@ -500,6 +503,12 @@ class Sequential(functional.Functional):
     if (not model.inputs and build_input_shape and
         isinstance(build_input_shape, (tuple, list))):
       model.build(build_input_shape)
+
+    # Begin IPU specific changes.
+    base_layer.extension_delegate_if_exists(
+      "deserialize_from_config", model, config)
+    # End IPU specific changes.
+
     return model
 
   @property

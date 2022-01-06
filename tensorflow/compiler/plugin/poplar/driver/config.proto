@@ -1,0 +1,315 @@
+syntax = "proto3";
+
+package xla.poplarplugin;
+
+import "tensorflow/compiler/plugin/poplar/driver/option_flag.proto";
+import "tensorflow/compiler/plugin/poplar/driver/threestate.proto";
+
+enum IpuSelectionOrder {
+  AUTO = 0;
+  ZIGZAG = 1;
+  SNAKE = 2;
+  HOOF = 3;
+}
+
+// When to attach to the device.
+enum IpuDeviceConnectionType {
+  // Attach when configuring the device.
+  ALWAYS = 0;
+  // Defer connection to when the IPU is needed. (i.e when running an executable).
+  ON_DEMAND = 1;
+  // Never attach to the device. (Device can only be used for compilation).
+  NEVER = 2;
+  // Do not attach to a device and any execution will just return zeros.
+  PRE_COMPILE = 3;
+}
+
+// Who instantiated the IpuOptions object.
+enum IpuOptionsCreator {
+  INVALID = 0;
+  IPU_UTILS = 1;
+}
+
+// The type of execution profiling to use. See poplar docs for the meaning of
+// the profiling types.
+enum IpuExecutionProfileType {
+  // Do not do execution profiling.
+  NO_PROFILE = 0;
+  // Do execution profiling at the device level.
+  DEVICE_PROFILE = 1;
+  // Do execution profiling at the IPU level.
+  IPU_PROFILE = 2;
+  // Do execution profiling at the Tile level.
+  TILE_PROFILE = 3;
+}
+
+enum IpuSchedulingAlgorithm {
+  // Tries to automatically determine the best scheduler based on TensorFlow's
+  // native heap simulator.
+  CHOOSE_BEST = 0;
+  // Groups clusters of operations together in order to look through stretches
+  // of instructions with potentially high liveness.
+  CLUSTERING = 1;
+  // Schedules the instructions in the order which is obtained by walking the
+  // graph in 'post order'.
+  POST_ORDER = 2;
+  // Looks ahead a number of operations from any schedulable one, as given by
+  // the `max_scheduler_lookahead_depth` and `max_scheduler_search_space_size`
+  // options. It attempts to look through areas of high liveness.
+  LOOK_AHEAD = 3;
+  // Schedules the graph giving priority to the shortest path to the root.
+  SHORTEST_PATH = 4;
+}
+
+enum SyntheticDataCategory {
+  Seed = 0;
+  Infeed = 1;
+  Outfeed = 2;
+  HostEmbedding = 3;
+  Parameters = 4;
+  Unknown = 5;
+}
+
+enum StochasticRoundingBehaviour {
+  StochasticRounding_Off = 0;
+  StochasticRounding_On = 1;
+  StochasticRounding_ReplicaIdenticalOnly = 2;
+}
+
+message IpuOptions {
+
+  // Options controlling the software IPU model (see IPUModel in poplar)
+  message IpuModelConfig {
+    bool compile_ipu_code = 1;
+    int64 tiles_per_ipu = 2;
+    string ipu_model_version = 3;
+  };
+  IpuModelConfig ipu_model_config = 1;
+
+  // Options to control IPU profiling
+  message Profiling {
+    // Set to enable compilation trace.
+    bool enable_compilation_trace = 1;
+
+    // Set to have the poplar reports in text, not JSON.
+    bool enable_poplar_reports_text = 2;
+
+    // Set to enable I/O trace.
+    bool enable_io_trace = 3;
+
+    // Execution trace type.
+    IpuExecutionProfileType execution_trace_type = 4;
+
+    // Report every N'th execution (0=once only).
+    int64 report_every_nth_execution = 5;
+
+    // retired = 6;
+
+    // Enable IPU trace events - indpendently of poplar reporting.
+    bool enable_ipu_trace_events = 7;
+
+    // Set to have the poplar reports in CBOR, not JSON.
+    bool enable_poplar_reports_cbor = 8;
+
+    // When non-empty, reports will be written into this directory, instead of
+    // into the Tensorboard events.
+    string report_directory = 9;
+
+    // Reports over this size (in bytes) will be discarded.
+    int64 max_report_size = 10;
+
+    // Options for controlling graph profile report generation.
+    repeated PoplarOptionFlag graph_options = 11;
+
+    // Options for controlling execution profile report generation.
+    repeated PoplarOptionFlag execution_options = 12;
+
+    // Set to have the Poplar serialized graph to be included with the
+    // compiler report.
+    bool enable_poplar_graph = 13;
+  };
+  Profiling profiling = 2;
+
+  // Options to control Poplar compilation
+  repeated PoplarOptionFlag compilation_options = 3;
+
+  // Options controlling the configuration of each IPU device
+  message DeviceConfig {
+    // Set one of these fields to determine the way to select IPUs
+    oneof selection {
+      // Set this to the number of IPUs which are required.  The system will
+      // acquire a free IPU configuration containing this many physical IPUs.
+      int32 auto_count = 1;
+
+      // Set this to acquire a specific IPU hardware configuration.
+      int32 cfg_index = 2;
+    }
+  };
+  repeated DeviceConfig device_config = 4;
+
+  // Options to control the memory size and speed of the execution trade-off.
+  message SpeedSizeConfig {
+    // Option controlling whether to rearrange streamed copies on the host
+    bool always_rearrange_copies_on_the_host = 1;
+
+    // retired = 2;
+
+    // Option to disable caching of sub-graphs containing convolutions
+    bool disable_graph_outlining = 3;
+
+    // Option to enable re-computation.
+    bool allow_recompute = 4;
+
+    // retired = 5;
+
+    // Merge all streaming reads into a block to reduce the host-sync round-trip
+    // count.  This may decrease the device->host read latency at the expense of
+    // having more live tensors in memory on the device.
+    bool merge_infeed_io_copies = 6;
+
+    // Specifies the scheduling algorithm to use
+    IpuSchedulingAlgorithm scheduler_selection = 7;
+  }
+  SpeedSizeConfig speed_size_config = 5;
+
+  // Options controlling the configuration of convolutions
+  repeated PoplarOptionFlag convolution_options = 6;
+
+  // Options controlling the configuration of matmuls
+  repeated PoplarOptionFlag matmul_options = 7;
+
+  // Options controlling the configuration of pooling operations
+  repeated PoplarOptionFlag pooling_options = 8;
+
+  // If set, then don't include MatMul pass type in the matmul options
+  bool clear_matmul_pass_type = 9;
+
+  // Removed feature
+  bool deprecated = 10;
+
+  // The maximum number of bytes to wait before scheduling an all-reduce
+  int64 max_cross_replica_sum_buffer_size = 11;
+
+  // The maximum number of bytes to wait before scheduling a reduce-scatter
+  int64 max_reduce_scatter_buffer_size = 12;
+
+  message FloatingPointBehaviour {
+    // These flags match the ones provided by the poplar::FloatingPointBehaviour
+    // structure
+    bool inv = 2;
+    bool div0 = 3;
+    bool oflo = 4;
+    StochasticRoundingBehaviour esr = 5;
+    bool nanoo = 6;
+  }
+  FloatingPointBehaviour floating_point_behaviour = 13;
+
+  // The maximum number of bytes to wait before a inter IPU copy between IPUs is
+  // scheduled.
+  int64 max_inter_ipu_copies_buffer_size = 14;
+
+  // The maximum number of bytes that can be waiting before a send/recv
+  // instruction cluster is scheduled.
+  int64 max_send_recv_cluster_size = 15;
+
+  // The maximum distance to look into the future for valid schedules.
+  int64 max_scheduler_lookahead_depth = 16;
+
+  // The maximum number of nodes to consider when building the tree of future
+  // schedules.
+  int64 max_scheduler_search_space_size = 17;
+
+  // Whether to prefetch data for data streams.
+  bool prefetch_data_streams = 18;
+
+  // Whether to fuse multi_slice operations that use the same input.
+  bool enable_multi_slice_combiner = 19;
+
+  // Whether to fuse matmul operations that use the same input or the same weights.
+  bool enable_matmul_combiner = 20;
+
+  // Which selection order to use when creating the virtual graphs.
+  IpuSelectionOrder selection_order = 21;
+
+  // Whether to converts gathers into multiSlice operations.
+  bool disable_gather_simplifier = 22;
+
+  // Where to save the compiled executable.
+  string serialization_folder = 23;
+
+  // When to attach to the device.
+  IpuDeviceConnectionType device_connection_type = 24;
+
+  // Version of the IPU hardware used.
+  string ipu_version = 25;
+
+  IpuOptionsCreator creator_id = 27;
+
+  // Use stable statistics calculation in norms
+  bool use_stable_norm_statistics = 28;
+
+  // How many tiles to reserve per IPU for IO operations.
+  int64 num_io_tiles = 29;
+
+  // Collective operations options for the Graphcore Communication Library.
+  repeated PoplarOptionFlag gcl_options = 30;
+
+  // Block size for triangular solve expander pass.
+  int64 triangular_solve_expander_block_size = 31;
+
+  // Enable remote buffer embeddings
+  bool enable_experimental_remote_buffer_embedding = 32;
+
+  // Enable math optimizations which might not adhere to IEEE.
+  bool enable_fast_math = 33;
+
+  // Options for multi-replica distribution.
+  int64 multi_replica_process_count = 34;
+  int64 multi_replica_process_index = 35;
+
+  // The minimum size a tensor (in bytes) has to be in order to be consider for
+  // being stored in remote memory.
+  int64 minimum_remote_tensor_size = 36;
+
+  // Whether to place TensorFlow operations on IO tiles.
+  bool place_ops_on_io_tiles = 37;
+
+  // Whether to enable remote buffers for the compilations without devices
+  // attached.
+  bool enable_remote_buffers_without_device = 38;
+
+  // Control the merging mode for compatible remote buffers.
+  // THREESTATE_OFF: Do not attempt to merge any remote buffers.
+  // THREESTATE_ON: Attempt to merge all compatible remote buffers.
+  // THREESTATE_UNDEFINED: Merge remote buffers only when it is
+  //     considered beneficial to enable code re-use.
+  ThreeState remote_buffer_merging_mode = 39;
+
+  // Block size for triangular solve expander pass.
+  int64 cholesky_block_size = 40;
+
+  // Group size for distributed batch norm.
+  int64 experimental_distributed_batch_norm_replica_group_size = 41;
+
+  double io_tile_available_memory_proportion = 42;
+
+  // Options controlling the configuration of slice operations.
+  repeated PoplarOptionFlag slice_options = 43;
+
+  // The maximum number of bytes to wait before scheduling a reduce-many
+  int64 max_reduce_many_buffer_size = 44;
+
+  message IpuAlgebraicSimplifierConfig {
+    bool enable_fast_math = 1;
+
+    bool enable_dot_strength = 2;
+  }
+
+  IpuAlgebraicSimplifierConfig algebraic_simplifier_config = 45;
+
+	// Option for controlling whether experimental prng work is enabled
+  bool enable_experimental_prng_stability = 46;
+
+  // The maximum number of bytes to wait before scheduling an all-gather
+  int64 max_all_gather_buffer_size = 47;
+};

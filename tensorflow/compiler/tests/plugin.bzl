@@ -18,6 +18,15 @@
 #   git update-index --assume-unchanged tensorflow/compiler/tests/plugin.bzl
 
 plugins = {
+  "poplar": {
+    "device":"IPU",
+    "types":"DT_FLOAT,DT_INT32",
+    "tags":[],
+    "args":["--disabled_manifest=tensorflow/compiler/plugin/poplar/disabled_manifest.txt",
+            "--tf_xla_flags='--tf_xla_min_cluster_size=1'"],
+    "data":["//tensorflow/compiler/plugin/poplar:disabled_manifest.txt"],
+    "deps":[],
+  },
     #"example": {
     #  "device":"XLA_MY_DEVICE",
     #  "types":"DT_FLOAT,DT_HALF,DT_INT32",

@@ -313,18 +313,22 @@ class HloComputation {
   ProgramShape ComputeProgramShape(bool include_ids = true) const;
 
   // Return whether `*this` and `other` are functionally equivalent.
-  bool Equal(const HloComputation& other, bool is_layout_sensitive) const {
+  bool Equal(const HloComputation& other, bool is_layout_sensitive,
+             bool is_sharding_sensitive = false) const {
     return EqualInternal(other, is_layout_sensitive,
-                         /*ignore_channel_id_values=*/false);
+                         /*ignore_channel_id_values=*/false,
+                         is_sharding_sensitive);
   }
 
   // Same as Equal() but ignores channel ID value mismatches on instructions, as
   // long as the two instructions both have channel IDs or neither has a channel
   // ID.
   bool EqualIgnoringChannelIdValues(const HloComputation& other,
-                                    bool is_layout_sensitive) const {
+                                    bool is_layout_sensitive,
+                                    bool is_sharding_sensitive = false) const {
     return EqualInternal(other, is_layout_sensitive,
-                         /*ignore_channel_id_values=*/true);
+                         /*ignore_channel_id_values=*/true,
+                         is_sharding_sensitive);
   }
 
   // Return whether `*this` and `other` are functionally equivalent.
@@ -508,8 +512,9 @@ class HloComputation {
       std::unique_ptr<HloInstruction> instruction);
 
   // Internal helper for comparison with different options.
-  bool EqualInternal(const HloComputation& other, bool is_layout_sensitive,
-                     bool ignore_channel_id_values) const;
+  bool EqualInternal(
+    const HloComputation& other, bool is_layout_sensitive,
+    bool ignore_channel_id_values, bool is_sharding_sensitive) const;
 
   // Fuses HLOs in instructions_to_fuse into fusion_instruction.
   //

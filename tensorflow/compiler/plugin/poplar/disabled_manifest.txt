@@ -1,0 +1,123 @@
+AdjustContrastTest # Currently taking too long when run alongside other processes
+AdjustHueTest
+AdjustSaturationTest
+ArrayElementwiseOpTest.ClampF32 # Incorrect NaN passing
+BinaryOpsTest.testNextAfter # Unsigned int
+BinaryOpsTest.testS64Comparisons # No S64
+CategoricalTest.testCategoricalIsNotConstant # disable until poplar CPU random works
+CategoricalTest.testEmpty # Integer output
+CategoricalTest.testStatelessMultinomialIsInRange # No U64
+CategoricalTest.testDeterminismMultinomial # disable until poplar CPU random works
+CholeskyOpTest.testNonSquareMatrix # Not allowed in V2
+CholeskyOpTest.testWrongDimensions # out of memory on V2
+CondTest.testCondConstPropagation # Switch node in cluster
+CondTest.testCondNoInputs # Switch node in cluster
+CumsumTest.test3D # Too long
+CumsumTest.test6D # Too long
+CumprodTest.test3D # Too long
+CumprodTest.test6D # Too long
+DeuantizedOpsTest # No bfloat16
+EagerFunctionTest # No registered OpKernel
+EagerTest.testAdam
+EagerTest.testAdamSparse
+EagerTest.testAssignAddVariable
+EagerTest.testIdentityOnVariable # Copy back from device failing
+EagerTest.testMultipleVariableReads
+EagerTest.testReadAssignRead
+EagerTest.testVariableGradient
+ExcessivePaddingTest.testAsFunctionInput
+ExcessivePaddingTest.testAsFunctionOutput
+ExcessivePaddingTest.testAsFunctionInput # No registered OpKernel
+ExcessivePaddingTest.testAsFunctionOutput # No registered OpKernel
+FFTTest # No support for FFT
+GatherTest.testHigherRank # Bad
+IgammaTest.testGradMediumValues # Too slow
+IgammaTest.testGradLargeValues # Too slow
+InverseOpTest # matrix inversing
+ListDiffTest.testEmptyY # no int64 iota
+ListDiffTest.testNonOverlapping # no int64 iota
+MatrixBandPartTest  # Too slow
+NonMaxSuppressionTest # Complex reductions
+OutOfMemoryTest.testOutputOutOfMemory # Don't do out of memory yet
+PoolGradTest.testMaxPool # Tests MaxPoolGradGrad
+Pooling3DTest.testMaxPool3dSamePaddingDifferentStrides  # Too slow at the moment
+Pooling3DTest.testMaxPoolGradValidPadding1_1_3d  # 3D grad_grad
+Pooling3DTest.testMaxPoolGradValidPadding2_1_6_3d  # 3D grad_grad
+Pooling3DTest.testMaxPoolGradValidPadding2_2_3d  # 3D grad_grad
+Pooling3DTest.testMaxPoolGradSamePadding1_1_3d  # 3D grad_grad
+Pooling3DTest.testMaxPoolGradSamePadding2_1_3d  # 3D grad_grad
+Pooling3DTest.testMaxPoolGradSamePadding2_2_3d  # 3D grad_grad
+Pooling3DTest.testMaxPoolGradSamePadding3_1_3d  # 3D grad_grad
+QrOpTest # No QR support
+QuantizedOpsTest # No bfloat16
+DequantizedOpsTest # No (U)Int8 support
+RandomOpsTest.testParameterizedTruncatedNormalIsInRange # Too slow
+RandomOpsTest.testParameterizedTruncatedNormalBroadcasting # Too slow
+RandomOpsTest.testRandomNormalIsNotConstant # disable until poplar CPU random works
+RandomOpsTest.testRandomUniformIsNotConstant # disable until poplar CPU random works
+RandomOpsTest.testShuffle1d # Need to implement 'sort'
+RandomOpsTest.testTruncatedNormalIsNotConstant # disable until poplar CPU random works
+RandomOpsTest.testTruncatedNormalIsInRange  # Non-constant range
+RandomOpsTest.testRandomUniformIsInRange  # Non-constant range
+ReduceOpsTest.testReduceMeanC64           # No support for C64
+ReduceOpsTest.testReduceProdC64           # No support for C64
+ReduceOpsTest.testReduceSumC64            # No support for C64
+ResizeBilinearTest.test112x112To512x512 # Too slow
+ResizeBilinearTest.test112x112To512x512 # Too slow
+ResizeBilinearTest.test256x48To2048x384 # Too slow
+ResizeBilinearTest.test320x60To2048x384 # Too slow
+ResizeBilinearTest.test448x84To2048x384 # Too slow
+ResizeBilinearTest.test69x69To545x545 # Too slow
+ResizeBilinearTest.test86x86To545x545 # Too slow
+ResizeBilinearTest.test103x103To545x545 # Too slow
+ResizeBilinearTest.test120x120To545x545 # Too slow
+ResizeBilinearTest.test57x57To456x456 # Too slow
+ResizeBilinearTest.test72x72To456x456 # Too slow
+ResizeBilinearTest.test86x86To456x456 # Too slow
+ResizeBilinearTest.test100x100To456x456 # Too slow
+ResizeBilinearTest.test256x256To224x224 # Too slow
+ResizeBilinearTest.test256x256To299x299 # Too slow
+ResizeBilinearGradTest.test100x100To456x456 # Too slow
+ResizeBilinearGradTest.test69x69To545x545 # Too slow
+ResizeBilinearGradTest.test86x86To545x545 # Too slow
+ResizeBilinearGradTest.test103x103To545x545 # Too slow
+ResizeBilinearGradTest.test120x120To545x545 # Too slow
+ResizeBilinearGradTest.test57x57To456x456 # Too slow
+ResizeBilinearGradTest.test72x72To456x456 # Too slow
+ResizeBilinearGradTest.test86x86To456x456 # Too slow
+ResizeBilinearGradTest.test100x100To456x456 # Too slow
+ResizeBilinearGradTest.test112x112To512x512 # Too slow
+ResamplerOpsTest # Don't support the op
+SegmentReductionOpsTest.testUnsortedSegmentOps1DIndices1DDataNegativeIndices #Scatter negative indices
+SegmentReductionOpsTest.testUnsortedSegmentSum1DIndices1DDataNegativeIndices # Tests negative indices, not allowed in TF Op
+SelfAdjointEigOpTest # seg fault
+StatelessRandomOpsTest.testDeterminism # poplibs CPU mode does not obey seed
+StatelessRandomOpsTest.testRandomUniformIsInRange # poplar CPU model random uniform int doesn't obey limits
+StatelessRandomOpsTest.testDistributionOfStatelessRandomUniform # Unsupported non-constant range
+StatelessRandomOpsTest.testTruncatedNormal # Tests float64
+SvdOpTest # Seg fault
+UnaryOpsTest.testIntOps$ # Unsupported cast
+UnaryOpsTest.testFloatOps$ # Different NaN behaviour on sign
+UnaryOpsTest.testCast$  # Unsupported unsgined behaviour
+UnaryOpsTest.testAllTypeOps # Need bitwise reductions
+WhileTest.testCountingLoopHandrolledC64 # C64
+WhileTest.testNestedWhileLoopWithMaxItersFromOuterContext # badly constructed test
+XlaOpsNumericalTest.testGather$ # Implementation defined out of bounds behaviour
+XlaOpsNumericalTest.testShiftRightArithmetic  # Unsigned int
+XlaOpsNumericalTest.testShiftRightLogical # Unsigned int
+XlaOpsNumericalTest.testVariadicReduce # Variadic reduction not supported
+XlaSortOpTest.testTopK_200000
+XlaSortOpTest.testTopKLarge
+XlaSortOpTest.testTopK2D_200000
+XlaSortOpTest.testTopK2DLarge
+XlaSortOpTest.testInTopKLarge
+XlaSortOpTest.testTopK$ # Too large on CPU target
+XlaSortOpTest.testTopK2D #  Too large on CPU target
+XlaSortOpTest.testTopKZeros$ # T37228
+MatrixDiagPartTest.testV1 # need popops::reduce(OR, int)
+MatrixDiagPartTest.testBatch # need popops::reduce(OR, int)
+MatrixDiagPartTest.testPadding # need popops::reduce(OR, int)
+MatrixDiagPartTest.testSingleMatrix # need popops::reduce(OR, int)
+SLogDetOpTest # Need to register LogMatrixDeterminant op
+TridiagonalSolveOpsTest # need to register TridiagonalSolve op
+StatefulRandomOpsTest # T37613 - Need to support kRngBitGenerator

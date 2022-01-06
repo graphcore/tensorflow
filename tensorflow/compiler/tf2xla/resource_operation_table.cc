@@ -109,6 +109,9 @@ CreateResourceOpInfoMap() {
   add("TensorArraySizeV3"                    , kRead,      kTensorArray);
   add("TensorArraySplitV3"                   , kWrite,     kTensorArray);
   add("TensorArrayWriteV3"                   , kWrite,     kTensorArray);
+
+  // IPU specific ops.
+  add("IpuStatefulGradientAccumulateWithMomentum", kReadWrite, kVariable);
   // clang-format on
 
   return result;

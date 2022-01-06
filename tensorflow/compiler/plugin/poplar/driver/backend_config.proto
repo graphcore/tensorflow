@@ -1,0 +1,248 @@
+syntax = "proto3";
+
+import "tensorflow/compiler/xla/xla_data.proto";
+import "tensorflow/compiler/plugin/poplar/driver/option_flag.proto";
+import "tensorflow/compiler/plugin/poplar/driver/threestate.proto";
+import "tensorflow/compiler/plugin/poplar/driver/tools/alias_info.proto";
+
+package xla.poplarplugin;
+
+// Enums to use as string keys in the FrontendAttributes map from
+// tensorflow/compiler/xla/xla_data.proto for the Poplar specific
+// attributes.
+enum FrontendAttributeId {
+  // Scope override for stochastic rounding
+  // (See tensorflow/python/ipu/scopes.py)
+  STOCHASTIC_ROUNDING = 0;
+  // Custom call's type (Used in pipelining).
+  CALL_CONFIG_TYPE = 1;
+  // Type to use to store the partials results.
+  PARTIALS_TYPE = 2;
+  // Used in pipelining to indicate how many times each stage is executed.
+  GRADIENT_ACCUMULATION_COUNT = 3;
+  // ID of a pipeline stage.
+  PIPELINE_STAGE_ID = 4;
+  // Used in pipelining to indicate how many times the pipeline should be
+  // executed.
+  PIPELINE_REPEAT_COUNT = 5;
+  // Used to select the pipeline schedule.
+  PIPELINE_SCHEDULE = 6;
+  // Used to configure the pipeline lowering to Poplar.
+  PIPELINE_POPLAR_CONFIG = 7;
+  // Used to indicate whether to offload variables which are only used by the
+  // resource update.
+  OFFLOAD_WEIGHT_UPDATE_VARIABLES = 8;
+  // Used to indicate how many batches need to be accumulated during gradient
+  // accumulation.
+  NUM_BATCHES_TO_ACCUMULATE = 9;
+  // The "Machine Learning" type of the instruction
+  ML_TYPE = 10;
+  // Used to set Poplar OptionFlags of an instruction.
+  OPTION_FLAGS = 11;
+  // The number of times a loop executes to compute a batch on each pipeline
+  // stage execution.
+  PIPELINE_BATCH_SERIALIZATION_ITERATIONS = 12;
+  // Whether to partition offloaded weight update variables across the replicas.
+  PARTITION_OFFLOADED_WEIGHT_UPDATE_VARIABLES = 13;
+  // Used in pipelining to indicate whether activations should be offloaded into
+  // remote memory
+  OFFLOAD_ACTIVATIONS = 14;
+  // Used in pipelining to indicate whether the gradient accumulation buffers
+  // should be offloaded.
+  OFFLOAD_GRADIENT_ACCUMULATION_BUFFERS = 15;
+  // Used in pipelining to indicate whether weights used by the forward/backward
+  // stages should be partitioned between replicas.
+  PARTITION_VARIABLES = 16;
+  // Used in pipelining to indicate whether weights used by the forward/backward
+  // stages should be offloaded.
+  OFFLOAD_VARIABLES = 17;
+  // Used in pipelining to indicate the recomputation mode.
+  RECOMPUTATION_MODE = 18;
+  // Used for functions to indicate whether the callsite should have unique
+  // sharding.
+  UNIQUE_SHARDING = 19;
+  // Used for functions to indicate whether the callsite should keep the input
+  // layouts or whether they can be reallocated.
+  KEEP_INPUT_LAYOUTS = 20;
+};
+
+// An enum representing the "Machine Learning" type of the instruction.
+enum MLType {
+  NONE = 0;
+  INFERENCE_FWD = 1;
+  TRAINING_FWD = 2;
+  TRAINING_BWD = 3;
+  TRAINING_WU = 4;
+};
+
+// An enum used for representing a convolution type in a multi-convolution.
+enum ConvType {
+  Conv = 0;
+  ConvWithReverse = 1;
+  /*
+  Retired2 = 2;
+  Retired3 = 3;
+  */
+};
+
+enum CollectiveOperator {
+  COLLECTIVE_OP_ADD = 0;
+  COLLECTIVE_OP_MUL = 1;
+  COLLECTIVE_OP_MIN = 2;
+  COLLECTIVE_OP_MAX = 3;
+  COLLECTIVE_OP_LOGICAL_AND = 4;
+  COLLECTIVE_OP_LOGICAL_OR = 5;
+  COLLECTIVE_OP_SQUARE_ADD = 6;
+  COLLECTIVE_OP_LOCAL = 7;
+  COLLECTIVE_OP_MEAN = 8;
+};
+
+// An enum representing a subset of tiles per IPU.
+enum Tileset {
+  TILESET_COMPUTE_TILES = 0;
+  TILESET_IO_TILES = 1;
+};
+
+enum CloneMethod {
+  CloneMethod_PreserveOrderAndAliases = 0;
+  CloneMethod_PreserveOrderUnlessAliases = 1;
+  CloneMethod_Bypass = 2;
+}
+
+enum StochasticRoundingMethod {
+  StochasticRoundingMethod_Undefined = 0;
+  StochasticRoundingMethod_DifferingSeeds = 1;
+  StochasticRoundingMethod_IdenticalSeeds = 2;
+  StochasticRoundingMethod_Any = 3;
+  StochasticRoundingMethod_None = 4;
+}
+
+// Backend specific HloInstruction config
+message PoplarBackendConfig {
+  // Copy config for a copy instruction
+  message CopyConfig {
+    repeated CloneMethod clone_method = 1;
+  };
+  // Instruction config for a fusion instruction
+  message FusionConfig {
+    // Convolutions
+    Window window = 1;
+    ConvolutionDimensionNumbers dimension_numbers = 2;
+    int64 feature_group_count = 3;
+    int64 batch_group_count = 4;
+
+    repeated PoplarUseDescription inplace_descriptions = 5;
+  };
+
+  // Instruction config for a Call instruction
+  message CallConfig {
+    enum Type {
+      // Call by default.
+      Call = 0;
+      RepeatLoop = 1;
+      PipelineStage = 2;
+      PipelineStageBackward = 3;
+      Pipeline = 4;
+      PipelineStageRecomputation = 5;
+      ResourceUpdate = 6;
+      Function = 7;
+      MultiConv = 8;
+    };
+
+    message RepeatConfig {
+      int64 repeat_count = 1;
+      // TODO(T25039): always enable this option.
+      bool allow_finer_alias_analysis = 2;
+    }
+
+    message PipelineStageConfig {
+      int64 stage_id = 1;
+    }
+
+    message PipelineConfig {
+      enum Schedule {
+        Grouped = 0;
+        Interleaved = 1;
+        Sequential = 2;
+      };
+
+      enum RecomputationMode {
+        Auto = 0;
+        Recompute_then_backpropagate = 1;
+        Recompute_and_backpropagate_interleaved = 2;
+      }
+
+      int64 batch_serialization_iterations = 1;
+      int64 repeat_count = 2;
+      Schedule schedule = 3;
+      ThreeState offload_activations = 4;
+      ThreeState offload_gradient_accumulation_buffers = 5;
+      ThreeState partition_variables = 6;
+      ThreeState offload_variables = 7;
+      RecomputationMode recomputation_mode = 8;
+      int64 gradient_accumulation_index = 9;
+    }
+
+    message CallConfig {
+    }
+
+    message FunctionConfig {
+      bool keep_input_layouts = 1;
+      bool unique_sharding = 2;
+      int64 num_modified_remote_buffer_inputs = 3;
+      int64 num_unmodified_remote_buffer_inputs = 4;
+      bool partitioned_elementwise_cluster = 5;
+    }
+
+    message ResourceUpdateConfig {
+      ThreeState offload_variables = 1;
+      ThreeState partition_offloaded_variables = 2;
+    }
+
+    Type type = 1;
+
+    oneof Config {
+      CallConfig call_config = 2;
+      RepeatConfig repeat_config = 3;
+      PipelineStageConfig pipeline_stage_config = 4;
+      PipelineConfig pipeline_config = 5;
+      FunctionConfig function_config = 6;
+      ResourceUpdateConfig resource_update_config = 7;
+    }
+  }
+
+  oneof Config {
+    FusionConfig fusion_config = 1;
+    CallConfig call_config = 2;
+    CopyConfig copy_config = 14;
+  }
+
+  bool is_inplace = 3;
+
+  int64 hash_of_custom_attributes = 4;
+
+  ThreeState stochastic_rounding = 5;
+
+  MLType ml_type = 6;
+
+  PrimitiveType partials_type = 7;
+
+  // Flags to be used by the convolution.
+  repeated PoplarOptionFlag convolution_options = 8;
+
+  // Flags to be used by the matmul.
+  repeated PoplarOptionFlag matmul_options = 9;
+
+  // Flags to be used by the slice operation.
+  repeated PoplarOptionFlag slice_options = 10;
+
+  // The tile subset that should be used by this instruction.
+  Tileset tileset = 11;
+
+  // Tag that says whether an instruction produces
+  // a value thats identical across replicas.
+  bool is_replica_identical = 12;
+
+  // Tag for controlling how we perform SR.
+  StochasticRoundingMethod stochastic_rounding_method = 13;
+};

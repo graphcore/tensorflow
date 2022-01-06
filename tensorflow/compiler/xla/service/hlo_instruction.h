@@ -1185,10 +1185,13 @@ class HloInstruction {
           eq_operands = std::equal_to<const HloInstruction*>(),
       const std::function<bool(const HloComputation*, const HloComputation*)>&
           eq_computations = std::equal_to<const HloComputation*>(),
-      bool layout_sensitive = true) const {
+      bool layout_sensitive = true,
+      const std::function<bool(const std::string&, const std::string&)>&
+          eq_backend_config = std::equal_to<std::string>()) const {
     return IdenticalInternal(other, eq_operands, eq_computations,
                              layout_sensitive,
-                             /*ignore_channel_id_values=*/false);
+                             /*ignore_channel_id_values=*/false,
+                             eq_backend_config);
   }
 
   // Same as Identical() but ignores channel ID value mismatches, as long as
@@ -1199,10 +1202,13 @@ class HloInstruction {
           eq_operands = std::equal_to<const HloInstruction*>(),
       const std::function<bool(const HloComputation*, const HloComputation*)>&
           eq_computations = std::equal_to<const HloComputation*>(),
-      bool layout_sensitive = true) const {
+      bool layout_sensitive = true,
+      const std::function<bool(const std::string&, const std::string&)>&
+          eq_backend_config = std::equal_to<std::string>()) const {
     return IdenticalInternal(other, eq_operands, eq_computations,
                              layout_sensitive,
-                             /*ignore_channel_id_values=*/true);
+                             /*ignore_channel_id_values=*/true,
+                             eq_backend_config);
   }
 
   // Generates a hash value of an HLO instruction. Hash considers
@@ -1502,7 +1508,7 @@ class HloInstruction {
   // to the newly cloned nodes.
   void ReplaceCalledComputations(
       std::function<HloComputation*(HloComputation*)> map_function) {
-    for (int64 i = 0; i < called_computations_.size(); ++i) {
+    for (size_t i = 0; i < called_computations_.size(); ++i) {
       called_computations_[i] = map_function(called_computations_[i]);
     }
   }
@@ -2040,7 +2046,9 @@ class HloInstruction {
           eq_operands,
       const std::function<bool(const HloComputation*, const HloComputation*)>&
           eq_computations,
-      bool layout_sensitive, bool ignore_channel_id_values) const;
+      bool layout_sensitive, bool ignore_channel_id_values,
+      const std::function<bool(const std::string&, const std::string&)>&
+          eq_backend_config) const;
 
   // Implementation for non-common logic of CloneWithNewOperands.
   virtual std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(

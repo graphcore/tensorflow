@@ -114,6 +114,10 @@ class Functional(training_lib.Model):
     super(Functional, self).__init__(name=name, trainable=trainable)
     self._init_graph_network(inputs, outputs)
 
+    # Begin IPU specific changes.
+    base_layer.extension_delegate_if_exists("get_pipelining_from_nodes", self)
+    # End IPU specific changes.
+
   @trackable.no_automatic_dependency_tracking
   def _init_graph_network(self, inputs, outputs):
     base_layer.keras_api_gauge.get_cell('Functional').set(True)
@@ -645,6 +649,7 @@ class Functional(training_lib.Model):
 
     return tensor
 
+  @base_layer.extension_delegate
   def get_config(self):
     return copy.deepcopy(get_network_config(self))
 
@@ -670,6 +675,12 @@ class Functional(training_lib.Model):
       model = cls(inputs=input_tensors, outputs=output_tensors,
                   name=config.get('name'))
       connect_ancillary_layers(model, created_layers)
+
+      # Begin IPU specific changes.
+      base_layer.extension_delegate_if_exists(
+        "deserialize_from_config", model, config)
+      # End IPU specific changes.
+
       return model
 
   def _validate_graph_inputs_and_outputs(self):

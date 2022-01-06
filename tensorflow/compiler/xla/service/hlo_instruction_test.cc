@@ -902,6 +902,41 @@ static bool Identical(const HloInstruction& instruction1,
   return is_equal;
 }
 
+// Convenience function for comparing two HloInstructions.
+static bool IdenticalNoBackendConfig(
+  const HloInstruction& instruction1,
+  const HloInstruction& instruction2) {
+
+  auto eq_operand_shapes = [](const HloInstruction* a,
+                              const HloInstruction* b) {
+    return ShapeUtil::Equal(a->shape(), b->shape());
+  };
+  auto eq_computations = [](const HloComputation* a, const HloComputation* b) {
+    return *a == *b;
+  };
+  auto eq_backend_config = [](const std::string& a, const std::string& b) {
+    return true;
+  };
+
+  // Verify Identical is reflexive for both instructions.
+  EXPECT_TRUE(instruction1.Identical(
+    instruction1, eq_operand_shapes, eq_computations, false,
+    eq_backend_config));
+  EXPECT_TRUE(instruction2.Identical(
+    instruction2, eq_operand_shapes, eq_computations, false,
+    eq_backend_config));
+
+  bool is_equal = instruction1.Identical(
+    instruction2, eq_operand_shapes, eq_computations, false,
+    eq_backend_config);
+
+  // Verify Identical is symmetric.
+  EXPECT_EQ(is_equal, instruction2.Identical(
+    instruction1, eq_operand_shapes, eq_computations, false,
+    eq_backend_config));
+  return is_equal;
+}
+
 // Convenience function for comparing two HloInstructions for structural
 // equality.
 static bool StructuralEqual(const HloInstruction& instruction1,
@@ -983,6 +1018,13 @@ TEST_F(HloInstructionTest, IdenticalInstructions) {
   EXPECT_FALSE(Identical(
       *HloInstruction::CreateBinary(shape, HloOpcode::kAdd, op1, op2),
       *HloInstruction::CreateBinary(shape, HloOpcode::kDivide, op1, op2)));
+
+  auto i1 = HloInstruction::CreateBinary(shape, HloOpcode::kAdd, op1, op2);
+  auto i2 = HloInstruction::CreateBinary(shape, HloOpcode::kAdd, op1, op2);
+  i1->set_raw_backend_config_string("config1");
+  i1->set_raw_backend_config_string("config2");
+  EXPECT_FALSE(Identical(*i1, *i2));
+  EXPECT_TRUE(IdenticalNoBackendConfig(*i1, *i2));
 }
 
 TEST_F(HloInstructionTest, IdenticalCallInstructions) {

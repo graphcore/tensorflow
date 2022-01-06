@@ -1450,6 +1450,11 @@ def main():
 
   configure_ios(environ_cp)
 
+  # IPU specific options.
+  set_action_env_var(
+    environ_cp, 'TF_NEED_IPU_HOROVOD', 'Horovod for IPU (requires MPI)',
+    enabled_by_default=False, bazel_config_name='ipu_horovod')
+
   print('Preconfigured Bazel build configs. You can use any of the below by '
         'adding "--config=<>" to your build command. See .bazelrc for more '
         'details.')

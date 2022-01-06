@@ -138,7 +138,8 @@ build --enable_platform_specific_config
 # Enable XLA support by default.
 build --define=with_xla_support=true
 
-build --config=short_logs
+# IPU specific options - disable short_logs so we can see compile warnings
+# build --config=short_logs
 
 build --config=v2
 
@@ -278,8 +279,9 @@ build:ios --noenable_platform_specific_config
 # Suppress C++ compiler warnings, otherwise build logs become 10s of MBs.
 build:android --copt=-w
 build:ios --copt=-w
-build:linux --copt=-w
-build:linux --host_copt=-w
+# IPU specific change - disabling -w so we can compile with warnings
+# build:linux --copt=-w
+# build:linux --host_copt=-w
 build:macos --copt=-w
 build:windows --copt=/W0
 
@@ -531,7 +533,14 @@ build:elinux_armhf --config=elinux
 build:elinux_armhf --cpu=armhf
 # END TF REMOTE BUILD EXECUTION OPTIONS
 
+<<<<<<< HEAD
 # Config-specific options should come above this line.
+=======
+# IPU specific options.
+build:ipu_horovod --action_env TF_NEED_IPU_HOROVOD=1
+
+# Default options should come above this line
+>>>>>>> poplar/r2.4/release
 
 # Load rc file written by ./configure.
 try-import %workspace%/.tf_configure.bazelrc

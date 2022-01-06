@@ -26,6 +26,7 @@ package_group(
     packages = [
         "//tensorflow/compiler/aot/...",
         "//tensorflow/compiler/jit/...",
+        "//tensorflow/compiler/plugin/...",
         "//tensorflow/compiler/mlir/...",
         "//tensorflow/compiler/tests/...",
         "//tensorflow/compiler/tf2xla/...",
@@ -55,6 +56,7 @@ cc_library(
     deps = [
         ":xla_compiler",
         ":xla_op_registry",
+        "//tensorflow/compiler/plugin:plugin_backend",
         "//tensorflow/compiler/tf2xla/kernels:xla_ops",
         "//tensorflow/core:framework",
         "//tensorflow/core:framework_internal",
@@ -139,6 +141,7 @@ cc_library(
         ":xla_compiler",
         ":xla_op_registry",
         "//tensorflow/compiler/aot:aot_only_var_handle_op",
+        "//tensorflow/compiler/plugin:plugin_backend",
         "//tensorflow/compiler/tf2xla/kernels:xla_ops",
         "//tensorflow/compiler/xla/client",
         "//tensorflow/compiler/xla/client:xla_computation",

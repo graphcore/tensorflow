@@ -18,7 +18,7 @@ set -e
 
 # Get the latest version of pip so it recognize manylinux2010
 wget https://bootstrap.pypa.io/get-pip.py
-python3.6 get-pip.py
+python3 get-pip.py
 rm -f get-pip.py
 
 # Install pip packages from whl files to avoid the time-consuming process of
@@ -60,17 +60,17 @@ rm -rf /usr/lib/python3/dist-packages/six*
 # https://github.com/tensorflow/tensorflow/issues/6968
 # This workaround isn't needed for Ubuntu 16.04 or later.
 if $(cat /etc/*-release | grep -q 14.04); then
-  pip3 install --no-binary=:all: --upgrade numpy==1.14.5
+  pip3 install --no-binary=:all: --upgrade numpy==1.18.0
 else
-  pip3 install --upgrade numpy==1.14.5
+  pip3 install --upgrade numpy==1.18.0
 fi
 
 pip3 install scipy==1.4.1
 
-pip3 install scikit-learn==0.18.1
+pip3 install scikit-learn==0.22.0
 
 # pandas required by `inflow`
-pip3 install pandas==0.19.2
+pip3 install pandas==0.25.2
 
 # Benchmark tests require the following:
 pip3 install psutil

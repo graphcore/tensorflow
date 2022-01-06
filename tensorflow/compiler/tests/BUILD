@@ -1971,6 +1971,7 @@ tf_xla_py_test(
         "cpu",
         "cpu_ondemand",
         "gpu",
+        "poplar",
     ],
     deps = [
         ":xla_test",

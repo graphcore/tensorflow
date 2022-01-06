@@ -285,6 +285,19 @@ int64 MaxVLogLevelFromEnv() {
   return LogLevelStrToInt(tf_env_var_val);
 #endif
 }
+namespace {
+static const char* kPoplarBackendLocation = "tensorflow/compiler/plugin/poplar";
+
+int64 MinPoplarVLogLevelFromEnv() {
+  const char* tf_env_var_val = getenv("TF_POPLAR_VLOG_LEVEL");
+  return LogLevelStrToInt(tf_env_var_val);
+}
+
+int64 MinPoplarVLogLevel() {
+  static int64 min_poplar_log_level = MinPoplarVLogLevelFromEnv();
+  return min_poplar_log_level;
+}
+}  // namespace
 
 LogMessage::LogMessage(const char* fname, int line, int severity)
     : fname_(fname), line_(line), severity_(severity) {}
@@ -316,6 +329,12 @@ bool LogMessage::VmoduleActivated(const char* fname, int level) {
   if (level <= MaxVLogLevel()) {
     return true;
   }
+
+  if (level <= MinPoplarVLogLevel()) {
+    return strncmp(kPoplarBackendLocation, fname,
+                   strlen(kPoplarBackendLocation)) == 0;
+  }
+
   static VmoduleMap* vmodules = VmodulesMapFromEnv();
   if (TF_PREDICT_TRUE(vmodules == nullptr)) {
     return false;

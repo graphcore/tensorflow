@@ -34,6 +34,13 @@ limitations under the License.
 namespace tensorflow {
 
 namespace {
+bool IsPoplarBackendFunctionalNode(const Node* n) {
+  static const std::string op_names[] = {
+      "Pipeline",       "PipelineStage", "PipelineStageBackward",
+      "ResourceUpdate", "Function",      "MultiConv"};
+  return std::count(std::begin(op_names), std::end(op_names),
+                    n->op_def().name());
+}
 
 // Given original input types and argument index mapping, return the new input
 // types.
@@ -505,6 +512,182 @@ Status MaybeRewriteIfNode(
   return Status::OK();
 }
 
+Status OutputTypesNeedsRearrange(const std::vector<DataType>& out_types,
+                                 bool* need_rewrite, int* resource_input_count,
+                                 std::vector<int>* index_mapping) {
+  return InputTypesNeedsRearrange(out_types, need_rewrite, resource_input_count,
+                                  index_mapping);
+}
+
+// Given mapping between original output index and rearranged output index,
+// change "index" attribute for _Retval nodes. Notice that DT_RESOURCE _Retval
+// nodes will *not* be removed.
+void RearrangeRetvalNodesWithResources(
+    const gtl::InlinedVector<Node*, 4>& ret_nodes,  // non-absl ok
+    const std::vector<int>& index_mapping) {
+  for (int i = 0; i < ret_nodes.size(); i++) {
+    Node* n = ret_nodes[i];
+    n->ClearAttr("index");
+    n->AddAttr("index", index_mapping.at(i));
+  }
+}
+
+// Given original output types and return value index mapping, return the new
+// output types. Notice that DT_RESOURCE will *not* be removed.
+std::vector<DataType> ShuffleOutputDataTypeAttributeWithResources(
+    const std::vector<DataType>& out_types,
+    const std::vector<int>& index_mapping) {
+  std::vector<DataType> result(index_mapping.size());
+  for (int i = 0; i < out_types.size(); i++) {
+    result[index_mapping.at(i)] = out_types[i];
+  }
+  return result;
+}
+
+// Given mapping between original input index and rearranged
+// input index, reorder output edges for the node. DT_RESOURCE are *not*
+// removed.
+Status ReorderOutputEdgesWithResources(Graph* g, Node* n,
+                                       const std::vector<int>& index_mapping) {
+  std::vector<const Edge*> out_edges;
+  for (const Edge* e : n->out_edges()) {
+    if (!e->IsControlEdge()) {
+      out_edges.push_back(e);
+    }
+  }
+
+  for (const Edge* e : out_edges) {
+    int src_output = e->src_output();
+    int dst_input = e->dst_input();
+    Node* dst = e->dst();
+    g->RemoveEdge(e);
+    g->AddEdge(n, index_mapping.at(src_output), dst, dst_input);
+  }
+  return Status::OK();
+}
+
+// Begin IPU specific changes.
+// Extends the 'types' vector with the DataTypes for all the original tensor
+// ArgDefs to the node 'n'.
+// When registering an OpDef, an .Input/.Output call (ArgDef) can provide either
+// a single or variadic number of tensors all with potentially differing types.
+// This function provides the DataType being used by the node 'n' for every
+// tensor input/output across all the provided 'arg_defs'.
+Status GetOriginalNodeTypes(
+    Node* n, const protobuf::RepeatedPtrField<OpDef::ArgDef>& arg_defs,
+    std::vector<DataType>& types) {
+  for (const OpDef::ArgDef& arg_def : arg_defs) {
+    bool is_arg_list;  // ignored
+    DataTypeVector arg_def_types;
+    TF_RETURN_IF_ERROR(
+        ArgNumType(n->attrs(), arg_def, &is_arg_list, &arg_def_types));
+    types.reserve(types.size() + arg_def_types.size());
+    types.insert(types.end(), arg_def_types.begin(), arg_def_types.end());
+  }
+  return Status::OK();
+}
+
+// XLA requires all DT_RESOURCES to be at the end of the input/output list.
+// We need to rearrange any resources that are not at the end of these lists.
+Status MaybePoplarBackendFunctionalNode(
+    std::function<Status(const NameAttrList&, const FunctionBody**)>
+        get_function_body_fn,
+    Graph* g, Node* n, FunctionLibraryDefinition* fld, bool* node_rewritten,
+    const FunctionLibraryDefinition* global_fld) {
+  // Upstream relies on the assumption that While and If both have a Tin/Tout
+  // attr which describes all the input/output types. This might not be the case
+  // for other OpDefs which could have multiple Inputs with differing singular
+  // or variadic input type attrs, so we instead examine the ArgDefs on the
+  // parsed OpDef for all the input types.
+
+  // Get the original types for all the tensors in the Input ArgDefs.
+  std::vector<DataType> in_types;
+  TF_RETURN_IF_ERROR(
+      GetOriginalNodeTypes(n, n->op_def().input_arg(), in_types));
+  bool input_need_rearrange;
+  int resource_input_count;
+  std::vector<int> input_index_mapping;
+  TF_RETURN_IF_ERROR(InputTypesNeedsRearrange(in_types, &input_need_rearrange,
+                                              &resource_input_count,
+                                              &input_index_mapping));
+
+  // Get the original types for all the tensors in the Output ArgDefs.
+  std::vector<DataType> out_types;
+  TF_RETURN_IF_ERROR(
+      GetOriginalNodeTypes(n, n->op_def().output_arg(), out_types));
+  bool output_need_rearrange;
+  int resource_output_count;
+  std::vector<int> output_index_mapping;
+  TF_RETURN_IF_ERROR(
+      OutputTypesNeedsRearrange(out_types, &output_need_rearrange,
+                                &resource_output_count, &output_index_mapping));
+
+  if (!input_need_rearrange && !output_need_rearrange) {
+    *node_rewritten = false;
+    return Status::OK();
+  }
+
+  *node_rewritten = true;
+
+  if (input_need_rearrange) {
+    // Reorder input edges.
+    TF_RETURN_IF_ERROR(ReorderInputEdges(g, n, input_index_mapping));
+
+    // Change Tin attribute.
+    std::vector<DataType> new_in_types =
+        ShuffleInputDataTypeAttribute(in_types, input_index_mapping);
+    n->ClearAttr("Tin");
+    n->AddAttr("Tin", new_in_types);
+  }
+
+  // Rewrite the to_apply function.
+  NameAttrList f;
+  TF_RETURN_IF_ERROR(GetNodeAttr(n->def(), "to_apply", &f));
+  const FunctionBody* fbody;
+  TF_RETURN_IF_ERROR(get_function_body_fn(f, &fbody));
+
+  if (input_need_rearrange) {
+    // Change _Arg node index.
+    RearrangeArgNodes(&fbody->arg_nodes, input_index_mapping);
+  }
+
+  if (output_need_rearrange) {
+    // Change index for _Retval nodes such that the resource nodes are at the
+    // end.
+    RearrangeRetvalNodesWithResources(fbody->ret_nodes, output_index_mapping);
+  }
+
+  // Save the new FunctionDef.
+  FunctionDef new_fdef;
+  string new_name =
+      fld->UniqueFunctionName(absl::StrCat(f.name(), "_rearrange_"));
+  TF_RETURN_IF_ERROR(GraphToFunctionDef(*fbody->graph, new_name, &new_fdef));
+  const StackTracesMap& stack_traces =
+      fld->GetStackTraces(f.name()).empty() && global_fld
+          ? global_fld->GetStackTraces(f.name())
+          : fld->GetStackTraces(f.name());
+  TF_RETURN_IF_ERROR(fld->AddFunctionDef(new_fdef, stack_traces));
+
+  // Change node to use rewritten function.
+  f.set_name(new_name);
+  n->ClearAttr("to_apply");
+  n->AddAttr("to_apply", f);
+
+  if (output_need_rearrange) {
+    // Rearrange output edges so that they point at the correct output index.
+    TF_RETURN_IF_ERROR(
+        ReorderOutputEdgesWithResources(g, n, output_index_mapping));
+
+    // Change Tout attribute for the node.
+    std::vector<DataType> new_out_types =
+        ShuffleOutputDataTypeAttributeWithResources(out_types,
+                                                    output_index_mapping);
+    n->ClearAttr("Tout");
+    n->AddAttr("Tout", new_out_types);
+  }
+  return Status::OK();
+}
+// End IPU specific changes.
 }  // namespace
 
 Status RearrangeFunctionArguments(
@@ -542,6 +725,12 @@ Status RearrangeFunctionArguments(
       bool node_rewritten;
       TF_RETURN_IF_ERROR(MaybeRewriteIfNode(get_function_body_fn, g, n, fld,
                                             &node_rewritten, global_fld));
+      // Begin IPU specific changes.
+    } else if (IsPoplarBackendFunctionalNode(n)) {
+      bool node_rewritten;
+      TF_RETURN_IF_ERROR(MaybePoplarBackendFunctionalNode(
+          get_function_body_fn, g, n, fld, &node_rewritten, global_fld));
+      // End IPU specific changes.
     }
   }
 

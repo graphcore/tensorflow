@@ -2015,7 +2015,9 @@ bool HloInstruction::IdenticalInternal(
         eq_operands,
     const std::function<bool(const HloComputation*, const HloComputation*)>&
         eq_computations,
-    bool layout_sensitive, bool ignore_channel_id_values) const {
+    bool layout_sensitive, bool ignore_channel_id_values,
+    const std::function<bool(const std::string&, const std::string&)>&
+        eq_backend_config) const {
   // An instruction is always identical to itself.
   if (this == &other) {
     return true;
@@ -2042,7 +2044,7 @@ bool HloInstruction::IdenticalInternal(
     }
   }
 
-  if (backend_config_ != other.backend_config_) {
+  if (!eq_backend_config(backend_config_, other.backend_config_)) {
     return false;
   }
 
@@ -2052,6 +2054,7 @@ bool HloInstruction::IdenticalInternal(
           other, eq_computations);
     }
   }
+
   return IdenticalSlowPath(other, eq_computations);
 }
 

@@ -482,6 +482,10 @@ class DatasetV2(collections_abc.Iterable, tracking_base.Trackable,
       RuntimeError: If not inside of tf.function and not executing eagerly.
     """
     if context.executing_eagerly() or ops.inside_function():
+      strategy = ds_context.get_strategy()
+      if hasattr(strategy, "_enable_dataset_iterators"):
+        if strategy._enable_dataset_iterators():  # pylint: disable=protected-access
+          return strategy._create_dataset_iterator(self)  # pylint: disable=protected-access
       with ops.colocate_with(self._variant_tensor):
         return iterator_ops.OwnedIterator(self)
     else:

@@ -38,6 +38,8 @@ load("//tensorflow/core/platform:build_config.bzl", "pyx_library", "tf_additiona
 load("//tensorflow/core/platform:build_config_root.bzl", "if_static", "tf_additional_plugin_deps", "tf_additional_profiler_deps", "tf_additional_xla_deps_py")
 load("//tensorflow/python:build_defs.bzl", "tf_gen_op_wrapper_private_py")
 
+load("@local_config_poplar//poplar:build_defs.bzl", "if_poplar")
+
 # TODO(mdan): Break into per-directory files.
 
 visibility = [
@@ -84,7 +86,9 @@ py_library(
         ":no_contrib",
         "//tensorflow/python/estimator:estimator_py",
         "//tensorflow/python/tpu:tpu_estimator",
-    ],
+    ] + if_poplar(["//tensorflow/python/ipu:ipu_lib"],
+                ["//tensorflow/python/ipu:dataset_extractor"]
+               ),
 )
 
 py_library(

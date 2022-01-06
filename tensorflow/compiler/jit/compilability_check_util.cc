@@ -177,8 +177,10 @@ bool RecursiveCompilabilityChecker::HasXLAKernel(
 
   if (node.type_string() == "Const") {
     const AttrValue* attr = node.attrs().Find("dtype");
+    // IPU specific change - allow string ttype const but treat it as a no-op.
     if (!op_filter_.allow_string_consts && attr != nullptr &&
-        attr->type() == DT_STRING) {
+        attr->type() == DT_STRING &&
+        jit_device_type_.type_string() != "XLA_IPU_JIT") {
       *uncompilable_reason =
           "Const op with type DT_STRING is not supported by XLA.";
       return false;

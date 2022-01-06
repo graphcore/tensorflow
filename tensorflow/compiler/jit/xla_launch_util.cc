@@ -605,7 +605,8 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>>
 XlaComputationLaunchContext::BuildXlaCompilerArguments(
     absl::Span<int const> must_be_constant_idxs,
     absl::Span<const Tensor* const> inputs,
-    absl::Span<VariableInfo const> variable_args, Device* device) {
+    absl::Span<VariableInfo const> variable_args, Device* device,
+    const std::vector<std::string>& mangled_input_names) {
   CHECK(absl::c_is_sorted(must_be_constant_idxs));
   std::vector<XlaCompiler::Argument> out;
   out.resize(inputs.size());
@@ -637,6 +638,14 @@ XlaComputationLaunchContext::BuildXlaCompilerArguments(
     const Tensor* input = inputs[input_num];
 
     XlaCompiler::Argument& arg = out[input_num];
+
+    // IPU specific change begin.
+    if (mangled_input_names.size()) {
+      CHECK_EQ(mangled_input_names.size(), inputs.size());
+      arg.name = mangled_input_names.at(input_num);
+    }
+    // IPU specific change end.
+
     if (variable_info_lookup.count(input_num)) {
       // Handles resource variables.
       TF_RET_CHECK(input->dtype() == DT_RESOURCE);

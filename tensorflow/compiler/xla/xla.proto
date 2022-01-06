@@ -384,6 +384,23 @@ message ExecutionOptions {
   bool deduplicate_hlo = 12;
 
   reserved 13;  // Was broadcast_replicated_parameters_via_collectives
+
+  // IPU Specific.
+  // The indices of arguments to the original TF operation. This does
+  // not include compile time constants or resource variables.
+  repeated int32 argument_input_indices = 100;
+
+  // The indices of resources to the TF operation which are resource variables.
+  repeated int32 resource_input_indices = 101;
+
+  // Element at index `i` indicates whether resource variable at
+  // `resource_input_indices[i]` is initialized.
+  repeated bool resource_input_initialized = 102;
+
+  // The number of outputs which are updates for resource variables.  For each
+  // output which is a resource update, this contains a mapping to the input
+  // parameter which is for that resource.
+  repeated int32 resource_update_to_input_index = 103;
 }
 
 message GetDeviceHandlesRequest {

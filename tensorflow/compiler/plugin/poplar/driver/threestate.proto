@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package xla.poplarplugin;
+
+// An enum for helping with setting a state of something, where the state can be
+// on, off or automatic/not set/undefined.
+enum ThreeState {
+  THREESTATE_OFF = 0;
+  THREESTATE_ON = 1;
+  THREESTATE_UNDEFINED = 2;
+}

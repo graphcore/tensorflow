@@ -99,11 +99,70 @@ string ExecutableBuildOptions::ToString() const {
       "num_replicas=%d}",
       device_ordinal_, result_layout, num_replicas_);
 }
+ExecutableBuildOptions& ExecutableBuildOptions::set_argument_input_indices(
+    const std::vector<int>& argument_input_indices) {
+  argument_input_indices_ = argument_input_indices;
+  return *this;
+}
+
+std::vector<int> ExecutableBuildOptions::argument_input_indices() const {
+  return argument_input_indices_;
+}
+
+ExecutableBuildOptions& ExecutableBuildOptions::set_resource_input_indices(
+    const std::vector<int>& resource_input_indices) {
+  resource_input_indices_ = resource_input_indices;
+  return *this;
+}
+
+std::vector<int> ExecutableBuildOptions::resource_input_indices() const {
+  return resource_input_indices_;
+}
+
+ExecutableBuildOptions& ExecutableBuildOptions::set_resource_input_initialized(
+    const std::vector<bool>& resource_input_initialized) {
+  resource_input_initialized_ = resource_input_initialized;
+  return *this;
+}
+
+std::vector<bool> ExecutableBuildOptions::resource_input_initialized() const {
+  return resource_input_initialized_;
+}
+
+ExecutableBuildOptions&
+ExecutableBuildOptions::set_resource_update_to_input_index(
+    const std::vector<int>& resource_update_to_input_index) {
+  std::copy(resource_update_to_input_index.begin(),
+            resource_update_to_input_index.end(),
+            std::back_inserter(resource_update_to_input_index_));
+  return *this;
+}
+
+std::vector<int> ExecutableBuildOptions::resource_update_to_input_index()
+    const {
+  return resource_update_to_input_index_;
+}
 
 ExecutionOptions CreateExecutionOptions(
     const ExecutableBuildOptions& build_options,
     const ProgramShape* program_shape) {
   ExecutionOptions execution_options = CreateDefaultExecutionOptions();
+
+  // IPU specific changes begin.
+  for (const int i : build_options.argument_input_indices()) {
+    execution_options.add_argument_input_indices(i);
+  }
+  for (const int i : build_options.resource_input_indices()) {
+    execution_options.add_resource_input_indices(i);
+  }
+  for (const bool i : build_options.resource_input_initialized()) {
+    execution_options.add_resource_input_initialized(i);
+  }
+  for (const int i : build_options.resource_update_to_input_index()) {
+    execution_options.add_resource_update_to_input_index(i);
+  }
+  // IPU specific changes end.
+
   if (build_options.has_debug_options()) {
     *execution_options.mutable_debug_options() = build_options.debug_options();
   }
@@ -129,5 +188,4 @@ ExecutionOptions CreateExecutionOptions(
       build_options.alias_passthrough_params());
   return execution_options;
 }
-
 }  // namespace xla
