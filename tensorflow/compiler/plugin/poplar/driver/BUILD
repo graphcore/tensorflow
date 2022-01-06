@@ -242,6 +242,8 @@ poplar_cc_library(
         "//tensorflow/compiler/xla/service:sort_simplifier",
         "//tensorflow/compiler/xla/service:tuple_simplifier",
         "//tensorflow/compiler/xla/service:while_loop_constant_sinking",
+        "//tensorflow/compiler/xla/service:while_loop_invariant_code_motion",
+        "//tensorflow/compiler/xla/service:while_loop_simplifier",
         "//tensorflow/compiler/xla/service:zero_sized_hlo_elimination",
         "//tensorflow/core/common_runtime:device_mgr",
     ],

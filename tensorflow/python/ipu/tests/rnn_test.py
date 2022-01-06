@@ -206,7 +206,7 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           'max_memory': 14563678 if TF1 else 14289524
       }, {
           'build': build_model_rnn1,
-          'cycles': 86929788 if TF1 else 80404544,
+          'cycles': 86929788 if TF1 else 78661615,
           'total_memory': 12141874 if TF1 else 12359011,
           'max_memory': 3044815 if TF1 else 3106806
       }, {

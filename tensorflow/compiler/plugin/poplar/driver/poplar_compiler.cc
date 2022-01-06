@@ -204,6 +204,8 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/sort_simplifier.h"
 #include "tensorflow/compiler/xla/service/tuple_simplifier.h"
 #include "tensorflow/compiler/xla/service/while_loop_constant_sinking.h"
+#include "tensorflow/compiler/xla/service/while_loop_invariant_code_motion.h"
+#include "tensorflow/compiler/xla/service/while_loop_simplifier.h"
 #include "tensorflow/compiler/xla/service/zero_sized_hlo_elimination.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
@@ -1403,6 +1405,10 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<F16ConstantFolding>();
       pipeline.AddPass<HloConstantFolding>();
       pipeline.AddPass<HloCSE>(true);
+      pipeline.AddPass<HloDCE>();
+      pipeline.AddPass<HloPassFix<WhileLoopInvariantCodeMotion>>();
+      pipeline.AddPass<TupleSimplifier>(true);
+      pipeline.AddPass<HloPassFix<WhileLoopSimplifier>>();
       pipeline.AddPass<WideConstFinder>();
       pipeline.AddPass<CommutativeInstructionReorderOperands>();
       {
