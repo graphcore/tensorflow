@@ -208,15 +208,17 @@ std::set<unsigned int> GetPoolingReductionDims(const Window& window) {
     }
   }
 
-  // When we have a single reduction dimension, add an adjacent dimension for
-  // reduction as well.
-  if (reduction_dims.size() == 1) {
-    if (reduction_dims.count(window.dimensions_size() - 1) == 0) {
-      reduction_dims.insert(window.dimensions_size() - 1);
-    } else {
-      reduction_dims.insert(window.dimensions_size() - 2);
+  // If not enough reduction dimensions, we add more
+  // If the input is an N-D tensor, we need N-2 "reduction dimensions"
+  int dims_from_end = 1;
+  while (reduction_dims.size() < window.dimensions_size() - 2) {
+    int dim_candidate = window.dimensions_size() - dims_from_end;
+    if (reduction_dims.count(dim_candidate) == 0) {
+      reduction_dims.insert(dim_candidate);
     }
+    dims_from_end += 1;
   }
+
   return reduction_dims;
 }
 
