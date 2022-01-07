@@ -22,7 +22,9 @@ import numpy as np
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import gradients
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
 
@@ -199,6 +201,45 @@ class IpuXlaConvTest(xla_test.XLATestCase):
         fd = {pa: np.ones([1, 1, 10, 10, 10])}
         result = sess.run(output, fd)
         self.assertAllClose(result, np.ones([1, 1, 5, 5, 5]))
+
+  # Need to test case where one spatial dimension is not reduced
+  def testAvgPool3DSamePaddingWithStridesF32OnlyTwoReduced(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
+        output = nn.avg_pool3d(pa,
+                               ksize=[1, 1, 1, 2, 2],
+                               strides=[1, 1, 1, 2, 2],
+                               data_format='NCDHW',
+                               padding='SAME',
+                               name="avg")
+
+        fd = {pa: np.ones([1, 1, 10, 10, 10])}
+        result = sess.run(output, fd)
+        self.assertAllClose(result, np.ones([1, 1, 10, 5, 5]))
+
+  # Test gradients for previous case
+  def testAvgPool3DSamePaddingWithStridesF32OnlyTwoReducedGradient(self):
+    with self.session() as sess:
+      pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
+
+      def calc_pool_grads(x):
+        with ops.device("/device:IPU:0"):
+          output = nn.avg_pool3d(x,
+                                 ksize=[1, 1, 1, 2, 2],
+                                 strides=[1, 1, 1, 2, 2],
+                                 data_format='NCDHW',
+                                 padding='SAME',
+                                 name="avg")
+          output_grads = gradients.gradients(output, x)
+          return output_grads
+
+      grads_on_ipu = ipu_compiler.compile(calc_pool_grads, inputs=[pa])
+
+      fd = {pa: np.ones([1, 1, 10, 10, 10])}
+      result = sess.run(grads_on_ipu, fd)
+
+      self.assertAllClose(result, 0.25 * np.ones([1, 1, 1, 10, 10, 10]))
 
   def testAvgPool3DSamePaddingWithStridesF16(self):
     with self.session() as sess:
