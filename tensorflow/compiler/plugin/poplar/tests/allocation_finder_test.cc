@@ -390,11 +390,11 @@ TEST_F(AllocationFinderTest, FindSubCompTensorAllocations) {
   Shape input_shape = ShapeUtil::MakeShape(F32, {1, 10, 10, 2});
   Shape weight_shape = ShapeUtil::MakeShape(F32, {3, 3, 2, 1});
 
-  Shape conv_shape =
-      ShapeInference::InferConvolveShape(
-          input_shape, weight_shape, /*feature_group_count=*/1,
-          /*batch_group_count*/ 1, GetConv1Window(), GetConvDimensions())
-          .ConsumeValueOrDie();
+  Shape conv_shape = ShapeInference::InferConvolveShape(
+                         input_shape, weight_shape, /*feature_group_count=*/1,
+                         /*batch_group_count*/ 1, GetConv1Window(),
+                         GetConvDimensions(), absl::nullopt)
+                         .ConsumeValueOrDie();
 
   /* Create convolution sub-computation */
   auto builder_sub = HloComputation::Builder(TestName());
@@ -479,17 +479,17 @@ TEST_F(AllocationFinderTest, FindMultiCompTensorAllocations1) {
   Shape input_shape = ShapeUtil::MakeShape(F32, {1, 10, 10, 2});
   Shape weight_shape = ShapeUtil::MakeShape(F32, {3, 3, 2, 1});
 
-  Shape conv1_shape =
-      ShapeInference::InferConvolveShape(
-          input_shape, weight_shape, /*feature_group_count=*/1,
-          /*batch_group_count*/ 1, GetConv1Window(), GetConvDimensions())
-          .ConsumeValueOrDie();
+  Shape conv1_shape = ShapeInference::InferConvolveShape(
+                          input_shape, weight_shape, /*feature_group_count=*/1,
+                          /*batch_group_count*/ 1, GetConv1Window(),
+                          GetConvDimensions(), absl::nullopt)
+                          .ConsumeValueOrDie();
 
-  Shape conv2_shape =
-      ShapeInference::InferConvolveShape(
-          input_shape, weight_shape, /*feature_group_count=*/1,
-          /*batch_group_count*/ 1, GetConv2Window(), GetConvDimensions())
-          .ConsumeValueOrDie();
+  Shape conv2_shape = ShapeInference::InferConvolveShape(
+                          input_shape, weight_shape, /*feature_group_count=*/1,
+                          /*batch_group_count*/ 1, GetConv2Window(),
+                          GetConvDimensions(), absl::nullopt)
+                          .ConsumeValueOrDie();
 
   /* Create convolution sub-computation 1 */
   auto builder_sub1 = HloComputation::Builder(TestName());
@@ -612,17 +612,17 @@ TEST_F(AllocationFinderTest, FindMultiCompTensorAllocations2) {
   Shape input_shape = ShapeUtil::MakeShape(F32, {1, 10, 10, 2});
   Shape weight_shape = ShapeUtil::MakeShape(F32, {3, 3, 2, 1});
 
-  Shape conv1_shape =
-      ShapeInference::InferConvolveShape(
-          input_shape, weight_shape, /*feature_group_count=*/1,
-          /*batch_group_count*/ 1, GetConv1Window(), GetConvDimensions())
-          .ConsumeValueOrDie();
+  Shape conv1_shape = ShapeInference::InferConvolveShape(
+                          input_shape, weight_shape, /*feature_group_count=*/1,
+                          /*batch_group_count*/ 1, GetConv1Window(),
+                          GetConvDimensions(), absl::nullopt)
+                          .ConsumeValueOrDie();
 
-  Shape conv2_shape =
-      ShapeInference::InferConvolveShape(
-          input_shape, weight_shape, /*feature_group_count=*/1,
-          /*batch_group_count*/ 1, GetConv2Window(), GetConvDimensions())
-          .ConsumeValueOrDie();
+  Shape conv2_shape = ShapeInference::InferConvolveShape(
+                          input_shape, weight_shape, /*feature_group_count=*/1,
+                          /*batch_group_count*/ 1, GetConv2Window(),
+                          GetConvDimensions(), absl::nullopt)
+                          .ConsumeValueOrDie();
 
   /* Create convolution sub-computation 1 */
   auto builder_sub1 = HloComputation::Builder(TestName());
@@ -1192,11 +1192,11 @@ TEST_F(AllocationFinderTest, FindDoesntTraceThroughInvalidCalls) {
   Shape half_shape = ShapeUtil::MakeShape(F32, {1, 10, 10, 1});
   Shape weight_shape = ShapeUtil::MakeShape(F32, {3, 3, 2, 1});
 
-  Shape conv_shape =
-      ShapeInference::InferConvolveShape(
-          input_shape, weight_shape, /*feature_group_count=*/1,
-          /*batch_group_count*/ 1, GetConv1Window(), GetConvDimensions())
-          .ConsumeValueOrDie();
+  Shape conv_shape = ShapeInference::InferConvolveShape(
+                         input_shape, weight_shape, /*feature_group_count=*/1,
+                         /*batch_group_count*/ 1, GetConv1Window(),
+                         GetConvDimensions(), absl::nullopt)
+                         .ConsumeValueOrDie();
 
   /* Create sub-computation which contains an unacceptable op */
   auto builder_sub = HloComputation::Builder(TestName());

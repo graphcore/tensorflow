@@ -3108,7 +3108,8 @@ TEST_P(ConvInputPaddingTest, DoTest) {
   builder.AddInstruction(HloInstruction::CreateConvolve(
       ShapeInference::InferConvolveShape(lhs_pad->shape(), filter->shape(),
                                          /*feature_group_count=*/1,
-                                         /*batch_group_count=*/1, window, dnums)
+                                         /*batch_group_count=*/1, window, dnums,
+                                         absl::nullopt)
           .ValueOrDie(),
       lhs_pad, filter, /*feature_group_count=*/1, /*batch_group_count=*/1,
       window, dnums, DefaultPrecisionConfig(2)));
@@ -3226,7 +3227,8 @@ TEST_P(ConvFilterPaddingTest, DoIt) {
   builder.AddInstruction(HloInstruction::CreateConvolve(
       ShapeInference::InferConvolveShape(input->shape(), rhs_pad->shape(),
                                          /*feature_group_count=*/1,
-                                         /*batch_group_count=*/1, window, dnums)
+                                         /*batch_group_count=*/1, window, dnums,
+                                         absl::nullopt)
           .ValueOrDie(),
       input, rhs_pad, /*feature_group_count=*/1, /*batch_group_count=*/1,
       window, dnums, precision_config));
