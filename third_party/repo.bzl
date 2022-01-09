@@ -33,6 +33,12 @@ def _get_link_dict(ctx, link_files, build_file):
         link_files = dict(link_files, **{build_file: "BUILD.bazel"})
     return {ctx.path(v): Label(k) for k, v in link_files.items()}
 
+def _archive_name(url):
+    index = url.rfind("/")
+    if index < 0:
+        fail("Couldn't find the beginning of the archive name in "+url)
+    return url[index:]
+
 def _tf_http_archive_impl(ctx):
     # Construct all labels early on to prevent rule restart. We want the
     # attributes to be strings instead of labels because they refer to files
@@ -47,10 +53,38 @@ def _tf_http_archive_impl(ctx):
             build_file = ctx.attr.system_build_file,
         ))
     else:
+        # IPU specific changes for using the mirror for dependencies.
+        mirror = _get_env_var(ctx, "HTTP_MIRROR") or ""
+        create_mirror_script = _get_env_var(ctx, "CREATE_MIRROR")
+        archive_path = ""
+        url = ctx.attr.urls[0]
+        archive_name = ctx.path("./"+_archive_name(url))
+
+        if mirror or create_mirror_script:
+            roots = ["mirror.tensorflow.org", "mirror.bazel.build", "download.tensorflow.org"]
+            for r in roots:
+                index = url.find(r)
+                if index >= 0:
+                    index += len(r)
+                    break
+            if index < 0:
+                fail("Couldn't substitute the mirror's url in " + url)
+            archive_path = url[index:]
+            new_url = mirror + url[index:]
+            if create_mirror_script:
+                # Stick to the original public urls
+                urls = ctx.attr.urls;
+            elif _get_env_var(ctx, "ENABLE_MIRROR_FALLBACK"):
+                urls = [ new_url ] + ctx.attr.urls
+            else:
+                urls = [ new_url ]
+        else:
+            urls = ctx.attr.urls
+
         patch_file = ctx.attr.patch_file
         patch_file = Label(patch_file) if patch_file else None
         ctx.download_and_extract(
-            url = ctx.attr.urls,
+            url = urls,
             sha256 = ctx.attr.sha256,
             type = ctx.attr.type,
             stripPrefix = ctx.attr.strip_prefix,
