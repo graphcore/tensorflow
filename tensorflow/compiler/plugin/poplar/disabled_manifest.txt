@@ -114,6 +114,9 @@ XlaSortOpTest.testInTopKLarge
 XlaSortOpTest.testTopK$ # Too large on CPU target
 XlaSortOpTest.testTopK2D #  Too large on CPU target
 XlaSortOpTest.testTopKZeros$ # T37228
+XlaSortOpTest.testVariadicSortLexicographic # Variadic sort not supported.
+XlaSortOpTest.testVariadicSortSeveral
+XlaSortOpTest.testVariadicSortSeveralStable
 MatrixDiagPartTest.testV1 # need popops::reduce(OR, int)
 MatrixDiagPartTest.testBatch # need popops::reduce(OR, int)
 MatrixDiagPartTest.testPadding # need popops::reduce(OR, int)
