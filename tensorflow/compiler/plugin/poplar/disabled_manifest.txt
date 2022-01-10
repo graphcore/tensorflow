@@ -109,6 +109,7 @@ XlaOpsNumericalTest.testGather$ # Implementation defined out of bounds behaviour
 XlaOpsNumericalTest.testShiftRightArithmetic  # Unsigned int
 XlaOpsNumericalTest.testShiftRightLogical # Unsigned int
 XlaOpsNumericalTest.testVariadicReduce # Variadic reduction not supported
+XlaOpsNumericalTest.testDotGeneralInt8xInt8ToInt32 # Don't support int8
 XlaSortOpTest.testTopK_200000
 XlaSortOpTest.testTopKLarge
 XlaSortOpTest.testTopK2D_200000
