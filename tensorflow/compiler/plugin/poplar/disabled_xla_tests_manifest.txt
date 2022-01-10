@@ -218,6 +218,7 @@ ArrayElementwiseOpTest.MulTwoConstantZeroElementC64s POPLAR
 ArrayElementwiseOpTest.CompareEqC64s POPLAR
 ArrayElementwiseOpTest.CompareEqZeroElementC64s POPLAR
 ArrayElementwiseOpTest.CompareNeC64s POPLAR
+ConvolutionHloTest.ConvolveC64Forward POPLAR
 TupleTest.ComplexTuples POPLAR
 DotOperationTest.MatrixVectorC64 POPLAR
 DotOperationTextTest.MatrixVectorComplex POPLAR
