@@ -75,6 +75,10 @@ DequantizeTest.MinCombinedUint8R2TailingZeroTransposeOutput POPLAR
 DequantizeTest.MinCombinedUint8LargeSizeTest POPLAR
 DequantizeTest.MinCombinedUint8LargeSizeTestTransposeOutput POPLAR
 ScalarBF16Test POPLAR
+HloTestBase.ReduceWindowVariadicSupport POPLAR
+HloTestBase.ReduceWindowVariadicSupport2 POPLAR
+HloTestBase.ReduceWindowVariadicSupport3 POPLAR
+HloTestBase.ReduceWindowVariadicSupport4 POPLAR
 
 UnaryOpTest.UnsignedAbsTestR1         POPLAR // U32
 UnaryOpTest.UnsignedSignTestR1        POPLAR
@@ -412,3 +416,6 @@ BufferDonationTest.TestMustAliasNotDonated POPLAR
 
 LocalClientExecuteTest.SizeOfGeneratedCodeInBytes POPLAR // Unsupported features.
 LocalClientExecuteTest.CompilePartitionedExecutable POPLAR
+
+ArrayElementwiseOpTest.IntPow POPLAR // No int32 power operator in Poplar. (T53427)
+ArrayElementwiseOpTest.IntPowLarge POPLAR

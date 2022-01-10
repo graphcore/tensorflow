@@ -17,6 +17,7 @@ limitations under the License.
 #include <functional>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/permutation_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 
@@ -176,7 +177,8 @@ std::tuple<Shape, Shape, std::vector<int64>> LeftMatMulPrepare(
     const Shape& shape, const DotDimensionNumbers& dot_dims) {
   std::vector<int64> permutations = LeftMatMulPermutations(shape, dot_dims);
   // Collapse the LHS dimensions down to [Batch, M, Contracting]
-  Shape shuffled_shape = ShapeUtil::PermuteDimensions(permutations, shape);
+  Shape shuffled_shape =
+      ShapeUtil::PermuteDimensions(InversePermutation(permutations), shape);
   return std::make_tuple(LeftMatMulPackShape(shuffled_shape, dot_dims),
                          shuffled_shape, permutations);
 }
@@ -185,7 +187,8 @@ std::tuple<Shape, Shape, std::vector<int64>> RightMatMulPrepare(
     const Shape& shape, const DotDimensionNumbers& dot_dims) {
   std::vector<int64> permutations = RightMatMulPermutations(shape, dot_dims);
   // Collapse the LHS dimensions down to [Batch, M, Contracting]
-  Shape shuffled_shape = ShapeUtil::PermuteDimensions(permutations, shape);
+  Shape shuffled_shape =
+      ShapeUtil::PermuteDimensions(InversePermutation(permutations), shape);
   return std::make_tuple(RightMatMulPackShape(shuffled_shape, dot_dims),
                          shuffled_shape, permutations);
 }
