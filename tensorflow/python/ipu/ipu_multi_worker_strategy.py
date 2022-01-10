@@ -269,14 +269,9 @@ class IPUMirroredVariable(values.MirroredVariable):  # pylint: disable=abstract-
 
 IPU_VARIABLE_CLASS_MAPPING = {
     "VariableClass": IPUDistributedVariable,
-    variable_scope.VariableSynchronization.AUTO: IPUMirroredVariable,
     variable_scope.VariableSynchronization.ON_WRITE: IPUMirroredVariable,
     variable_scope.VariableSynchronization.ON_READ: IPUSyncOnReadVariable,
 }
-
-
-class IPUAutoPolicy(values.AutoPolicy):  # pylint: disable=abstract-method
-  pass
 
 
 class IPUOnWritePolicy(values.OnWritePolicy):  # pylint: disable=abstract-method
@@ -288,7 +283,6 @@ class IPUOnReadPolicy(values.OnReadPolicy):  # pylint: disable=abstract-method
 
 
 IPU_VARIABLE_POLICY_MAPPING = {
-    variable_scope.VariableSynchronization.AUTO: IPUAutoPolicy,
     variable_scope.VariableSynchronization.ON_WRITE: IPUOnWritePolicy,
     variable_scope.VariableSynchronization.ON_READ: IPUOnReadPolicy,
 }

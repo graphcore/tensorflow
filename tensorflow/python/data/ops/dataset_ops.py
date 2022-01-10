@@ -78,6 +78,10 @@ from tensorflow.python.util import nest as tf_nest
 from tensorflow.python.util.compat import collections_abc
 from tensorflow.python.util.tf_export import tf_export
 
+# IPU specific changes begin.
+from tensorflow.python.distribute import distribution_strategy_context as ds_context
+# IPU specific changes end.
+
 # Loaded lazily due to a circular dependency (roughly
 # tf.function->wrap_function->dataset->autograph->tf.function).
 # TODO(b/133251390): Use a regular import.
