@@ -1658,7 +1658,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
         outfeed_thread.join()
         logs = outfeed_thread.get_result()
 
-      logs = tf_utils.to_numpy_or_python_type(logs)
+      logs = tf_utils.sync_to_numpy_or_python_type(logs)
 
       # Delete the outfeed queue.
       with context.eager_mode():
@@ -1821,7 +1821,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
       callbacks.on_predict_end()
     all_outputs = nest.map_structure_up_to(batch_outputs,
                                            training_module.concat, outputs)
-    return tf_utils.to_numpy_or_python_type(all_outputs)
+    return tf_utils.sync_to_numpy_or_python_type(all_outputs)
 
   def _get_pipeline_post_order(self, input_shapes, input_dtypes):
     """Get a dict of pipeline stage to list of nodes to execute for all the
