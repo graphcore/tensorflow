@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import numpy as np
 from typing import Generator, Iterator
 from tensorflow.python.data.experimental.ops import cardinality
 from tensorflow.python.data.ops import dataset_ops
@@ -25,6 +26,24 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.util import nest
 from tensorflow.python.ops import variables
+
+# Counter to keep track of number of log entries per token.
+_counter_per_token = {}
+
+
+def _call_counter(token):
+  """Wrapper for _counter_per_token.
+
+  Args:
+    token: The token for which to look up the count.
+
+  Returns:
+    The number of times this function has been called with
+    *token* as an argument (starting at 0)
+  """
+  global _counter_per_token  # pylint: disable=global-variable-not-assigned
+  _counter_per_token[token] = 1 + _counter_per_token.get(token, -1)
+  return _counter_per_token[token]
 
 
 class IPUDataHandler(data_adapter.DataHandler):
@@ -60,6 +79,17 @@ class IPUDataHandler(data_adapter.DataHandler):
       self._steps_per_execution = steps_per_execution
       self._steps_per_execution_value = steps_per_execution.numpy().item()
 
+    numpy_warning = ("{} is of type `np.ndarray`. This will be cast to "
+                     "`tf.Tensor` during every call to: {}. If you plan to "
+                     "call any of these functions multiple times in your "
+                     "program, it is recommended to pre-emptively cast to "
+                     "`tf.Tensor` to avoid the repeated computation.")
+    if isinstance(x, np.ndarray) and _call_counter("x_is_ndarray") == 1:
+      logging.warn(
+          numpy_warning.format("x", "`fit()`, `predict()` and `evaluate()`"))
+    if (y is not None and isinstance(y, np.ndarray)
+        and _call_counter("y_is_ndarray") == 1):
+      logging.warn(numpy_warning.format("y", "`fit()` and `evaluate()`"))
     strategy = ds_context.get_strategy()
     adapter_cls = data_adapter.select_data_adapter(x, y)
     self._adapter = adapter_cls(x,
