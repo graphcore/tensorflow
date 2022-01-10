@@ -95,6 +95,9 @@ StatelessRandomOpsTest.testDeterminism # poplibs CPU mode does not obey seed
 StatelessRandomOpsTest.testRandomUniformIsInRange # poplar CPU model random uniform int doesn't obey limits
 StatelessRandomOpsTest.testDistributionOfStatelessRandomUniform # Unsupported non-constant range
 StatelessRandomOpsTest.testTruncatedNormal # Tests float64
+StatelessRandomOpsTest.testDistributionOfStatelessRandomNormal # rng-bit-generator not supported (T37613)
+StatelessRandomOpsTest.testLargeNormal # rng-bit-generator not supported (T37613)
+StatelessRandomOpsTest.testRandomNormalIsFinite # rng-bit-generator not supported (T37613)
 SvdOpTest # Seg fault
 UnaryOpsTest.testIntOps$ # Unsupported cast
 UnaryOpsTest.testFloatOps$ # Different NaN behaviour on sign
