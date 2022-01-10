@@ -19,9 +19,9 @@ limitations under the License.
 namespace tensorflow {
 
 REGISTER_OP("IpuAllGather")
-    .Input("input: dtype")
+    .Input("inputs: dtype")
     .Output("output: dtype")
-    .Attr("dtype: {float16, float32, int32}")
+    .Attr("dtype: list({float16, float32, int32}) >= 1")
     .Attr("replication_factor: int")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       shape_inference::ShapeHandle output;
@@ -29,10 +29,12 @@ REGISTER_OP("IpuAllGather")
       int32 replication_factor = 0;
       TF_RETURN_IF_ERROR(c->GetAttr("replication_factor", &replication_factor));
 
-      TF_RETURN_IF_ERROR(c->Concatenate(c->MakeShape({replication_factor}),
-                                        c->input(0), &output));
+      for (int64 i = 0; i != c->num_inputs(); ++i) {
+        TF_RETURN_IF_ERROR(c->Concatenate(c->MakeShape({replication_factor}),
+                                          c->input(i), &output));
 
-      c->set_output(0, output);
+        c->set_output(i, output);
+      }
       return Status::OK();
     });
 

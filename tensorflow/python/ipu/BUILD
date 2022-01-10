@@ -203,6 +203,20 @@ py_library(
 )
 
 tf_py_test(
+    name = "all_gather_test",
+    size = "small",
+    srcs = ["tests/all_gather_test.py"],
+    tags = ["hw_poplar_test_4_ipus"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
     name = "automatic_loss_scaling_optimizer_test",
     size = "large",
     srcs = ["tests/automatic_loss_scaling_optimizer_test.py"],

@@ -17,6 +17,7 @@ Popops all to all and all gather operators
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from tensorflow.python.util import nest
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 
 
@@ -51,7 +52,7 @@ def all_gather(x, replication_factor, name=None):
     have the exact same output.
 
     Args:
-      x: The tensor to gather
+      x: The tensor or list of tensors to gather
       replication_factor: The number of replicas in each collective group.
         If less than the total number of replicas in the model, the replicas
         are divided into consecutive groups of the given size, and the
@@ -64,9 +65,14 @@ def all_gather(x, replication_factor, name=None):
       name: Optional op name.
 
     Returns:
-      A tensor of [replication_factor][x] with each replica in the same group
-      having the same tensor.
+      A tensor or list of tensors of shape [replication_factor][x] with each
+      replica in the same group having the same tensor.
     """
-  return gen_popops_ops.ipu_all_gather(x,
-                                       replication_factor=replication_factor,
-                                       name=name)
+
+  flat_tensors = nest.flatten(x)
+  output = gen_popops_ops.ipu_all_gather(flat_tensors,
+                                         replication_factor=replication_factor,
+                                         name=name)
+  if len(output) == 1:
+    return output[0]
+  return output
