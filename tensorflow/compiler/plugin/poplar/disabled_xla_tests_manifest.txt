@@ -74,6 +74,7 @@ DequantizeTest.MinCombinedUint8R2TailingZero POPLAR
 DequantizeTest.MinCombinedUint8R2TailingZeroTransposeOutput POPLAR
 DequantizeTest.MinCombinedUint8LargeSizeTest POPLAR
 DequantizeTest.MinCombinedUint8LargeSizeTestTransposeOutput POPLAR
+DotOperationTextTest.MatrixVectorBF16 POPLAR
 ScalarBF16Test POPLAR
 HloTestBase.ReduceWindowVariadicSupport POPLAR
 HloTestBase.ReduceWindowVariadicSupport2 POPLAR
@@ -202,6 +203,8 @@ SquareMatrixDot/3.TypesTF POPLAR
 SquareMatrixDot/3.TypesFF POPLAR
 RandomCholeskyTest.Complex POPLAR // Complex
 
+DotOperationTextTest.PREDDot POPLAR // Pred
+
 ArrayElementwiseOpTest.NegConstantZeroElementC64 POPLAR // Complex<double>
 ArrayElementwiseOpTest.NegConstantC64 POPLAR
 ArrayElementwiseOpTest.AddTwoConstantC64s POPLAR
@@ -297,6 +300,7 @@ DotOperationTest.DotOfInputTupleElem POPLAR // dot of a tuple
 
 ParametricDotTest.TestS32 POPLAR // Dot of an integer
 DotOperationTextTest.IntegerDotCodegen POPLAR
+DotOperationTextTest.WiderIntegralResultAccumulation POPLAR
 
 GatherOperationTest.OutOfBoundsIndex POPLAR
 GatherOperationTest.OutOfBoundsUnsignedIndex POPLAR
