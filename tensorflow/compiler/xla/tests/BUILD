@@ -991,6 +991,8 @@ xla_test(
         "cpu",
         "gpu",
         "interpreter",
+        # IPU specific change.
+        "poplar",
     ],
     tags = [
         "optonly",
