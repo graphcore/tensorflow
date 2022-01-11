@@ -285,6 +285,7 @@ ArrayElementwiseOpTest.MaxF32s POPLAR
 VecOpsSimpleTest.ClampFloatEdgeCases POPLAR
 
 MatOpsSimpleTest_F16F32.ExpTwoByTwoValues POPLAR // Precision error
+MathTest.IgammacF16 POPLAR
 
 DotOperationTest.ZeroElementVectorDot POPLAR // Zero sized matmul
 DotOperationTest_F16F32F64CF64.ZeroElementVectorDot POPLAR
