@@ -1308,6 +1308,12 @@ class KerasExtensionBase(base_layer.KerasExtension):
     local_replication_factor = int(global_replication_factor /\
       popdist.getNumInstances())
 
+    if verbose == 'auto':
+      if self.distribute_strategy._should_use_with_coordinator:  # pylint: disable=protected-access
+        verbose = 2  # Default to epoch-level logging for PSStrategy.
+      else:
+        verbose = 1  # Default to batch-level logging otherwise.
+
     if validation_split:
       # Create the validation data using the training data. Only supported for
       # `Tensor` and `NumPy` input.
@@ -1351,9 +1357,9 @@ class KerasExtensionBase(base_layer.KerasExtension):
             steps=data_handler.inferred_steps)
 
       self.stop_training = False
+      train_function_wrapper = self._make_ipu_train_function_wrapper()
       self._train_counter.assign(0)
       callbacks.on_train_begin()
-      train_function_wrapper = self._make_ipu_train_function_wrapper()
       training_logs = None
 
       data_handler._initial_epoch = (  # pylint: disable=protected-access
