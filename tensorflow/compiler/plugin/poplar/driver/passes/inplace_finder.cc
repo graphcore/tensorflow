@@ -13,13 +13,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include <memory>
+#include <tuple>
+#include <utility>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_dataflow_analysis.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 
@@ -32,17 +36,29 @@ namespace poplarplugin {
 namespace {
 enum class InplacePriority {
   kHigh = 0,
-  kMedium,
-  kLow,
+  kMedium = 1,
+  kLow = 2,
 };
 
 using InplaceCandidates =
     std::map<InplacePriority, std::vector<HloInstruction*>>;
-}  // namespace
 
 static bool IsInplaceCandidate(HloInstruction* instruction,
                                const HloPoplarDataflowAnalysis& dataflow) {
   // if any of the outputs could be inplaced consider instruction as a candidate
+  if (instruction->opcode() == HloOpcode::kParameter) {
+    return false;  // Don't handle these later down the line
+  }
+  if (instruction->opcode() == HloOpcode::kCopy) {
+    return false;  // Can't inplace a copy
+  }
+  if (IsFunction(instruction)) {
+    if (GetFunctionNumberModifiedRemoteBufferInputs(instruction) +
+        GetFunctionNumberUnmodifiedRemoteBufferInputs(instruction)) {
+      // In this case we must inline so don't even check buffers
+      return true;
+    }
+  }
   const auto& instruction_set = dataflow.GetInstructionBufferSet(instruction);
   const auto& buffer_sets = instruction_set.GetBufferSets();
   bool result = false;
@@ -65,75 +81,86 @@ static std::vector<HloInstruction*> FindAllCandidates(
   return result;
 }
 
-static std::map<HloInstructionType, InplaceCandidates> FindInplaceCandidates(
+static HloInstructionType GetInplaceType(
+    const HloInstruction* inst,
+    const HloPoplarInplaceDescription& inst_description) {
+  auto result = inst_description.GetType();
+  CHECK(result == HloInstructionType::kInplaceGetTupleElement ||
+        result == HloInstructionType::kInplaceReadWrite ||
+        result == HloInstructionType::kInplaceReadOnly)
+      << "Not allowed to inplace " << static_cast<int>(result)
+      << inst->ToString();
+  return result;
+}
+
+static InplacePriority GetPriority(const HloInstruction* inst) {
+  if (inst->parent()->root_instruction() == inst) {
+    return InplacePriority::kHigh;
+  }
+  switch (inst->opcode()) {
+    case HloOpcode::kAdd:
+    case HloOpcode::kFusion:
+    case HloOpcode::kDynamicUpdateSlice:
+    case HloOpcode::kMultiply:
+    case HloOpcode::kSubtract:
+    case HloOpcode::kAddDependency:
+    case HloOpcode::kGetTupleElement:
+      return InplacePriority::kHigh;
+    case HloOpcode::kCustomCall:
+      return InplacePriority::kMedium;
+    default:
+      return InplacePriority::kLow;
+  }
+}
+
+static int64 GetBufferOperandsSize(
+    const HloInstruction* inst,
+    const HloPoplarInplaceDescription& inst_description) {
+  int64 result = 0;
+  for (const int64 index : inst_description.GetInplaceOperandIndices()) {
+    const auto* inplace_operand = (inst->operand(index));
+    result += GetByteSizeOfTotalShapeSafe(inplace_operand->shape());
+  }
+  return result;
+}
+
+using SortKeyType = std::tuple<HloInstructionType, InplacePriority, int64>;
+static SortKeyType CreateSortKey(const HloInstruction* inst) {
+  auto inst_description = GetInplaceDescription(inst);
+  // Prioritise instructions by how they'll be inplaced, how important they
+  // are to inplace, and then by how large they are
+  return std::make_tuple(GetInplaceType(inst, inst_description),
+                         GetPriority(inst),
+                         -1 * GetBufferOperandsSize(inst, inst_description));
+}
+
+static absl::flat_hash_map<const HloInstruction*, SortKeyType> CreateKeyMap(
+    const std::vector<HloInstruction*>& candidates) {
+  absl::flat_hash_map<const HloInstruction*, SortKeyType> result;
+  result.reserve(candidates.size());
+  for (const auto* inst : candidates) {
+    result.emplace(inst, CreateSortKey(inst));
+  }
+  return result;
+}
+
+static std::vector<HloInstruction*> OrderInplaceCandidates(
+    std::vector<HloInstruction*> candidates, HloComputation* comp) {
+  const auto key_map = CreateKeyMap(candidates);
+  absl::c_stable_sort(candidates,
+                      [&](const HloInstruction* a, const HloInstruction* b) {
+                        return key_map.at(a) < key_map.at(b);
+                      });
+  return candidates;
+}
+
+static std::vector<HloInstruction*> FindInplaceCandidates(
     HloComputation* comp, const HloPoplarDataflowAnalysis& dataflow) {
   std::vector<HloInstruction*> candidates = FindAllCandidates(comp, dataflow);
-
-  std::map<HloInstructionType, InplaceCandidates> inplace_candidates;
-  absl::flat_hash_map<const HloInstruction*, InplacePriority> current_priority;
-
-  auto UpdateQueue = [&](HloInstruction* inst, InplaceCandidates& candidates,
-                         InplacePriority new_priority) {
-    auto it = current_priority.find(inst);
-    if (it != current_priority.end()) {
-      InplacePriority& old_priority = it->second;
-      if (old_priority == new_priority) {
-        return;
-      }
-      auto& queue = candidates[old_priority];
-      queue.erase(std::remove(queue.begin(), queue.end(), inst), queue.end());
-      old_priority = new_priority;
-    } else {
-      current_priority.emplace(inst, new_priority);
-    }
-    candidates[new_priority].push_back(inst);
-  };
-
-  auto AddToQueue = [&](HloInstruction* inst, InplacePriority priority) {
-    auto inst_description = GetInplaceDescription(inst);
-    UpdateQueue(inst, inplace_candidates[inst_description.GetType()], priority);
-  };
-
-  // For each route in map mark inplace ops as high priority inplace
-  // candidates.
-  for (auto& inst : candidates) {
-    switch (inst->opcode()) {
-      case HloOpcode::kAdd:
-      case HloOpcode::kFusion:
-      case HloOpcode::kDynamicUpdateSlice:
-      case HloOpcode::kMultiply:
-      case HloOpcode::kSubtract:
-      case HloOpcode::kAddDependency:
-      case HloOpcode::kGetTupleElement: {
-        AddToQueue(inst, InplacePriority::kHigh);
-        break;
-      }
-      default:
-        break;
-    }
-  }
-
-  // Get all possible remaining inplace instructions.
-  // Give medium priority to outlined poplibs calls.
-  for (auto* inst : comp->MakeInstructionPostOrder()) {
-    if (inst->parent()->root_instruction() == inst) {
-      AddToQueue(inst, InplacePriority::kHigh);
-    } else {
-      switch (inst->opcode()) {
-        case HloOpcode::kCustomCall:
-        case HloOpcode::kFusion: {
-          AddToQueue(inst, InplacePriority::kMedium);
-          break;
-        }
-        default: {
-          AddToQueue(inst, InplacePriority::kLow);
-          break;
-        }
-      }
-    }
-  }
-  return inplace_candidates;
+  return OrderInplaceCandidates(std::move(candidates), comp);
 }
+
+}  // namespace
 
 StatusOr<bool> InplaceFinder::Run(HloModule* module) {
   TF_ASSIGN_OR_RETURN(auto dataflow,
@@ -153,22 +180,11 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
     // Because we are using a map, we first inplace GTEs, then Read/Write and
     // then Read-Only.
     const auto inplace_candidates = FindInplaceCandidates(comp, *dataflow);
-    for (auto type_candidates_pair : inplace_candidates) {
-      auto& inplace_candidates_queues = type_candidates_pair.second;
-      // Because we are using a map, all the candidate queues are sorted from
-      // High to Low priority.
-      for (auto inplace_priority_candidates_pair : inplace_candidates_queues) {
-        auto& inplace_instruction_candidates =
-            inplace_priority_candidates_pair.second;
-        for (auto* inst : inplace_instruction_candidates) {
-          if (HloPoplarInplaceDescription::ConvertToInplace(
-                  inst, reachability_map.get(), worklist)) {
-            changed = true;
-            VLOG(1) << "Inplacing " << inst->ToString();
-          }
-        }
-      }
+    for (auto* inst : inplace_candidates) {
+      HloPoplarInplaceDescription::ConvertToInplace(
+          inst, reachability_map.get(), worklist);
     }
+    changed |= (!inplace_candidates.empty());
   }
 
   return changed;
