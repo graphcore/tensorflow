@@ -1032,8 +1032,10 @@ StatusOr<bool> AlgebraicSimplifierVisitor::RemoveDegenerateDimensionFromDot(
           : dot->mutable_operand(1);
   TF_ASSIGN_OR_RETURN(
       auto new_dot,
-      MakeDotHlo(new_lhs, new_rhs, new_dnums, dot->precision_config(),
-                 /*preferred_element_type=*/dot->shape().element_type()));
+      pp::algebraic_simplifier::util::PreserveFrontendAttributesIfNeeded(
+          MakeDotHlo(new_lhs, new_rhs, new_dnums, dot->precision_config(),
+                     /*preferred_element_type=*/dot->shape().element_type()),
+          dot));
   if (ShapeUtil::Compatible(dot->shape(), new_dot->shape())) {
     TF_RETURN_IF_ERROR(ReplaceInstruction(dot, new_dot));
   } else {
