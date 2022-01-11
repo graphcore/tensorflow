@@ -253,6 +253,21 @@ int64 GetByteSizeOfTotalShape(const Shape& shape) {
   return size;
 }
 
+int64 GetByteSizeOfTotalShapeSafe(const Shape& shape) {
+  int64 size = 0;
+  WalkShape(shape, [&](const Shape& s) {
+    if (s.IsOpaque()) {
+      return;
+    }
+    // If we hit a token byte size of will return zero.
+    // And alternative approach would be to just add the
+    // size of operand 0 if it is a token. It's a bit of
+    // a guess but for most cases a good one.
+    size += ShapeUtil::ByteSizeOf(s);
+  });
+  return size;
+}
+
 template <typename NativeT>
 StatusOr<NativeT> LiteralScalarToNativeType(const Literal& lit) {
   auto primitive_type = primitive_util::NativeToPrimitiveType<NativeT>();

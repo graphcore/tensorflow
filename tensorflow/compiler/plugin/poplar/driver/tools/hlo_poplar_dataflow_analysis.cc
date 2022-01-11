@@ -133,7 +133,8 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
       const HloPoplarPosition input_position{input, input_index};
       const HloPoplarPosition output_position{inst, indexed_shape.index};
 
-      const auto& buffer_set = analysis_->GetBufferSet(input_position);
+      HloPoplarBufferSet buffer_set = analysis_->GetBufferSet(input_position);
+      buffer_set.AddNewBufferUse(BufferUseKind::USE_ALIAS_READ_ONLY);
 
       analysis_->SetInstructionBufferSetOutput(inst, indexed_shape.index,
                                                buffer_set);

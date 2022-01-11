@@ -146,6 +146,9 @@ int64 ExtractFromTuple(const Shape& tuple, int64 tuple_index,
 
 std::vector<Shape> FlattenedXlaShape(const Shape& shape);
 int64 GetByteSizeOfTotalShape(const Shape& shape);
+// Get total byte size and if hit opaque type assume zero rather than
+// erroring
+int64 GetByteSizeOfTotalShapeSafe(const Shape& shape);
 
 template <typename NativeT>
 StatusOr<NativeT> LiteralScalarToNativeType(const Literal& lit);
