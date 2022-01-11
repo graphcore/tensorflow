@@ -227,6 +227,7 @@ ArrayElementwiseOpTest.PowC64s POPLAR
 TriangularSolveTest.SimpleRightLowerTransposeConjugate POPLAR
 TriangularSolveTest.SimpleLeftUpperTransposeNoconjugate POPLAR
 MathTest.AcosComplexValues POPLAR
+MatrixTest.SymmetrizeComplex POPLAR
 
 ConvolveWithAndWithoutCanonicalization.Convolve2D_NoSpatialDims POPLAR // ??
 
