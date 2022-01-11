@@ -70,32 +70,28 @@ static std::map<HloInstructionType, InplaceCandidates> FindInplaceCandidates(
   std::vector<HloInstruction*> candidates = FindAllCandidates(comp, dataflow);
 
   std::map<HloInstructionType, InplaceCandidates> inplace_candidates;
+  absl::flat_hash_map<const HloInstruction*, InplacePriority> current_priority;
 
-  InplaceCandidates& inplace_gte_candidates =
-      inplace_candidates[HloInstructionType::kInplaceGetTupleElement];
-  InplaceCandidates& inplace_read_write_candidates =
-      inplace_candidates[HloInstructionType::kInplaceReadWrite];
-  InplaceCandidates& inplace_read_only_candidates =
-      inplace_candidates[HloInstructionType::kInplaceReadOnly];
+  auto UpdateQueue = [&](HloInstruction* inst, InplaceCandidates& candidates,
+                         InplacePriority new_priority) {
+    auto it = current_priority.find(inst);
+    if (it != current_priority.end()) {
+      InplacePriority& old_priority = it->second;
+      if (old_priority == new_priority) {
+        return;
+      }
+      auto& queue = candidates[old_priority];
+      queue.erase(std::remove(queue.begin(), queue.end(), inst), queue.end());
+      old_priority = new_priority;
+    } else {
+      current_priority.emplace(inst, new_priority);
+    }
+    candidates[new_priority].push_back(inst);
+  };
 
   auto AddToQueue = [&](HloInstruction* inst, InplacePriority priority) {
     auto inst_description = GetInplaceDescription(inst);
-    switch (inst_description.GetType()) {
-      case HloInstructionType::kInplaceGetTupleElement: {
-        inplace_gte_candidates[priority].push_back(inst);
-        break;
-      }
-      case HloInstructionType::kInplaceReadWrite: {
-        inplace_read_write_candidates[priority].push_back(inst);
-        break;
-      }
-      case HloInstructionType::kInplaceReadOnly: {
-        inplace_read_only_candidates[priority].push_back(inst);
-        break;
-      }
-      default:
-        break;
-    }
+    UpdateQueue(inst, inplace_candidates[inst_description.GetType()], priority);
   };
 
   // For each route in map mark inplace ops as high priority inplace
@@ -148,7 +144,6 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
       continue;
     }
 
-    absl::flat_hash_set<HloInstruction*> converted;
     InplaceWorkList worklist;
     // The reachability map is used for adding and finding control dependencies
     // in order to allow for inplace ops to be executed after other instructions
@@ -166,10 +161,8 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
         auto& inplace_instruction_candidates =
             inplace_priority_candidates_pair.second;
         for (auto* inst : inplace_instruction_candidates) {
-          if (!converted.contains(inst) &&
-              HloPoplarInplaceDescription::ConvertToInplace(
+          if (HloPoplarInplaceDescription::ConvertToInplace(
                   inst, reachability_map.get(), worklist)) {
-            converted.insert(inst);
             changed = true;
             VLOG(1) << "Inplacing " << inst->ToString();
           }
