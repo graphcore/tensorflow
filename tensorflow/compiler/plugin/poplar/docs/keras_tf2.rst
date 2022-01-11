@@ -53,8 +53,9 @@ When training, gradient accumulation allows us to simulate bigger batch sizes.
 This is achieved by accumulating the gradients across multiple batches together
 then performing the weight update.
 
-For example, if we have a model where each step is of batch size 16 and we use a
-gradient accumulation factor of 4 then this simulates an input batch of size 64.
+For example, if we have a model where each step is of batch size 16 and we set
+`gradient_accumulation_steps_per_replica` to 4 then this simulates an input
+batch of size 64.
 
 Gradient accumulation can be easily enabled for Keras models created inside of
 an ``IPUStrategy`` by calling the
@@ -69,8 +70,8 @@ for more details.
   When using data-parallelism, the ``steps_per_execution`` value the model was
   compiled with must be an integer multiple of
   ``gradient_accumulation_steps_per_replica`` multiplied by the number of
-  replicas in the model. Data parallelism is discussed in the
-  :any:`keras-data-parallelism` section below.
+  replicas in the model. Data parallelism is discussed in
+  :numref:`automatic-data-parallelism`.
 
 
 .. note::
@@ -180,6 +181,7 @@ everything else to the second stage, as follows:
   equivalents.
 
 
+.. _automatic-data-parallelism:
 Automatic data parallelism
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -242,6 +244,20 @@ follows:
   :linenos:
   :emphasize-lines: 26-28
 
+
+Saving and loading Keras models
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Saving and loading a Keras model must be done within the IPUStrategy scope in
+order to save/load IPU-specific information.
+
+.. note::
+  The arguments `pipelining_kwargs` from :py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_pipelining_options` and
+  `gradient_accumulation_optimizer_kwargs` from :py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_gradient_accumulation_options`
+  are not serializable, which means that when the model
+  is being saved, their values are not saved. When restoring/loading a model,
+  call ``set_pipelining_options()`` or ``set_gradient_accumulation_options()``
+  again.
 
 Porting models from TensorFlow 2.1
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
