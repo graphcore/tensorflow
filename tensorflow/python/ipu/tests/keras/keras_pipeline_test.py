@@ -14,11 +14,10 @@
 # ==============================================================================
 
 from functools import partial
-from tensorflow.python.ipu.config import IPUConfig
-import pva
 import re
-
+from absl.testing import parameterized
 import numpy as np
+import pva
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -31,6 +30,8 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.keras import backend as K
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
+from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 
 
 def simple_model(layer_sizes, layer_stages, w=None, pipeline=False):
@@ -144,9 +145,16 @@ class BatchCallbackCounter(keras.callbacks.Callback):
     return self._logs
 
 
-class IPUPipelineTest(test.TestCase):
+class IPUPipelineTest(test.TestCase, parameterized.TestCase):
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.run_v2_only
-  def testFitCpuMatch(self):
+  def testFitCpuMatch(self, reduction_method):
+    experimental_normalize_gradients = \
+        reduction_method == ga.GradientAccumulationReductionMethod.SUM
+
     cfg = IPUConfig()
     cfg.ipu_model.tiles_per_ipu = 8
     cfg.auto_select_ipus = 2
@@ -168,8 +176,10 @@ class IPUPipelineTest(test.TestCase):
 
     with strategy.scope():
       m = simple_pipeline([32, 2], [0, 1], w=0.2)
-      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
-                               experimental_normalize_gradients=True)
+      m.set_pipelining_options(
+          gradient_accumulation_steps_per_replica=8,
+          experimental_normalize_gradients=experimental_normalize_gradients,
+          gradient_accumulation_reduction_method=reduction_method)
       m.compile('sgd', loss='mse', steps_per_execution=16)
       m.fit(test_dataset(length=96), epochs=2, class_weight=class_weight)
       ipu_weights = m.weights
@@ -199,8 +209,15 @@ class IPUPipelineTest(test.TestCase):
       # Should be called 96 / 16 times
       self.assertEqual(cb.count(), 6)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.run_v2_only
-  def testFitTwice(self):
+  def testFitTwice(self, reduction_method):
+    experimental_normalize_gradients = \
+        reduction_method == ga.GradientAccumulationReductionMethod.SUM
+
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg, output_execution_profile=True)
@@ -213,8 +230,10 @@ class IPUPipelineTest(test.TestCase):
       ds = test_dataset()
 
       m = simple_pipeline([32, 32, 2], [0, 1, 1])
-      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
-                               experimental_normalize_gradients=True)
+      m.set_pipelining_options(
+          gradient_accumulation_steps_per_replica=8,
+          experimental_normalize_gradients=experimental_normalize_gradients,
+          gradient_accumulation_reduction_method=reduction_method)
       m.compile('sgd', loss='mse', steps_per_execution=16)
       history = m.fit(ds, steps_per_epoch=16)
 
@@ -256,8 +275,12 @@ class IPUPipelineTest(test.TestCase):
       # Don't need to compile the graph again.
       self.assert_num_reports(report_helper, 0)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.run_v2_only
-  def testFitMultipleOutputs(self):
+  def testFitMultipleOutputs(self, reduction_method):
     cfg = IPUConfig()
     cfg.ipu_model.tiles_per_ipu = 8
     cfg.auto_select_ipus = 2
@@ -279,7 +302,9 @@ class IPUPipelineTest(test.TestCase):
                                 name="output2")(input_layer)
 
       m = keras.Model(inputs=input_layer, outputs=[y1, y2])
-      m.set_pipelining_options(gradient_accumulation_steps_per_replica=4)
+      m.set_pipelining_options(
+          gradient_accumulation_steps_per_replica=4,
+          gradient_accumulation_reduction_method=reduction_method)
       m.compile('sgd', loss='mse', steps_per_execution=4)
 
     # Fit the weights to the dataset
@@ -420,8 +445,12 @@ class IPUPipelineTest(test.TestCase):
       self.assertEqual(type(history.history['accuracy'][0]), float)
       self.assertEqual(type(history.history['accuracy'][1]), float)
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.run_v2_only
-  def testFitAndEvaluateAccumulateOutfeed(self):
+  def testFitAndEvaluateAccumulateOutfeed(self, reduction_method):
     cfg = IPUConfig()
     cfg.ipu_model.tiles_per_ipu = 8
     cfg.auto_select_ipus = 2
@@ -432,13 +461,26 @@ class IPUPipelineTest(test.TestCase):
     # Accumulating the outfeeds shouldn't make a difference to the outputs.
     with strategy.scope():
       m = simple_pipeline([32, 2], [0, 1], w=0.2)
-      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8)
+      m.set_pipelining_options(
+          gradient_accumulation_steps_per_replica=8,
+          gradient_accumulation_reduction_method=reduction_method)
       m_acc = simple_pipeline([32, 2], [0, 1], w=0.2)
-      m_acc.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
-                                   accumulate_outfeed=True)
+      m_acc.set_pipelining_options(
+          gradient_accumulation_steps_per_replica=8,
+          accumulate_outfeed=True,
+          gradient_accumulation_reduction_method=reduction_method)
 
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.0001)
-      m.compile(opt, loss='mse', metrics=['accuracy'], steps_per_execution=16)
+      steps_per_execution = 16
+
+      lr = 0.0001
+      if reduction_method != ga.GradientAccumulationReductionMethod.SUM:
+        lr *= steps_per_execution
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=lr)
+      m.compile(opt,
+                loss='mse',
+                metrics=['accuracy'],
+                steps_per_execution=steps_per_execution)
       m_acc.compile(opt,
                     loss='mse',
                     metrics=['accuracy'],
@@ -459,7 +501,11 @@ class IPUPipelineTest(test.TestCase):
                               steps_per_epoch=16,
                               epochs=10,
                               callbacks=[cb_acc])
-      self.assertAllClose(history.history, history_acc.history)
+
+      self.assertAllClose(history.history,
+                          history_acc.history,
+                          atol=1e-5,
+                          rtol=1e-5)
       self.assertEqual(cb.count(), cb_acc.count())
 
       cb = BatchCallbackCounter()
@@ -469,11 +515,16 @@ class IPUPipelineTest(test.TestCase):
 
       # Call evaluate with accumulate_outfeed and check accumulated
       history_acc = m_acc.evaluate(test_dataset(length=96), callbacks=[cb_acc])
+
       self.assertAllClose(history, history_acc)
       self.assertEqual(cb.count(), cb_acc.count())
 
+  @parameterized.parameters([
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN
+  ])
   @test_util.run_v2_only
-  def testFitAccumulateOutfeedSetDtype(self):
+  def testFitAccumulateOutfeedSetDtype(self, reduction_method):
     cfg = IPUConfig()
     cfg.ipu_model.tiles_per_ipu = 8
     cfg.auto_select_ipus = 2
@@ -506,8 +557,10 @@ class IPUPipelineTest(test.TestCase):
                     keras.metrics.RootMeanSquaredError()
                 ],
                 steps_per_execution=8)
-      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
-                               accumulate_outfeed=True)
+      m.set_pipelining_options(
+          gradient_accumulation_steps_per_replica=8,
+          accumulate_outfeed=True,
+          gradient_accumulation_reduction_method=reduction_method)
 
       # With default types nothing overflows.
       history = m.fit(test_dataset(), steps_per_epoch=8, epochs=1)
@@ -523,9 +576,11 @@ class IPUPipelineTest(test.TestCase):
           return np.float16
         return var.dtype
 
-      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
-                               accumulate_outfeed=True,
-                               accumulate_outfeed_dtype=fp16metrics)
+      m.set_pipelining_options(
+          gradient_accumulation_steps_per_replica=8,
+          accumulate_outfeed=True,
+          accumulate_outfeed_dtype=fp16metrics,
+          gradient_accumulation_reduction_method=reduction_method)
       history = m.fit(test_dataset(), steps_per_epoch=8, epochs=1)
 
       self.assertAllEqual(history.history['loss'], [np.inf])
