@@ -787,7 +787,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
         return all_outputs
 
       computational_stages = []
-      for stage_id in post_order_nodes_and_assignment:
+      for stage_id in sorted(post_order_nodes_and_assignment):
         computational_stages.append(partial(stage, stage_id))
 
       # When training loss and metrics are the outputs from the last

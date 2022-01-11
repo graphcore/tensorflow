@@ -772,6 +772,40 @@ class IPUPipelineTest(test.TestCase):
 
       self.assertEqual(test_layer.training, True)
 
+  def testPredictWithPipelinedNonlinearGraph(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.tiles_per_ipu = 8
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
+    # Tests that pipeline stages are built in the correct order by keras.
+    # These nodes would have multiple potential orderings, if not for the
+    # pipeline stage assignments.
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      input1 = keras.layers.Input(32)
+      input2 = keras.layers.Input(32)
+      with ipu.keras.PipelineStage(0):
+        x1 = keras.layers.Flatten()(input1)
+      with ipu.keras.PipelineStage(1):
+        x2 = keras.layers.Flatten()(input2)
+      l = keras.layers.Dense(4)
+      with ipu.keras.PipelineStage(2):
+        x1 = l(x1)
+      with ipu.keras.PipelineStage(3):
+        x2 = l(x2)
+
+      m = keras.Model((input1, input2), (x1, x2))
+      m.set_pipelining_options(device_mapping=[0] * 4)
+      inputs = [
+          np.ones(shape=(4, 32), dtype=np.int32),
+          np.ones(shape=(4, 32), dtype=np.int32)
+      ]
+      m.compile('sgd', loss='mse', steps_per_execution=4)
+      # If the nodes were not built in the correct order, calling predict will
+      # result in an exception.
+      m.predict(inputs, batch_size=1)
+
 
 if __name__ == '__main__':
   test.main()
