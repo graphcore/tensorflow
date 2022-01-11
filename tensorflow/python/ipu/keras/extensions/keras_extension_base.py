@@ -1280,7 +1280,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
                     y=None,
                     batch_size=None,
                     epochs=1,
-                    verbose=1,
+                    verbose='auto',
                     callbacks=None,
                     validation_split=0.,
                     validation_data=None,
@@ -1525,7 +1525,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
                          max_queue_size=10,
                          workers=1,
                          use_multiprocessing=False,
-                         return_dict=False):
+                         return_dict=False,
+                         **kwargs):
     mode = _Mode.EVALUATE
     base_layer.keras_api_gauge.get_cell('evaluate').set(True)
     version_utils.disallow_legacy_graph('Model', 'evaluate')

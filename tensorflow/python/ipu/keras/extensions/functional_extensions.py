@@ -158,7 +158,7 @@ class FunctionalLayerPipelineStageAssignment:
 
 class FunctionalExtension(keras_extension_base.KerasExtensionBase):  # pylint: disable=abstract-method
   @trackable.no_automatic_dependency_tracking
-  def __init__(self):
+  def __init__(self, *args, **kwargs):  # pylint: disable=unused-argument
     keras_extension_base.KerasExtensionBase.__init__(self)
     self._pipeline_stage_assignment = []
 
