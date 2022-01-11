@@ -188,6 +188,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/computation_placer.h"
 #include "tensorflow/compiler/xla/service/dynamic_index_splitter.h"
 #include "tensorflow/compiler/xla/service/dynamic_padder.h"
+#include "tensorflow/compiler/xla/service/eigh_expander.h"
 #include "tensorflow/compiler/xla/service/flatten_call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_constant_folding.h"
@@ -1360,6 +1361,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<NotSupportedGatherExpander>();
       pipeline.AddPass<NotSupportedScatterExpander>();
       pipeline.AddPass<QrExpander>();
+      pipeline.AddPass<EighExpander>();
       pipeline.AddPass<DynamicIndexSplitter>();
       pipeline.AddPass<HloPassFix<ConstantSliceFolding>>();
       pipeline.AddPass<HloPassFix<FuseOpsEarly>>(resources.annotations);
