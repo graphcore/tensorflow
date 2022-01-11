@@ -35,26 +35,41 @@ class PopopsAllGather : public XlaOpKernel, IpuOpKernel {
   void Compile(XlaOpKernelContext* ctx) override {
     attribute_map_.AddAttribute("replica_group_size", replica_group_size_);
 
-    // The output should be [replicationFactor][inputShape] shaped.
-    const TensorShape input_shape = ctx->InputShape(0);
-    TensorShape output_shape = ctx->InputShape(0);
-    output_shape.InsertDim(0, replica_group_size_);
+    // Build xla output shape.
+    std::vector<xla::Shape> xla_output_shapes;
+    xla_output_shapes.reserve(ctx->num_inputs());
+    for (int64 i = 0; i < ctx->num_inputs(); i++) {
+      // The output should be [replicationFactor][inputShape] shaped.
+      TensorShape output_shape = ctx->InputShape(i);
+      output_shape.InsertDim(0, replica_group_size_);
 
-    // Get the element type of the input
-    xla::PrimitiveType input_type;
-    OP_REQUIRES_OK(ctx,
-                   DataTypeToPrimitiveType(ctx->input_type(0), &input_type));
+      // Get the element type of the input.
+      xla::PrimitiveType input_type;
+      OP_REQUIRES_OK(ctx,
+                     DataTypeToPrimitiveType(ctx->input_type(i), &input_type));
+
+      // Convert the output shape into the XLA format.
+      xla_output_shapes.push_back(
+          TensorShapeToXLAShape(input_type, output_shape));
+    }
+    // Combine output shapes into tuple.
+    xla::Shape xla_output_shape =
+        xla::ShapeUtil::MakeTupleShape(xla_output_shapes);
 
     xla::XlaBuilder& b = *ctx->builder();
 
-    // Convert the output shape into the XLA format.
-    xla::Shape xla_output_shape =
-        TensorShapeToXLAShape(input_type, output_shape);
+    std::vector<xla::XlaOp> input_values;
+    std::vector<TensorShape> input_shapes;
+    OP_REQUIRES_OK(ctx, ctx->InputList("inputs", &input_values, &input_shapes));
 
     xla::XlaOp call_output =
-        xla::CustomCall(&b, PoplarOp_Name(PoplarOp::AllGather), {ctx->Input(0)},
+        xla::CustomCall(&b, PoplarOp_Name(PoplarOp::AllGather), input_values,
                         xla_output_shape, attribute_map_.Serialise());
-    ctx->SetOutput(0, call_output);
+
+    // Get each output value with a GTE.
+    for (int64 i = 0; i != ctx->num_inputs(); ++i) {
+      ctx->SetOutput(i, xla::GetTupleElement(call_output, i));
+    }
   }
 
  private:

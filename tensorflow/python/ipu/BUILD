@@ -181,6 +181,20 @@ py_library(
 )
 
 tf_py_test(
+    name = "all_gather_test",
+    size = "small",
+    srcs = ["tests/all_gather_test.py"],
+    tags = ["hw_poplar_test_4_ipus"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
     name = "config_test",
     size = "small",
     srcs = ["tests/config_test.py"],

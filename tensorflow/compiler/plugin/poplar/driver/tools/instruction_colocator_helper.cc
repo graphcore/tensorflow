@@ -717,7 +717,7 @@ class AllGatherColocatorHelper : public InstructionColocatorHelper {
  public:
   AllGatherColocatorHelper()
       : InstructionColocatorHelper(
-            /*requires_matching_element_types=*/true) {}
+            /*requires_matching_element_types=*/false) {}
 
   bool CanColocate(const HloInstruction* inst) const override {
     return IsPoplarInstruction(PoplarOp::AllGather)(inst);
@@ -749,45 +749,59 @@ class AllGatherColocatorHelper : public InstructionColocatorHelper {
     auto* first_all_gather = to_combine.front();
     HloComputation* comp = first_all_gather->parent();
 
+    // Concatenate tuples from cluster into one big tuple.
     std::vector<Shape> new_shapes;
     std::vector<HloInstruction*> new_operands;
     new_shapes.reserve(cluster_size);
     new_operands.reserve(cluster_size);
     for (HloInstruction* old_all_gather : to_combine) {
-      CHECK_EQ(old_all_gather->operand_count(), 1);
-      new_shapes.push_back(old_all_gather->shape());
-      new_operands.push_back(old_all_gather->mutable_operand(0));
+      CHECK(old_all_gather->shape().IsTuple());
+      for (int64 i = 0; i != old_all_gather->operand_count(); ++i) {
+        new_shapes.push_back(old_all_gather->shape().tuple_shapes(i));
+        new_operands.push_back(old_all_gather->mutable_operand(i));
+      }
     }
 
     const auto new_shape = ShapeUtil::MakeTupleShape(new_shapes);
-    PoplarReplicaGroups new_replica_groups =
+    // Get replica groups from first instruction as we ensure they are all equal
+    // in CanColocateExtra.
+    PoplarReplicaGroups replica_groups =
         Cast<HloPoplarAllGatherInstruction>(first_all_gather)
             ->GetPoplarReplicaGroups();
 
     // Add the new instruction.
     HloInstruction* new_all_gather = AddReplacementInstruction(
         comp, first_all_gather,
-        CreatePoplarAllGather(new_operands, new_shape, new_replica_groups));
+        CreatePoplarAllGather(new_operands, new_shape, replica_groups));
 
-    std::vector<HloInstruction*> result(cluster_size + 1);
-    result[0] = new_all_gather;
-
-    for (uint64 i = 0; i != cluster_size; ++i) {
-      HloInstruction* old_all_gather = to_combine[i];
-      // Add a GTE to unpack the new_inst result.
-      TF_ASSIGN_OR_RETURN(HloInstruction * gte,
-                          AddGTEInstruction(new_all_gather, i, old_all_gather));
-
-      result[i + 1] = gte;
+    // Delete old instructions and replace uses.
+    int64 output_index_offset = 0;
+    for (HloInstruction* old_all_gather : to_combine) {
       TF_RETURN_IF_ERROR(
           new_all_gather->CopyAllControlDepsFrom(old_all_gather));
       TF_RETURN_IF_ERROR(old_all_gather->DropAllControlDeps());
-      TF_RETURN_IF_ERROR(old_all_gather->ReplaceAllUsesWith(gte));
-      // This will do safety checks like confirming that there are no
-      // users of the old AllGather instructions.
+      // Record the number of users before adding the users from old_all_gather.
+      // This is used later to iterate through only the new users.
+      int64 new_users_offset = new_all_gather->user_count();
+      TF_RETURN_IF_ERROR(
+          old_all_gather->ReplaceAllUsesWithDifferentShape(new_all_gather));
+
+      // Iterate through new users and update gte indexes.
+      for (auto itr = new_all_gather->users().begin() + new_users_offset;
+           itr != new_all_gather->users().end(); ++itr) {
+        HloInstruction* gte = *itr;
+        CHECK(gte->opcode() == HloOpcode::kGetTupleElement);
+        gte->set_tuple_index(gte->tuple_index() + output_index_offset);
+      }
+      // Used to calculate updated gte index values.
+      output_index_offset += old_all_gather->operand_count();
+
+      // Remove old instruction.
       TF_RETURN_IF_ERROR(comp->RemoveInstruction(old_all_gather));
     }
 
+    std::vector<HloInstruction*> result(1);
+    result[0] = new_all_gather;
     return result;
   }
 };

@@ -28,7 +28,7 @@ namespace poplarplugin {
 
 // Constructor.
 HloPoplarAllGatherInstruction::HloPoplarAllGatherInstruction(
-    std::vector<HloInstruction*> inputs, const Shape& output_shape,
+    absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
     PoplarReplicaGroups replica_groups)
     : HloPoplarInstruction(output_shape, inputs, PoplarOp::AllGather,
                            replica_groups),
@@ -77,7 +77,7 @@ PoplarReplicaGroups HloPoplarAllGatherInstruction::GetPoplarReplicaGroups()
 
 // Creates an instance of a HloPoplarAllGatherInstruction
 std::unique_ptr<HloInstruction> CreatePoplarAllGather(
-    std::vector<HloInstruction*> inputs, const Shape& output_shape,
+    absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
     PoplarReplicaGroups replica_groups) {
   return absl::make_unique<HloPoplarAllGatherInstruction>(inputs, output_shape,
                                                           replica_groups);
@@ -87,8 +87,7 @@ std::unique_ptr<HloInstruction>
 HloPoplarAllGatherInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  return CreatePoplarAllGather({operands.begin(), operands.end()}, shape,
-                               replica_groups_);
+  return CreatePoplarAllGather(operands, shape, replica_groups_);
 }
 
 std::vector<std::string>
@@ -111,8 +110,7 @@ static HloPoplarInstructionFactory allgather_factory(
       const auto replica_groups =
           PoplarReplicaGroups::Consecutive(replica_group_size);
 
-      CHECK_EQ(call->operand_count(), 1);
-      return CreatePoplarAllGather({call->mutable_operand(0)}, call->shape(),
+      return CreatePoplarAllGather(call->operands(), call->shape(),
                                    replica_groups);
     });
 

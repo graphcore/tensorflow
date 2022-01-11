@@ -28,9 +28,9 @@ namespace poplarplugin {
 
 class HloPoplarAllGatherInstruction : public HloPoplarInstruction {
  public:
-  explicit HloPoplarAllGatherInstruction(std::vector<HloInstruction*> inputs,
-                                         const Shape& output_shape,
-                                         PoplarReplicaGroups replica_groups);
+  explicit HloPoplarAllGatherInstruction(
+      absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
+      PoplarReplicaGroups replica_groups);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -61,7 +61,7 @@ class HloPoplarAllGatherInstruction : public HloPoplarInstruction {
 };
 
 std::unique_ptr<HloInstruction> CreatePoplarAllGather(
-    std::vector<HloInstruction*> inputs, const Shape& output_shape,
+    absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
     PoplarReplicaGroups replica_groups = {});
 
 }  // namespace poplarplugin

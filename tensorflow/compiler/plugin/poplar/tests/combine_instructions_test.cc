@@ -1247,27 +1247,45 @@ HloModule top
 entry {
   arg0 = f32[10] parameter(0)
   arg1 = f32[10] parameter(1)
-  arg2 = f32[10] parameter(2)
-  r0 = f32[4,10] custom-call(arg0), custom_call_target="AllGather",
+  arg2 = u32[10] parameter(2)
+  r0 = (f32[4,10]) custom-call(arg0), custom_call_target="AllGather",
     backend_config="{\"replica_group_size\":0}"
-  r1 = f32[4,10] custom-call(arg1), custom_call_target="AllGather",
+  r1 = (f32[4,10]) custom-call(arg1), custom_call_target="AllGather",
     backend_config="{\"replica_group_size\":0}"
-  r2 = f32[4,10] custom-call(arg2), custom_call_target="AllGather",
+  r2 = (u32[4,10]) custom-call(arg2), custom_call_target="AllGather",
     backend_config="{\"replica_group_size\":0}"
-  r3 = f32[2,10] custom-call(arg0), custom_call_target="AllGather",
+  r3 = (f32[2,10]) custom-call(arg0), custom_call_target="AllGather",
     backend_config="{\"replica_group_size\":2}"
-  r4 = f32[2,10] custom-call(arg1), custom_call_target="AllGather",
+  r4 = (f32[2,10]) custom-call(arg1), custom_call_target="AllGather",
     backend_config="{\"replica_group_size\":2}"
-  r5 = f32[2,10] custom-call(arg2), custom_call_target="AllGather",
+  r5 = (u32[2,10]) custom-call(arg2), custom_call_target="AllGather",
     backend_config="{\"replica_group_size\":2}"
-  r6 = f32[4,10] custom-call(arg0), custom_call_target="AllGather",
+  r6 = (f32[4,10]) custom-call(arg0), custom_call_target="AllGather",
     backend_config="{\"replica_group_size\":4}"
-  r7 = f32[4,10] custom-call(arg1), custom_call_target="AllGather",
+  r7 = (f32[4,10]) custom-call(arg1), custom_call_target="AllGather",
     backend_config="{\"replica_group_size\":4}"
-  r8 = f32[4,10] custom-call(arg2), custom_call_target="AllGather",
+  r8 = (u32[4,10]) custom-call(arg2), custom_call_target="AllGather",
     backend_config="{\"replica_group_size\":4}"
-  ROOT %tuple = (f32[4,10], f32[4,10], f32[4,10], f32[2,10], f32[2,10], f32[2,10], f32[4,10],
-    f32[4,10], f32[4,10]) tuple(r0, r1, r2, r3, r4, r5, r6, r7, r8)
+  gte0 = f32[4,10] get-tuple-element((f32[4,10]) r0), index=0,
+    backend_config="{\"isInplace\":true}"
+  gte1 = f32[4,10] get-tuple-element((f32[4,10]) r1), index=0,
+    backend_config="{\"isInplace\":true}"
+  gte2 = u32[4,10] get-tuple-element((u32[4,10]) r2), index=0,
+    backend_config="{\"isInplace\":true}"
+  gte3 = f32[2,10] get-tuple-element((f32[2,10]) r3), index=0,
+    backend_config="{\"isInplace\":true}"
+  gte4 = f32[2,10] get-tuple-element((f32[2,10]) r4), index=0,
+    backend_config="{\"isInplace\":true}"
+  gte5 = u32[2,10] get-tuple-element((u32[2,10]) r5), index=0,
+    backend_config="{\"isInplace\":true}"
+  gte6 = f32[4,10] get-tuple-element((f32[4,10]) r6), index=0,
+    backend_config="{\"isInplace\":true}"
+  gte7 = f32[4,10] get-tuple-element((f32[4,10]) r7), index=0,
+    backend_config="{\"isInplace\":true}"
+  gte8 = u32[4,10] get-tuple-element((u32[4,10]) r8), index=0,
+    backend_config="{\"isInplace\":true}"
+  ROOT %tuple = (f32[4,10], f32[4,10], u32[4,10], f32[2,10], f32[2,10], u32[2,10], f32[4,10],
+    f32[4,10], u32[4,10]) tuple(gte0, gte1, gte2, gte3, gte4, gte5, gte6, gte7, gte8)
 }
   )hlo";
 class CombineInstructionsAllGatherTest : public CombineInstructionsTest {
@@ -1559,6 +1577,7 @@ struct ShardingPropogationTest : CombineInstructionsTest,
     GradientAccumulationFuser fuser(annotations);
     fuser.Run(module_.get());
 
+    information_.set_max_all_gather_buffer_size(4 * 1024);
     information_.set_max_reduce_scatter_buffer_size(60 * 1024);
     information_.set_max_all_reduce_buffer_size(64 * 1024);
     information_.set_max_send_recv_cluster_size(8);

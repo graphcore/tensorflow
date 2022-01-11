@@ -184,7 +184,7 @@ class TestSeedControl(test_util.TensorFlowTestCase):
     # using the same seed.
     with ipu.scopes.ipu_scope('/device:IPU:0'):
       cast1 = math_ops.cast(inp, dtype=np.float16)
-      out0 = gen_popops_ops.ipu_all_gather(cast1, replication_factor=2)
+      out0, = gen_popops_ops.ipu_all_gather([cast1], replication_factor=2)
 
     # Configure the hardware
     config = ipu.config.IPUConfig()

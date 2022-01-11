@@ -39,7 +39,7 @@ class TestAllGather(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         rep_id = ipu.replication_ops.replication_index()
         x = x + math_ops.cast(rep_id, dtype=np.float32)
-        y = gen_popops_ops.ipu_all_gather(x, replication_factor=8)
+        y, = gen_popops_ops.ipu_all_gather([x], replication_factor=8)
         outfeed = outfeed_queue.enqueue(y)
         return y, outfeed
 
@@ -69,7 +69,7 @@ class TestAllGather(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testAllGatherShapeInference(self):
     x = array_ops.placeholder(np.float32, shape=(2, 4))
-    y = gen_popops_ops.ipu_all_gather(x, replication_factor=8)
+    y, = gen_popops_ops.ipu_all_gather([x], replication_factor=8)
     self.assertAllEqual((8, 2, 4), y.shape)
 
   @tu.test_uses_ipus(num_ipus=8)
