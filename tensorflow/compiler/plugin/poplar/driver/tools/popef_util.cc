@@ -33,6 +33,8 @@ void ToPopEFShape(const xla::Shape& shape, std::vector<int64_t>& popef_shape) {
 
 StatusOr<popef::DataType> ToPopEFDataType(xla::PrimitiveType type) {
   switch (type) {
+    case xla::PRED:
+      return popef::DataType::BOOL;
     case xla::F32:
       return popef::DataType::F32;
     case xla::F16:
