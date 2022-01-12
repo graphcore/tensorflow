@@ -1602,10 +1602,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(pipeline)
       # Loss of '1' is accumulated 8 times.
-      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
-        self.assertAllEqual([8], sess.run(outfed))
-      else:
-        self.assertAllEqual([1], sess.run(outfed))
+      self.assertAllEqual([8], sess.run(outfed))
 
     # There should be 2 GA-adds. One for the weight and one for the outfeed.
     report_json = pva.openReport(report_helper.find_report())
@@ -1667,10 +1664,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(pipeline)
       # '1' is accumulated 8 times.
-      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
-        self.assertAllEqual([[8]], sess.run(outfed))
-      else:
-        self.assertAllEqual([[1]], sess.run(outfed))
+      self.assertAllEqual([[8]], sess.run(outfed))
 
     report_json = pva.openReport(report_helper.find_report())
     # There should be 2 GA-adds. One for the weight and one for the outfeed.
@@ -1738,20 +1732,13 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(pipeline_16)
       # Buffer overflows float16
       val = sess.run(outfed)[0]
-      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
-        self.assertTrue(val > np.finfo(np.float16).max
-                        or val < np.finfo(np.float16).min)
-      else:
-        # With MEAN, we don't overflow, but we do see an underflow.
-        self.assertAllEqual([30000], val)
+      self.assertTrue(val > np.finfo(np.float16).max
+                      or val < np.finfo(np.float16).min)
 
       sess.run(pipeline_32)
       # '1' is accumulated 8 times, + 24 ga count * 10000 addition to the loss
       val = sess.run(outfed2)[0]
-      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
-        self.assertAllEqual([[240008]], [val])
-      else:
-        self.assertAllEqual([[30001]], [val])
+      self.assertAllEqual([[240008]], [val])
 
   @parameterized.parameters([
       ga.GradientAccumulationReductionMethod.SUM,
@@ -1806,11 +1793,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
       sess.run(variables.global_variables_initializer())
       sess.run(pipeline)
-      # '1' is accumulated 8 times, '2' is accumulated 8 times.
-      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
-        self.assertAllEqual([[8], [16]], sess.run(outfed))
-      else:
-        self.assertAllEqual([[1], [2]], sess.run(outfed))
+      self.assertAllEqual([[8], [16]], sess.run(outfed))
 
     report_json = pva.openReport(report_helper.find_report())
     # There should be 3 GA-adds. One for the weight and one for each output.
@@ -1861,10 +1844,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(pipeline)
       # '1' is accumulated 8 times.
-      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
-        self.assertAllEqual([[8]], sess.run(outfed))
-      else:
-        self.assertAllEqual([[1]], sess.run(outfed))
+      self.assertAllEqual([[8]], sess.run(outfed))
 
     report_json = pva.openReport(report_helper.find_report())
     # There should be 1 GA-add for the outfeed.
@@ -1912,10 +1892,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(pipeline)
       # '1' is accumulated 8 times, '2' is accumulated 8 times.
-      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
-        self.assertAllEqual([[8], [16]], sess.run(outfed))
-      else:
-        self.assertAllEqual([[1], [2]], sess.run(outfed))
+      self.assertAllEqual([[8], [16]], sess.run(outfed))
 
     report_json = pva.openReport(report_helper.find_report())
     # There should be a GA-add for each output from the last stage.
