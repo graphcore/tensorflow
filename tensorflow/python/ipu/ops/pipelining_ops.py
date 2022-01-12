@@ -879,17 +879,10 @@ def pipeline(computational_stages,
         control_outputs.append(outfeed_queue.enqueue(tensor_or_tensors))
       else:
         tensors = functional_ops._convert_to_list(tensor_or_tensors)  # pylint: disable=protected-access
-        grad_scale = _grad_scale(captured_gradient_accumulation_count)
         for tensor in tensors:
           # Find the data type for the outfeed accumulator.
           dtype = op_util.get_accumulator_dtype(tensor,
                                                 accumulate_outfeed_dtype)
-
-          if grad_scale is not None:
-            gs = grad_scale if grad_scale.dtype == tensor.dtype else \
-                math_ops.cast(grad_scale, tensor.dtype)
-            tensor = tensor * gs
-
           # Create a new tensor for the accumulator buffer.
           acc = gen_poputil_ops.gradient_accumulator_create_from_shape(
               shape=tensor.shape, output_type=dtype)

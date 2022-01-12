@@ -303,8 +303,6 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
       for _ in range(num_weight_updates_per_loop):
         # L(x) = w * x + y
         loss = expected_w * x + y
-        if reduction_method != ga.GradientAccumulationReductionMethod.SUM:
-          loss /= gradient_accumulation_count
         step_losses.append(loss)
 
         # dL(x)/dw = x
