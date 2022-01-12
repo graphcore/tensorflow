@@ -620,18 +620,22 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
     model_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj,
                                                         freeze_variables=False)
 
-    inputs = [
-        model_ref['d1_weight'], model_ref['d1_bias'], model_ref['d2_bias'],
-        model_ref['d1_weight'], model_ref['d3_bias'], model_ref['d3_weight']
-    ]
+    inputs = {
+        'XLA_Args/d1/weight': model_ref['d1_weight'],
+        'XLA_Args/d1/bias': model_ref['d1_weight'],
+        'XLA_Args/d2/weight': model_ref['d2_weight'],
+        'XLA_Args/d2/bias': model_ref['d2_bias'],
+        'XLA_Args/d3/weight': model_ref['d3_weight'],
+        'XLA_Args/d3/bias': model_ref['d3_bias'],
+    }
 
     with sl.Session():
       engine_name = f'engine_{self.id()}'
 
       with self.assertRaisesRegex(
           Exception,
-          "Mismatched input shape at position 0 \\('XLA_Args/d1/bias'\\). "
-          "Expected \\[320\\], but input 0 has shape \\[784, 320\\]."):
+          "Mismatched input shape at position 1 \\('XLA_Args/d1/bias'\\). "
+          "Expected \\[320\\], but input 1 has shape \\[784, 320\\]."):
         embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
                                                 engine_name)
 
@@ -643,7 +647,6 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
                                                         freeze_variables=False)
 
     inputs = [
-        np.ones((320), dtype=np.int32),
         mnist_ref['d1_weight'],
         mnist_ref['d2_bias'],
         mnist_ref['d2_weight'],
@@ -651,13 +654,22 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
         mnist_ref['d3_weight'],
     ]
 
+    inputs = {
+        'XLA_Args/d1/weight': mnist_ref['d1_weight'],
+        'XLA_Args/d1/bias': np.ones((320), dtype=np.int32),
+        'XLA_Args/d2/weight': mnist_ref['d2_weight'],
+        'XLA_Args/d2/bias': mnist_ref['d2_bias'],
+        'XLA_Args/d3/weight': mnist_ref['d3_weight'],
+        'XLA_Args/d3/bias': mnist_ref['d3_bias'],
+    }
+
     with sl.Session():
       engine_name = f'engine_{self.id()}'
 
       with self.assertRaisesRegex(
           Exception,
-          "Mismatched input dtype at position 0 \\('XLA_Args/d1/bias'\\). "
-          "Expected <dtype: 'float32'>, but input 0 has dtype int32."):
+          "Mismatched input dtype at position 1 \\('XLA_Args/d1/bias'\\). "
+          "Expected <dtype: 'float32'>, but input 1 has dtype int32."):
         embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
                                                 engine_name)
 
@@ -913,6 +925,119 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
         except:  # pylint: disable=bare-except
           failed = True
         self.assertEqual(failed, should_fail)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_large_input_count(self):
+    loop_count = 16
+
+    ds = dataset_ops.Dataset.from_tensors(
+        tuple([
+            np.ones(()).astype(np.float32),
+            np.ones((1, 5)).astype(np.float32),
+            np.ones((5, 1)).astype(np.float32),
+            np.ones(()).astype(np.float32),
+            np.ones(()).astype(np.float32),
+            np.ones(()).astype(np.float32),
+            np.ones(()).astype(np.float32),
+            np.ones(()).astype(np.float32),
+            np.ones(()).astype(np.float32),
+            np.ones(()).astype(np.float32),
+            np.ones(()).astype(np.float32),
+            np.ones(()).astype(np.float32),
+        ]))
+    ds = ds.repeat()
+
+    # The host side queues.
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    # The device side main.
+    def body(inputs_0, inputs_1, inputs_2, inputs_3, inputs_4, inputs_5,
+             inputs_6, inputs_7, inputs_8, inputs_9, inputs_10, inputs_11):
+      result = inputs_0
+      result = result + math_ops.matmul(inputs_1, inputs_2)
+      result = result + inputs_3
+      result = result + inputs_4
+      result = result + inputs_5
+      result = result + inputs_6
+      result = result + inputs_7
+      result = result + inputs_8
+      result = result + inputs_9
+      result = result + inputs_10
+      result = result + inputs_11
+
+      outfeed = outfeed_queue.enqueue({'result': result})
+      return outfeed
+
+    # Wrap in a loop.
+    def my_net():
+      r = loops.repeat(loop_count, body, [], infeed_queue)
+      return r
+
+    # Configure the IPU for compilation.
+    cfg = config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
+
+    # Setup a temporary directory to store the executable.
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    tmp_dir = tmp_dir_obj.name
+    poplar_exec_filepath = os.path.join(tmp_dir, "application.poplar_exec")
+
+    # Compile the application.
+    compile_op = application_compile_op.experimental_application_compile_op(
+        my_net, output_path=poplar_exec_filepath)
+
+    with sl.Session() as sess:
+      sess.run(compile_op)
+
+    # Create the start op.
+    # This creates the poplar engine in a background thread.
+    engine_name = "my_engine"
+    ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
+                                                  engine_name)
+
+    # Create the call op and the input placeholder.
+    input_placeholder_0 = array_ops.placeholder(np.float32, shape=[])
+    input_placeholder_1 = array_ops.placeholder(np.float32, shape=[1, 5])
+    input_placeholder_2 = array_ops.placeholder(np.float32, shape=[5, 1])
+    input_placeholder_3 = array_ops.placeholder(np.float32, shape=[])
+    input_placeholder_4 = array_ops.placeholder(np.float32, shape=[])
+    input_placeholder_5 = array_ops.placeholder(np.float32, shape=[])
+    input_placeholder_6 = array_ops.placeholder(np.float32, shape=[])
+    input_placeholder_7 = array_ops.placeholder(np.float32, shape=[])
+    input_placeholder_8 = array_ops.placeholder(np.float32, shape=[])
+    input_placeholder_9 = array_ops.placeholder(np.float32, shape=[])
+    input_placeholder_10 = array_ops.placeholder(np.float32, shape=[])
+    input_placeholder_11 = array_ops.placeholder(np.float32, shape=[])
+
+    call_result = embedded_runtime.embedded_runtime_call([
+        input_placeholder_0, input_placeholder_1, input_placeholder_2,
+        input_placeholder_3, input_placeholder_4, input_placeholder_5,
+        input_placeholder_6, input_placeholder_7, input_placeholder_8,
+        input_placeholder_9, input_placeholder_10, input_placeholder_11
+    ], ctx)
+
+    for _ in range(loop_count):
+      with sl.Session() as sess:
+        # Expect execution without throwing an exception.
+        sess.run(call_result,
+                 feed_dict={
+                     input_placeholder_0: np.ones(()).astype(np.float32),
+                     input_placeholder_1: np.ones((1, 5)).astype(np.float32),
+                     input_placeholder_2: np.ones((5, 1)).astype(np.float32),
+                     input_placeholder_3: np.ones(()).astype(np.float32),
+                     input_placeholder_4: np.ones(()).astype(np.float32),
+                     input_placeholder_5: np.ones(()).astype(np.float32),
+                     input_placeholder_6: np.ones(()).astype(np.float32),
+                     input_placeholder_7: np.ones(()).astype(np.float32),
+                     input_placeholder_8: np.ones(()).astype(np.float32),
+                     input_placeholder_9: np.ones(()).astype(np.float32),
+                     input_placeholder_10: np.ones(()).astype(np.float32),
+                     input_placeholder_11: np.ones(()).astype(np.float32),
+                 })
 
 
 if __name__ == "__main__":

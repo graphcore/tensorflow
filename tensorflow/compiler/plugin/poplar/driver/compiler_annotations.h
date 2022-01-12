@@ -131,8 +131,8 @@ struct InputInfo {
   Shape shape;
 
   bool operator<(const InputInfo& rhs) const {
-    return std::tie(name, argument, tuple_index) <
-           std::tie(rhs.name, rhs.argument, rhs.tuple_index);
+    return std::tie(argument, tuple_index) <
+           std::tie(rhs.argument, rhs.tuple_index);
   }
 };
 
@@ -142,7 +142,10 @@ struct OutputInfo {
   int64 tuple_index;
   Shape shape;
 
-  bool operator<(const OutputInfo& rhs) const { return handle < rhs.handle; }
+  bool operator<(const OutputInfo& rhs) const {
+    return std::tie(tuple_index, handle) <
+           std::tie(rhs.tuple_index, rhs.handle);
+  }
 };
 
 using SendRecvInfos = std::vector<SendRecvInfo>;
@@ -339,9 +342,10 @@ inline Status AddEntryOutputInfo(CompilerAnnotations& compiler_annotations,
   if (other_info_itr != compiler_annotations.entry_output_infos.end() &&
       output_info.shape != other_info_itr->shape) {
     return xla::FailedPrecondition(
-        "Output with matching handle '%s' have different shapes (%s != %s).",
-        output_info.handle, output_info.shape.ToString(),
-        other_info_itr->shape.ToString());
+        "Output with matching handle '%s'=='%s' have different shapes (%s != "
+        "%s).",
+        output_info.handle, other_info_itr->handle,
+        output_info.shape.ToString(), other_info_itr->shape.ToString());
   }
 
   if (other_info_itr == compiler_annotations.entry_output_infos.end()) {
