@@ -1461,20 +1461,35 @@ bool PoplarExecutor::PoplarDeviceIsAttached() const {
   return ipu_.DeviceAttached();
 }
 
+std::string FailureMessageAttachToTFDevice(const int num_ipus = -1) {
+  const std::string probable_causes =
+      " Common causes of this error include: incorrect "
+      "configuration of your V-IPU partition, requesting more IPUs than are "
+      "available on your system, or IPUs being used by another program."
+      " Use `gc-info -l` and `gc-monitor` to check your configuration.";
+  if (num_ipus <= 0) {
+    return probable_causes;
+  }
+  return " This device was expected to have " + std::to_string(num_ipus) +
+         " IPU(s)." + probable_causes;
+}
+
+std::string FormattedOrdinal(const int32 ordinal) {
+  return std::string("TensorFlow virtual device /device:IPU:") +
+         std::to_string(ordinal);
+}
+
 StatusOr<std::size_t> PoplarExecutor::AttachToPoplarDevice(
     absl::Span<const poplar::Device> device_list, int32 ordinal,
     bool wait_for_device) {
   TENSORFLOW_TRACEPOINT();
-  const std::string error_probable_causes =
-      " Common causes of this error include: incorrect "
-      "configuration of your V-IPU partition, requesting more IPUs than are "
-      "available on your system, or IPUs being used by another program.";
+
   if (device_list.empty()) {
     return InvalidArgumentStrCat(
-        "No device matches the requested configuration for ordinal ", ordinal,
-        ".", error_probable_causes);
+        "No device matches the requested configuration for ",
+        FormattedOrdinal(ordinal), ".", FailureMessageAttachToTFDevice());
   }
-
+  const auto num_ipus = device_list[0].getTarget().getNumIPUs();
   const uint64 on_demand_device_poll_time =
       std::max<uint64>(PoplarXlaFlags::Get().on_demand_device_poll_time, 100);
   const uint64 on_demand_device_poll_time_us =
@@ -1505,20 +1520,22 @@ StatusOr<std::size_t> PoplarExecutor::AttachToPoplarDevice(
 
       if (elapsed_time.count() > on_demand_device_timeout) {
         return InternalErrorStrCat(
-            "Timed out trying to find an available device for ordinal ",
-            ordinal, ".", error_probable_causes);
+            "Timed out trying to find an available device for ",
+            FormattedOrdinal(ordinal), ".",
+            FailureMessageAttachToTFDevice(num_ipus));
       } else {
         if (!logged_message) {
-          LOG(INFO) << "Currently there is no available device for ordinal ",
-              ordinal, ". Waiting for one to become available.";
+          LOG(INFO) << "Currently there is no available device for ",
+              FormattedOrdinal(ordinal),
+              ". Waiting for one to become available.";
           logged_message = true;
         }
         env->SleepForMicroseconds(on_demand_device_poll_time_us);
       }
     } else {
-      return InternalErrorStrCat(
-          "Could not find an available device for ordinal ", ordinal, ".",
-          error_probable_causes);
+      return InternalErrorStrCat("Could not find an available device for ",
+                                 FormattedOrdinal(ordinal), ".",
+                                 FailureMessageAttachToTFDevice(num_ipus));
     }
   }
 }
@@ -1546,8 +1563,8 @@ Status PoplarExecutor::AttachToPoplarDevice() {
       if (use_ipu_model) {
         if (!ipu_.Device().attach()) {
           return InternalErrorStrCat(
-              "Unable to acquire Poplar device IPUModel for ordinal ", ordinal_,
-              ".");
+              "Unable to acquire Poplar device IPUModel for ",
+              FormattedOrdinal(ordinal_), ".");
         }
       } else {
         auto& device = ipu_.Device();
@@ -1565,6 +1582,12 @@ Status PoplarExecutor::AttachToPoplarDevice() {
       // Hardware devices
       auto device_list =
           GetDeviceManager().getDevices(target.getTargetType(), num_local_ipus);
+      if (device_list.empty()) {
+        return InvalidArgumentStrCat(
+            "No device matches the requested configuration for ",
+            FormattedOrdinal(ordinal_), ".",
+            FailureMessageAttachToTFDevice(num_local_ipus));
+      }
       TF_ASSIGN_OR_RETURN(
           std::size_t attached,
           AttachToPoplarDevice(device_list, ordinal_, wait_for_device));
@@ -1589,8 +1612,8 @@ Status PoplarExecutor::AttachToPoplarDevice() {
     VLOG(1) << "Opened Poplar device type " << GetDeviceTargetName();
     ipu_.SetDeviceAttached();
   } catch (poplar::poplar_error e) {
-    return xla::InternalError("Unable to open Poplar device for ordinal %d: %s",
-                              ordinal_, e.what());
+    return xla::InternalError("Unable to open Poplar device for %s: %s",
+                              FormattedOrdinal(ordinal_), e.what());
   }
 
   return Status::OK();
