@@ -30,6 +30,7 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.keras import backend as K
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
+from tensorflow.python.platform import tf_logging
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 
@@ -860,6 +861,79 @@ class IPUPipelineTest(test.TestCase, parameterized.TestCase):
       # If the nodes were not built in the correct order, calling predict will
       # result in an exception.
       m.predict(inputs, batch_size=1)
+
+  def testKerasBatchNormalizationLayerWarns(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.tiles_per_ipu = 8
+    cfg.auto_select_ipus = 2
+    cfg.configure_ipu_system()
+    grad_acc = 8
+    num_updates = 1
+    bs = 4
+    bn_momentum = 0.5
+
+    # Generate a batched linear dataset like
+    #   [([0,1,2,3], [0,1,2,3]),
+    #     [4,5,6,7], [4,5,6,7]), ...]
+    # We run num_updates pipelines (and therefore weight updates), each with
+    # grad_acc depth, so generate exactly that much data.
+    # Note that the crux of the problem here is that the moving statistics need
+    # to be updated per-batch, but the pipeline only allows updates after it
+    # flushes, so the behaviour is undefined.
+    ds = dataset_ops.Dataset.range(bs * grad_acc * num_updates)
+    ds = ds.batch(bs, drop_remainder=True)
+    ds = ds.map(lambda x: (math_ops.cast(x, dtypes.float32),
+                           math_ops.cast(x, dtypes.float32)))
+
+    # Calculate what the moving statistics should be.
+    # According to
+    # https://keras.io/api/layers/normalization_layers/batch_normalization/,
+    # the moving statistics are updated for every batch they see, with:
+    # m' = m * momentum + mean(batch) * (1 - momentum)
+    # v' = v * momentum + var(batch) * (1 - momentum)
+    # We expect grad_acc * num_updates micro batches to be seen.
+    def expected_moving_statistics(num_updates, micro_bs, grad_acc,
+                                   bn_momentum):
+      mean, var = np.zeros((1,)), np.ones((1,))
+      for i in range(grad_acc * num_updates):
+        # Form the ith batch as [i, i+1, i+2, i+3]
+        batch = np.arange(i * micro_bs, (i + 1) * micro_bs)
+
+        mean = mean * bn_momentum + np.mean(batch) * (1 - bn_momentum)
+        var = var * bn_momentum + np.var(batch) * (1 - bn_momentum)
+      return mean, var
+
+    # Create a pipelined model with a single batch norm as the first layer so it
+    # sees the raw batch data and fit it.
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      inp = keras.layers.Input(1)
+      with ipu.keras.PipelineStage(0):
+        x = keras.layers.BatchNormalization(momentum=bn_momentum)(inp)
+      with ipu.keras.PipelineStage(1):
+        x = keras.layers.Dense(1)(x)
+
+      m = keras.Model((inp), (x))
+      m.set_pipelining_options(
+          gradient_accumulation_steps_per_replica=grad_acc)
+      m.compile('sgd', loss='mse', steps_per_execution=grad_acc)
+
+      # Make sure a warning about using BN with pipelining is logged.
+      with test.mock.patch.object(tf_logging, 'warn') as mock_log:
+        m.fit(ds, epochs=1, steps_per_epoch=num_updates * grad_acc)
+        self.assertIsNotNone(mock_log.call_args)
+        self.assertTrue("The moving statistics" in mock_log.call_args[0][0])
+
+      # Make sure the moving_mean and moving_var are incorrect hence
+      # justifying the warning.
+      moving_mean, moving_var = [
+          v.numpy() for v in m.weights if "moving_" in v.name
+      ]
+
+      exp_mean, exp_var = expected_moving_statistics(num_updates, bs, grad_acc,
+                                                     bn_momentum)
+      self.assertNotEqual(moving_mean, exp_mean)
+      self.assertNotEqual(moving_var, exp_var)
 
 
 if __name__ == '__main__':

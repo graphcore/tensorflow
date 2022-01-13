@@ -45,6 +45,7 @@ from tensorflow.python.keras.engine import base_layer
 from tensorflow.python.keras.engine import input_spec
 from tensorflow.python.keras.engine import training as training_module
 from tensorflow.python.keras.engine import training_utils
+from tensorflow.python.keras.layers import BatchNormalization
 from tensorflow.python.keras.utils import tf_inspect
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.keras.utils import version_utils
@@ -645,6 +646,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
                      add_loss=False,
                      add_optimizer=False):
     training = add_loss and add_optimizer
+    self._logged_bn_warning = False
 
     @def_function.function(experimental_compile=True)
     def pipeline_function(_steps_per_execution, iterator, outfeed):
@@ -740,6 +742,21 @@ class KerasExtensionBase(base_layer.KerasExtension):
           # Set up the arguments and execute the layer.
           args, kwargs = node.map_arguments(tensor_dict)
           outputs = node.layer(*args, **kwargs)
+
+          # Warn the user of usage of BN layers, as their moving statistics are
+          # not properly updated in training pipelines when the momentum is
+          # non-trivial.
+          if isinstance(node.layer,
+                        BatchNormalization) and 0 < node.layer.momentum < 1:
+            if not self._logged_bn_warning:
+              logging.warn(
+                  "The moving statistics for keras.BatchNormalization layers in"
+                  " pipelined models are not properly updated when training."
+                  " This means that during evaluation or inference, these batch"
+                  " normalization layers will not necessarily normalize their"
+                  " input data in a way that is consistent with the"
+                  " distribution of the data they saw when training.")
+              self._logged_bn_warning = True
 
           # Update tensor_dict.
           for x_id, y in zip(node.flat_output_ids, nest.flatten(outputs)):
