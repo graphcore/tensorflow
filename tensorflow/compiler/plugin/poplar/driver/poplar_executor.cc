@@ -1878,31 +1878,31 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     option_flags_.set("debug.retainDebugInformation", "true");
   }
 
-  for (auto opt : option_flags_) {
+  for (const auto& opt : option_flags_) {
     VLOG(1) << "Engine option: " << opt.first << " = " << opt.second;
   }
 
-  for (auto opt : conv_options_) {
+  for (const auto& opt : conv_options_) {
     VLOG(1) << "Convolution option: " << opt.first << " = " << opt.second;
   }
 
-  for (auto opt : matmul_options_) {
+  for (const auto& opt : matmul_options_) {
     VLOG(1) << "MatMul option: " << opt.first << " = " << opt.second;
   }
 
-  for (auto opt : pooling_options_) {
+  for (const auto& opt : pooling_options_) {
     VLOG(1) << "Pooling option: " << opt.first << " = " << opt.second;
   }
 
-  for (auto opt : graph_options_) {
+  for (const auto& opt : graph_options_) {
     VLOG(1) << "Graph report option: " << opt.first << " = " << opt.second;
   }
 
-  for (auto opt : execution_options_) {
+  for (const auto& opt : execution_options_) {
     VLOG(1) << "Execution report option: " << opt.first << " = " << opt.second;
   }
 
-  for (auto opt : gcl_options_) {
+  for (const auto& opt : gcl_options_) {
     VLOG(1) << "GCL option: " << opt.first << " = " << opt.second;
   }
 
@@ -2031,7 +2031,7 @@ void PoplarExecutor::AddCompileBeginEventRecord(
     const std::string& module_name) {
   auto evt = NewTraceEvent();
   evt.set_type(tensorflow::IpuTraceEvent::COMPILE_BEGIN);
-  evt.mutable_compile_begin()->set_module_name(std::move(module_name));
+  evt.mutable_compile_begin()->set_module_name(module_name);
 
   reports_.push_back(evt);
 }
@@ -2049,14 +2049,15 @@ std::string PoplarExecutor::ReportFileExtension() const {
   return report_file_extension;
 }
 
-void PoplarExecutor::AddCompileEndEventRecord(
-    const std::string& module_name, const std::string& tensor_map,
-    const std::string& instruction_info, int64 duration) {
+void PoplarExecutor::AddCompileEndEventRecord(const std::string& module_name,
+                                              std::string&& tensor_map,
+                                              std::string&& instruction_info,
+                                              int64 duration) {
   auto evt = NewTraceEvent();
   evt.set_type(tensorflow::IpuTraceEvent::COMPILE_END);
 
   auto* compile_end = evt.mutable_compile_end();
-  compile_end->set_module_name(std::move(module_name));
+  compile_end->set_module_name(module_name);
   compile_end->set_duration(duration);
   compile_end->set_tensor_map(std::move(tensor_map));
   compile_end->set_instruction_info(std::move(instruction_info));
@@ -2064,7 +2065,7 @@ void PoplarExecutor::AddCompileEndEventRecord(
   reports_.push_back(evt);
 }
 
-void PoplarExecutor::AddHostToDeviceEventRecord(const std::string& json) {
+void PoplarExecutor::AddHostToDeviceEventRecord(std::string&& json) {
   auto evt = NewTraceEvent();
   evt.set_type(tensorflow::IpuTraceEvent::HOST_TO_DEVICE_TRANSFER);
   evt.mutable_data_transfer()->set_data_transfer(std::move(json));
@@ -2072,7 +2073,7 @@ void PoplarExecutor::AddHostToDeviceEventRecord(const std::string& json) {
   reports_.push_back(evt);
 }
 
-void PoplarExecutor::AddDeviceToHostEventRecord(const std::string& json) {
+void PoplarExecutor::AddDeviceToHostEventRecord(std::string&& json) {
   auto evt = NewTraceEvent();
   evt.set_type(tensorflow::IpuTraceEvent::DEVICE_TO_HOST_TRANSFER);
   evt.mutable_data_transfer()->set_data_transfer(std::move(json));
@@ -2083,7 +2084,7 @@ void PoplarExecutor::AddDeviceToHostEventRecord(const std::string& json) {
 void PoplarExecutor::AddLoadEngineEventRecord(const std::string& module_name) {
   auto evt = NewTraceEvent();
   evt.set_type(tensorflow::IpuTraceEvent::LOAD_ENGINE);
-  evt.mutable_load_engine()->set_module_name(std::move(module_name));
+  evt.mutable_load_engine()->set_module_name(module_name);
 
   reports_.push_back(evt);
 }
@@ -2091,7 +2092,7 @@ void PoplarExecutor::AddLoadEngineEventRecord(const std::string& module_name) {
 void PoplarExecutor::AddExecuteEventRecord(const std::string& module_name) {
   auto evt = NewTraceEvent();
   evt.set_type(tensorflow::IpuTraceEvent::EXECUTE);
-  evt.mutable_execute()->set_module_name(std::move(module_name));
+  evt.mutable_execute()->set_module_name(module_name);
 
   reports_.push_back(evt);
 }
@@ -2482,7 +2483,7 @@ Status PoplarExecutor::BufferOutputAllocation::PopulateBuffer(
   TensorControl* top_tc = reinterpret_cast<TensorControl*>(top_buffer.opaque());
   void** top_buf = reinterpret_cast<void**>(top_tc->data);
 
-  for (int64 output_index = 0; output_index != tuple_size; ++output_index) {
+  for (int32 output_index = 0; output_index != tuple_size; ++output_index) {
     // Walk the shape for the current output index.
     const Shape& output_index_shape = shape.tuple_shapes(output_index);
     ShapeTree<se::DeviceMemoryBase> buffer_tree(output_index_shape);
@@ -2547,7 +2548,7 @@ Status PoplarExecutor::PopulateOutputBuffer(
                                            /*current_flat_tuple_index=*/0);
   }
 
-  for (int64 output_index = 0;
+  for (int32 output_index = 0;
        output_index != ShapeUtil::TupleElementCount(shape); ++output_index) {
     // Walk the shape for the current output index.
     const Shape& output_index_shape = shape.tuple_shapes(output_index);
@@ -2630,7 +2631,7 @@ StatusOr<bool> PoplarExecutor::CheckAnyArgOnDevice(const Args& args) {
 
 StatusOr<bool> PoplarExecutor::CheckRemapGraphNeedsOnDeviceBuffers(
     const OutputAllocation& output_allocator, const Shape& shape) {
-  const RemapOutputAllocation* remap_allocator =
+  const auto* remap_allocator =
       static_cast<const RemapOutputAllocation*>(&output_allocator);
 
   auto remap_requires_device_buffer =
@@ -2649,7 +2650,7 @@ StatusOr<bool> PoplarExecutor::CheckRemapGraphNeedsOnDeviceBuffers(
                                         /*current_flat_tuple_index=*/0);
   }
 
-  for (int64 output_index = 0;
+  for (int32 output_index = 0;
        output_index != ShapeUtil::TupleElementCount(shape); ++output_index) {
     // Walk the shape for the current output index.
     const Shape& output_index_shape = shape.tuple_shapes(output_index);
@@ -2838,7 +2839,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
 
     if (current_config_.profiling().enable_ipu_trace_events() &&
         current_config_.profiling().enable_io_trace()) {
-      AddDeviceToHostEventRecord(json_msg);
+      AddDeviceToHostEventRecord(std::move(json_msg));
     }
 
     // Post process upload
@@ -3001,10 +3002,10 @@ Status PoplarExecutor::MoveHostToDevice() {
 
     if (current_config_.profiling().enable_ipu_trace_events() &&
         current_config_.profiling().enable_io_trace()) {
-      AddHostToDeviceEventRecord(json_msg);
+      AddHostToDeviceEventRecord(std::move(json_msg));
     }
 
-    for (auto arg : args_map_) {
+    for (const auto& arg : args_map_) {
       TensorControl* tc = arg.second.tc;
       tc->converted_data.clear();
     }
@@ -3050,7 +3051,7 @@ void PoplarExecutor::ConnectStreamedVariablesDeviceToHost() {
     return;
   }
 
-  for (auto output : outputs_map_) {
+  for (const auto& output : outputs_map_) {
     if (output.second.streamed) {
       TensorControl* tc = output.second.tc;
       ConnectReplicatedDeviceToHost(output.first.name, tc);
@@ -3060,7 +3061,7 @@ void PoplarExecutor::ConnectStreamedVariablesDeviceToHost() {
 
 void PoplarExecutor::PostProcessStreamedVariablesDeviceToHost() {
   TENSORFLOW_TRACEPOINT();
-  for (auto output : outputs_map_) {
+  for (const auto& output : outputs_map_) {
     if (output.second.streamed) {
       PostProcessBuffer(output.second.tc);
     }
@@ -3436,7 +3437,7 @@ Status TransformEvaluatorOutput(const Shape& layout, Literal& evaluator_output,
   if (shape.IsTuple()) {
     ShapeIndex shape_index;
     // Start a depth-first traversal from each subshape.
-    for (int64 i = 0; i < shape.tuple_shapes_size(); i++) {
+    for (int32 i = 0; i < shape.tuple_shapes_size(); i++) {
       // We need to traverse the shape tree down.
       shape_index.push_back(i);
       auto& sub_shape = layout.tuple_shapes(i);
@@ -3528,8 +3529,6 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
   std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
   args_map_ = args_map;
 
-  const auto& input_output_aliasing_map =
-      executable.GetInputOutputAliasingMap();
   const Shape& output_shape = executable.result_shape();
   poplar::Engine* engine = executable.Engine();
 

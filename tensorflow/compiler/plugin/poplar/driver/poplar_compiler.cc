@@ -488,7 +488,7 @@ bool AreAllOutputsParameters(const HloModule* module,
   }
 
   // Check that all the parameters are in a standard layout format.
-  const ComputationLayout layout = module->entry_computation_layout();
+  const ComputationLayout& layout = module->entry_computation_layout();
   for (uint64 param_number : output_paramater_numbers) {
     if (param_number < static_cast<uint64>(layout.parameter_count())) {
       auto parameter_shape = layout.parameter_layout(param_number).shape();
@@ -1213,7 +1213,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   const poplar::Target& target = poplar_executor->GetOrCreatePoplarTarget();
   const auto num_ipus = target.getNumIPUs();
   const auto num_shards = NumIPUsInShards(module);
-  const auto replication_factor = num_ipus / num_shards;
+  const uint32_t replication_factor = num_ipus / num_shards;
   TF_ASSIGN_OR_RETURN(const auto num_io_tiles, GetNumIoTiles(poplar_executor));
 
   // Check that it's divisible.
@@ -1886,7 +1886,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           Tracepoint tracepoint("PoplarEngineSerialisation");
           // Serialize some additional options that Poplar does not serialize
           // on its own.
-          poplar::OptionFlags options_to_serialize =
+          const poplar::OptionFlags& options_to_serialize =
               poplar_executor->GetReportExecutionFlags();
 
           auto& annotations = resources.annotations;
@@ -1961,8 +1961,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       TF_ASSIGN_OR_RETURN(auto inst_info,
                           GetInstructionCompilationInfo(module, resources));
 
-      poplar_executor->AddCompileEndEventRecord(module->name(), map_json,
-                                                inst_info, duration);
+      poplar_executor->AddCompileEndEventRecord(
+          module->name(), std::move(map_json), std::move(inst_info), duration);
     }
   }
 

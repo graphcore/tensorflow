@@ -44,7 +44,7 @@ message RemoteParameterConfig {
   string buffer_name = 3;
   int64 buffer_offset = 4;
   int64 num_merged = 5;
-  repeated uint64 merged_params = 6 [packed = true];
+  repeated int64 merged_params = 6 [packed = true];
   int64 host_rearrangement_id = 7;
 }
 
@@ -97,7 +97,7 @@ message EmbeddedRuntimeConfig {
 message PoplarExecutableProto {
 
   // The number of replicas
-  int32 replication_factor = 1;
+  uint32 replication_factor = 1;
 
   // Names of the infeed instructions
   repeated FeedConfig infeeds = 2;

@@ -232,10 +232,13 @@ Status PartitionedElementwiseClusterVisitor::SetRemoteBufferHostRearrangementId(
   const HloInstruction* param =
       entry_comp->parameter_instruction(entry_param_idx);
 
+  // Make a copy of the merged params as the constructor only takes an rvalue.
+  auto old_merged_params = old_info->merged_params;
+
   RemoteParameterInfo info(
       old_info->parameter_number, old_info->is_replica_partitioned,
       old_info->buffer_name, old_info->buffer_offset, old_info->num_merged,
-      old_info->merged_params, host_rearrangement_id);
+      std::move(old_merged_params), host_rearrangement_id);
 
   TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(param->shape()));
   auto found_buffer = resources_.remote_buffers.find(info.buffer_name);

@@ -37,8 +37,7 @@ namespace poplarplugin {
 
 PoplarExecutableCore::PoplarExecutableCore(
     std::unique_ptr<poplar::Engine> engine,
-    const InputOutputAliasingMap& input_output_aliasing_map,
-    bool is_constant_graph,
+    InputOutputAliasingMap&& input_output_aliasing_map, bool is_constant_graph,
     std::vector<std::vector<Literal>> constant_literal_output,
     bool is_remap_graph, bool is_scalar_elementwise_graph,
     bool loaded_from_cache, std::vector<uint64> remaped_output,
@@ -152,7 +151,9 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
 
   for (const auto& remote_parameter : proto.remote_parameters()) {
     std::vector<int64> merged_params;
-    for (const auto& merged_param : merged_params) {
+    merged_params.reserve(remote_parameter.merged_params_size());
+
+    for (const auto& merged_param : remote_parameter.merged_params()) {
       merged_params.push_back(merged_param);
     }
 
@@ -160,7 +161,7 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
         remote_parameter.parameter_number(),
         remote_parameter.is_replica_partitioned(),
         remote_parameter.buffer_name(), remote_parameter.buffer_offset(),
-        remote_parameter.num_merged(), merged_params,
+        remote_parameter.num_merged(), std::move(merged_params),
         remote_parameter.host_rearrangement_id()});
   }
 

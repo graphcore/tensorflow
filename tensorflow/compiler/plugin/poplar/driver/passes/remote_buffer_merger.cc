@@ -575,9 +575,10 @@ Status AddMergedInfo(const GroupedInstructions& creators_to_merge,
             << buffer_name << "'";
 
     std::vector<int64> merged_params;
+
     for (const HloInstruction* inst : creators) {
       if (IsRemoteParameter(inst, annotations)) {
-        merged_params.push_back(inst->parameter_number());
+        merged_params.emplace_back(inst->parameter_number());
       }
     }
 
@@ -615,7 +616,7 @@ Status AddMergedInfo(const GroupedInstructions& creators_to_merge,
 
         const auto merged_info = RemoteParameterInfo(
             found_info->parameter_number, found_info->is_replica_partitioned,
-            buffer_name, buffer_offset, num_merged, merged_params);
+            buffer_name, buffer_offset, num_merged, std::move(merged_params));
 
         // Replace the existing info with the merged info.
         annotations.remote_parameter_infos.erase(found_info);

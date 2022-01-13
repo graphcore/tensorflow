@@ -76,7 +76,7 @@ class PoplarExecutableCore {
  public:
   PoplarExecutableCore(
       std::unique_ptr<poplar::Engine> engine,
-      const InputOutputAliasingMap& input_output_aliasing_map,
+      InputOutputAliasingMap&& input_output_aliasing_map,
       bool is_constant_graph,
       std::vector<std::vector<Literal>> constant_literal_output,
       bool is_remap_graph, bool is_scalar_elementwise_graph,

@@ -98,7 +98,7 @@ struct RemoteParameterInfo {
                                bool is_replica_partitioned,
                                const std::string& buffer_name,
                                int64 buffer_offset, int64 num_merged,
-                               const std::vector<int64>& merged_params = {},
+                               std::vector<int64>&& merged_params = {},
                                int64 host_rearrangement_id = 0)
       : parameter_number(parameter_number),
         is_replica_partitioned(is_replica_partitioned),
@@ -378,4 +378,4 @@ inline Status AddFeedOutputInfo(CompilerAnnotations& compiler_annotations,
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_ANNOTATIONS_H_

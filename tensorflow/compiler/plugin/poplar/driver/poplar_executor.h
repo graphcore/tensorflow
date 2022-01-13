@@ -585,13 +585,12 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   void AddCompileBeginEventRecord(const std::string& module_name);
 
   void AddCompileEndEventRecord(const std::string& module_name,
-                                const std::string& tensor_map_json,
-                                const std::string& instruction_info,
-                                int64 duration);
+                                std::string&& tensor_map_json,
+                                std::string&& instruction_info, int64 duration);
 
-  void AddHostToDeviceEventRecord(const std::string& transfer_json);
+  void AddHostToDeviceEventRecord(std::string&& transfer_json);
 
-  void AddDeviceToHostEventRecord(const std::string& transfer_json);
+  void AddDeviceToHostEventRecord(std::string&& transfer_json);
 
   void AddLoadEngineEventRecord(const std::string& module_name);
 
@@ -1099,4 +1098,4 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_EXECUTOR_H_
