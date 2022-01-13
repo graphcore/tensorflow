@@ -177,7 +177,8 @@ StatusOr<int64> GetRemoteBufferEntryParameterNumber(
     source = next;
   } while (source->opcode() != HloOpcode::kParameter);
 
-  if (source->parent() == module->entry_computation()) {
+  if (source->parent() == module->entry_computation() &&
+      source->opcode() == HloOpcode::kParameter) {
     return source->parameter_number();
   } else {
     return InternalErrorStrCat("Can't find an entry parameter index for ",
