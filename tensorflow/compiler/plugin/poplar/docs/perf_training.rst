@@ -51,11 +51,11 @@ construct a loop.
   :linenos:
 
 
-In this case the DataSet is a trivial one.  It constructs a base DataSet from a
-single TensorFlow constant, and then maps the output of that DataSet into a
+In this case the DataSet is a trivial one.  The program constructs it from a
+single TensorFlow constant, and then maps its output into a
 pair of tensors.  It then arranges for the DataSet to be repeated indefinitely.
 
-After the DataSet is constructed, the two data feed queues are constructed. The
+After the DataSet is created, the two data feed queues are constructed. The
 ``IPUInfeedQueue`` takes the DataSet as a parameter.
 
 The ``IPUOutfeedQueue`` has extra options to control how it collects and outputs
@@ -80,10 +80,9 @@ function that generated the body of the loop, in this case the function
 ``body``, a list of extra parameters to pass to the body, in this case none,
 and finally the infeed queue which will feed data into the loop.
 
-Next we create an IPU scope at the top level and call ``ipu_compiler.compile``
-passing the ``my_net`` function, to create the training loop in the main graph.
-The output of the ``ipu_compiler.compile`` will be an operation that can be
-called to execute the training loop.
+Next we create a strategy scope at the top level and call ``strategy.run``.
+This takes the ``my_net`` function as an argument and creates the training loop
+in the main graph.
 
 Finally, we create an operation which can be used to fetch results from the
 outfeed queue.  Note that it isn't necessary to use an outfeed queue if you do
