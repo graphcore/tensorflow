@@ -3406,6 +3406,22 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "device_connection_failure_test",
+    size = "small",
+    srcs = ["tests/device_connection_failure_test.py"],
+    enabled_backends = ["poplar"],
+    tags = [
+        "exclusive",
+        "hw_poplar_test_1_ipus",
+    ],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "compile_cache_test",
     size = "large",
     srcs = ["tests/compile_cache_test.py"],
@@ -3469,6 +3485,7 @@ test_suite(
         "debug_info_test",
         "deferred_visitor_test",
         "dependency_replacer_test",
+        "device_connection_failure_test",
         "device_connection_test",
         "distributed_batch_norm_decomposer_test",
         "distributed_batch_norm_test",
