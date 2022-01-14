@@ -18,9 +18,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from absl.testing import parameterized
-
 import os
+import json
+
+from absl.testing import parameterized
 import numpy as np
 import pva
 import test_utils as tu
@@ -156,8 +157,8 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
                  recurrent_activation='sigmoid',
                  input_size=INPUT_SIZE,
                  num_channels=NUM_CHANNELS,
-                 available_memory_proportion_fwd=None,
-                 available_memory_proportion_bwd=None):
+                 options=None,
+                 options_bwd=None):
     del forget_bias
     with ops.device("/device:IPU:0"):
       with variable_scope.variable_scope("lstm_layer", use_resource=True):
@@ -170,6 +171,8 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
                                shape=[4, num_channels],
                                initializer=init_ops.constant_initializer(
                                    0.0, DATA_TYPE))
+      options = '{}' if options is None else json.dumps(options)
+      options_bwd = '{}' if options is None else json.dumps(options_bwd)
       if seq_lens is None:
         outputs, _, _, _ = gen_popnn_ops.popnn_lstm_layer(
             activation=activation,
@@ -182,8 +185,8 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
             input_c_state=initial_state[1],
             is_training=training,
             name=name,
-            available_memory_proportion_fwd=available_memory_proportion_fwd,
-            available_memory_proportion_bwd=available_memory_proportion_bwd)
+            options=options,
+            options_bwd=options_bwd)
       else:
         outputs, _, _, _ = gen_popnn_ops.popnn_dynamic_lstm_layer(
             activation=activation,
@@ -197,8 +200,8 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
             input_c_state=initial_state[1],
             is_training=training,
             name=name,
-            available_memory_proportion_fwd=available_memory_proportion_fwd,
-            available_memory_proportion_bwd=available_memory_proportion_bwd)
+            options=options,
+            options_bwd=options_bwd)
       outputs = outputs if seq_lens_h is None else outputs[0:min(
           SEQ_LEN, seq_lens_h[0])]
       return outputs
@@ -348,8 +351,8 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
                             batch_size=BATCH_SIZE,
                             input_size=INPUT_SIZE,
                             num_channels=NUM_CHANNELS,
-                            available_memory_proportion_fwd=None,
-                            available_memory_proportion_bwd=None):
+                            options=None,
+                            options_bwd=None):
     with self.session() as sess:
       pinputs = array_ops.placeholder(DATA_TYPE,
                                       [SEQ_LEN, batch_size, input_size],
@@ -372,12 +375,10 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
               initializer=init_ops.constant_initializer(c_value, DATA_TYPE))
 
         kwargs = {}
-        if available_memory_proportion_fwd is not None:
-          kwargs["available_memory_proportion_fwd"] = \
-            available_memory_proportion_fwd
-        if available_memory_proportion_bwd is not None:
-          kwargs["available_memory_proportion_bwd"] = \
-            available_memory_proportion_bwd
+        if options is not None:
+          kwargs["options"] = options
+        if options_bwd is not None:
+          kwargs["options_bwd"] = options_bwd
 
         logits = lstm_layer_function(inputs=pinputs,
                                      weights_value=weights_value,
@@ -682,7 +683,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
           forget_bias=0.,
           training=False,
           name=None,
-          available_memory_proportion_fwd=0.7 if valid_value else -123.)
+          options={"availableMemoryProportion": 0.7 if valid_value else -123.})
 
       initial_state = _createLSTMInitialState(h_value, c_value, BATCH_SIZE,
                                               NUM_CHANNELS)
@@ -745,7 +746,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
               name=None,
               input_size=input_size,
               num_channels=num_channels,
-              available_memory_proportion_fwd=amp_val)
+              options={"availableMemoryProportion": amp_val})
 
         initial_state = _createLSTMInitialState(h_value, c_value, batch_size,
                                                 num_channels)
@@ -776,22 +777,22 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
                                      input_size=INPUT_SIZE,
                                      num_channels=NUM_CHANNELS,
                                      amp_val=None):
-    self._RunLSTMLayerTraining(name=name,
-                               input_value=0.,
-                               forget_bias=0.,
-                               weights_value=0.7,
-                               h_value=0.5,
-                               c_value=10.5,
-                               training_steps=1,
-                               seq_lens=None,
-                               labels_array=np.ones(shape=(batch_size,),
-                                                    dtype=np.int32),
-                               lstm_layer_function=self._LSTMLayer,
-                               device_string="/device:IPU:0",
-                               batch_size=batch_size,
-                               input_size=input_size,
-                               num_channels=num_channels,
-                               available_memory_proportion_bwd=amp_val)
+    self._RunLSTMLayerTraining(
+        name=name,
+        input_value=0.,
+        forget_bias=0.,
+        weights_value=0.7,
+        h_value=0.5,
+        c_value=10.5,
+        training_steps=1,
+        seq_lens=None,
+        labels_array=np.ones(shape=(batch_size,), dtype=np.int32),
+        lstm_layer_function=self._LSTMLayer,
+        device_string="/device:IPU:0",
+        batch_size=batch_size,
+        input_size=input_size,
+        num_channels=num_channels,
+        options_bwd={"availableMemoryProportion": amp_val})
 
   @parameterized.parameters((True,), (False,))
   def testLSTMWithAvailableMemoryProportionBwd(self, valid_value):

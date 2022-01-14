@@ -1723,6 +1723,20 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "rnn_util_test",
+    size = "small",
+    srcs = ["tests/rnn_util_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:rnn_util",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
 tf_cc_test(
     name = "extract_outside_compilation_pass_test",
     size = "small",
@@ -3620,6 +3634,7 @@ test_suite(
         "resource_update_fixer_test",
         "resource_update_merger_test",
         "resource_update_schedule_optimizer_test",
+        "rnn_util_test",
         "root_token_replacer_test",
         "scalar_elementwise_graph_test",
         "scatter_simplifier_test",

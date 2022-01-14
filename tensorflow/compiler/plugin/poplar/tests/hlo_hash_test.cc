@@ -841,7 +841,7 @@ ENTRY c1 {
   p0 = (s32[20], s32[20], s32[20], s32[20]) parameter(0)
   p0_0 = s32[20] get-tuple-element(p0), index=0
 
-  c = s32[20] custom-call(p0), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":4, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\", \"activation\":\"tanh\", \"recurrent_activation\":\"sigmoid\", \"available_memory_proportion\":-1.0}\n"
+  c = s32[20] custom-call(p0), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":4, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\", \"activation\":\"tanh\", \"recurrent_activation\":\"sigmoid\", \"available_memory_proportion\":-1.0, \"options\":\"{}\"}\n"
 
   ROOT a = s32[20] add(p0_0, c)
 }
@@ -855,7 +855,7 @@ ENTRY c1 {
   p0 = (s32[20], s32[20], s32[20], s32[20]) parameter(0)
   p0_0 = s32[20] get-tuple-element(p0), index=0
 
-  c = s32[20] custom-call(p0), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":4, \"is_training\":true, \"partials_dtype\":\"DT_FLOAT\", \"activation\":\"tanh\", \"recurrent_activation\":\"sigmoid\", \"available_memory_proportion\":-1.0}\n"
+  c = s32[20] custom-call(p0), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":4, \"is_training\":true, \"partials_dtype\":\"DT_FLOAT\", \"activation\":\"tanh\", \"recurrent_activation\":\"sigmoid\", \"available_memory_proportion\":-1.0, \"options\":\"{}\"}\n"
 
   ROOT a = s32[20] add(p0_0, c)
 }
@@ -890,7 +890,7 @@ ENTRY c1 {
   p0 = (s32[20], s32[20], s32[20], s32[20]) parameter(0)
   p0_0 = s32[20] get-tuple-element(p0), index=0
 
-  c = s32[20] custom-call(p0), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":4, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\", \"activation\":\"tanh\", \"recurrent_activation\":\"sigmoid\", \"available_memory_proportion\":-1.0}\n"
+  c = s32[20] custom-call(p0), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":4, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\", \"activation\":\"tanh\", \"recurrent_activation\":\"sigmoid\", \"available_memory_proportion\":-1.0, \"options\":\"{}\"}\n"
 
   ROOT a = s32[20] add(p0_0, c)
 }
@@ -904,7 +904,7 @@ ENTRY c1 {
   p0 = (s32[20], s32[20], s32[20], s32[20]) parameter(0)
   p0_0 = s32[20] get-tuple-element(p0), index=0
 
-  c = s32[20] custom-call(p0), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":4, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\", \"activation\":\"tanh\", \"recurrent_activation\":\"sigmoid\", \"available_memory_proportion\":-1.0}\n"
+  c = s32[20] custom-call(p0), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":4, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\", \"activation\":\"tanh\", \"recurrent_activation\":\"sigmoid\", \"available_memory_proportion\":-1.0, \"options\":\"{}\"}\n"
 
   ROOT a = s32[20] add(p0_0, c)
 }

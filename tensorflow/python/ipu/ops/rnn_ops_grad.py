@@ -44,7 +44,9 @@ def _popnn_lstm_layer_backward(op, *grads):
       partials_dtype=op.get_attr("partials_dtype"),
       is_training=op.get_attr("is_training"),
       available_memory_proportion_bwd=op.get_attr(
-          "available_memory_proportion_bwd"))
+          "available_memory_proportion_bwd"),
+      options=op.get_attr("options_bwd"),
+  )
 
 
 @ops.RegisterGradient("PopnnDynamicLstmLayer")
@@ -74,7 +76,9 @@ def _popnn_dynamic_lstm_layer_backward(op, *grads):
       partials_dtype=op.get_attr("partials_dtype"),
       is_training=op.get_attr("is_training"),
       available_memory_proportion_bwd=op.get_attr(
-          "available_memory_proportion_bwd"))
+          "available_memory_proportion_bwd"),
+      options=op.get_attr("options_bwd"),
+  )
   return [g[0], g[1], g[2], g[3], g[4], None]
 
 
@@ -101,7 +105,9 @@ def _popnn_gru_layer_backward(op, *grads):
       is_training=op.get_attr("is_training"),
       reset_after=op.get_attr("reset_after"),
       available_memory_proportion_bwd=op.get_attr(
-          "available_memory_proportion_bwd"))
+          "available_memory_proportion_bwd"),
+      options=op.get_attr("options_bwd"),
+  )
 
 
 @ops.RegisterGradient("PopnnDynamicGRULayer")
@@ -129,7 +135,9 @@ def _popnn_dynamic_gru_layer_backward(op, *grads):
       is_training=op.get_attr("is_training"),
       reset_after=op.get_attr("reset_after"),
       available_memory_proportion_bwd=op.get_attr(
-          "available_memory_proportion_bwd"))
+          "available_memory_proportion_bwd"),
+      options=op.get_attr("options_bwd"),
+  )
   return [g[0], g[1], g[2], g[3], None]
 
 
@@ -159,5 +167,7 @@ def _popnn_augru_layer_backward(op, *grads):
       is_training=op.get_attr("is_training"),
       reset_after=op.get_attr("reset_after"),
       available_memory_proportion_bwd=op.get_attr(
-          "available_memory_proportion_bwd"))
+          "available_memory_proportion_bwd"),
+      options=op.get_attr("options_bwd"),
+  )
   return [g[0], g[1], g[2], g[3], None, g[4]]

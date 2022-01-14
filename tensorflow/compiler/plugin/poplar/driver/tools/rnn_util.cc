@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/rnn_util.h"
 
+#include <exception>
 #include <string>
 
 #include <popnn/GruDef.hpp>
@@ -25,10 +26,25 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/lstm.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/core/lib/core/errors.h"
 
 namespace xla {
 namespace poplarplugin {
+
+tensorflow::Status DeserialiseOptionsOntoOptionFlags(
+    const std::string& serialised_options, poplar::OptionFlags& option_flags) {
+  try {
+    poplar::readJSON(serialised_options, option_flags);
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "Failed to parse Poplar options '" << serialised_options
+               << "' passed to an RNN layer.";
+    return PoplarExceptionToTensorflowStatus("[Graph construction]", e);
+  }
+
+  return Status::OK();
+}
 
 StatusOr<popnn::NonLinearityType> convertToNonLinearityType(
     rnn_helper::ActivationType activation) {
@@ -101,7 +117,6 @@ StatusOr<popnn::lstm::LstmParams> GetLstmParameters(
 StatusOr<poplar::OptionFlags> GetLstmOpts(const HloInstruction* inst,
                                           const CompilerResources& res) {
   auto lstm_inst = Cast<HloRNNInstruction>(inst);
-
   // Initialize options from matmul options
   poplar::OptionFlags lstm_opts = res.default_matmul_options;
   bool is_training = lstm_inst->is_training();
@@ -109,6 +124,7 @@ StatusOr<poplar::OptionFlags> GetLstmOpts(const HloInstruction* inst,
     lstm_opts.set({{"inferenceOnly", "true"}});
   }
 
+  // TODO(T53098): Remove setting of `available_memory_proportion`.
   auto available_memory_proportion = lstm_inst->available_memory_proportion();
   /* Only pass on available_memory_proportion if it is not (relatively) equal
      to -1.0, which is to assume the default. */
@@ -122,6 +138,10 @@ StatusOr<poplar::OptionFlags> GetLstmOpts(const HloInstruction* inst,
   TF_ASSIGN_OR_RETURN(poplar::Type partials_poplar_type,
                       PoplarDataType(partials_xla_type));
   lstm_opts.set({{"partialsType", partials_poplar_type.toString()}});
+
+  TF_RETURN_IF_ERROR(
+      DeserialiseOptionsOntoOptionFlags(lstm_inst->options(), lstm_opts));
+
   return lstm_opts;
 }
 
@@ -190,6 +210,7 @@ StatusOr<poplar::OptionFlags> GetGruOpts(const HloInstruction* inst,
     gru_opts.set({{"inferenceOnly", "true"}});
   }
 
+  // TODO(T53098): Remove setting of `available_memory_proportion`.
   auto available_memory_proportion = gru_inst->available_memory_proportion();
   /* Only pass on available_memory_proportion if it is not (relatively) equal
      to -1.0, which is to assume the default. */
@@ -203,6 +224,10 @@ StatusOr<poplar::OptionFlags> GetGruOpts(const HloInstruction* inst,
   TF_ASSIGN_OR_RETURN(poplar::Type partials_poplar_type,
                       PoplarDataType(partials_xla_type));
   gru_opts.set({{"partialsType", partials_poplar_type.toString()}});
+
+  TF_RETURN_IF_ERROR(
+      DeserialiseOptionsOntoOptionFlags(gru_inst->options(), gru_opts));
+
   return gru_opts;
 }
 

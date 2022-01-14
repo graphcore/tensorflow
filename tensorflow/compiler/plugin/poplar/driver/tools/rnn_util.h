@@ -15,6 +15,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_RNN_UTIL_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_RNN_UTIL_H_
 
+#include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
@@ -24,6 +26,9 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+
+tensorflow::Status DeserialiseOptionsOntoOptionFlags(
+    const std::string& serialised_options, poplar::OptionFlags& option_flags);
 
 StatusOr<popnn::lstm::LstmParams> GetLstmParameters(const HloInstruction* inst);
 
