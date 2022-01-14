@@ -120,6 +120,7 @@ enum PoplarOp {
   CollectiveReorder = 115;
   UndoCollectiveReorder = 116;
   GeluErf = 117;
+  AllGatherWithinReplica = 118;
 
   // Supported Fusions.
   Conv_biasadd = 200;

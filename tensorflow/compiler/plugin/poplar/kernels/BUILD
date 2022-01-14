@@ -85,6 +85,7 @@ poplar_cc_library(
         "popops/reduce_scatter.cc",
         "popops/sequence_slice.cc",
         "popops/sparse_softmax_cross_entropy.cc",
+        "popops/within_replicas.cc",
         "poprand/candidate_sampler.cc",
         "poprand/categorical.cc",
         "poprand/dropout_xla.cc",

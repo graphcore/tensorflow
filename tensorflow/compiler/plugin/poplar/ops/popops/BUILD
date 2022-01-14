@@ -82,6 +82,17 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "within_replicas",
+    srcs = [
+        "within_replicas.cc",
+    ],
+    deps = [
+        "//tensorflow/core:framework",
+    ],
+    alwayslink = True,
+)
+
+poplar_cc_library(
     name = "ops",
     srcs = [],
     deps = [
@@ -92,5 +103,6 @@ poplar_cc_library(
         ":normalise_image",
         ":reduce_scatter",
         ":sequence_slice",
+        ":within_replicas",
     ],
 )
