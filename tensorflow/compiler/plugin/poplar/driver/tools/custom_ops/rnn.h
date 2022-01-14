@@ -17,6 +17,7 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_RNN_H_
 
 #include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -39,12 +40,13 @@ struct RNNAttributes {
   ActivationType activation;
   ActivationType recurrent_activation;
   float available_memory_proportion;
+  std::string options;
 
  protected:
   RNNAttributes(int32 num_channels, bool is_training,
                 xla::PrimitiveType partials_xla_type, ActivationType activation,
                 ActivationType recurrent_activation,
-                float available_memory_proportion);
+                float available_memory_proportion, const std::string& options);
 };
 }  // namespace rnn_helper
 
@@ -56,16 +58,17 @@ class HloRNNInstruction : public HloPoplarInstruction {
       PoplarOp op, bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
       xla::PrimitiveType partials_type, float available_memory_proportion,
-      Args&&... attributes)
+      const std::string& options, Args&&... attributes)
       : HloPoplarInstruction(shape, operands, op, is_training, activation,
                              recurrent_activation, num_channels, partials_type,
-                             attributes...),
+                             options, attributes...),
         is_training_(is_training),
         activation_(activation),
         recurrent_activation_(recurrent_activation),
         num_channels_(num_channels),
         partials_type_(partials_type),
-        available_memory_proportion_(available_memory_proportion) {}
+        available_memory_proportion_(available_memory_proportion),
+        options_(options) {}
 
   bool is_training() const;
   rnn_helper::ActivationType activation() const;
@@ -73,6 +76,7 @@ class HloRNNInstruction : public HloPoplarInstruction {
   int32 num_channels() const;
   xla::PrimitiveType partials_type() const;
   float available_memory_proportion() const;
+  const std::string& options() const;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -85,23 +89,22 @@ class HloRNNInstruction : public HloPoplarInstruction {
   int32 num_channels_;
   xla::PrimitiveType partials_type_;
   float available_memory_proportion_;
+  std::string options_;
 };
 
 class HloRNNFwdInstruction : public HloRNNInstruction {
  public:
   template <typename... Args>
-  explicit HloRNNFwdInstruction(PoplarOp op, const Shape& shape,
-                                absl::Span<HloInstruction* const> operands,
-                                bool is_training,
-                                rnn_helper::ActivationType activation,
-                                rnn_helper::ActivationType recurrent_activation,
-                                int32 num_channels,
-                                xla::PrimitiveType partials_type,
-                                float available_memory_proportion,
-                                Args&&... attributes)
+  explicit HloRNNFwdInstruction(
+      PoplarOp op, const Shape& shape,
+      absl::Span<HloInstruction* const> operands, bool is_training,
+      rnn_helper::ActivationType activation,
+      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+      xla::PrimitiveType partials_type, float available_memory_proportion,
+      const std::string& options, Args&&... attributes)
       : HloRNNInstruction(shape, operands, op, is_training, activation,
                           recurrent_activation, num_channels, partials_type,
-                          available_memory_proportion, attributes...),
+                          available_memory_proportion, options, attributes...),
         op_(op) {}
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
@@ -119,18 +122,16 @@ class HloRNNFwdInstruction : public HloRNNInstruction {
 class HloRNNBwdInstruction : public HloRNNInstruction {
  public:
   template <typename... Args>
-  explicit HloRNNBwdInstruction(PoplarOp op, const Shape& shape,
-                                absl::Span<HloInstruction* const> operands,
-                                bool is_training,
-                                rnn_helper::ActivationType activation,
-                                rnn_helper::ActivationType recurrent_activation,
-                                int32 num_channels,
-                                xla::PrimitiveType partials_type,
-                                float available_memory_proportion,
-                                Args&&... attributes)
+  explicit HloRNNBwdInstruction(
+      PoplarOp op, const Shape& shape,
+      absl::Span<HloInstruction* const> operands, bool is_training,
+      rnn_helper::ActivationType activation,
+      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+      xla::PrimitiveType partials_type, float available_memory_proportion,
+      const std::string& options, Args&&... attributes)
       : HloRNNInstruction(shape, operands, op, is_training, activation,
                           recurrent_activation, num_channels, partials_type,
-                          available_memory_proportion, attributes...),
+                          available_memory_proportion, options, attributes...),
         op_(op) {}
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;

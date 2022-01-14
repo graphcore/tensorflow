@@ -51,13 +51,15 @@ RNNAttributes::RNNAttributes(int32 num_channels, bool is_training,
                              xla::PrimitiveType partials_xla_type,
                              ActivationType activation,
                              ActivationType recurrent_activation,
-                             float available_memory_proportion)
+                             float available_memory_proportion,
+                             const std::string& options)
     : num_channels(num_channels),
       is_training(is_training),
       partials_xla_type(partials_xla_type),
       activation(activation),
       recurrent_activation(recurrent_activation),
-      available_memory_proportion(available_memory_proportion) {}
+      available_memory_proportion(available_memory_proportion),
+      options(options) {}
 // Helper for parsing the attribute map when converting the custom call
 // instruction.
 StatusOr<RNNAttributes> RNNAttributes::Parse(
@@ -90,10 +92,14 @@ StatusOr<RNNAttributes> RNNAttributes::Parse(
   TF_ASSIGN_OR_RETURN(ActivationType recurrent_activation,
                       strToActivationType(recurrent_activation_string));
 
+  TF_ASSIGN_OR_RETURN(std::string options,
+                      attribute_map.GetAttributeAsString("options"));
+
   xla::PrimitiveType partials_xla_type;
   TF_CHECK_OK(DataTypeToPrimitiveType(partials_dtype, &partials_xla_type));
   return RNNAttributes(num_channels, is_training, partials_xla_type, activation,
-                       recurrent_activation, available_memory_proportion);
+                       recurrent_activation, available_memory_proportion,
+                       options);
 }
 }  // namespace rnn_helper
 
@@ -109,6 +115,7 @@ xla::PrimitiveType HloRNNInstruction::partials_type() const {
 float HloRNNInstruction::available_memory_proportion() const {
   return available_memory_proportion_;
 }
+const std::string& HloRNNInstruction::options() const { return options_; }
 
 std::vector<std::string> HloRNNInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {

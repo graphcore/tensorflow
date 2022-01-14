@@ -13,9 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/gru.h"
+
 #include <memory>
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/gru.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
@@ -29,9 +30,9 @@ GRUAttributes::GRUAttributes(int32 num_channels, bool is_training,
                              ActivationType activation,
                              ActivationType recurrent_activation,
                              float available_memory_proportion,
-                             bool reset_after)
+                             bool reset_after, const std::string& options)
     : RNNAttributes(num_channels, is_training, partials_xla_type, activation,
-                    recurrent_activation, available_memory_proportion),
+                    recurrent_activation, available_memory_proportion, options),
       reset_after(reset_after) {}
 // Helper for parsing the attribute map when converting the custom call
 // instruction.
@@ -48,7 +49,8 @@ StatusOr<GRUAttributes> GRUAttributes::Parse(
                        rnn_attibutes.partials_xla_type,
                        rnn_attibutes.activation,
                        rnn_attibutes.recurrent_activation,
-                       rnn_attibutes.available_memory_proportion, reset_after);
+                       rnn_attibutes.available_memory_proportion, reset_after,
+                       rnn_attibutes.options);
 }
 }  // namespace rnn_helper
 
@@ -64,10 +66,10 @@ HloGRUFwdInstruction::HloGRUFwdInstruction(
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after)
+    bool reset_after, const std::string& options)
     : HloRNNFwdInstruction(PoplarOp::GRULayerFwd, shape, operands, is_training,
                            activation, recurrent_activation, num_channels,
-                           partials_type, available_memory_proportion,
+                           partials_type, available_memory_proportion, options,
                            reset_after),
       HloGRUInstructionCommon(reset_after) {}
 
@@ -82,7 +84,7 @@ std::unique_ptr<HloInstruction> HloGRUFwdInstruction::CloneWithNewOperandsImpl(
     HloCloneContext* ctx) const {
   return CreateGRUFwd(shape, operands, is_training(), activation(),
                       recurrent_activation(), num_channels(), partials_type(),
-                      available_memory_proportion(), reset_after());
+                      available_memory_proportion(), reset_after(), options());
 }
 
 std::unique_ptr<HloInstruction> CreateGRUFwd(
@@ -90,10 +92,11 @@ std::unique_ptr<HloInstruction> CreateGRUFwd(
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after) {
+    bool reset_after, const std::string& options) {
   return absl::make_unique<HloGRUFwdInstruction>(
       shape, operands, is_training, activation, recurrent_activation,
-      num_channels, partials_type, available_memory_proportion, reset_after);
+      num_channels, partials_type, available_memory_proportion, reset_after,
+      options);
 }
 
 HloGRUBwdInstruction::HloGRUBwdInstruction(
@@ -101,10 +104,10 @@ HloGRUBwdInstruction::HloGRUBwdInstruction(
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after)
+    bool reset_after, const std::string& options)
     : HloRNNBwdInstruction(PoplarOp::GRULayerBwd, shape, operands, is_training,
                            activation, recurrent_activation, num_channels,
-                           partials_type, available_memory_proportion,
+                           partials_type, available_memory_proportion, options,
                            reset_after),
       HloGRUInstructionCommon(reset_after) {}
 
@@ -113,7 +116,7 @@ std::unique_ptr<HloInstruction> HloGRUBwdInstruction::CloneWithNewOperandsImpl(
     HloCloneContext* ctx) const {
   return CreateGRUBwd(shape, operands, is_training(), activation(),
                       recurrent_activation(), num_channels(), partials_type(),
-                      available_memory_proportion(), reset_after());
+                      available_memory_proportion(), reset_after(), options());
 }
 
 std::unique_ptr<HloInstruction> CreateGRUBwd(
@@ -121,10 +124,11 @@ std::unique_ptr<HloInstruction> CreateGRUBwd(
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after) {
+    bool reset_after, const std::string& options) {
   return absl::make_unique<HloGRUBwdInstruction>(
       shape, operands, is_training, activation, recurrent_activation,
-      num_channels, partials_type, available_memory_proportion, reset_after);
+      num_channels, partials_type, available_memory_proportion, reset_after,
+      options);
 }
 
 HloDynamicGRUFwdInstruction::HloDynamicGRUFwdInstruction(
@@ -132,11 +136,11 @@ HloDynamicGRUFwdInstruction::HloDynamicGRUFwdInstruction(
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after)
+    bool reset_after, const std::string& options)
     : HloRNNFwdInstruction(PoplarOp::DynamicGRULayerFwd, shape, operands,
                            is_training, activation, recurrent_activation,
                            num_channels, partials_type,
-                           available_memory_proportion, reset_after),
+                           available_memory_proportion, options, reset_after),
       HloGRUInstructionCommon(reset_after) {}
 
 absl::flat_hash_set<int64> HloDynamicGRUFwdInstruction::AllocatingIndices()
@@ -153,7 +157,7 @@ HloDynamicGRUFwdInstruction::CloneWithNewOperandsImpl(
   return CreateDynamicGRUFwd(shape, operands, is_training(), activation(),
                              recurrent_activation(), num_channels(),
                              partials_type(), available_memory_proportion(),
-                             reset_after());
+                             reset_after(), options());
 }
 
 std::unique_ptr<HloInstruction> CreateDynamicGRUFwd(
@@ -161,10 +165,11 @@ std::unique_ptr<HloInstruction> CreateDynamicGRUFwd(
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after) {
+    bool reset_after, const std::string& options) {
   return absl::make_unique<HloDynamicGRUFwdInstruction>(
       shape, operands, is_training, activation, recurrent_activation,
-      num_channels, partials_type, available_memory_proportion, reset_after);
+      num_channels, partials_type, available_memory_proportion, reset_after,
+      options);
 }
 
 HloDynamicGRUBwdInstruction::HloDynamicGRUBwdInstruction(
@@ -172,11 +177,11 @@ HloDynamicGRUBwdInstruction::HloDynamicGRUBwdInstruction(
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after)
+    bool reset_after, const std::string& options)
     : HloRNNBwdInstruction(PoplarOp::DynamicGRULayerBwd, shape, operands,
                            is_training, activation, recurrent_activation,
                            num_channels, partials_type,
-                           available_memory_proportion, reset_after),
+                           available_memory_proportion, options, reset_after),
       HloGRUInstructionCommon(reset_after) {}
 
 std::unique_ptr<HloInstruction>
@@ -186,7 +191,7 @@ HloDynamicGRUBwdInstruction::CloneWithNewOperandsImpl(
   return CreateDynamicGRUBwd(shape, operands, is_training(), activation(),
                              recurrent_activation(), num_channels(),
                              partials_type(), available_memory_proportion(),
-                             reset_after());
+                             reset_after(), options());
 }
 
 std::unique_ptr<HloInstruction> CreateDynamicGRUBwd(
@@ -194,10 +199,11 @@ std::unique_ptr<HloInstruction> CreateDynamicGRUBwd(
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after) {
+    bool reset_after, const std::string& options) {
   return absl::make_unique<HloDynamicGRUBwdInstruction>(
       shape, operands, is_training, activation, recurrent_activation,
-      num_channels, partials_type, available_memory_proportion, reset_after);
+      num_channels, partials_type, available_memory_proportion, reset_after,
+      options);
 }
 
 HloAUGRUFwdInstruction::HloAUGRUFwdInstruction(
@@ -205,11 +211,11 @@ HloAUGRUFwdInstruction::HloAUGRUFwdInstruction(
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after)
+    bool reset_after, const std::string& options)
     : HloRNNFwdInstruction(PoplarOp::AUGRULayerFwd, shape, operands,
                            is_training, activation, recurrent_activation,
                            num_channels, partials_type,
-                           available_memory_proportion, reset_after),
+                           available_memory_proportion, options, reset_after),
       HloGRUInstructionCommon(reset_after) {}
 
 absl::flat_hash_set<int64> HloAUGRUFwdInstruction::AllocatingIndices() const {
@@ -224,7 +230,8 @@ HloAUGRUFwdInstruction::CloneWithNewOperandsImpl(
     HloCloneContext* ctx) const {
   return CreateAUGRUFwd(shape, operands, is_training(), activation(),
                         recurrent_activation(), num_channels(), partials_type(),
-                        available_memory_proportion(), reset_after());
+                        available_memory_proportion(), reset_after(),
+                        options());
 }
 
 std::unique_ptr<HloInstruction> CreateAUGRUFwd(
@@ -232,10 +239,11 @@ std::unique_ptr<HloInstruction> CreateAUGRUFwd(
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after) {
+    bool reset_after, const std::string& options) {
   return absl::make_unique<HloAUGRUFwdInstruction>(
       shape, operands, is_training, activation, recurrent_activation,
-      num_channels, partials_type, available_memory_proportion, reset_after);
+      num_channels, partials_type, available_memory_proportion, reset_after,
+      options);
 }
 
 HloAUGRUBwdInstruction::HloAUGRUBwdInstruction(
@@ -243,11 +251,11 @@ HloAUGRUBwdInstruction::HloAUGRUBwdInstruction(
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after)
+    bool reset_after, const std::string& options)
     : HloRNNBwdInstruction(PoplarOp::AUGRULayerBwd, shape, operands,
                            is_training, activation, recurrent_activation,
                            num_channels, partials_type,
-                           available_memory_proportion, reset_after),
+                           available_memory_proportion, options, reset_after),
       HloGRUInstructionCommon(reset_after) {}
 
 std::unique_ptr<HloInstruction>
@@ -256,7 +264,8 @@ HloAUGRUBwdInstruction::CloneWithNewOperandsImpl(
     HloCloneContext* ctx) const {
   return CreateAUGRUBwd(shape, operands, is_training(), activation(),
                         recurrent_activation(), num_channels(), partials_type(),
-                        available_memory_proportion(), reset_after());
+                        available_memory_proportion(), reset_after(),
+                        options());
 }
 
 std::unique_ptr<HloInstruction> CreateAUGRUBwd(
@@ -264,10 +273,11 @@ std::unique_ptr<HloInstruction> CreateAUGRUBwd(
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after) {
+    bool reset_after, const std::string& options) {
   return absl::make_unique<HloAUGRUBwdInstruction>(
       shape, operands, is_training, activation, recurrent_activation,
-      num_channels, partials_type, available_memory_proportion, reset_after);
+      num_channels, partials_type, available_memory_proportion, reset_after,
+      options);
 }
 
 namespace {
@@ -281,7 +291,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloGRUFwdFactoryFunc(
       parsed_attributes.activation, parsed_attributes.recurrent_activation,
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
       parsed_attributes.available_memory_proportion,
-      parsed_attributes.reset_after);
+      parsed_attributes.reset_after, parsed_attributes.options);
 }
 
 static HloPoplarInstructionFactory gru_fwd_factory(PoplarOp::GRULayerFwd,
@@ -297,7 +307,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloGRUBwdFactoryFunc(
       parsed_attributes.activation, parsed_attributes.recurrent_activation,
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
       parsed_attributes.available_memory_proportion,
-      parsed_attributes.reset_after);
+      parsed_attributes.reset_after, parsed_attributes.options);
 }
 
 static HloPoplarInstructionFactory gru_bwd_factory(PoplarOp::GRULayerBwd,
@@ -313,7 +323,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloDynamicGRUFwdFactoryFunc(
       parsed_attributes.activation, parsed_attributes.recurrent_activation,
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
       parsed_attributes.available_memory_proportion,
-      parsed_attributes.reset_after);
+      parsed_attributes.reset_after, parsed_attributes.options);
 }
 
 static HloPoplarInstructionFactory dynamic_gru_fwd_factory(
@@ -329,7 +339,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloDynamicGRUBwdFactoryFunc(
       parsed_attributes.activation, parsed_attributes.recurrent_activation,
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
       parsed_attributes.available_memory_proportion,
-      parsed_attributes.reset_after);
+      parsed_attributes.reset_after, parsed_attributes.options);
 }
 
 static HloPoplarInstructionFactory dynamic_gru_bwd_factory(
@@ -345,7 +355,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloAUGRUFwdFactoryFunc(
       parsed_attributes.activation, parsed_attributes.recurrent_activation,
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
       parsed_attributes.available_memory_proportion,
-      parsed_attributes.reset_after);
+      parsed_attributes.reset_after, parsed_attributes.options);
 }
 
 static HloPoplarInstructionFactory augru_fwd_factory(PoplarOp::AUGRULayerFwd,
@@ -361,7 +371,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloAUGRUBwdFactoryFunc(
       parsed_attributes.activation, parsed_attributes.recurrent_activation,
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
       parsed_attributes.available_memory_proportion,
-      parsed_attributes.reset_after);
+      parsed_attributes.reset_after, parsed_attributes.options);
 }
 
 static HloPoplarInstructionFactory augru_bwd_factory(PoplarOp::AUGRULayerBwd,

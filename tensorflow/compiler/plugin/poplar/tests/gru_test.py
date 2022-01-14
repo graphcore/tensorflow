@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import json
 import numpy as np
 from absl.testing import parameterized
 import pva
@@ -190,8 +191,8 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
                 recurrent_activation='sigmoid',
                 input_size=INPUT_SIZE,
                 num_channels=NUM_CHANNELS,
-                available_memory_proportion_fwd=None,
-                available_memory_proportion_bwd=None):
+                options=None,
+                options_bwd=None):
     with ops.device("/device:IPU:0"):
       with variable_scope.variable_scope("gru_layer", use_resource=True):
         kernel = _get_variable(
@@ -203,7 +204,8 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
                                shape=[3, num_channels],
                                initializer=init_ops.constant_initializer(
                                    0.0, DATA_TYPE))
-
+      options = {} if options is None else options
+      options_bwd = {} if options is None else options_bwd
       if seq_length is None:
         outputs, _, _ = gen_popnn_ops.popnn_gru_layer(
             activation=activation,
@@ -215,8 +217,8 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
             initial_state=initial_state,
             is_training=training,
             name=name,
-            available_memory_proportion_fwd=available_memory_proportion_fwd,
-            available_memory_proportion_bwd=available_memory_proportion_bwd)
+            options=json.dumps(options),
+            options_bwd=json.dumps(options_bwd))
       elif att_scores is not None:
         outputs, _, _ = gen_popnn_ops.popnn_augru_layer(
             activation=activation,
@@ -230,8 +232,8 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
             seq_len=seq_length,
             att_score=att_scores,
             name=name,
-            available_memory_proportion_fwd=available_memory_proportion_fwd,
-            available_memory_proportion_bwd=available_memory_proportion_bwd)
+            options=json.dumps(options),
+            options_bwd=json.dumps(options_bwd))
       else:
         outputs, _, _ = gen_popnn_ops.popnn_dynamic_gru_layer(
             activation=activation,
@@ -244,8 +246,8 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
             is_training=training,
             seq_len=seq_length,
             name=name,
-            available_memory_proportion_fwd=available_memory_proportion_fwd,
-            available_memory_proportion_bwd=available_memory_proportion_bwd)
+            options=json.dumps(options),
+            options_bwd=json.dumps(options_bwd))
       outputs = outputs if seq_val is None else outputs[0:min(
           SEQ_LEN, seq_val[0])]
       return outputs
@@ -382,8 +384,8 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
                            batch_size=BATCH_SIZE,
                            input_size=INPUT_SIZE,
                            num_channels=NUM_CHANNELS,
-                           available_memory_proportion_fwd=None,
-                           available_memory_proportion_bwd=None):
+                           options=None,
+                           options_bwd=None):
     with self.session() as sess:
       pinputs = array_ops.placeholder(DATA_TYPE,
                                       [SEQ_LEN, batch_size, input_size],
@@ -407,12 +409,10 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
                   init_state_value, DATA_TYPE))
 
         kwargs = {}
-        if available_memory_proportion_fwd is not None:
-          kwargs["available_memory_proportion_fwd"] = \
-            available_memory_proportion_fwd
-        if available_memory_proportion_bwd is not None:
-          kwargs["available_memory_proportion_bwd"] = \
-            available_memory_proportion_bwd
+        if options is not None:
+          kwargs["options"] = options
+        if options_bwd is not None:
+          kwargs["options_bwd"] = options_bwd
 
         logits = gru_layer_function(inputs=pinputs,
                                     weights_value=weights_value,
@@ -716,7 +716,7 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
           initial_state=pinitial_state,
           training=False,
           name=None,
-          available_memory_proportion_fwd=0.7 if valid_value else -123.)
+          options={"availableMemoryProportion": 0.7 if valid_value else -123.})
 
       sess.run(variables.global_variables_initializer())
 
@@ -772,7 +772,7 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
             name=name,
             input_size=input_size,
             num_channels=num_channels,
-            available_memory_proportion_fwd=amp_val)
+            options={"availableMemoryProportion": amp_val})
 
         utils.move_variable_initialization_to_cpu()
         sess.run(variables.global_variables_initializer())
@@ -799,21 +799,21 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
                                     input_size=INPUT_SIZE,
                                     num_channels=NUM_CHANNELS,
                                     amp_val=None):
-    self._RunGRULayerTraining(name=name,
-                              input_value=0.,
-                              weights_value=0.7,
-                              init_state_value=1.,
-                              training_steps=1,
-                              seq_val=None,
-                              att_score_val=0.5,
-                              labels_array=np.ones(shape=[batch_size],
-                                                   dtype=np.int32),
-                              gru_layer_function=self._GRULayer,
-                              device_string="/device:IPU:0",
-                              batch_size=batch_size,
-                              input_size=input_size,
-                              num_channels=num_channels,
-                              available_memory_proportion_bwd=amp_val)
+    self._RunGRULayerTraining(
+        name=name,
+        input_value=0.,
+        weights_value=0.7,
+        init_state_value=1.,
+        training_steps=1,
+        seq_val=None,
+        att_score_val=0.5,
+        labels_array=np.ones(shape=[batch_size], dtype=np.int32),
+        gru_layer_function=self._GRULayer,
+        device_string="/device:IPU:0",
+        batch_size=batch_size,
+        input_size=input_size,
+        num_channels=num_channels,
+        options_bwd={"availableMemoryProportion": amp_val})
 
   @parameterized.parameters((True), (False))
   def testGRUWithAvailableMemoryProportionBwd(self, valid_value):

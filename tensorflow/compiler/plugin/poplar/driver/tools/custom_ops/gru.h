@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <memory>
 #include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 
@@ -37,7 +38,8 @@ struct GRUAttributes : public RNNAttributes {
                 xla::PrimitiveType partials_xla_type,
                 rnn_helper::ActivationType activation,
                 rnn_helper::ActivationType recurrent_activation,
-                float available_memory_proportion, bool reset_after);
+                float available_memory_proportion, bool reset_after,
+                const std::string& options);
 };
 }  // namespace rnn_helper
 
@@ -60,7 +62,7 @@ class HloGRUFwdInstruction : public HloRNNFwdInstruction,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
       xla::PrimitiveType partials_type, float available_memory_proportion,
-      bool reset_after);
+      bool reset_after, const std::string& options);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -79,7 +81,7 @@ class HloGRUBwdInstruction : public HloRNNBwdInstruction,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
       xla::PrimitiveType partials_type, float available_memory_proportion,
-      bool reset_after);
+      bool reset_after, const std::string& options);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -92,14 +94,14 @@ std::unique_ptr<HloInstruction> CreateGRUFwd(
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after);
+    bool reset_after, const std::string& options);
 
 std::unique_ptr<HloInstruction> CreateGRUBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after);
+    bool reset_after, const std::string& options);
 
 class HloDynamicGRUFwdInstruction : public HloRNNFwdInstruction,
                                     public HloGRUInstructionCommon {
@@ -109,7 +111,7 @@ class HloDynamicGRUFwdInstruction : public HloRNNFwdInstruction,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
       xla::PrimitiveType partials_type, float available_memory_proportion,
-      bool reset_after);
+      bool reset_after, const std::string& options);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -128,7 +130,7 @@ class HloDynamicGRUBwdInstruction : public HloRNNBwdInstruction,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
       xla::PrimitiveType partials_type, float available_memory_proportion,
-      bool reset_after);
+      bool reset_after, const std::string& options);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -141,14 +143,14 @@ std::unique_ptr<HloInstruction> CreateDynamicGRUFwd(
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after);
+    bool reset_after, const std::string& options);
 
 std::unique_ptr<HloInstruction> CreateDynamicGRUBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after);
+    bool reset_after, const std::string& options);
 
 class HloAUGRUFwdInstruction : public HloRNNFwdInstruction,
                                public HloGRUInstructionCommon {
@@ -158,7 +160,7 @@ class HloAUGRUFwdInstruction : public HloRNNFwdInstruction,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
       xla::PrimitiveType partials_type, float available_memory_proportion,
-      bool reset_after);
+      bool reset_after, const std::string& options);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -177,7 +179,7 @@ class HloAUGRUBwdInstruction : public HloRNNBwdInstruction,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
       xla::PrimitiveType partials_type, float available_memory_proportion,
-      bool reset_after);
+      bool reset_after, const std::string& options);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -190,14 +192,14 @@ std::unique_ptr<HloInstruction> CreateAUGRUFwd(
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after);
+    bool reset_after, const std::string& options);
 
 std::unique_ptr<HloInstruction> CreateAUGRUBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
     xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after);
+    bool reset_after, const std::string& options);
 
 }  // namespace poplarplugin
 }  // namespace xla
