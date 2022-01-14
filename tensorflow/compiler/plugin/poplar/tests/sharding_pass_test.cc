@@ -2037,6 +2037,55 @@ main {
   EXPECT_EQ(t->sharding().tuple_elements()[1].GetUniqueDevice(), 0);
 }
 
+const char* all_gather_within_replica_hlo = R"(
+HloModule top
+
+main {
+  shard0 = f32[1] constant(0), sharding={maximal device=0}
+  shard1 = f32[1] constant(1), sharding={maximal device=1}
+  shard2 = f32[1] constant(2), sharding={maximal device=2}
+  shard3 = f32[1] constant(3), sharding={maximal device=3}
+  all_gather = (f32[4], f32[4], f32[4], f32[4]) custom-call(shard0, shard1, shard2, shard3), custom_call_target="AllGatherWithinReplica"
+  gathered_shard0 = f32[4] get-tuple-element(all_gather), index=0
+  gathered_shard1 = f32[4] get-tuple-element(all_gather), index=1
+  gathered_shard2 = f32[4] get-tuple-element(all_gather), index=2
+  ROOT gathered_shard3 = f32[4] get-tuple-element(all_gather), index=3
+}
+)";
+TEST_F(ShardingPassTest, AllGatherWithinReplicaSharding) {
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(all_gather_within_replica_hlo));
+  ASSERT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+
+  ASSERT_TRUE(ShardingPass().Run(module.get()).ValueOrDie());
+
+  const HloInstruction* all_gather =
+      FindInstruction(module.get(), "all-gather-within-replica");
+  ASSERT_TRUE(all_gather);
+
+  // Check that sharding info comes from the tuple and propogate to the users,
+  // so tuple[i] uses shard i as does user[i].
+  const auto all_gather_sharding = all_gather->sharding();
+  ASSERT_TRUE(all_gather_sharding.IsTuple());
+
+  const auto shard_count = 4u;
+
+  const auto tuple_sharding = all_gather_sharding.tuple_elements();
+  ASSERT_EQ(tuple_sharding.size(), shard_count);
+
+  const auto users = all_gather->users();
+  ASSERT_EQ(users.size(), shard_count);
+
+  for (auto i = 0; i < shard_count; ++i) {
+    ASSERT_TRUE(tuple_sharding[i].HasUniqueDevice());
+    ASSERT_EQ(tuple_sharding[i].GetUniqueDevice(), i)
+        << "Expected output i to be on shard/ipu i";
+
+    const auto* user = users[i];
+    ASSERT_EQ(tuple_sharding[i], user->sharding());
+  }
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

@@ -31,6 +31,7 @@ py_library(
         "ops/slicing_ops.py",
         "ops/statistics_ops.py",
         "ops/summary_ops.py",
+        "ops/within_replica_ops.py",
     ],
     srcs_version = "PY2AND3",
     deps = [
@@ -151,6 +152,7 @@ py_library(
         "ops/slicing_ops.py",
         "ops/statistics_ops.py",
         "ops/summary_ops.py",
+        "ops/within_replica_ops.py",
         "optimizers/__init__.py",
         "optimizers/cross_replica_optimizer.py",
         "optimizers/gradient_accumulation_optimizer.py",
@@ -235,6 +237,21 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     tags = ["hw_poplar_test_4_ipus"],
+)
+
+tf_py_test(
+    name = "within_replicas_test",
+    size = "medium",
+    srcs = ["tests/within_replicas_test.py"],
+    shard_count = 2,
+    tags = ["hw_poplar_test_4_ipus"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
 )
 
 tf_py_test(

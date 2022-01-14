@@ -64,6 +64,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:sequence_slice",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:slice_apply",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:sort_ops",
+        "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:within_replicas",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poprand:candidate_sampler",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poprand:dropout",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poprand:random",

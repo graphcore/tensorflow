@@ -229,3 +229,14 @@ poplar_cc_library(
     ],
     alwayslink = True,
 )
+
+poplar_cc_library(
+    name = "within_replicas",
+    srcs = [
+        "within_replicas.cc",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver:tensor",
+    ],
+    alwayslink = True,
+)

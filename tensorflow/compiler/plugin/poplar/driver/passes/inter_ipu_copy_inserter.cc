@@ -95,8 +95,11 @@ StatusOr<bool> InterIpuCopyInserter::Run(HloModule* module) {
   auto is_ineligible_op = [](const HloInstruction* inst) {
     // These ops are expected to have their input(s) on a different device to
     // their output(s).
+    // Dont perform an InterIpuCopy for AllGatherWithinReplica operands since it
+    // will do its own copies.
     return inst->opcode() == HloOpcode::kAfterAll ||
-           IsPoplarInstruction(PoplarOp::InterIpuCopy)(inst);
+           IsPoplarInstruction(PoplarOp::InterIpuCopy)(inst) ||
+           IsPoplarInstruction(PoplarOp::AllGatherWithinReplica)(inst);
   };
 
   for (auto* comp : module->MakeComputationPostOrder()) {

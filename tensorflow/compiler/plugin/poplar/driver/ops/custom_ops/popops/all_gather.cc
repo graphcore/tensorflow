@@ -78,7 +78,6 @@ class AllGatherOp : public PoplarOpDef {
     }
 
     const auto* all_gather_inst = Cast<HloPoplarAllGatherInstruction>(inst);
-    const auto replica_groups = all_gather_inst->GetPoplarReplicaGroups();
     TF_ASSIGN_OR_RETURN(
         const auto gcl_comm_group,
         ToGclCommGroup(all_gather_inst->GetPoplarReplicaGroups(), res));

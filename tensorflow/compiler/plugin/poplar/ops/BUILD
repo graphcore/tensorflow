@@ -310,6 +310,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/ops/popops:normalise_image",
         "//tensorflow/compiler/plugin/poplar/ops/popops:reduce_scatter",
         "//tensorflow/compiler/plugin/poplar/ops/popops:sequence_slice",
+        "//tensorflow/compiler/plugin/poplar/ops/popops:within_replicas",
         "//tensorflow/compiler/plugin/poplar/ops/poprand:dropout_tf",
         "//tensorflow/compiler/plugin/poplar/ops/poputil:assume_equal_across_replicas",
         "//tensorflow/compiler/plugin/poplar/ops/poputil:barrier",

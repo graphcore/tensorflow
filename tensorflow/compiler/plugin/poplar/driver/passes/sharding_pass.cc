@@ -146,6 +146,19 @@ void SetTupleShardingFromVector(HloInstruction* inst,
   SetSharding(inst, ConvertToTupleSharding(inst->shape(), shardings));
 }
 
+// Setup tuple sharding when the ith element of the tuple is on shard/ipu i.
+void SetTupleShardingFromElementIndices(HloInstruction* inst) {
+  std::vector<HloSharding> shardings;
+
+  const auto output_shape = inst->shape();
+  CHECK(output_shape.IsTuple());
+  for (auto ipu = 0l; ipu < ShapeUtil::TupleElementCount(output_shape); ++ipu) {
+    shardings.push_back(HloSharding::AssignDevice(ipu));
+  }
+
+  SetTupleShardingFromVector(inst, shardings);
+}
+
 bool CopyShardingFromUsers(HloInstruction* inst) {
   if (inst->user_count() == 0) {
     return false;
@@ -369,6 +382,11 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
         added_sharding = CopyShardingFromUsers(inst);
       }
 
+      if (IsPoplarInstruction(PoplarOp::AllGatherWithinReplica, inst)) {
+        SetTupleShardingFromElementIndices(inst);
+        added_sharding = true;
+      }
+
       // Try to take sharding from operands
       if (!inst->has_sharding()) {
         switch (inst->opcode()) {
@@ -387,7 +405,7 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
             break;
           }
           default: {
-            if (IsPoplarInstruction(PoplarOp::Barrier)(inst)) {
+            if (IsPoplarInstruction(PoplarOp::Barrier, inst)) {
               added_sharding = CopyTupleShardingFromOperands(inst);
             } else {
               added_sharding = CopyShardingFromOperands(inst);

@@ -28,6 +28,19 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "within_replicas",
+    srcs = [
+        "within_replicas.cc",
+    ],
+    hdrs = [
+        "within_replicas.h",
+    ],
+    deps = [
+        ":custom_ops_dependencies",
+    ],
+)
+
+poplar_cc_library(
     name = "arg_min_max",
     srcs = [
         "arg_min_max.cc",
@@ -865,6 +878,7 @@ poplar_cc_library(
         ":truncated_normal",
         ":user_op_hlo",
         ":weights_transpose_chans_flip_xy",
+        ":within_replicas",
     ],
     alwayslink = True,
 )
