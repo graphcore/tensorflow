@@ -51,12 +51,12 @@ And these are the main differences:
 
 * With the ``IPUMultiReplicaStrategy`` designed for IPU-POD systems, a
   collective operation (performed either explicitly by calling a member function
-  like ``reduce()`` or implicitly by using an optimizer under the strategy scope)
-  will be performed directly on the IPU by using compiled communications with the
-  GCL library over the IPU-Links and GW-Links. The ``IPUMultiReplicaStrategy`` is
-  designed for use with PopDist and PopRun. Please refer to the
-  `PopDist and PopRun User Guide <https://docs.graphcore.ai/projects/poprun-user-guide/>`_
-  for more details.
+  like ``reduce()`` or implicitly by using an optimizer under the strategy
+  scope) will be performed directly on the IPU by using compiled communications
+  with the GCL library over the IPU-Links and GW-Links. The
+  ``IPUMultiReplicaStrategy`` is designed for use with PopDist and PopRun.
+  Refer to the `PopDist and PopRun User Guide
+  <https://docs.graphcore.ai/projects/poprun-user-guide/>`_ for more details.
 
 * With the two distribution strategies designed for IPU-Server systems, an
   equivalent collective operation will involve a transfer of the tensor from
@@ -172,7 +172,7 @@ Distributed training with Horovod
 
 Distributed training can also be performed using
 `Horovod <https://github.com/horovod/horovod/>`_ which is included in the
-TensorFlow wheel provided by Graphcore.
+TensorFlow wheel provided by Graphcore. Please refer to the section on installing Horovod for TensorFlow in the `PopDist and PopRun User Guide <https://docs.graphcore.ai/projects/poprun-user-guide/html/configuration.html#tensorflow-1-and-tensorflow-2>`__ for more details.
 
 The class
 :class:`~tensorflow.python.ipu.horovod.ipu_horovod_strategy.IPUHorovodStrategy`
