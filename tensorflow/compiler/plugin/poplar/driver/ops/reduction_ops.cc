@@ -13,8 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include <algorithm>
-#include <gcl/Collectives.hpp>
 #include <limits>
+#include <vector>
+
+#include <gcl/Collectives.hpp>
+
 #include <poplar/TensorCloneMethod.hpp>
 #include <popnn/Pooling.hpp>
 #include <popnn/PoolingDef.hpp>
@@ -24,6 +27,7 @@ limitations under the License.
 #include <popops/Reduce.hpp>
 #include <poputil/TileMapping.hpp>
 #include <poputil/Util.hpp>
+
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -1015,28 +1019,21 @@ StatusOr<poplar::program::Sequence> CreateReplicatedAllReduce(
 }
 
 StatusOr<poplar::program::Sequence> CreateReplicatedAllToAll(
-    CompilerResources& res, const HloInstruction* inst, const xla::Shape&,
-    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
   poplar::Graph& graph = GetGraph(res, inst);
 
-  // Re-concat the incoming tensor slices.
-  std::vector<poplar::Tensor> incoming_slices(inst->operand_count());
-  for (int i = 0; i < inst->operand_count(); ++i) {
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor input,
-        FindInstructionInput(tensor_map, res, inst, i, seq, debug_name_and_id));
-    incoming_slices[i] = input.expand({0});
-  }
+  CHECK_EQ(inst->operand_count(), 1);
 
   // Create a single tensor target.
-  poplar::Tensor target_input = poplar::concat(incoming_slices);
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor target_input,
+      FindInstructionInput(tensor_map, res, inst, 0, seq, debug_name_and_id));
 
-  // Reshape it to be in the shape [num_splits][split_shape]
-  std::vector<std::size_t> sub_tensor_shape = target_input[0].shape();
-  sub_tensor_shape.insert(sub_tensor_shape.begin(), inst->operand_count());
-
-  target_input = target_input.reshape(sub_tensor_shape);
+  // GCL expects {num_replicas, x} whereas XLA provides {x, num_replicas}.
+  target_input = target_input.expand({0}).transpose();
 
   poplar::Tensor output_tensor;
 
@@ -1052,11 +1049,14 @@ StatusOr<poplar::program::Sequence> CreateReplicatedAllToAll(
                                   GetReplicatedCollectiveOptions(res));
   }
 
-  for (int i = 0; i < inst->operand_count(); ++i) {
-    // Add each slice of the tensor as an output and expand to be
-    // [1][output_shape] to match what XLA expects.
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output_tensor[i]));
+  std::vector<std::size_t> output_dimensions{};
+
+  for (const auto& dimension : output_shape.dimensions()) {
+    output_dimensions.emplace_back(dimension);
   }
+
+  output_tensor = output_tensor.reshape(output_dimensions);
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output_tensor));
 
   return seq;
 }
