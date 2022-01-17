@@ -14,10 +14,12 @@
 # =============================================================================
 
 import numpy as np
+from absl.testing import parameterized
 import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 
+import tensorflow as tf
 from tensorflow.python.client import session
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
@@ -96,6 +98,48 @@ class PoprandSameSeedTest(xla_test.XLATestCase):
         first_val = res[0]
         for i in res:
           np.testing.assert_equal(i, first_val)
+
+
+# pylint: disable=abstract-method
+class ShuffleOpTest(xla_test.XLATestCase, parameterized.TestCase):
+  @parameterized.parameters([tf.int32, tf.float32, tf.float16])
+  @test_util.deprecated_graph_mode_only
+  def testShuffleOp(self, dtype):
+    cfg = ipu.config.IPUConfig()
+    cfg.configure_ipu_system()
+
+    ds = tf.data.Dataset.from_tensors(
+        tf.constant(1, shape=[32, 32], dtype=dtype))
+    ds = ds.repeat()
+
+    # The host side queues
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def my_net():
+      x = variable_scope.get_variable(
+          'x',
+          shape=[32, 32],
+          dtype=dtype,
+          initializer=init_ops.constant_initializer(5),
+          use_resource=True)
+
+      def random_shuffle(x):
+        x = tf.random.shuffle(x)
+        return x
+
+      output = random_shuffle(x)
+      outfeed = outfeed_queue.enqueue(output)
+      return outfeed
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      xla_graph = ipu.ipu_compiler.compile(my_net, inputs=[])
+
+    dequeue_outfeed = outfeed_queue.dequeue()
+
+    with session.Session() as sess:
+      sess.run(variables.global_variables_initializer())
+      sess.run(xla_graph)
+      sess.run(dequeue_outfeed)
 
 
 if __name__ == "__main__":
