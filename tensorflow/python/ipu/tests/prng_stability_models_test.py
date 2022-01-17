@@ -430,7 +430,6 @@ class PrngStabilityModelsKerasTest(test_util.TensorFlowTestCase):
       normalizer = preprocessing.Normalization(input_shape=[
           1,
       ], axis=None)
-      normalizer.adapt(horsepower)
 
       model = keras.Sequential([normalizer, keras.layers.Dense(units=1)])
       model.set_pipelining_options(gradient_accumulation_steps_per_replica=4)
