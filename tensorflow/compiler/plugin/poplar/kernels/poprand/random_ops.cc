@@ -50,8 +50,8 @@ class RandomShuffleOp : public XlaOpKernel, public IpuOpKernel {
         xla::ConstantR0<int32>(builder, std::numeric_limits<int32>::max()),
         keys_shape);
     xla::XlaOp sorted_keys = xla::Sort(
-        {keys, indices}, xla::CreateScalarLtComputation(
-                             {xla::S32, ctx->input_xla_type(0)}, builder));
+        {keys, indices},
+        xla::CreateScalarLtComputation({xla::S32, xla::S32}, builder));
     indices = xla::GetTupleElement(sorted_keys, 1);
     auto keys_tensor_shape = TensorShape({n});
     DataType type = ctx->expected_output_dtype(0);
