@@ -1405,7 +1405,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<HloConstantFolding>();
       pipeline.AddPass<HloCSE>(true);
       pipeline.AddPass<HloDCE>();
-      pipeline.AddPass<HloPassFix<WhileLoopInvariantCodeMotion>>();
+      pipeline.AddPass<HloPassFix<WhileLoopInvariantCodeMotion>>(
+          /*hoist_constants=*/ false, /*hoist_size_inflating_ops=*/ false);
       pipeline.AddPass<TupleSimplifier>(true);
       pipeline.AddPass<HloPassFix<WhileLoopSimplifier>>();
       pipeline.AddPass<WideConstFinder>();
