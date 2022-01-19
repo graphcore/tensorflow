@@ -211,6 +211,20 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "reduce_scatter_test",
+    size = "small",
+    srcs = ["tests/reduce_scatter_test.py"],
+    tags = ["hw_poplar_test_4_ipus"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
     name = "reconfigure_ipu_test",
     size = "small",
     srcs = ["tests/reconfigure_ipu_test.py"],

@@ -17,6 +17,7 @@ Popops reduce scatter operator
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from tensorflow.python.util import nest
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 
 
@@ -34,7 +35,7 @@ def reduce_scatter(x, replication_factor, op='COLLECTIVE_OP_ADD', name=None):
             Replica1: [z0 + z1, 0]
 
   Args:
-    x: The input `Tensor`. Must have rank 1.
+    x: The input `Tensor` or list of `Tensor`s. `Tensor`s must have rank 1.
     replication_factor: The number of replicas in each collective group.
       If less than the total number of replicas in the model, the replicas
       are divided into consecutive groups of the given size, and the
@@ -52,7 +53,13 @@ def reduce_scatter(x, replication_factor, op='COLLECTIVE_OP_ADD', name=None):
     name: Optional op name.
 
   Returns:
-    A `Tensor` with the result for this replica.
+    A `Tensor` or list of `Tensor`s. The shape of each output will be
+    `[ceil(input_length / number_of_replicas)]`.
   """
-  return gen_popops_ops.ipu_reduce_scatter(
-      x, replication_factor=replication_factor, op=op, name=name)
+
+  flat_x = nest.flatten(x)
+  output = gen_popops_ops.ipu_reduce_scatter(
+      flat_x, replication_factor=replication_factor, op=op, name=name)
+  if len(output) == 1:
+    return output[0]
+  return output
