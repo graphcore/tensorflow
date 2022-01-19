@@ -20,29 +20,30 @@ limitations under the License.
 namespace tensorflow {
 
 REGISTER_OP("IpuReduceScatter")
-    .Input("input: dtype")
-    .Output("output: dtype")
-    .Attr("dtype: {float16, float32, int32}")
+    .Input("inputs: dtype")
+    .Output("outputs: dtype")
+    .Attr("dtype: list({float16, float32, int32}) >= 1")
     .Attr("op: string")
     .Attr("replication_factor: int")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       int32 replication_factor;
       TF_RETURN_IF_ERROR(c->GetAttr("replication_factor", &replication_factor));
 
-      shape_inference::ShapeHandle input_shape;
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 1, &input_shape));
+      for (int64 i = 0; i != c->num_inputs(); ++i) {
+        shape_inference::ShapeHandle input_shape;
+        TF_RETURN_IF_ERROR(c->WithRank(c->input(i), 1, &input_shape));
 
-      shape_inference::DimensionHandle d = c->Dim(input_shape, 0);
-      if (c->ValueKnown(d)) {
+        shape_inference::DimensionHandle d = c->Dim(input_shape, 0);
+        if (!c->ValueKnown(d)) {
+          return errors::InvalidArgument("Unknown input tensor shape.");
+        }
         const int64 input_length = c->Value(d);
         const int64 output_length =
             MathUtil::CeilOfRatio<int64>(input_length, replication_factor);
 
-        c->set_output(0, c->MakeShape({output_length}));
-        return Status::OK();
-      } else {
-        return errors::InvalidArgument("Unknown input tensor shape.");
+        c->set_output(i, c->MakeShape({output_length}));
       }
+      return Status::OK();
     });
 
 }  // namespace tensorflow

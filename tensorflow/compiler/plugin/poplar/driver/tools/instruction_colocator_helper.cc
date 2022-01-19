@@ -80,6 +80,40 @@ StatusOr<HloInstruction*> AddGTEInstruction(HloInstruction* operand,
 
   return gte;
 }
+
+// Returns a concatenated tuple shape from the shapes of the given instructions.
+static Shape CombineShapes(const std::vector<HloInstruction*>& to_combine) {
+  std::vector<Shape> combined_shapes;
+  // Lower bound for size.
+  combined_shapes.reserve(to_combine.size());
+
+  for (HloInstruction* inst : to_combine) {
+    const Shape& shape = inst->shape();
+    if (shape.IsTuple()) {
+      for (const Shape& tuple_shape : shape.tuple_shapes()) {
+        combined_shapes.push_back(tuple_shape);
+      }
+    } else {
+      combined_shapes.push_back(shape);
+    }
+  }
+  return ShapeUtil::MakeTupleShape(combined_shapes);
+}
+
+// Returns a concatenated list of the operands of the given instructions.
+static std::vector<HloInstruction*> CombineOperands(
+    const std::vector<HloInstruction*>& to_combine) {
+  std::vector<HloInstruction*> combined_operands;
+  // Lower bound for size.
+  combined_operands.reserve(to_combine.size());
+
+  for (HloInstruction* inst : to_combine) {
+    for (HloInstruction* operand : inst->operands()) {
+      combined_operands.push_back(operand);
+    }
+  }
+  return combined_operands;
+}
 }  // namespace
 
 InstructionColocatorHelper::InstructionColocatorHelper(
@@ -156,26 +190,13 @@ bool InstructionColocatorHelperPtrComparator::operator()(
   return lhs->GetID() < rhs->GetID();
 }
 
-HloInstruction* InstructionColocatorHelper::CombineColocatedInstructions(
+StatusOr<HloInstruction*>
+InstructionColocatorHelper::CombineColocatedInstructions(
     const std::vector<HloInstruction*>& to_combine) const {
-  HloInstruction* archetype = to_combine[0];
+  HloInstruction* archetype = to_combine.front();
 
-  // By default merge all the operands.
-  // Combine all the shapes into a single one.
-  std::vector<Shape> shapes(to_combine.size());
-  absl::c_transform(to_combine, shapes.begin(),
-                    [](HloInstruction* inst) { return inst->shape(); });
-  auto shape = ShapeUtil::MakeTupleShape(shapes);
-
-  // The new list of operands
-  auto operands = absl::c_accumulate(
-      to_combine, std::vector<HloInstruction*>{},
-      [](std::vector<HloInstruction*>& accum, HloInstruction* inst) {
-        accum.insert(accum.end(), inst->operands().begin(),
-                     inst->operands().end());
-
-        return accum;
-      });
+  Shape shape = CombineShapes(to_combine);
+  std::vector<HloInstruction*> operands = CombineOperands(to_combine);
 
   // Add the new instruction.
   HloInstruction* new_inst = AddReplacementInstruction(
@@ -193,25 +214,47 @@ InstructionColocatorHelper::CombineAndReplaceColocatedInstructions(
     return to_combine;
   }
 
-  auto* new_inst = CombineColocatedInstructions(to_combine);
+  TF_ASSIGN_OR_RETURN(auto* new_inst, CombineColocatedInstructions(to_combine));
   auto* comp = new_inst->parent();
 
   // Replace all the users.
-  std::vector<HloInstruction*> result(cluster_size + 1);
-  result[0] = new_inst;
-  for (uint64 i = 0; i != cluster_size; ++i) {
-    HloInstruction* inst = to_combine[i];
-    // Add a GTE to unpack the new_inst result.
-    TF_ASSIGN_OR_RETURN(HloInstruction * gte,
-                        AddGTEInstruction(new_inst, i, inst));
+  std::vector<HloInstruction*> result;
+  result.push_back(new_inst);
 
-    result[i + 1] = gte;
+  // Delete old instructions and replace uses.
+  int64 output_index_offset = 0;
+  for (HloInstruction* old_inst : to_combine) {
+    TF_RETURN_IF_ERROR(new_inst->CopyAllControlDepsFrom(old_inst));
+    TF_RETURN_IF_ERROR(old_inst->DropAllControlDeps());
 
-    // Replace the old inst.
-    TF_RETURN_IF_ERROR(new_inst->CopyAllControlDepsFrom(inst));
-    TF_RETURN_IF_ERROR(inst->DropAllControlDeps());
-    TF_RETURN_IF_ERROR(inst->ReplaceAllUsesWith(gte));
-    TF_RETURN_IF_ERROR(comp->ForceRemoveInstruction(inst));
+    if (old_inst->shape().IsTuple()) {
+      // Record the number of users before adding the users from old_inst.
+      // This is used to iterate through only the new users.
+      int64 new_users_offset = new_inst->user_count();
+      TF_RETURN_IF_ERROR(old_inst->ReplaceAllUsesWithDifferentShape(new_inst));
+
+      // Iterate through new users and update GTE indexes.
+      for (auto itr = new_inst->users().begin() + new_users_offset;
+           itr != new_inst->users().end(); ++itr) {
+        HloInstruction* gte = *itr;
+        CHECK(gte->opcode() == HloOpcode::kGetTupleElement);
+        gte->set_tuple_index(gte->tuple_index() + output_index_offset);
+      }
+      // Used to calculate updated gte index values.
+      output_index_offset += old_inst->operand_count();
+    } else {
+      // Add a GTE to unpack the result from the output tuple.
+      TF_ASSIGN_OR_RETURN(
+          HloInstruction * gte,
+          AddGTEInstruction(new_inst, output_index_offset, old_inst));
+      TF_RETURN_IF_ERROR(old_inst->ReplaceAllUsesWith(gte));
+      // Include new GTE in result.
+      result.push_back(gte);
+      ++output_index_offset;
+    }
+
+    // Remove old instruction.
+    TF_RETURN_IF_ERROR(comp->ForceRemoveInstruction(old_inst));
   }
   return result;
 }
@@ -312,10 +355,11 @@ class InterIpuCopyColocatorHelper : public InstructionColocatorHelper {
     return information.max_inter_ipu_copies_buffer_size;
   }
 
-  HloInstruction* CombineColocatedInstructions(
+  StatusOr<HloInstruction*> CombineColocatedInstructions(
       const std::vector<HloInstruction*>& to_combine) const override {
-    auto* new_inst =
-        InstructionColocatorHelper::CombineColocatedInstructions(to_combine);
+    TF_ASSIGN_OR_RETURN(
+        auto* new_inst,
+        InstructionColocatorHelper::CombineColocatedInstructions(to_combine));
     std::vector<HloSharding> new_sharding;
     for (const auto* inst : to_combine) {
       new_sharding.push_back(inst->sharding());
@@ -330,7 +374,9 @@ class InterIpuCopyColocatorHelper : public InstructionColocatorHelper {
 
 class ReduceScatterColocatorHelper : public InstructionColocatorHelper {
  public:
-  ReduceScatterColocatorHelper() : InstructionColocatorHelper() {}
+  ReduceScatterColocatorHelper()
+      : InstructionColocatorHelper(
+            /*requires_matching_element_types=*/false) {}
 
   bool CanColocate(const HloInstruction* inst) const override {
     return IsPoplarInstruction(PoplarOp::ReduceScatter)(inst);
@@ -387,18 +433,15 @@ class SendToHostColocatorHelper : public InstructionColocatorHelper {
     auto* first_send = old_sends[0];
     HloComputation* comp = first_send->parent();
 
-    std::vector<Shape> new_shapes;
-    std::vector<HloInstruction*> new_operands;
+    std::vector<HloInstruction*> new_operands = CombineOperands(to_combine);
+    const Shape new_shape = CombineShapes(to_combine);
+
     std::vector<std::string> new_rendezvous_keys;
     for (auto* old_send : old_sends) {
       CHECK_EQ(old_send->operand_count(), 1);
       CHECK_EQ(old_send->RendezvousKeys().size(), 1);
-      new_shapes.push_back(old_send->shape());
-      new_operands.push_back(old_send->mutable_operand(0));
       new_rendezvous_keys.push_back(old_send->RendezvousKeys()[0]);
     }
-
-    const auto new_shape = ShapeUtil::MakeTupleShape(new_shapes);
 
     // Add the new instruction.
     HloInstruction* new_send = AddReplacementInstruction(
@@ -446,18 +489,14 @@ class RecvFromHostColocatorHelper : public InstructionColocatorHelper {
     auto* first_recv = old_recvs[0];
     HloComputation* comp = first_recv->parent();
 
-    std::vector<Shape> new_shapes;
-    std::vector<HloInstruction*> new_operands;
+    std::vector<HloInstruction*> new_operands = CombineOperands(to_combine);
+    const Shape new_shape = CombineShapes(to_combine);
+
     std::vector<std::string> new_rendezvous_keys;
     for (auto* old_recv : old_recvs) {
       CHECK_EQ(old_recv->RendezvousKeys().size(), 1);
-      new_shapes.push_back(old_recv->shape());
-      new_operands.insert(new_operands.end(), old_recv->operands().cbegin(),
-                          old_recv->operands().cend());
       new_rendezvous_keys.push_back(old_recv->RendezvousKeys()[0]);
     }
-
-    const auto new_shape = ShapeUtil::MakeTupleShape(new_shapes);
 
     // Add the new instruction.
     HloInstruction* new_recv = AddReplacementInstruction(
@@ -550,7 +589,7 @@ class StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper
       return to_combine;
     }
 
-    HloComputation* comp = to_combine[0]->parent();
+    HloComputation* comp = to_combine.front()->parent();
     // The inputs to a gradient accumulation with momentum are:
     // 0 - accumulator
     // 1 - gradient
@@ -576,14 +615,14 @@ class StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper
       output_shapes[cluster_size + i] = grad->shape();
     }
     // Momentum operand.
-    operands[2 * cluster_size] = to_combine[0]->mutable_operand(2);
+    operands[2 * cluster_size] = to_combine.front()->mutable_operand(2);
 
     auto shape = ShapeUtil::MakeTupleShape(output_shapes);
 
     // Add the new instruction.
     HloInstruction* new_inst = AddReplacementInstruction(
-        comp, to_combine[0],
-        to_combine[0]->CloneWithNewOperands(shape, operands));
+        comp, to_combine.front(),
+        to_combine.front()->CloneWithNewOperands(shape, operands));
 
     // Replace all the users.
     std::vector<HloInstruction*> result(3 * cluster_size + 1);
@@ -649,65 +688,31 @@ class ReduceManyColocatorHelper : public InstructionColocatorHelper {
     return information.max_reduce_many_buffer_size;
   }
 
-  StatusOr<std::vector<HloInstruction*>> CombineAndReplaceColocatedInstructions(
-      std::vector<HloInstruction*> to_combine) const override {
-    const uint64 cluster_size = to_combine.size();
-    CHECK_GT(cluster_size, 0);
-    if (cluster_size == 1) {
-      return to_combine;
-    }
+  StatusOr<HloInstruction*> CombineColocatedInstructions(
+      const std::vector<HloInstruction*>& to_combine) const override {
+    HloInstruction* archetype = to_combine.front();
 
-    auto* first_reduce = to_combine[0];
-    HloComputation* comp = first_reduce->parent();
+    std::vector<HloInstruction*> new_operands = CombineOperands(to_combine);
+    const Shape new_shape = CombineShapes(to_combine);
 
-    std::vector<Shape> new_shapes;
-    std::vector<HloInstruction*> new_operands;
     std::vector<ReductionInfo> reductions_info;
-    new_shapes.reserve(cluster_size);
-    new_operands.reserve(cluster_size * 3);
-    reductions_info.reserve(cluster_size);
+    reductions_info.reserve(to_combine.size());
     for (HloInstruction* old_reduce : to_combine) {
       const auto old_operand_count = old_reduce->operand_count();
       const bool with_scale = old_operand_count == 3;
       CHECK(old_operand_count == 2 || with_scale);
 
-      new_shapes.push_back(old_reduce->shape());
-      new_operands.push_back(old_reduce->mutable_operand(0));
-      new_operands.push_back(old_reduce->mutable_operand(1));
-      if (with_scale) {
-        new_operands.push_back(old_reduce->mutable_operand(2));
-      }
       TF_ASSIGN_OR_RETURN(ReductionInfo reduction_info,
                           GetReductionInfo(old_reduce, with_scale));
       reductions_info.push_back(reduction_info);
     }
 
-    const auto new_shape = ShapeUtil::MakeTupleShape(new_shapes);
-
     // Add the new instruction.
-    HloInstruction* reduce_many = AddReplacementInstruction(
-        comp, first_reduce,
+    HloInstruction* new_inst = AddReplacementInstruction(
+        archetype->parent(), archetype,
         CreatePoplarReduceMany(new_operands, new_shape, reductions_info));
 
-    std::vector<HloInstruction*> result(cluster_size + 1);
-    result[0] = reduce_many;
-
-    for (uint64 i = 0; i != cluster_size; ++i) {
-      HloInstruction* old_reduce = to_combine[i];
-      // Add a GTE to unpack the new_inst result.
-      TF_ASSIGN_OR_RETURN(HloInstruction * gte,
-                          AddGTEInstruction(reduce_many, i, old_reduce));
-
-      result[i + 1] = gte;
-      TF_RETURN_IF_ERROR(reduce_many->CopyAllControlDepsFrom(old_reduce));
-      TF_RETURN_IF_ERROR(old_reduce->DropAllControlDeps());
-      TF_RETURN_IF_ERROR(old_reduce->ReplaceAllUsesWith(gte));
-      // This will do safety checks like confirming that there are no
-      // users of the reduce instruction.
-      TF_RETURN_IF_ERROR(comp->RemoveInstruction(old_reduce));
-    }
-
-    return result;
+    return new_inst;
   }
 };
 
@@ -736,73 +741,6 @@ class AllGatherColocatorHelper : public InstructionColocatorHelper {
   int64 GetColocateBufferSize(
       const CompilerInformation& information) const override {
     return information.max_all_gather_buffer_size;
-  }
-
-  StatusOr<std::vector<HloInstruction*>> CombineAndReplaceColocatedInstructions(
-      std::vector<HloInstruction*> to_combine) const override {
-    const uint64 cluster_size = to_combine.size();
-    CHECK_GT(cluster_size, 0);
-    if (cluster_size == 1) {
-      return to_combine;
-    }
-
-    auto* first_all_gather = to_combine.front();
-    HloComputation* comp = first_all_gather->parent();
-
-    // Concatenate tuples from cluster into one big tuple.
-    std::vector<Shape> new_shapes;
-    std::vector<HloInstruction*> new_operands;
-    new_shapes.reserve(cluster_size);
-    new_operands.reserve(cluster_size);
-    for (HloInstruction* old_all_gather : to_combine) {
-      CHECK(old_all_gather->shape().IsTuple());
-      for (int64 i = 0; i != old_all_gather->operand_count(); ++i) {
-        new_shapes.push_back(old_all_gather->shape().tuple_shapes(i));
-        new_operands.push_back(old_all_gather->mutable_operand(i));
-      }
-    }
-
-    const auto new_shape = ShapeUtil::MakeTupleShape(new_shapes);
-    // Get replica groups from first instruction as we ensure they are all equal
-    // in CanColocateExtra.
-    PoplarReplicaGroups replica_groups =
-        Cast<HloPoplarAllGatherInstruction>(first_all_gather)
-            ->GetPoplarReplicaGroups();
-
-    // Add the new instruction.
-    HloInstruction* new_all_gather = AddReplacementInstruction(
-        comp, first_all_gather,
-        CreatePoplarAllGather(new_operands, new_shape, replica_groups));
-
-    // Delete old instructions and replace uses.
-    int64 output_index_offset = 0;
-    for (HloInstruction* old_all_gather : to_combine) {
-      TF_RETURN_IF_ERROR(
-          new_all_gather->CopyAllControlDepsFrom(old_all_gather));
-      TF_RETURN_IF_ERROR(old_all_gather->DropAllControlDeps());
-      // Record the number of users before adding the users from old_all_gather.
-      // This is used later to iterate through only the new users.
-      int64 new_users_offset = new_all_gather->user_count();
-      TF_RETURN_IF_ERROR(
-          old_all_gather->ReplaceAllUsesWithDifferentShape(new_all_gather));
-
-      // Iterate through new users and update gte indexes.
-      for (auto itr = new_all_gather->users().begin() + new_users_offset;
-           itr != new_all_gather->users().end(); ++itr) {
-        HloInstruction* gte = *itr;
-        CHECK(gte->opcode() == HloOpcode::kGetTupleElement);
-        gte->set_tuple_index(gte->tuple_index() + output_index_offset);
-      }
-      // Used to calculate updated gte index values.
-      output_index_offset += old_all_gather->operand_count();
-
-      // Remove old instruction.
-      TF_RETURN_IF_ERROR(comp->RemoveInstruction(old_all_gather));
-    }
-
-    std::vector<HloInstruction*> result(1);
-    result[0] = new_all_gather;
-    return result;
   }
 };
 

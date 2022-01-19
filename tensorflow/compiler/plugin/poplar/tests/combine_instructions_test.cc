@@ -495,14 +495,22 @@ HloModule top
 
 %cluster_1  {
   %arg0 = f16[4] parameter(0)
-  %r0 = f16[4] custom-call(arg0), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\", \"replica_group_size\": 2}\n"
-  %arg1 = f16[4] parameter(1)
-  %r1 = f16[4] custom-call(arg1), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\", \"replica_group_size\": 2}\n"
+  %arg1 = u32[4] parameter(1)
   %arg2 = f16[4] parameter(2)
-  %r2 = f16[4] custom-call(arg2), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\", \"replica_group_size\": 4}\n"
   %arg3 = f16[4] parameter(3)
-  %r3 = f16[4] custom-call(arg3), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_LOCAL\", \"replica_group_size\": 4}\n"
-  ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(r0, r1, r2)
+  %r0 = (f16[4]) custom-call(arg0), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\", \"replica_group_size\": 2}\n"
+  %r1 = (u32[4]) custom-call(arg1), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\", \"replica_group_size\": 2}\n"
+  %r2 = (f16[4]) custom-call(arg2), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\", \"replica_group_size\": 4}\n"
+  %r3 = (f16[4]) custom-call(arg3), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_LOCAL\", \"replica_group_size\": 4}\n"
+  %gte0 = f16[4] get-tuple-element((f16[4]) %r0), index=0,
+    backend_config="{\"isInplace\":true}"
+  %gte1 = u32[4] get-tuple-element((u32[4]) %r1), index=0,
+    backend_config="{\"isInplace\":true}"
+  %gte2 = f16[4] get-tuple-element((f16[4]) %r2), index=0,
+    backend_config="{\"isInplace\":true}"
+  %gte3 = f16[4] get-tuple-element((f16[4]) %r3), index=0,
+    backend_config="{\"isInplace\":true}"
+  ROOT %tuple = (f16[4], u32[4], f16[4], f16[4]) tuple(%gte0, %gte1, %gte2, %gte3)
 }
   )";
 TEST_F(CombineInstructionsTest, TestCombineReduceScatter) {
@@ -531,9 +539,9 @@ TEST_F(CombineInstructionsTest, TestCombineReduceScatter) {
   auto seq = s.instructions();
 
   // There should be a three reduce scatters:
-  // - One combined with with op=ADD replica_group_size=2
-  // - One left alone with with op=ADD replica_group_size=4
-  // - One left alone with with op=LOCAL replica_group_size=4
+  // - One combined with op=ADD replica_group_size=2
+  // - One left alone with op=ADD replica_group_size=4
+  // - One left alone with op=LOCAL replica_group_size=4
   ASSERT_THAT(seq, ContainsNPoplarOps(PoplarOp::ReduceScatter, 3));
 }
 

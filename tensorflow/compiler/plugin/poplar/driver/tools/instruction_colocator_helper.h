@@ -63,7 +63,7 @@ class InstructionColocatorHelper {
  protected:
   // Combines several instructions to one. Does not replace the existing
   // instruction or modify its users.
-  virtual HloInstruction* CombineColocatedInstructions(
+  virtual StatusOr<HloInstruction*> CombineColocatedInstructions(
       const std::vector<HloInstruction*>& to_combine) const;
 
  private:

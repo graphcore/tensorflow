@@ -33,32 +33,54 @@ class PopopsReduceScatter : public XlaOpKernel, IpuOpKernel {
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
-    const TensorShape input_shape = ctx->InputShape(0);
-    OP_REQUIRES(ctx, TensorShapeUtils::IsVector(input_shape),
-                errors::InvalidArgument("Input must be vector"));
-
+    // Add attributes.
     attribute_map_.AddAttribute("op", op_);
     attribute_map_.AddAttribute("replica_group_size", replica_group_size_);
 
-    const int64 input_length = input_shape.dim_size(0);
-    const int64 output_length =
-        MathUtil::CeilOfRatio<int64>(input_length, replica_group_size_);
+    // Build xla output shape.
+    std::vector<xla::Shape> xla_output_shapes;
+    xla_output_shapes.reserve(ctx->num_inputs());
+    for (int64 i = 0; i < ctx->num_inputs(); i++) {
+      const TensorShape input_shape = ctx->InputShape(i);
+      OP_REQUIRES(ctx, TensorShapeUtils::IsVector(input_shape),
+                  errors::InvalidArgument("All inputs must be vectors"));
 
-    TensorShape output_shape;
-    output_shape.AddDim(output_length);
+      // Calculate output shape based on input shape and number of replicas.
+      const int64 input_length = input_shape.dim_size(0);
+      const int64 output_length =
+          MathUtil::CeilOfRatio<int64>(input_length, replica_group_size_);
 
-    xla::PrimitiveType input_type;
-    OP_REQUIRES_OK(ctx,
-                   DataTypeToPrimitiveType(ctx->input_type(0), &input_type));
+      TensorShape output_shape;
+      output_shape.AddDim(output_length);
 
-    const xla::Shape xla_output_shape =
-        TensorShapeToXLAShape(input_type, output_shape);
+      // Get the element type of the input.
+      xla::PrimitiveType input_type;
+      OP_REQUIRES_OK(ctx,
+                     DataTypeToPrimitiveType(ctx->input_type(i), &input_type));
 
+      // Convert the output shape into the XLA format.
+      xla_output_shapes.push_back(
+          TensorShapeToXLAShape(input_type, output_shape));
+    }
+
+    // Combine output shapes into tuple.
+    xla::Shape xla_output_shape =
+        xla::ShapeUtil::MakeTupleShape(xla_output_shapes);
+
+    // Get input values.
+    std::vector<xla::XlaOp> input_values;
+    std::vector<TensorShape> input_shapes;
+    OP_REQUIRES_OK(ctx, ctx->InputList("inputs", &input_values, &input_shapes));
+
+    // Do custom call.
     const xla::XlaOp call_output = xla::CustomCall(
-        ctx->builder(), PoplarOp_Name(PoplarOp::ReduceScatter), {ctx->Input(0)},
+        ctx->builder(), PoplarOp_Name(PoplarOp::ReduceScatter), input_values,
         xla_output_shape, attribute_map_.Serialise());
 
-    ctx->SetOutput(0, call_output);
+    // Get each output value with a GTE.
+    for (int64 i = 0; i != ctx->num_inputs(); ++i) {
+      ctx->SetOutput(i, xla::GetTupleElement(call_output, i));
+    }
   }
 
  private:
