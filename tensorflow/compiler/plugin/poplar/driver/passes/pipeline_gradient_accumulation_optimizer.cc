@@ -112,7 +112,9 @@ StatusOr<bool> PipelineGradientAccumulationOptimizer::OptimizePipeline(
       continue;
     }
     auto const_opt = GetConstantValue<float>(end_of_path_users[0]->operand(2));
-    CHECK(const_opt && *const_opt == 1.0f);
+    if (!const_opt) {
+      continue;
+    }
 
     HloInstruction* gradient_accumulator_add = end_of_path_users[0];
 

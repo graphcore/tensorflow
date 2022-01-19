@@ -188,7 +188,8 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
         schedule=pipelining_ops.PipelineSchedule.Interleaved,
         minimum_remote_tensor_size=minimum_remote_tensor_size,
         replicated_optimizer_state_sharding=replicated_optimizer_state_sharding,
-        merge_remote_buffers=merge_remote_buffers)
+        merge_remote_buffers=merge_remote_buffers,
+        rtol=1e-4)
 
   @tu.test_uses_ipus(4, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
@@ -497,8 +498,8 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
         schedule=pipelining_ops.PipelineSchedule.Grouped,
         minimum_remote_tensor_size=minimum_remote_tensor_size,
         offload_activations=offload_activations,
-        replicated_optimizer_state_sharding=replicated_optimizer_state_sharding
-    )
+        replicated_optimizer_state_sharding=replicated_optimizer_state_sharding,
+        rtol=1e-5)
 
 
 if __name__ == "__main__":

@@ -381,10 +381,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase,
         gradient_accumulation_count, dataset_fn, optimizer_fn, self, 6328,
         True, pipelining_ops.PipelineSchedule.Sequential)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
   def testDistributedBatchNorm(self, reduction_method):

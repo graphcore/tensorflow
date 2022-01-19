@@ -21,6 +21,7 @@ from tensorflow.python import keras
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import test
+from tensorflow.python.keras.optimizer_v2 import gradient_descent
 
 
 def get_mnist_dataset(batch_size):
@@ -164,10 +165,13 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
     cpu_train_ds, _, _ = get_mnist_dataset(batch_size *
                                            gradient_accumulation_steps)
 
+    lr = 0.01
+    optimizer = gradient_descent.SGD(learning_rate=lr)
+
     # Run on CPU - simulate gradient accumulation by just using a bigger batch
     # size but less steps per epoch.
     m = model_fn(False)
-    m.compile(optimizer='sgd',
+    m.compile(optimizer=optimizer,
               loss=keras.losses.SparseCategoricalCrossentropy())
     m.fit(cpu_train_ds,
           steps_per_epoch=steps_per_epoch // gradient_accumulation_steps,
@@ -177,11 +181,14 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
     cpu_eval = m.evaluate(eval_ds, steps=steps_per_epoch)
     cpu_predict = m.predict(predict_ds, steps=steps_per_epoch)
 
+    lr /= replication_factor
+
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
+      optimizer = gradient_descent.SGD(learning_rate=lr)
       m = model_fn(pipelined)
       steps_per_execution = gradient_accumulation_steps * 2
-      m.compile(optimizer='sgd',
+      m.compile(optimizer=optimizer,
                 loss=keras.losses.SparseCategoricalCrossentropy(),
                 steps_per_execution=steps_per_execution)
 

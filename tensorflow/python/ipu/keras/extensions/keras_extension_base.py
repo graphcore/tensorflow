@@ -575,11 +575,15 @@ class KerasExtensionBase(base_layer.KerasExtension):
 
   def _make_single_ipu_train_function_with_gradient_accumulation(
       self, gradient_accumulation_steps_per_replica):
-    replication_factor = self._get_replication_factor()
+    # This gradient normalizer can only be enabled when the gradient accumulation
+    # reduction method is set to SUM. For other reduction methods, this acts as a
+    # pass-through v1 optimizer. Additionally, we do not scale down by
+    # replication factor since we use cross_replica_mean for reducing gradients
+    # across replicas
     optimizer = _NormalizedKerasOptimizerWrapper(
         self._experimental_gradient_accumulation_normalize_gradients,
-        (gradient_accumulation_steps_per_replica * replication_factor), self,
-        self.optimizer)
+        (gradient_accumulation_steps_per_replica), self, self.optimizer)
+
     optimizer = \
       gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
           optimizer,
@@ -813,11 +817,14 @@ class KerasExtensionBase(base_layer.KerasExtension):
       outfeed_mask = [True, False] if training else None
 
       def optimizer_function(loss, *_):
-        replication_factor = self._get_replication_factor()
+        # This gradient normalizer can only be enabled when the gradient accumulation
+        # reduction method is set to SUM. For other reduction methods, this acts as a
+        # pass-through v1 optimizer. Additionally, we do not scale down by
+        # replication factor since we use cross_replica_mean for reducing gradients
+        # across replicas
         optimizer = _NormalizedKerasOptimizerWrapper(
             self._experimental_pipelining_normalize_gradients,
-            (gradient_accumulation_steps_per_replica * replication_factor),
-            self, self.optimizer)
+            (gradient_accumulation_steps_per_replica), self, self.optimizer)
         return pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
 
       opt = optimizer_function if add_optimizer else None
@@ -1039,11 +1046,14 @@ class KerasExtensionBase(base_layer.KerasExtension):
     # The extension might need to be reset if any of the values are set.
     reset_extension = False
 
-    if experimental_normalize_gradients:
-      # TODO(T46011) - Change experimental_normalize_gradients to False
-      # and set gradient_accumulation_reduction_method to MEAN?
-      gradient_accumulation_reduction_method = \
-        gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
+    if experimental_normalize_gradients and \
+        gradient_accumulation_reduction_method != \
+          gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM: # pylint: disable=line-too-long
+      raise ValueError(
+          "Setting `experimental_normalize_gradients` to True is only "
+          "supported when setting gradient_accumulation_reduction_method "
+          "to SUM. It is currently set to "
+          f"{gradient_accumulation_reduction_method}")
 
     self._gradient_accumulation_reduction_method = \
       gradient_accumulation_reduction_method

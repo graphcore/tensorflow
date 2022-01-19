@@ -147,10 +147,7 @@ class BatchCallbackCounter(keras.callbacks.Callback):
 
 
 class IPUPipelineTest(test.TestCase, parameterized.TestCase):
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.run_v2_only
   def testFitCpuMatch(self, reduction_method):
     experimental_normalize_gradients = \
@@ -210,10 +207,7 @@ class IPUPipelineTest(test.TestCase, parameterized.TestCase):
       # Should be called 96 / 16 times
       self.assertEqual(cb.count(), 6)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.run_v2_only
   def testFitTwice(self, reduction_method):
     experimental_normalize_gradients = \
@@ -276,10 +270,7 @@ class IPUPipelineTest(test.TestCase, parameterized.TestCase):
       # Don't need to compile the graph again.
       self.assert_num_reports(report_helper, 0)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.run_v2_only
   def testFitMultipleOutputs(self, reduction_method):
     cfg = IPUConfig()
@@ -446,10 +437,7 @@ class IPUPipelineTest(test.TestCase, parameterized.TestCase):
       self.assertEqual(type(history.history['accuracy'][0]), float)
       self.assertEqual(type(history.history['accuracy'][1]), float)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.run_v2_only
   def testFitAndEvaluateAccumulateOutfeed(self, reduction_method):
     cfg = IPUConfig()
@@ -520,10 +508,7 @@ class IPUPipelineTest(test.TestCase, parameterized.TestCase):
       self.assertAllClose(history, history_acc)
       self.assertEqual(cb.count(), cb_acc.count())
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.run_v2_only
   def testFitAccumulateOutfeedSetDtype(self, reduction_method):
     cfg = IPUConfig()

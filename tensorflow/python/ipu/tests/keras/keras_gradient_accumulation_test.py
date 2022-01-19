@@ -93,11 +93,7 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
       replication_factor=[1, 2],
       optimizer=['sgd',
                  gradient_descent.GradientDescentOptimizer(0.001)],
-      # experimental_normalize_gradients=[False, True],
-      reduction_method=[
-          ga.GradientAccumulationReductionMethod.SUM,
-          ga.GradientAccumulationReductionMethod.MEAN
-      ])
+      reduction_method=list(ga.GradientAccumulationReductionMethod))
 
   @parameterized.named_parameters(*TESTCASES)
   @test_util.run_v2_only
@@ -132,8 +128,7 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
           epochs=epochs)
     cpu_weights = m.weights
 
-    if reduction_method != ga.GradientAccumulationReductionMethod.SUM:
-      optimizer._learning_rate /= replication_factor
+    optimizer._learning_rate /= replication_factor
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():

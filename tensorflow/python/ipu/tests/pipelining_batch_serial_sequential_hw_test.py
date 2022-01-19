@@ -70,10 +70,7 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
               MergeRemoteBuffersBehaviour.NO_MERGING,
               MergeRemoteBuffersBehaviour.MERGE
           ],
-          reduction_method=[
-              ga.GradientAccumulationReductionMethod.SUM,
-              ga.GradientAccumulationReductionMethod.MEAN
-          ]))
+          reduction_method=list(ga.GradientAccumulationReductionMethod)))
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare1(self, merge_remote_buffers, reduction_method):

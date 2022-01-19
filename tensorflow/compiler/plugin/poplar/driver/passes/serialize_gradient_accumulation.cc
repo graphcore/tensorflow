@@ -89,8 +89,6 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
             accumulator->shape(), HloOpcode::kMultiply, accumulator,
             broadcasted_accumulator_scale));
 
-    // Do these need to be in the fusion?
-    to_outline.push_back(accumulator_scale);
     to_outline.push_back(broadcasted_accumulator_scale);
 
     add = comp->AddInstruction(HloInstruction::CreateBinary(
@@ -121,6 +119,8 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
     //      SliceApply(SliceApply(a, b), c) ...
     // ( 3) Add(a, Multiply(Concat(b, c, ...), Broadcast(d)) =>
     //      SliceApplyabY(SliceApplyabY(a, b, d), c, d) ...
+    // (10) Add(Multiply(a, Broadcast(b)), Multiply(c, Broadcast(d))) =>
+    //      ScaledInplaceaXbY(a, c, b, d)
     // ( 4) Add(a, Multiply(b, Broadcast(c))) =>
     //      ScaledInplaceXbY(a, b, c)
     // ( 5) Add(a, Add(b, c)) =>
@@ -232,19 +232,88 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       TF_RETURN_IF_ERROR(comp->ReplaceInstruction(output, new_output));
       output = lhs;
 
+    } else if (Match(output, m::Add(m::Op(), m::Op())) &&
+               (Match(output->mutable_operand(0),
+                      m::Multiply(m::Op(), m::Broadcast(m::Op().WithShape(
+                                               m::Shape().IsScalar())))) ||
+                Match(output->mutable_operand(0),
+                      m::Multiply(m::Op(),
+                                  m::Broadcast(m::Convert(m::Op().WithShape(
+                                      m::Shape().IsScalar())))))) &&
+               (Match(output->mutable_operand(1),
+                      m::Multiply(m::Op(), m::Broadcast(m::Op().WithShape(
+                                               m::Shape().IsScalar())))) ||
+                Match(output->mutable_operand(1),
+                      m::Convert(m::Multiply(m::Convert(m::Op()),
+                                             m::Broadcast(m::Op().WithShape(
+                                                 m::Shape().IsScalar()))))))) {
+      // Case 10:
+      // Add(Multiply(a, Broadcast(b)), Multiply(c, Broadcast(d))) =>
+      // ScaledInplaceaXbY(a, c, b, d)
+
+      // Matching order
+      // output -> Add(ExprA, ExprB)
+      // ExprA  -> Multiply(A, Broadcast(ScaleA))
+      //         | Multiply(A, Broadcast(Convert(ScaleA)))
+      // ScaleA -> Scalar
+      // ExprB  -> Multiply(B, Broadcast(ScaleB))
+      //         | Convert(Multiply(Convert(B), Broadcast(ScaleB)))
+      // ScaleB -> Scalar
+
+      HloInstruction* a = lhs->mutable_operand(0);
+      HloInstruction* scale_a = lhs->mutable_operand(1)->mutable_operand(0);
+      if (scale_a->opcode() == HloOpcode::kConvert &&
+          IsF32ToF16Convert(scale_a)) {
+        scale_a = scale_a->mutable_operand(0);
+      }
+
+      HloInstruction* b;
+      if (rhs->opcode() == HloOpcode::kConvert && IsF32ToF16Convert(rhs)) {
+        rhs = rhs->mutable_operand(0);
+        b = rhs->mutable_operand(0)->mutable_operand(0);
+      } else {
+        b = rhs->mutable_operand(0);
+      }
+      HloInstruction* scale_b = rhs->mutable_operand(1)->mutable_operand(0);
+      if (scale_b->opcode() == HloOpcode::kConvert &&
+          IsF32ToF16Convert(scale_a)) {
+        scale_b = scale_b->mutable_operand(0);
+      }
+
+      to_outline.erase(to_outline.begin());
+
+      if (b->shape().element_type() != accumulator_type) {
+        b = MakeConvertToHlo(b, accumulator_type);
+        convert_instructions.push_back(b);
+      }
+
+      TF_RETURN_IF_ERROR(comp->ReplaceWithNewInstruction(
+          output,
+          CreateScaledInplaceaXbY(a, b, scale_a, scale_b, HloOpcode::kAdd)));
+      output = a;
     } else if (Match(rhs, m::Multiply(m::Op(), m::Broadcast(m::Op().WithShape(
-                                                   m::Shape().IsScalar()))))) {
+                                                   m::Shape().IsScalar())))) ||
+               Match(rhs,
+                     m::Convert(m::Multiply(m::Convert(m::Op()),
+                                            m::Broadcast(m::Op().WithShape(
+                                                m::Shape().IsScalar())))))) {
       // Case 4:
       // Add(a, Multiply(b, Broadcast(c))) =>
       // ScaledInplaceXbY(a, b, c)
-      HloInstruction* b = rhs->mutable_operand(0);
+
+      HloInstruction* b;
+      if (rhs->opcode() == HloOpcode::kConvert && IsF32ToF16Convert(rhs)) {
+        rhs = rhs->mutable_operand(0);
+        b = rhs->mutable_operand(0)->mutable_operand(0);
+      } else {
+        b = rhs->mutable_operand(0);
+      }
+
       HloInstruction* scale = rhs->mutable_operand(1)->mutable_operand(0);
 
       if (b->shape().element_type() != accumulator_type) {
         b = MakeConvertToHlo(b, accumulator_type);
         convert_instructions.push_back(b);
-        scale = MakeConvertToHlo(scale, accumulator_type);
-        convert_instructions.push_back(scale);
       } else if (scale->opcode() == HloOpcode::kConvert && IsF16(scale) &&
                  IsF32(scale->operand(0))) {
         scale = scale->mutable_operand(0);

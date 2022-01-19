@@ -780,12 +780,9 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase,
         13821,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareSharedWeights(self, reduction_method):
+  def testPipelineCompareSharedWeights1(self, reduction_method):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
 

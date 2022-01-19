@@ -45,6 +45,10 @@ StatusOr<poplar::Tensor> GetExecutionCounter(CompilerResources& resources,
   if (resources.execution_counter_scopes.empty()) {
     return FailedPrecondition("Cannot access an execution counter.");
   }
+  if (shard == -1) {
+    // shard is set to -1 when a pipeline state is mapped to all devices.
+    shard = 0;
+  }
   return resources.execution_counter_scopes.top()->GetCounter(shard);
 }
 

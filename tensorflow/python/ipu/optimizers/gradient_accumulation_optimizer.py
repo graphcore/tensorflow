@@ -18,12 +18,15 @@ Optimizer wrappers which perform local gradient accumulation
 """
 
 from enum import Enum
+import numpy as np
 
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.ipu.optimizers import IpuOptimizer
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
+from tensorflow.python.ipu import internal_ops
+from tensorflow.python.ops import math_ops
 
 
 class GradientAccumulationReductionMethod(Enum):
@@ -143,11 +146,6 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
 
     self._reduction_method = op_util.parse_gradient_accumulation_method(
         reduction_method)
-    if self._reduction_method != GradientAccumulationReductionMethod.SUM and \
-      self._reduction_method != GradientAccumulationReductionMethod.MEAN:
-      raise ValueError('Only GradientAccumulationReductionMethod.SUM and '
-                       'GradientAccumulationReductionMethod.MEAN are '
-                       'supported at the moment')
 
   def apply_gradients(self, grads_and_vars, global_step=None, name=None):
     """Apply gradients to variables.
@@ -168,14 +166,24 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
       ValueError: If the grads_and_vars is malformed.
     """
     if self._reduction_method == GradientAccumulationReductionMethod.SUM:
+      accum_scale = 1.0
       grad_scale = None
     elif self._reduction_method == GradientAccumulationReductionMethod.MEAN:
+      accum_scale = 1.0
       grad_scale = 1.0 / self._num_mini_batches
+    elif self._reduction_method == \
+        GradientAccumulationReductionMethod.RUNNING_MEAN:
+      n = internal_ops.get_current_iteration_counter()
+      n = n % self._num_mini_batches
+      n = math_ops.cast(n, np.float32)
+      accum_scale = n / (n + 1)
+      grad_scale = 1.0 / (n + 1)
     else:
-      raise ValueError('reduction_method must be set to SUM or MEAN')
+      raise ValueError(
+          'reduction_method must be set to SUM, MEAN or RUNNING_MEAN')
 
     accumulated_grads_and_vars = op_util.accumulate_gradients(
-        grads_and_vars, self._dtype, grad_scale)
+        grads_and_vars, self._dtype, accum_scale, grad_scale)
 
     # Create an explicit function call for the apply gradients - note that we
     # allow external captures here.
