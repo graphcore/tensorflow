@@ -1516,6 +1516,20 @@ class _MatmulConfig(_ConfigBase):
     Convolutions and Matmuls on the IPU
     <https://docs.graphcore.ai/projects/available-memory/>`_ for more details and for some practical
     examples of using `availableMemoryProportion`.
+
+    Another important parameter is `partialsType`, which sets the type of the
+    values of intermediate calculations (partials). This parameter can either be
+    set to `"float"` (for `float32`) or `"half"` (for `float16`). Note the use
+    of `"float"` or `"half"` and not `"float32"` or `"float16"` for the
+    parameter values (this is because Poplar/PopLibs uses the IEEE definitions
+    of what the datatypes should be called). An example showing how to use this
+    parameter is shown below:
+
+    ```python
+    cfg = config.IPUConfig()
+    cfg.matmuls.poplar_options['partialsType'] = "half"
+    cfg.configure_ipu_system()
+    ```
     """
     self.poplar_options = {}
 
@@ -1544,6 +1558,20 @@ class _ConvolutionConfig(_ConfigBase):
     Convolutions and Matmuls on the IPU
     <https://docs.graphcore.ai/projects/available-memory/>`_ for more details and for some practical
     examples of using `availableMemoryProportion`.
+
+    Another important parameter is `partialsType`, which sets the type of the
+    values of intermediate calculations (partials). This parameter can either be
+    set to `"float"` (for `float32`) or `"half"` (for `float16`). Note the use
+    of `"float"` or `"half"` and not `"float32"` or `"float16"` for the
+    parameter values (this is because Poplar/PopLibs uses the IEEE definitions
+    of what the datatypes should be called). An example showing how to use this
+    parameter is shown below:
+
+    ```python
+    cfg = config.IPUConfig()
+    cfg.convolutions.poplar_options['partialsType'] = "half"
+    cfg.configure_ipu_system()
+    ```
     """
     self.poplar_options = {}
 
