@@ -274,6 +274,7 @@ class DeferredVisitor : public FullVisitor {
   Status HandleWhile(HloInstruction* inst) final;
   Status HandleCustomCall(HloInstruction* inst) final;
   Status HandleConditional(HloInstruction* inst) final;
+  Status HandleFusion(HloInstruction* inst) final;
 
   // Finish visit always sets the output tensors and moves the tensor map and
   // then calls FinishDeferedAllocationVisit.
@@ -321,6 +322,10 @@ class DeferredVisitor : public FullVisitor {
   virtual Status HandleDeferredAllocationTuple(HloInstruction* inst);
   virtual Status HandleDeferredAllocationWhile(HloInstruction* inst);
 
+  // Handler of WideConst fusion which is aware of deferred
+  // allocation.
+  virtual Status HandleDeferredWideConst(HloInstruction* inst);
+
   // Handler of GradientAccumulatorCreate which is aware of deferred
   // allocation.
   virtual Status HandleGradientAccumulatorCreate(HloInstruction* inst);
@@ -337,6 +342,10 @@ class DeferredVisitor : public FullVisitor {
   // Handler for all custom calls apart from those which support deferred
   // allocation.
   virtual Status HandleNonDeferredCustomCall(HloInstruction* inst);
+
+  // Handler for all custom calls apart from those which support deferred
+  // allocation.
+  virtual Status HandleNonDeferredFusion(HloInstruction* inst);
 
   // FinishScopedVisit which is aware of deferred allocations.
   virtual Status FinishDeferedAllocationVisit(HloInstruction* inst);

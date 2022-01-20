@@ -50,18 +50,26 @@ Status DeferredAllocations::AddDeferredAllocation(
     case HloOpcode::kParameter: {
       break;
     }
-    case HloOpcode::kCustomCall: {
-      const bool supports_deferred_allocation =
-          IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
-              location.instruction) ||
-          IsPoplarInstruction(PoplarOp::CreateBuffer)(location.instruction) ||
-          IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(
-              location.instruction) ||
-          IsPoplarInstruction(PoplarOp::BufferLoadSlice)(location.instruction);
-      if (supports_deferred_allocation) {
+    case HloOpcode::kFusion: {
+      if (IsWideConstant(location.instruction)) {
         break;
       }
-      // Fall through.
+      return FailedPrecondition("Fusion %s cannot be a deferred allocation.",
+                                location.instruction->ToString());
+    }
+    case HloOpcode::kCustomCall: {
+      if (IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate,
+                              location.instruction) ||
+          IsPoplarInstruction(PoplarOp::CreateBuffer, location.instruction) ||
+          IsPoplarInstruction(PoplarOp::RemoteParameterLoad,
+                              location.instruction) ||
+          IsPoplarInstruction(PoplarOp::BufferLoadSlice,
+                              location.instruction)) {
+        break;
+      }
+      return FailedPrecondition(
+          "Custom call %s cannot be a deferred allocation.",
+          location.instruction->ToString());
     }
     default: {
       return FailedPrecondition(
@@ -855,8 +863,19 @@ Status DeferredVisitor::HandleCustomCall(HloInstruction* inst) {
   return HandleNonDeferredCustomCall(inst);
 }
 
+Status DeferredVisitor::HandleFusion(HloInstruction* inst) {
+  if (IsWideConstant(inst)) {
+    return HandleDeferredWideConst(inst);
+  }
+  return HandleNonDeferredFusion(inst);
+}
+
 Status DeferredVisitor::HandleNonDeferredCustomCall(HloInstruction* inst) {
   return FullVisitor::HandleCustomCall(inst);
+}
+
+Status DeferredVisitor::HandleNonDeferredFusion(HloInstruction* inst) {
+  return FullVisitor::HandleFusion(inst);
 }
 
 namespace {
@@ -880,6 +899,74 @@ Status AddGradientAccumulationZeroing(
   return Status::OK();
 }
 }  // namespace
+
+Status DeferredVisitor::HandleDeferredWideConst(HloInstruction* inst) {
+  auto dnai = GetDebugNameAndId(inst);
+  poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
+
+  const HloInstruction* root = inst->fused_expression_root();
+  const HloInstruction* constant = root->operand(0);
+  CHECK_EQ(constant->opcode(), HloOpcode::kConstant);
+  const Literal& constant_literal = constant->literal();
+
+  TensorLocation output_location = TensorLocation{inst, 0};
+  Shape output_shape = GetOutputShape(inst);
+
+  // Allocate the constant first.
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor constant_tensor,
+      AddConstantTensor(graph, TensorLocation{constant, 0}, constant->shape(),
+                        constant_literal, resources_, tensor_map, dnai));
+  // Broadcast the tensor to the right shape.
+  TF_ASSIGN_OR_RETURN(poplar::Tensor broadcasted_tensor,
+                      BroadcastTensor(constant_tensor, output_shape, {}));
+
+  const bool allocate_now =
+      HasTensorAllocationTarget(output_location, resources_);
+  // For wide constants, check if they have an allocation target, if so then
+  // allocate the tensor with that target and copy the constant to that
+  // layout.
+  if (allocate_now) {
+    // Doing this copy rather than allocating a big constant and calling
+    // setInitialValue is a trade off between having a large tensor always
+    // live and a copy + a scalar constant always being live.
+    TF_ASSIGN_OR_RETURN(poplar::Tensor layout,
+                        AddTensor(graph, output_location, output_shape,
+                                  resources_, tensor_map, {dnai, "layout"}));
+    poplar::program::Sequence seq(dnai);
+    seq.add(poplar::program::Copy(broadcasted_tensor, layout, false, dnai));
+    TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, layout));
+  } else {
+    // If wide constant does not have an allocation target, defer its
+    // allocation. If postprocess function gets original broadcast created by
+    // op, just ignore it. If it's any other tensor, fill it with desired
+    // value.
+    DeferredAllocateFunction allocate_fn =
+        [broadcasted_tensor](
+            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+      return broadcasted_tensor;
+    };
+
+    DeferredPostProcessFunction postprocess_fn =
+        [inst, this, broadcasted_tensor,
+         dnai](const poplar::Tensor& tensor) -> StatusOr<poplar::Tensor> {
+      if (tensor == broadcasted_tensor) {
+        // This is the original tensor we allocated, do not fill it.
+        return tensor;
+      }
+      poplar::program::Sequence seq(dnai);
+      seq.add(poplar::program::Copy(broadcasted_tensor, tensor));
+      TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
+      return tensor;
+    };
+
+    TF_ASSIGN_OR_RETURN(auto deferred_allocations, GetDeferredAllocations());
+    TF_RETURN_IF_ERROR(deferred_allocations->AddDeferredAllocation(
+        allocate_now, output_location, allocate_fn, postprocess_fn));
+  }
+  return Status::OK();
+}
 
 Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
