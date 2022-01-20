@@ -493,8 +493,8 @@ absl::optional<HloInstruction*> GetInplaceModifier(HloInstruction* inst) {
     for (HloInstruction* user : inst->users()) {
       auto inplace_description = GetInplaceDescription(user);
       // Returns true if `user` uses `inst` inplace.
-      auto is_used_inplace = [inplace_description](HloInstruction* inst,
-                                                   HloInstruction* user) {
+      auto is_used_inplace = [&inplace_description](HloInstruction* inst,
+                                                    HloInstruction* user) {
         return absl::c_any_of(inplace_description.GetInplaceOperandIndices(),
                               [&inst, &user](int64 inplace_idx) {
                                 return user->operand(inplace_idx) == inst;

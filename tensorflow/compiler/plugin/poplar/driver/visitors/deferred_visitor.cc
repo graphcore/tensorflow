@@ -682,8 +682,7 @@ Status DeferredVisitor::HandleTuple(HloInstruction* inst) {
 }
 
 StatusOr<DeferredArgRBVectors>
-DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst,
-                                                   bool preserve_aliasing) {
+DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst) {
   TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
 
@@ -702,6 +701,8 @@ DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst,
     auto shapes = FlattenedXlaShape(input_inst->shape());
 
     inputs[operand_idx].resize(shapes.size());
+    const bool inplace_operand = inplace_description.IsInplaceType() &&
+                                 inplace_indices_set.contains(operand_idx);
 
     // Go through all the tensors.
     for (size_t i = 0; i < shapes.size(); i++) {
@@ -711,7 +712,7 @@ DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst,
           deferred_allocation->IsDeferredAllocationLocation(input_location) &&
           allowed_deferred_allocation_locations[operand_idx][i];
 
-      if (inplace_description.IsInplaceType()) {
+      if (inplace_operand) {
         can_defer &= is_lowered_inplace;
       }
 
@@ -724,25 +725,7 @@ DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst,
                                           {i, i + 1}));
 
         CHECK_EQ(outputs.size(), 1);
-        if (outputs[0].IsTensor()) {
-          poplar::Tensor tensor = outputs[0];
-          // Make sure to process any inplace operands correctly.
-          if (inplace_indices_set.contains(operand_idx)) {
-            const bool is_tensor_lowered_inplace =
-                is_lowered_inplace &&
-                allowed_deferred_allocation_locations[operand_idx][i];
-
-            poplar::program::Sequence seq({}, debug_name_and_id);
-            tensor =
-                GetTensorForInplaceOp(outputs[0], resources_, inst, operand_idx,
-                                      i, seq, is_tensor_lowered_inplace,
-                                      !preserve_aliasing, debug_name_and_id);
-            TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
-          }
-          inputs[operand_idx][i] = tensor;
-        } else {
-          inputs[operand_idx][i] = outputs[0];
-        }
+        inputs[operand_idx][i] = outputs[0];
       }
     }
   }
@@ -752,8 +735,7 @@ DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst,
 Status DeferredVisitor::HandleDeferredAllocationTuple(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
-  TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(
-                                       inst, /*preserve_aliasing=*/true));
+  TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
 
   CHECK_EQ(inputs.size(), inst->operand_count());
 

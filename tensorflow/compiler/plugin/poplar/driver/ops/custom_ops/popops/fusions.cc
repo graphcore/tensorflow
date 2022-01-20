@@ -166,7 +166,7 @@ class ConvBiasAddOp : public PoplarOpDef {
                         FindInstructionInput(tensor_map, res, inst, 1, prog,
                                              {debug_info}, false));
 
-    const auto* conv_op = GetOperandLookThroughInterIpuCopy(inst, 0);
+    const auto* conv_op = LookThroughCopies(inst->operand(0));
     TF_ASSIGN_OR_RETURN(poplar::Tensor shuffled_in,
                         ShuffleConvolutionOutputToPoplar(conv_op, in));
 

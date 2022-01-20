@@ -313,7 +313,7 @@ class DeferredVisitor : public FullVisitor {
 
   // Get the inputs for a deferred instruction.
   StatusOr<DeferredArgRBVectors> GetInputsForDeferredRBInstruction(
-      const HloInstruction* inst, bool preserve_aliasing = false);
+      const HloInstruction* inst);
 
   // Handlers which are aware of deferred allocations - can be overriden by
   // other handlers which are also deferred allocation aware.

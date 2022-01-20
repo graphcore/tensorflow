@@ -641,12 +641,22 @@ int64 GetFunctionNumberUnmodifiedRemoteBufferInputs(
       .num_unmodified_remote_buffer_inputs();
 }
 
-const HloInstruction* GetOperandLookThroughInterIpuCopy(
-    const HloInstruction* inst, const int64 operand_idx) {
-  const HloInstruction* operand = inst->operand(operand_idx);
-  return IsPoplarInstruction(PoplarOp::InterIpuCopy)(operand)
-             ? operand->operand(0)
-             : operand;
+// TODO(T53775): Support colocated InterIpuCopy
+
+HloInstruction* LookThroughCopies(HloInstruction* inst) {
+  while (inst->opcode() == HloOpcode::kCopy ||
+         IsPoplarInstruction(PoplarOp::InterIpuCopy, inst)) {
+    inst = inst->mutable_operand(0);
+  }
+  return inst;
+}
+
+const HloInstruction* LookThroughCopies(const HloInstruction* inst) {
+  while (inst->opcode() == HloOpcode::kCopy ||
+         IsPoplarInstruction(PoplarOp::InterIpuCopy, inst)) {
+    inst = inst->operand(0);
+  }
+  return inst;
 }
 
 bool UseSyntheticDataFor(SyntheticDataCategory category) {
@@ -1323,7 +1333,7 @@ StatusOr<ShapeTree<CloneMethod>> GetCopyCloneMethod(
     const HloInstruction* inst) {
   TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
                       inst->backend_config<PoplarBackendConfig>());
-  ShapeTree<CloneMethod> clone_method_tree(inst->operand(0)->shape());
+  ShapeTree<CloneMethod> clone_method_tree(inst->shape());
   auto& clone_method_proto = poplar_backend_config.copy_config().clone_method();
   if (!clone_method_proto.empty()) {
     std::size_t tuple_idx = 0;
@@ -1332,9 +1342,25 @@ StatusOr<ShapeTree<CloneMethod>> GetCopyCloneMethod(
           static_cast<CloneMethod>(clone_method_proto.at(tuple_idx++));
     }
 
-    CHECK_EQ(clone_method_tree.leaf_count(), tuple_idx);
+    CHECK_EQ(ShapeUtil::GetLeafCount(inst->shape()), tuple_idx);
   }
   return clone_method_tree;
+}
+
+Status SetCopyCloneMethod(HloInstruction* inst,
+                          const ShapeTree<CloneMethod>& clone_method_tree) {
+  CHECK_EQ(ShapeUtil::GetLeafCount(inst->shape()),
+           clone_method_tree.leaf_count());
+  TF_ASSIGN_OR_RETURN(auto backend_config,
+                      inst->backend_config<PoplarBackendConfig>());
+  auto* copy_config = backend_config.mutable_copy_config();
+  copy_config->clear_clone_method();
+  for (auto& leaf : clone_method_tree.leaves()) {
+    copy_config->add_clone_method(leaf.second);
+  }
+  TF_RETURN_IF_ERROR(inst->set_backend_config(backend_config));
+
+  return Status::OK();
 }
 
 }  // namespace poplarplugin

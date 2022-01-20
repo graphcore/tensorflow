@@ -206,11 +206,9 @@ int64 GetFunctionNumberUnmodifiedRemoteBufferInputs(const HloInstruction*);
 
 bool IsSupportedSharding(const HloSharding&);
 
-// This function returns the operand of inst at index operand_idx and if the
-// operand is an inter ipu copy then it returns the operand which is being
-// copied.
-const HloInstruction* GetOperandLookThroughInterIpuCopy(
-    const HloInstruction* inst, const int64 operand_idx);
+// This function finds operand through copies and inter ipu copies.
+HloInstruction* LookThroughCopies(HloInstruction* inst);
+const HloInstruction* LookThroughCopies(const HloInstruction* inst);
 
 // This function returns true if the given SyntheticDataCategory was included in
 // the environment variable flag "synthetic_data_categories". If true then it
@@ -390,6 +388,8 @@ StatusOr<HloInstruction*> AddParametersToCall(
     const std::vector<HloInstruction*>& parameters_to_add);
 
 StatusOr<ShapeTree<CloneMethod>> GetCopyCloneMethod(const HloInstruction* inst);
+Status SetCopyCloneMethod(HloInstruction* inst,
+                          const ShapeTree<CloneMethod>& clone_method_tree);
 
 }  // namespace poplarplugin
 }  // namespace xla

@@ -1594,69 +1594,13 @@ bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
   return true;
 }
 
-poplar::Tensor GetTensorForInplaceOp(
-    poplar::Tensor tensor, CompilerResources& res, const HloInstruction* inst,
-    int64 operand_index, uint64 operand_tuple_idx,
-    poplar::program::Sequence& seq, bool is_lowered_inplace,
-    bool parallel_writeable_output,
-    const poplar::DebugNameAndId& debug_name_and_id) {
-  // We need to add a copy before an inplace op if:
-  // 1. inst is not marked as inplace, or
-  // 2. the output has to be parallel Writeable, but tensor is not.
-  bool add_copy = !is_lowered_inplace;
-  if (parallel_writeable_output) {
-    add_copy |= !tensor.isParallelWriteable();
-  }
-
-  if (add_copy) {
-    // Preserve aliases for inplace read only ops.
-    auto clone_method =
-        parallel_writeable_output
-            ? poplar::TensorCloneMethod::PRESERVE_ORDER_UNLESS_ALIASES
-            : poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES;
-
-    VLOG(1) << "Adding a copy for operand " << operand_index << ", tuple index "
-            << operand_tuple_idx << ", of inplace op " << inst->name();
-    const auto* operand = inst->operand(operand_index);
-    auto& graph = GetGraphWithOutputIndex(res, operand, operand_tuple_idx);
-
-    if (parallel_writeable_output) {
-      tensor = RebalanceTensorIfRequired(graph, res, seq, tensor,
-                                         {debug_name_and_id},
-                                         /*always_add_copy*/ true);
-    } else {
-      tensor = poputil::duplicate(graph, tensor, seq,
-                                  {debug_name_and_id, "clone"}, clone_method);
-    }
-  }
-
-  return tensor;
-}
-
-StatusOr<TensorOrRemoteBuffer> GetRemoteBufferForInplaceOp(
-    TensorOrRemoteBuffer remote_buffer, CompilerResources& res,
-    const HloInstruction* inst, int64 operand_index, uint64 operand_tuple_idx,
-    poplar::program::Sequence& seq, bool is_lowered_inplace) {
-  // We need to add a copy before an inplace op if inst is not marked as inplace
-  if (!is_lowered_inplace) {
-    return xla::FailedPrecondition(
-        "Unable to add copy on inplace input remote buffer at instruction "
-        "%s input %d:%d.",
-        inst->name(), operand_index, operand_tuple_idx);
-  }
-
-  return remote_buffer;
-}
-
 StatusOr<TensorVectors> FindInplaceOutputTensors(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     poplar::program::Sequence& seq,
-    const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing,
-    bool always_preserve_aliases) {
-  TF_ASSIGN_OR_RETURN(
-      auto result_with_remote_buffers,
-      FindInplaceOutputs(map, res, inst, seq, debug_name_and_id,
-                         expand_aliasing, always_preserve_aliases));
+    const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing) {
+  TF_ASSIGN_OR_RETURN(auto result_with_remote_buffers,
+                      FindInplaceOutputs(map, res, inst, seq, debug_name_and_id,
+                                         expand_aliasing));
 
   TensorVectors result;
   result.reserve(result_with_remote_buffers.size());
@@ -1675,66 +1619,35 @@ StatusOr<TensorVectors> FindInplaceOutputTensors(
 StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     poplar::program::Sequence& seq,
-    const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing,
-    bool always_preserve_aliases) {
+    const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing) {
   // Check that the instruction description is for an inplace operation.
   auto inplace_description = GetInplaceDescription(inst);
   if (!inplace_description.IsInplaceType()) {
     LOG(FATAL) << "Trying to execute " << inst->name()
                << " as an inplace operation, but it is not.";
   }
-  const bool is_inplace_read_write =
-      inplace_description.GetType() == HloInstructionType::kInplaceReadWrite;
-
-  const bool is_still_inplace = IsLoweredInplace(inst);
 
   // Get all the input tensors for all the inplace operands
-  auto inplace_indexes = inplace_description.GetInplaceOperandIndices();
+  auto inplace_indices = inplace_description.GetInplaceOperandIndices();
+  const bool require_parallel_writeable =
+      inplace_description.GetType() == HloInstructionType::kInplaceReadWrite &&
+      !inplace_description.AllowNonInplaceLowering();
 
-  TensorOrRemoteBufferVectors tensors(inplace_indexes.size());
-  if (inst->opcode() == HloOpcode::kGetTupleElement) {
-    // For GTEs there is only one input, and it is always inplace
-    CHECK_EQ(inplace_indexes.size(), 1);
-    CHECK_EQ(inplace_indexes[0], 0);
-    auto gte_tensors_indecies = FindGetTupleElementTupleIndices(inst);
-    tensors[0] =
-        FindInstructionInputsInRange(map, res, inst, 0, gte_tensors_indecies,
-                                     seq, debug_name_and_id, expand_aliasing);
-  } else {
-    for (uint64 i = 0; i < inplace_indexes.size(); i++) {
-      tensors[i] =
-          FindInstructionInputs(map, res, inst, inplace_indexes[i], seq,
-                                debug_name_and_id, expand_aliasing);
-    }
-  }
-
-  // True if the tensors returned by this function need to be parallel
-  // writeable.
-  const bool parallel_writeable_output =
-      is_inplace_read_write && !always_preserve_aliases;
-
-  // Go through all the inplace tensors and check if we need to add copies.
-  for (uint64 i = 0; i < inplace_indexes.size(); i++) {
-    for (uint64 tuple_idx = 0; tuple_idx < tensors[i].size(); tuple_idx++) {
-      if (tensors[i][tuple_idx].IsTensor()) {
-        poplar::Tensor t = tensors[i][tuple_idx];
-
-        tensors[i][tuple_idx] = GetTensorForInplaceOp(
-            t, res, inst, inplace_indexes[i], tuple_idx, seq, is_still_inplace,
-            parallel_writeable_output, debug_name_and_id);
-      } else if (tensors[i][tuple_idx].IsRemoteBuffer()) {
-        TF_ASSIGN_OR_RETURN(
-            tensors[i][tuple_idx],
-            GetRemoteBufferForInplaceOp(tensors[i][tuple_idx], res, inst,
-                                        inplace_indexes[i], tuple_idx, seq,
-                                        is_still_inplace));
-      } else if (tensors[i][tuple_idx].IsOpaque()) {
-        tensors[i][tuple_idx] = tensors[i][tuple_idx];
-      } else {
-        return xla::FailedPrecondition(
-            "Unknown tensor type in instruction `%s` at %d:%d, expected a "
-            "tensor or a remote buffer.",
-            inst->name(), inplace_indexes[i], tuple_idx);
+  TensorOrRemoteBufferVectors tensors(inplace_indices.size());
+  for (uint64 i = 0; i < inplace_indices.size(); i++) {
+    uint64 inplace_index = inplace_indices[i];
+    tensors[i] = FindInstructionInputs(map, res, inst, inplace_index, seq,
+                                       debug_name_and_id, expand_aliasing);
+    for (int64 j = 0; j < tensors[i].size(); ++j) {
+      if (tensors[i][j].IsTensor()) {
+        poplar::Tensor tensor = tensors[i][j].AsTensor();
+        if (require_parallel_writeable && !tensor.isParallelWriteable()) {
+          poplar::Graph& graph =
+              GetGraphWithOutputIndex(res, inst->operand(inplace_index), j);
+          tensors[i][j] = poputil::duplicate(
+              graph, tensor, seq, {debug_name_and_id, "clone"},
+              poplar::TensorCloneMethod::PRESERVE_ORDER_UNLESS_ALIASES);
+        }
       }
     }
   }

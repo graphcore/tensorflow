@@ -47,6 +47,7 @@ using tensorflow::str_util::StartsWith;
 
 namespace xla {
 namespace poplarplugin {
+namespace {
 class ParallelMapTester : public DfsHloVisitorWithDefault {
  public:
   ParallelMapTester() : _is_ok(true) {}
@@ -78,6 +79,7 @@ class ParallelMapTester : public DfsHloVisitorWithDefault {
 
   bool _is_ok;
 };
+}  // namespace
 
 StatusOr<bool> IsParallelMap(const HloInstruction* inst,
                              const HloComputation* computation) {
@@ -220,7 +222,7 @@ StatusOr<poplar::program::Sequence> CreateWhileOp(
   reallocate_input_info[0] =
       std::vector<bool>(inputs[0].size(), reallocate_all_inputs);
 
-  // Reallocate any inputs which are copies.
+  // Reallocate any inputs which are copies or non-writeable.
   if (input_inst->opcode() == HloOpcode::kTuple) {
     for (int64 i = 0, flat_index = 0; i != input_inst->operand_count(); ++i) {
       const HloInstruction* operand = input_inst->operand(i);
@@ -230,6 +232,14 @@ StatusOr<poplar::program::Sequence> CreateWhileOp(
                     true);
       }
       flat_index += num_tensors;
+    }
+  }
+
+  for (std::size_t i = 0; i < inputs[0].size(); ++i) {
+    const auto& input = inputs[0][i];
+    if (input && input->IsTensor() &&
+        !input->AsTensor().isParallelWriteable()) {
+      reallocate_input_info[0][i] = true;
     }
   }
 
@@ -582,8 +592,18 @@ StatusOr<poplar::program::Sequence> CreateRepeatOp(
   for (int64 i = 0; i != inst->operand_count(); ++i) {
     const bool reallocate_input =
         reallocate_all_inputs || inst->operand(i)->opcode() == HloOpcode::kCopy;
+
+    const auto& op_inputs = inputs[i];
     reallocate_input_info[i] =
-        std::vector<bool>(inputs[i].size(), reallocate_input);
+        std::vector<bool>(op_inputs.size(), reallocate_input);
+
+    for (std::size_t j = 0; j < op_inputs.size(); ++j) {
+      const auto& input = op_inputs[j];
+      if (input && input->IsTensor() &&
+          !input->AsTensor().isParallelWriteable()) {
+        reallocate_input_info[i][j] = true;
+      }
+    }
   }
 
   const HloComputation* loop_body = inst->to_apply();

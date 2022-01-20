@@ -57,9 +57,8 @@ Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
     num_mini_batches_to_accumulate_ =
         *GetResourceUpdateBatchesToAccumulate(inst);
 
-    TF_ASSIGN_OR_RETURN(
-        DeferredArgRBVectors inputs,
-        GetInputsForDeferredRBInstruction(inst, /*preserve_aliasing*/ true));
+    TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
+                        GetInputsForDeferredRBInstruction(inst));
 
     // The point at which we visit the resource update op differs from the point
     // at which it is executed within the poplar program, as it gets pulled out
