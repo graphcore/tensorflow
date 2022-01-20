@@ -102,51 +102,6 @@ static StatusOr<poplar::Tensor> ReversePathTransform(
   return in;
 }
 
-class WideConstOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map,
-      const poplar::DebugContext& debug_context) override {
-    PoplarOpDefDebugInfo debug_info(debug_context, "WideConstOp");
-    poplar::program::Sequence seq({}, debug_info);
-
-    const HloInstruction* root = inst->fused_expression_root();
-
-    const HloInstruction* constant = root->operand(0);
-    CHECK_EQ(constant->opcode(), HloOpcode::kConstant);
-    const Literal& constant_literal = constant->literal();
-
-    // Allocate the constant first.
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor constant_tensor,
-        AddConstantTensor(graph, TensorLocation{constant, 0}, constant->shape(),
-                          constant_literal, res, tensor_map, {debug_info}));
-
-    // Broadcast the tensor to the right shape.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor out,
-                        BroadcastTensor(constant_tensor, output_shape, {}));
-    // For wide constants, check if they have an allocation target, if so then
-    // allocate the tensor with that target and copy the constant to that
-    // layout.
-    TensorLocation src = TensorLocation{inst, 0};
-    if (HasTensorAllocationTarget(src, res)) {
-      // Doing this copy rather than allocating a big constant and calling
-      // setInitialValue is a trade off between having a large tensor always
-      // live and a copy + a scalar constant always being live.
-      TF_ASSIGN_OR_RETURN(poplar::Tensor layout,
-                          AddTensor(graph, src, output_shape, res, tensor_map,
-                                    {debug_info, "layout"}));
-      seq.add(poplar::program::Copy(out, layout, false, {debug_info}));
-      out = layout;
-    }
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
-
-    return seq;
-  }
-};
-
-REGISTER_POPLAR_OP(Wide_const, WideConstOp);
-
 class ConvBiasAddOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
