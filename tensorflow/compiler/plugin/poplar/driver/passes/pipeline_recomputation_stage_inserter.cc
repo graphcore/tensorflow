@@ -209,8 +209,13 @@ StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
     HloInstruction* bwd_stage = stages.backward[stage_id];
     // Do not recompute a stage if it has no outputs which go into the
     // corresponding backward stage (i.e. there is no FIFO).
-    const bool bwd_uses_fwd = absl::c_any_of(
-        bwd_stage->operands(), IsPoplarInstruction(PoplarOp::Fifo));
+    const bool bwd_uses_fwd =
+        absl::c_any_of(bwd_stage->operands(), [](const HloInstruction* inst) {
+          if (inst->opcode() == HloOpcode::kCopy) {
+            inst = inst->operand(0);
+          }
+          return IsPoplarInstruction(PoplarOp::Fifo, inst);
+        });
     if (!bwd_uses_fwd) {
       continue;
     }
@@ -406,6 +411,9 @@ StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
     auto bwd_operands = bwd_stage->operands();
     for (size_t op_idx = 0; op_idx != bwd_operands.size(); ++op_idx) {
       HloInstruction* operand = bwd_operands[op_idx];
+      HloInstruction* copied_operand = operand->opcode() == HloOpcode::kCopy
+                                           ? operand->mutable_operand(0)
+                                           : operand;
       HloInstruction* gte;
       if (schedule ==
           PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
@@ -414,11 +422,11 @@ StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
         }
         gte = operand;
       } else {
-        if (!IsPoplarInstruction(PoplarOp::Fifo)(operand)) {
+        if (!IsPoplarInstruction(PoplarOp::Fifo)(copied_operand)) {
           continue;
         }
         // We expect the FIFO input to be a GTE.
-        gte = operand->mutable_operand(0);
+        gte = copied_operand->mutable_operand(0);
         CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
       }
 
@@ -437,16 +445,21 @@ StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
       // stage.
       HloInstruction* new_gte = pipeline_comp->AddInstruction(
           gte->CloneWithNewOperands(gte->shape(), {recomp_stage}));
-      TF_RETURN_IF_ERROR(bwd_stage->ReplaceOperandWith(op_idx, new_gte));
+      if (operand == copied_operand) {
+        // If no copy was inserted, replace argument of bwd stage.
+        TF_RETURN_IF_ERROR(bwd_stage->ReplaceOperandWith(op_idx, new_gte));
+      } else {
+        // If operand was a copy, replace its argument
+        TF_RETURN_IF_ERROR(operand->ReplaceOperandWith(0, new_gte));
+      }
 
-      // Remove the old operand.
-      TF_RETURN_IF_ERROR(operand->DropAllControlDeps());
+      TF_RETURN_IF_ERROR(copied_operand->DropAllControlDeps());
       TF_RETURN_IF_ERROR(
-          pipeline_comp->RemoveInstructionAndUnusedOperands(operand));
+          pipeline_comp->RemoveInstructionAndUnusedOperands(copied_operand));
     }
 
     // Make sure that the fwd pass is executed before the recomputation.
-    fwd_stage->AddControlDependencyTo(recomp_stage);
+    TF_RETURN_IF_ERROR(fwd_stage->AddControlDependencyTo(recomp_stage));
 
     VLOG(1) << "Added recomputation for pipeline stage " << stage_id;
     changed = true;

@@ -15,9 +15,11 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TENSOR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TENSOR_H_
 
+#include <utility>
+#include <vector>
+
 #include <poplar/TensorCloneMethod.hpp>
 #include <popops/DynamicSlice.hpp>
-#include <utility>
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
@@ -308,31 +310,6 @@ StatusOr<TensorVector> FindInstructionInputTensors(
 bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
                                      const HloInstruction* inst);
 
-/**
- * Sometimes an inplace op cannot be performed because the input/output tensor
- * is not parallel writable or because further analysis has shown that the op
- * can no longer be in place. This function performs the copy if required.
- *
- * @param tensor The tensor which might be copied.
- * @param res resources
- * @param inst the instruction which uses tensor.
- * @param operand_index the index of `inst` operand where tensor came from.
- * @param operand_tuple_idx the output tuple index for the operand where tensor
- *        came from.
- * @param seq sequence where copies might be added.
- * @param is_lowered_inplace whether this tensor is being lowered inplace.
- * @param parallel_writeable_output whether the output must be parallel
- * writeable.
- *
- * @returns a tensor which is safe to be modified inplace.
- */
-poplar::Tensor GetTensorForInplaceOp(
-    poplar::Tensor tensor, CompilerResources& res, const HloInstruction* inst,
-    int64 operand_index, uint64 operand_tuple_idx,
-    poplar::program::Sequence& seq, bool is_lowered_inplace,
-    bool parallel_writeable_output,
-    const poplar::DebugNameAndId& debug_name_and_id);
-
 /* This returns a vector of poplar tensors which are all of the outputs from
  * the given instruction.
  */
@@ -356,7 +333,7 @@ StatusOr<TensorVectors> FindInplaceOutputTensors(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id,
-    bool expand_aliasing = true, bool always_preserve_aliases = false);
+    bool expand_aliasing = true);
 
 /**
  * Same as the above function, but has the option to also return remote
@@ -366,7 +343,7 @@ StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id,
-    bool expand_aliasing = true, bool always_preserve_aliases = false);
+    bool expand_aliasing = true);
 
 /* This returns a vector of all poplar tensors which are outputs of the inst
  *   in range [range.first, range.second).

@@ -365,7 +365,7 @@ StatusOr<poplar::program::Sequence> CreateCopy(
       return xla::FailedPrecondition(
           "Found illegal remote buffer as the input to a copy instruction '%s' "
           "at input %d.",
-          inst->name(), tuple_idx);
+          inst->ToString(), tuple_idx);
     }
     ++tuple_idx;
   }
@@ -490,13 +490,12 @@ StatusOr<poplar::program::Sequence> CreateUpdateScalarInRows(
 
 StatusOr<poplar::program::Sequence> CreateTuple(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
-    const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing,
-    bool preserve_aliases) {
+    const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
   TF_ASSIGN_OR_RETURN(
       TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_name_and_id,
-                               expand_aliasing, preserve_aliases));
+                               /*expand_aliasing=*/false));
   CHECK_EQ(inputs.size(), inst->operand_count());
   uint64 n = 0;
   for (uint64 i = 0; i < inputs.size(); i++) {

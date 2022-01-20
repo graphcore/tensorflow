@@ -949,7 +949,7 @@ ENTRY e {
 
   HloComputation* pipeline_comp = FindComputation(module.get(), "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_comp));
-  auto fifo = stages.backward[0]->operand(1);
+  auto fifo = LookThroughCopies(stages.backward[0]->operand(1));
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(fifo));
   EXPECT_THAT(fifo->control_successors(),
               ::testing::ElementsAre(stages.forward[1]));
@@ -1052,7 +1052,7 @@ ENTRY e {
 
   HloComputation* pipeline_comp = FindComputation(module.get(), "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_comp));
-  auto fifo = stages.backward[0]->operand(1);
+  auto fifo = LookThroughCopies(stages.backward[0]->operand(1));
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(fifo));
   EXPECT_THAT(fifo->control_successors(),
               ::testing::ElementsAre(stages.forward[1]));

@@ -13,10 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include <memory>
+#include <set>
 #include <tuple>
 #include <utility>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_dataflow_analysis.h"
@@ -43,8 +45,30 @@ enum class InplacePriority {
 using InplaceCandidates =
     std::map<InplacePriority, std::vector<HloInstruction*>>;
 
-static bool IsInplaceCandidate(HloInstruction* instruction,
-                               const HloPoplarDataflowAnalysis& dataflow) {
+// Only allow loops and any calls including pipelining stages.
+// Skip map/reduce computations because they are lowered as poplar expressions
+// and they do not need any inplacing/copying.
+bool AllowedComputation(CallGraph& call_graph, HloComputation* comp) {
+  if (IsPopOpsFusion(comp)) {
+    return false;
+  }
+  if (comp == comp->parent()->entry_computation()) {
+    // Allow entry computation.
+    return true;
+  }
+
+  auto callers = call_graph.GetComputationCallers(comp);
+  if (callers.empty()) {
+    return false;
+  }
+
+  CallContext context = GetInstructionCallContext(callers[0]->opcode());
+  // Do not consider map/reduce/fusion computations.
+  return context == CallContext::kSequential;
+}
+
+bool IsInplaceCandidate(HloInstruction* instruction,
+                        const HloPoplarDataflowAnalysis& dataflow) {
   // if any of the outputs could be inplaced consider instruction as a candidate
   if (instruction->opcode() == HloOpcode::kParameter) {
     return false;  // Don't handle these later down the line
@@ -69,7 +93,7 @@ static bool IsInplaceCandidate(HloInstruction* instruction,
   return result;
 }
 
-static std::vector<HloInstruction*> FindAllCandidates(
+std::vector<HloInstruction*> FindAllCandidates(
     HloComputation* computation, const HloPoplarDataflowAnalysis& dataflow) {
   std::vector<HloInstruction*> result;
   result.reserve(computation->instruction_count());
@@ -81,7 +105,7 @@ static std::vector<HloInstruction*> FindAllCandidates(
   return result;
 }
 
-static HloInstructionType GetInplaceType(
+HloInstructionType GetInplaceType(
     const HloInstruction* inst,
     const HloPoplarInplaceDescription& inst_description) {
   auto result = inst_description.GetType();
@@ -93,7 +117,7 @@ static HloInstructionType GetInplaceType(
   return result;
 }
 
-static InplacePriority GetPriority(const HloInstruction* inst) {
+InplacePriority GetPriority(const HloInstruction* inst) {
   if (inst->parent()->root_instruction() == inst) {
     return InplacePriority::kHigh;
   }
@@ -113,7 +137,7 @@ static InplacePriority GetPriority(const HloInstruction* inst) {
   }
 }
 
-static int64 GetBufferOperandsSize(
+int64 GetBufferOperandsSize(
     const HloInstruction* inst,
     const HloPoplarInplaceDescription& inst_description) {
   int64 result = 0;
@@ -125,7 +149,7 @@ static int64 GetBufferOperandsSize(
 }
 
 using SortKeyType = std::tuple<HloInstructionType, InplacePriority, int64>;
-static SortKeyType CreateSortKey(const HloInstruction* inst) {
+SortKeyType CreateSortKey(const HloInstruction* inst) {
   auto inst_description = GetInplaceDescription(inst);
   // Prioritise instructions by how they'll be inplaced, how important they
   // are to inplace, and then by how large they are
@@ -134,7 +158,7 @@ static SortKeyType CreateSortKey(const HloInstruction* inst) {
                          -1 * GetBufferOperandsSize(inst, inst_description));
 }
 
-static absl::flat_hash_map<const HloInstruction*, SortKeyType> CreateKeyMap(
+absl::flat_hash_map<const HloInstruction*, SortKeyType> CreateKeyMap(
     const std::vector<HloInstruction*>& candidates) {
   absl::flat_hash_map<const HloInstruction*, SortKeyType> result;
   result.reserve(candidates.size());
@@ -144,7 +168,7 @@ static absl::flat_hash_map<const HloInstruction*, SortKeyType> CreateKeyMap(
   return result;
 }
 
-static std::vector<HloInstruction*> OrderInplaceCandidates(
+std::vector<HloInstruction*> OrderInplaceCandidates(
     std::vector<HloInstruction*> candidates, HloComputation* comp) {
   const auto key_map = CreateKeyMap(candidates);
   absl::c_stable_sort(candidates,
@@ -154,7 +178,7 @@ static std::vector<HloInstruction*> OrderInplaceCandidates(
   return candidates;
 }
 
-static std::vector<HloInstruction*> FindInplaceCandidates(
+std::vector<HloInstruction*> FindInplaceCandidates(
     HloComputation* comp, const HloPoplarDataflowAnalysis& dataflow) {
   std::vector<HloInstruction*> candidates = FindAllCandidates(comp, dataflow);
   return OrderInplaceCandidates(std::move(candidates), comp);
@@ -163,11 +187,17 @@ static std::vector<HloInstruction*> FindInplaceCandidates(
 }  // namespace
 
 StatusOr<bool> InplaceFinder::Run(HloModule* module) {
-  TF_ASSIGN_OR_RETURN(auto dataflow,
-                      HloPoplarDataflowAnalysis::Run(module, annotations));
+  auto call_graph = CallGraph::Build(module);
+  if (!call_graph->IsFlattened()) {
+    return FailedPrecondition(
+        "InplaceFinder requires the call graph to be flattened.");
+  }
+
+  TF_ASSIGN_OR_RETURN(auto dataflow, HloPoplarDataflowAnalysis::Run(
+                                         module, annotations, *call_graph));
   bool changed = false;
   for (auto* comp : module->MakeComputationPostOrder()) {
-    if (IsPopOpsFusion(comp)) {
+    if (!AllowedComputation(*call_graph, comp)) {
       continue;
     }
 
@@ -180,11 +210,100 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
     // Because we are using a map, we first inplace GTEs, then Read/Write and
     // then Read-Only.
     const auto inplace_candidates = FindInplaceCandidates(comp, *dataflow);
+
+    struct OperandToCopy {
+      HloInstruction* inst;
+      std::vector<int64> operands;
+      explicit OperandToCopy(HloInstruction* inst) : inst(inst) {}
+    };
+    std::vector<OperandToCopy> operands_to_copy;
+
     for (auto* inst : inplace_candidates) {
-      HloPoplarInplaceDescription::ConvertToInplace(
-          inst, reachability_map.get(), worklist);
+      if (HloPoplarInplaceDescription::ConvertToInplace(
+              inst, reachability_map.get(), worklist)) {
+        changed = true;
+        VLOG(1) << "Inplaced " << inst->ToString();
+        continue;
+      }
+      // Do not insert copies for root tuple in entry computation.
+      if (inst == comp->root_instruction() &&
+          comp->parent()->entry_computation() == comp) {
+        continue;
+      }
+      const auto inplace_description = GetInplaceDescription(inst);
+      if (!inplace_description.IsInplaceType()) {
+        continue;
+      }
+
+      CHECK(!IsLoweredInplace(inst));
+      const bool allow_non_inplace =
+          inplace_description.AllowNonInplaceLowering();
+      VLOG(3) << "Processing " << inst->name()
+              << ", allow non-inplace: " << allow_non_inplace;
+      if (allow_non_inplace) {
+        // No copies required - op will be lowered as non-inplace.
+        continue;
+      }
+
+      // Those instructions are inplace only on remote buffers, and we can't
+      // copy them, they should be always inplace.
+      CHECK(!IsPoplarInstruction(PoplarOp::RemoteParameterStore, inst) &&
+            !IsPoplarInstruction(PoplarOp::BufferStoreSlice, inst));
+
+      operands_to_copy.emplace_back(inst);
+      for (auto op_index : inplace_description.GetInplaceOperandIndices()) {
+        operands_to_copy.back().operands.push_back(op_index);
+      }
     }
-    changed |= (!inplace_candidates.empty());
+
+    for (auto& operand_to_copy : operands_to_copy) {
+      HloInstruction* inst = operand_to_copy.inst;
+      auto inplace_description = GetInplaceDescription(inst);
+      for (int64 op_index : operand_to_copy.operands) {
+        HloInstruction* op = inst->mutable_operand(op_index);
+        VLOG(1) << "Adding a copy of operand " << op_index << " (" << op->name()
+                << ") "
+                << " for " << inst->name();
+        HloInstruction* copy = comp->AddInstruction(
+            HloInstruction::CreateUnary(op->shape(), HloOpcode::kCopy, op));
+        if (inplace_description.GetType() ==
+                HloInstructionType::kInplaceReadWrite &&
+            inst->opcode() != HloOpcode::kTuple) {
+          // As we need to add copy anyway, set clone method to
+          // CloneMethod_PreserveOrderUnlessAliases. This will rebalance tensor
+          // and expand aliasing, because read/write inplace ops can't have
+          // tensors with aliases as their inputs. Expand them here to avoid
+          // another copy later.
+          // Tuples should always preserve aliasing.
+          TF_RETURN_IF_ERROR(SetCopyCloneMethod(
+              copy,
+              ShapeTree<CloneMethod>(copy->shape(),
+                                     CloneMethod_PreserveOrderUnlessAliases)));
+        }
+
+        // If we copy result of the instruction, we have to guarantee that
+        // result was copied before any control successors (that potentially may
+        // modify this buffer inplace).
+        for (auto succ : op->control_successors()) {
+          TF_RETURN_IF_ERROR(copy->AddControlDependencyTo(succ));
+        }
+        // If the instruction has control predecessors, we have to guarantee
+        // that copies are made after all predecessors.
+        for (HloInstruction* pred : inst->control_predecessors()) {
+          TF_RETURN_IF_ERROR(pred->AddControlDependencyTo(copy));
+        }
+        op->SetupDerivedInstruction(copy);
+        TF_RETURN_IF_ERROR(inst->ReplaceOperandWith(op_index, copy));
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    VLOG(2) << "After the InplaceFinder:";
+    XLA_VLOG_LINES(2, module->ToString());
+  } else {
+    VLOG(2) << "There were no changes.";
   }
 
   return changed;

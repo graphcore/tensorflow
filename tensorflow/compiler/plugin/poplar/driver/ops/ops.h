@@ -318,8 +318,7 @@ StatusOr<poplar::program::Sequence> CreateUpdateScalarInRows(
 
 StatusOr<poplar::program::Sequence> CreateTuple(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
-    const poplar::DebugNameAndId& debug_name_and_id,
-    bool expand_aliasing = true, bool preserve_aliases = false);
+    const poplar::DebugNameAndId& debug_name_and_id);
 
 StatusOr<poplar::program::Sequence> CreateOutfeed(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,

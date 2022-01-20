@@ -230,9 +230,10 @@ Status BaseVisitor::HandleGetTupleElement(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   poplar::program::Sequence seq({}, debug_name_and_id);
 
-  TF_ASSIGN_OR_RETURN(TensorVectors output_tensors,
-                      FindInplaceOutputTensors(tensor_map, resources_, inst,
-                                               seq, debug_name_and_id, false));
+  TF_ASSIGN_OR_RETURN(
+      TensorVectors output_tensors,
+      FindInplaceOutputTensors(tensor_map, resources_, inst, seq,
+                               debug_name_and_id, /*expand_aliasing=*/false));
   CHECK_EQ(output_tensors.size(), 1);
   CHECK_EQ(output_tensors[0].size(), CountShapes(inst->shape()));
   for (size_t i = 0; i < output_tensors[0].size(); i++) {

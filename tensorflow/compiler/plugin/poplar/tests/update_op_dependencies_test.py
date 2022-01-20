@@ -81,7 +81,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        'Copy_XLA_Args/*_to_transpose/transpose', 'add/add.*/Op/Add',
+        '__seed*', 'host-exchange-local-copy-', 'add/add.*/Op/Add',
         'truediv/divide.*/Op/Divide'
     ]
     self.assert_all_compute_sets_and_list(report, ok)

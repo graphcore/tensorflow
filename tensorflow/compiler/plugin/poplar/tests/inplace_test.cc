@@ -1216,7 +1216,7 @@ ENTRY c1 {
   CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "i_b"), true,
                                          false);
   CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "root_b"),
-                                         true, true);
+                                         true, false);
   CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "p0"), false,
                                          true);
   CheckInstructionCanBeLoweredNonInplace(FindInstruction(module0, "eq_c"),

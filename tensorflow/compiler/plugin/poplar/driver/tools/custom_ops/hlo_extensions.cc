@@ -426,7 +426,7 @@ REGISTER_HLO_INST_EXTENSIONS(kSort, RegisterInplaceRWAllOperandsExtension);
 REGISTER_HLO_INST_EXTENSIONS(kTuple, [](HloOpcode opcode) {
   return RegisterInplaceAllOperandsExtension(
       opcode, HloInstructionType::kInplaceReadWrite,
-      /*allow_non_inplace=*/true);
+      /*allow_non_inplace=*/false);
 });
 
 // Inplace read-only ops.

@@ -506,12 +506,6 @@ StatusOr<TensorOrRemoteBufferVectors> GetInputs(
     const HloInstruction* inst, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   TensorOrRemoteBufferVectors inputs(inst->operand_count());
-  // First get all the inplace inputs - we do not expand constants and we
-  // preserve all the aliasing.
-  TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors inplace_inputs,
-                      FindInplaceOutputs(tensor_map, res, inst, seq,
-                                         debug_name_and_id, false, true));
-  auto inplace_inputs_itr = inplace_inputs.begin();
   auto inst_description = GetInplaceDescription(inst);
   // Keep track of inputs which are not inplace (i.e. parameters for forward
   // stages).
@@ -522,8 +516,8 @@ StatusOr<TensorOrRemoteBufferVectors> GetInputs(
 
   // Populate the inputs with the inplace inputs first.
   for (int64 inplace_idx : inst_description.GetInplaceOperandIndices()) {
-    inputs[inplace_idx] = *inplace_inputs_itr;
-    inplace_inputs_itr++;
+    inputs[inplace_idx] = FindInstructionInputs(
+        tensor_map, res, inst, inplace_idx, seq, debug_name_and_id, false);
     non_inplace_operand_indices.erase(inplace_idx);
   }
   // Get all the non inplace inputs.
@@ -779,9 +773,8 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   poplar::Graph& graph = GetGraph(resources_, inst);
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, inst));
 
-  TF_ASSIGN_OR_RETURN(
-      DeferredArgRBVectors inputs,
-      GetInputsForDeferredRBInstruction(inst, /*preserve_aliasing*/ true));
+  TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
+                      GetInputsForDeferredRBInstruction(inst));
 
   const bool has_recomputation = stages_with_recomputation_.contains(stage);
 
@@ -994,9 +987,8 @@ Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
   const std::string sr_change_name = hlo->name() + "_end";
 
   if (IsResourceUpdate(hlo)) {
-    TF_ASSIGN_OR_RETURN(
-        DeferredArgRBVectors inputs,
-        GetInputsForDeferredRBInstruction(hlo, /*preserve_aliasing*/ true));
+    TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
+                        GetInputsForDeferredRBInstruction(hlo));
 
     // Similar to pipeline stages we always do resource update relative to the
     // starting sr method, since all the pipeline stages do this too then we
