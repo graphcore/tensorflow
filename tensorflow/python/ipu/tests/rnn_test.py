@@ -32,6 +32,9 @@ from tensorflow.python.training import training as train
 from tensorflow.python.layers import layers
 from tensorflow.python import data
 from tensorflow.python import ipu
+from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.ops import tensor_array_ops
+from tensorflow.python.framework import dtypes
 from tensorflow import __version__ as version
 
 TF1 = version.split('.')[0] == '1'
@@ -119,6 +122,38 @@ def build_model_cnn1(opts, inputs):
   return cnn
 
 
+def build_custom_lstm(opts, inputs):
+  x = array_ops.transpose(inputs, [1, 0, 2])
+  x, _ = ipu.ops.rnn_ops.PopnnLSTM(128)(x)
+  _, x = ipu.ops.rnn_ops.PopnnLSTM(384)(x)
+  return layers.dense(x[1], opts.out_dim)
+
+
+def build_trivial_while(_, inputs):
+  x = array_ops.transpose(inputs, [1, 0, 2])
+  output = tensor_array_ops.TensorArray(x.dtype,
+                                        size=x.shape[0],
+                                        element_shape=[x.shape[1], x.shape[2]],
+                                        name="output")
+  time_ = array_ops.constant(0, dtype=dtypes.int32, name="time")
+  v = variables.Variable(initial_value=7.0, trainable=True)
+
+  def body_(time, out_ta):
+    in_slice = array_ops.slice(x, [time, 0, 0], [1, x.shape[1], x.shape[2]])
+    in_slice = array_ops.squeeze(in_slice)
+    mul = math_ops.multiply(in_slice, v)
+    new_out = out_ta.write(time, mul)
+    return (time + 1, new_out)
+
+  _, output = control_flow_ops.while_loop(
+      cond=lambda time_, *_: time_ < x.shape[0],
+      body=body_,
+      loop_vars=(time_, output),
+      maximum_iterations=x.shape[0],
+      name="easy-to-spot-while")
+  return math_ops.reduce_sum(output.stack(), axis=0, name="reduce_dims")
+
+
 def graph_builder(model_func, opts, x):
   preds = model_func(opts, x["inputs"])
   loss = math_ops.reduce_mean(losses.mean_squared_error(x["labels"], preds))
@@ -137,6 +172,9 @@ class TestOptions:
     self.in_dim = 16
     self.out_dim = 16
     self.output_keep_prob = 0.75
+    # some tests are just for debugging/comparison and not useful
+    # for CI or already tested in other files. For these just return
+    self.skip = False
 
 
 class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
@@ -179,42 +217,73 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     report = pva.openReport(report_helper.find_report())
     self.assert_number_of_executions(report, 1)
-    self.assert_execution_report_cycles(report, 0, cycles, tolerance=0.01)
-    self.assert_total_tile_memory(report, total_mem, tolerance=0.01)
-    self.assert_max_tile_memory(report, max_mem, tolerance=0.01)
+    if cycles is not None:
+      self.assert_execution_report_cycles(report, 0, cycles, tolerance=0.01)
+    if total_mem is not None:
+      self.assert_total_tile_memory(report, total_mem, tolerance=0.01)
+    if max_mem is not None:
+      self.assert_max_tile_memory(report, max_mem, tolerance=0.01)
 
-  @parameterized.parameters(
+  @parameterized.named_parameters(
       {
+          'testcase_name': 'tf_rnn1',
           'build': build_tf_rnn1,
           'cycles': 86697385 if TF1 else 87860863,
           'total_memory': 12378522 if TF1 else 12409375,
           'max_memory': 3117577 if TF1 else 3123543
-      }, {
+      },
+      {
+          'testcase_name': 'tf_rnn2',
           'build': build_tf_rnn2,
           'cycles': 61482649 if TF1 else 62027730,
           'total_memory': 8761227 if TF1 else 8660003,
           'max_memory': 2272901 if TF1 else 2187333
-      }, {
+      },
+      {
+          'testcase_name': 'tf_lstm1',
           'build': build_tf_lstm1,
           'cycles': 1086942603 if TF1 else 1081003611,
           'total_memory': 151061717,
-          'max_memory': 37776657
-      }, {
+          'max_memory': 37776657,
+      },
+      {
+          # This is just included so that I have an easy comparison
+          # against what the native RNNs should be performing at, and
+          # an easy way to get a report for it
+          'testcase_name': 'popnn_lstm1',
+          'build': build_custom_lstm,
+          # As this test is skipped by default we don't track these
+          # values so skip the checks
+          'cycles': None,
+          'total_memory': None,
+          'max_memory': None,
+          'options': {
+              'skip': True
+          }
+      },
+      {
+          'testcase_name': 'tf_gru1',
           'build': build_tf_gru1,
           'cycles': 463011327 if TF1 else 468068883,
           'total_memory': 57075050 if TF1 else 57145333,
           'max_memory': 14295671 if TF1 else 14289524
-      }, {
+      },
+      {
+          'testcase_name': 'model_rnn1',
           'build': build_model_rnn1,
           'cycles': 86929788 if TF1 else 75404503,
           'total_memory': 12141874 if TF1 else 12359011,
           'max_memory': 3044815 if TF1 else 3106806
-      }, {
+      },
+      {
+          'testcase_name': 'model_rnn2',
           'build': build_model_rnn2,
           'cycles': 144427061 if TF1 else 129967459,
           'total_memory': 18177930 if TF1 else 17409220,
           'max_memory': 4550619 if TF1 else 4362290
-      }, {
+      },
+      {
+          'testcase_name': 'model_cnn1',
           'build': build_model_cnn1,
           'cycles': 144497392,
           'total_memory': 13088427 if TF1 else 17369471,
@@ -223,6 +292,19 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
               'batch_size': 1,
               'steps': 32
           }
+      },
+      {
+          'testcase_name': 'trivial_multiply',
+          'build': build_trivial_while,
+          'cycles': 130861194,
+          'total_memory': 8394238,
+          'max_memory': 2099364,
+          'options': {
+              'batch_size': 4,
+              'steps': 32,
+              'in_dim': 4056,
+              'out_dim': 4056
+          }
       })
   @test_util.deprecated_graph_mode_only
   def test_rnn(self, build, cycles, total_memory, max_memory, options=None):
@@ -230,6 +312,8 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     if options:
       for key, value in options.items():
         setattr(opts, key, value)
+      if opts.skip:
+        self.skipTest("Doesn't add value to CI")
     self._run_test(opts, build, cycles, total_memory, max_memory)
 
 
