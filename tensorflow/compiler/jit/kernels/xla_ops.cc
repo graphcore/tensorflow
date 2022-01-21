@@ -295,6 +295,14 @@ void XlaLocalLaunchBase::Compute(OpKernelContext* ctx) {
 
   std::vector<VariableInfo> variable_infos;
   {
+    // IPU specific changes begin.
+    // TODO(T54498): IPU specific change to disable the input-output aliasing
+    // at Hlo level for resource updates as the Poplar runtime does not support
+    // it and implements it's own version of alaising.
+    const bool may_alias_resource_update =
+      platform_info_.SupportsMayAliasResourceUpdate();
+    // IPU specific changes end.
+
     OP_REQUIRES_OK(
         ctx, GetVariableInfosFromInputs(ctx->resource_manager(), ctx->device(),
                                         inputs, resources_, &variable_infos));
@@ -302,7 +310,7 @@ void XlaLocalLaunchBase::Compute(OpKernelContext* ctx) {
     Status s = CompileToLocalExecutable(
         ctx, function_, /*has_ref_vars=*/has_ref_vars_, platform_info_, inputs,
         variable_infos, constants_, XlaCompilationCache::CompileMode::kStrict,
-        /*may_alias_resource_update=*/true, &client, &compilation_result,
+        may_alias_resource_update, &client, &compilation_result,
         &executable);
     OP_REQUIRES_OK(ctx, s);
   }

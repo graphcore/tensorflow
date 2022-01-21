@@ -61,7 +61,8 @@ class XlaDevice : public LocalDevice {
     Metadata(int device_ordinal, se::Platform* platform,
              const DeviceType& device_type,
              XlaCompiler::ShapeRepresentationFn shape_representation_fn,
-             PaddedShapeFn padded_shape_fn, bool use_multiple_streams);
+             PaddedShapeFn padded_shape_fn, bool use_multiple_streams,
+             bool supports_may_alias_resource_update);
 
     // The index of the device on this host.
     int device_ordinal() const;
@@ -76,6 +77,10 @@ class XlaDevice : public LocalDevice {
 
     bool UseMultipleStreams() const { return use_multiple_streams_; }
 
+    bool SupportsMayAliasResourceUpdate() const {
+      return supports_may_alias_resource_update_;
+    }
+
    private:
     const int device_ordinal_;
     const DeviceType device_type_;
@@ -83,6 +88,7 @@ class XlaDevice : public LocalDevice {
     XlaCompiler::ShapeRepresentationFn shape_representation_fn_;
     PaddedShapeFn padded_shape_fn_;
     const bool use_multiple_streams_;
+    const bool supports_may_alias_resource_update_;
 
     TF_DISALLOW_COPY_AND_ASSIGN(Metadata);
   };
@@ -135,6 +141,10 @@ class XlaDevice : public LocalDevice {
     // platform will have resources allocated. For GPUs this will be
     // filled from visible_gpu_devices list from session configuration.
     absl::optional<std::set<int>> allowed_devices;
+
+    // TODO(T54498): IPU specific options to disable the input-output aliasing
+    // at Hlo level for resource updates.
+    bool supports_may_alias_resource_update = true;
   };
 
   // Creates a new XLA Device.
