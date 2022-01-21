@@ -24,6 +24,7 @@ limitations under the License.
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_ipu_copy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/within_replicas.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/xla/literal_util.h"
@@ -180,7 +181,7 @@ bool IsAllowedTupleSharding(const HloInstruction* inst) {
     case HloOpcode::kCustomCall:
       return IsPoplarInstruction(PoplarOp::RemoteParameterLoad, inst) ||
              IsPoplarInstruction(PoplarOp::Barrier, inst) ||
-             IsPoplarInstruction(PoplarOp::AllGatherWithinReplica, inst);
+             IsGCLWithinReplicaOp(inst);
     default:
       return false;
   }
@@ -476,6 +477,10 @@ const HloInstruction* GetGradientAccumulationCountInstruction(
   int64 index = GetAccumulationCountOperandIndex(inst);
   CHECK_LT(index, inst->operands().size());
   return inst->operand(index);
+}
+
+bool IsGCLWithinReplicaOp(const HloInstruction* inst) {
+  return DynCast<HloWithinReplicaInstruction>(inst) != nullptr;
 }
 
 template <typename NativeT>

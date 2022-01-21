@@ -204,6 +204,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver:config_proto_cc_impl",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:hlo_poplar_instruction",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:inter_ipu_copy",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:within_replicas",
         "//tensorflow/compiler/plugin/poplar/kernels:ops_proto_cc",
         "//tensorflow/compiler/xla:literal_util",
         "//tensorflow/compiler/xla/service:hlo_evaluator",

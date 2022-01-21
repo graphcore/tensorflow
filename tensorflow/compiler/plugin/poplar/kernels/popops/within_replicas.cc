@@ -36,6 +36,9 @@ class PopopsAllGatherWithinReplica : public XlaOpKernel, IpuOpKernel {
     int64 element_count = 0;
     std::vector<xla::XlaOp> inputs;
     for (int64 i = 0; i != ctx->num_inputs(); ++i) {
+      CHECK_EQ(ctx->input_type(0), ctx->input_type(i))
+          << "Expecting all inputs to be of the same type.";
+
       auto input = ctx->Input(i);
       inputs.push_back(input);
 
@@ -70,5 +73,61 @@ class PopopsAllGatherWithinReplica : public XlaOpKernel, IpuOpKernel {
 
 REGISTER_XLA_OP(Name("IpuAllGatherWithinReplica").Device(DEVICE_IPU_XLA_JIT),
                 PopopsAllGatherWithinReplica);
+
+class PopopsReduceScatterWithinReplica : public XlaOpKernel, IpuOpKernel {
+ public:
+  using XlaOpKernel::XlaOpKernel;
+
+  explicit PopopsReduceScatterWithinReplica(OpKernelConstruction* ctx)
+      : XlaOpKernel(ctx) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("collective_op", &op_));
+  }
+
+  void Compile(XlaOpKernelContext* ctx) override {
+    attribute_map_.AddAttribute("op", op_);
+
+    std::vector<xla::XlaOp> inputs;
+    for (int64 i = 0; i != ctx->num_inputs(); ++i) {
+      CHECK_EQ(ctx->input_type(0), ctx->input_type(i))
+          << "Expecting all inputs to be of the same type.";
+
+      auto input = ctx->Input(i);
+      inputs.push_back(input);
+    }
+
+    const TensorShape input_shape = ctx->InputShape(0);
+    const int64 input_length = input_shape.dim_size(0);
+    const auto shard_count = ctx->num_inputs();
+    const int64 output_length =
+        MathUtil::CeilOfRatio<int64>(input_length, shard_count);
+
+    TensorShape output_shape;
+    output_shape.AddDim(output_length);
+
+    xla::Shape output_shape_xla;
+    OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(output_type(0), output_shape,
+                                              &output_shape_xla));
+    const std::vector<xla::Shape> output_shapes(shard_count, output_shape_xla);
+
+    xla::XlaBuilder* builder = ctx->builder();
+    xla::XlaOp outputs = xla::CustomCall(
+        builder, PoplarOp_Name(PoplarOp::ReduceScatterWithinReplica), inputs,
+        xla::ShapeUtil::MakeTupleShape(output_shapes),
+        attribute_map_.Serialise());
+
+    for (auto i = 0; i != ctx->num_inputs(); ++i) {
+      ctx->SetOutput(i, xla::GetTupleElement(outputs, i));
+    }
+  }
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(PopopsReduceScatterWithinReplica);
+
+  std::string op_;
+};
+
+REGISTER_XLA_OP(
+    Name("IpuReduceScatterWithinReplica").Device(DEVICE_IPU_XLA_JIT),
+    PopopsReduceScatterWithinReplica);
 
 }  // namespace tensorflow

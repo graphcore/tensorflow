@@ -1014,6 +1014,12 @@ bool HasIOTiles(CompilerResources& res) {
   return res.io_graph || !res.shard_io_graphs.empty();
 }
 
+int64 GetNumIPUs(CompilerResources& res) {
+  auto& master_graph = GetMasterGraph(res);
+  const auto ipu_count = master_graph.getTarget().getNumIPUs();
+  return ipu_count;
+}
+
 void CheckPoplarPackageHash() {
   const std::string compiled_package_hash(tf_compiled_poplar_package_hash());
   const std::string runtime_package_hash(poplar::packageHash());

@@ -179,6 +179,7 @@ int64 GetPipelineRepeatCount(const HloInstruction*);
 int64 GetAccumulationCountOperandIndex(const HloInstruction* inst);
 const HloInstruction* GetGradientAccumulationCountInstruction(
     const HloInstruction* inst);
+bool IsGCLWithinReplicaOp(const HloInstruction* inst);
 
 template <typename NativeT>
 absl::optional<NativeT> GetConstantValue(const HloInstruction* inst);

@@ -382,7 +382,8 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
         added_sharding = CopyShardingFromUsers(inst);
       }
 
-      if (IsPoplarInstruction(PoplarOp::AllGatherWithinReplica, inst)) {
+      // gcl::allGatherWithinReplica etc have output i on the ith ipu.
+      if (IsGCLWithinReplicaOp(inst)) {
         SetTupleShardingFromElementIndices(inst);
         added_sharding = true;
       }

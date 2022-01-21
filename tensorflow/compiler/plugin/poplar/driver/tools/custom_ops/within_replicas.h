@@ -25,10 +25,10 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-class HloPoplarAllGatherWithinReplicaInstruction : public HloPoplarInstruction {
+class HloWithinReplicaInstruction : public HloPoplarInstruction {
  public:
-  explicit HloPoplarAllGatherWithinReplicaInstruction(
-      absl::Span<HloInstruction* const> inputs, const Shape& output_shape);
+  explicit HloWithinReplicaInstruction(absl::Span<HloInstruction* const> inputs,
+                                       const Shape& output_shape, PoplarOp op);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -43,6 +43,13 @@ class HloPoplarAllGatherWithinReplicaInstruction : public HloPoplarInstruction {
 
   bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
+};
+
+class HloAllGatherWithinReplicaInstruction
+    : public HloWithinReplicaInstruction {
+ public:
+  explicit HloAllGatherWithinReplicaInstruction(
+      absl::Span<HloInstruction* const> inputs, const Shape& output_shape);
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -54,8 +61,33 @@ class HloPoplarAllGatherWithinReplicaInstruction : public HloPoplarInstruction {
       HloCloneContext*) const override;
 };
 
+class HloReduceScatterWithinReplicaInstruction
+    : public HloWithinReplicaInstruction {
+ public:
+  explicit HloReduceScatterWithinReplicaInstruction(
+      absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
+      CollectiveOperator op);
+
+  CollectiveOperator GetCollectiveOperator() const { return op_; }
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+
+  CollectiveOperator op_;
+};
+
 std::unique_ptr<HloInstruction> CreatePoplarAllGatherWithinReplica(
     absl::Span<HloInstruction* const> inputs, const Shape& output_shape);
+
+std::unique_ptr<HloInstruction> CreatePoplarReduceScatterWithinReplica(
+    absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
+    CollectiveOperator op);
 
 }  // namespace poplarplugin
 }  // namespace xla

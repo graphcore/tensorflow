@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 
+import operator
 import numpy as np
 
 from absl.testing import parameterized
@@ -27,6 +28,36 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python import ipu
 from tensorflow.python.ipu.ops import within_replica_ops
 from tensorflow.python.platform import test
+
+
+def dtype_test_cases():
+  return ("F32", np.float32), ("F16", np.float16), ("I32", np.int32)
+
+
+def within_replica_ops_test_cases():
+  reduce_scatter_with_add = lambda inputs: within_replica_ops.reduce_scatter(
+      inputs, op="COLLECTIVE_OP_ADD")
+  test_cases = ("AllGather", within_replica_ops.all_gather),\
+               ("ReduceScatter", reduce_scatter_with_add)
+  return test_cases
+
+
+def reduce_op_numeric_test_cases():
+  test_cases = \
+      ("Add", "COLLECTIVE_OP_ADD", operator.add),\
+      ("Mul", "COLLECTIVE_OP_MUL", operator.mul),\
+      ("Min", "COLLECTIVE_OP_MIN", min),\
+      ("Max", "COLLECTIVE_OP_MAX", max)
+
+  return test_cases
+
+
+def reduce_op_logical_test_cases():
+  test_cases = \
+      ("And", "COLLECTIVE_OP_LOGICAL_AND", lambda x, y: x and y),\
+      ("Or", "COLLECTIVE_OP_LOGICAL_OR", lambda x, y: x or y)
+
+  return test_cases
 
 
 def increment_val_over_shards(num_shards, val):
@@ -54,13 +85,9 @@ class WithinReplicasTest(test_util.TensorFlowTestCase, parameterized.TestCase):
   def setUp(self):
     self._cfg = ipu.config.IPUConfig()
 
-  @parameterized.named_parameters(
-      ("F32", np.float32),
-      ("F16", np.float16),
-      ("I32", np.int32),
-  )
+  @parameterized.named_parameters(*dtype_test_cases())
   @tu.test_uses_ipus(num_ipus=4)
-  def testAllGatherWithinReplica(self, dtype):
+  def testAllGather(self, dtype):
     self._cfg.auto_select_ipus = 4
     tu.add_hw_ci_connection_options(self._cfg)
     self._cfg.configure_ipu_system()
@@ -88,7 +115,7 @@ class WithinReplicasTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                             [expected_gathered_data] * shard_count)
 
   @tu.test_uses_ipus(num_ipus=4)
-  def testAllGatherWithinReplicaMixedSizes(self):
+  def testAllGatherMixedSizes(self):
     self._cfg.auto_select_ipus = 4
     tu.add_hw_ci_connection_options(self._cfg)
     self._cfg.configure_ipu_system()
@@ -117,7 +144,7 @@ class WithinReplicasTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                             [expected_gathered_data] * shard_count)
 
   @tu.test_uses_ipus(num_ipus=2)
-  def testAllGatherWithinReplicaConcatDefault(self):
+  def testAllGatherConcatDefault(self):
     self._cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(self._cfg)
     self._cfg.configure_ipu_system()
@@ -126,6 +153,9 @@ class WithinReplicasTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     def my_net(val):
       shard0, shard1 = increment_val_over_shards(shard_count, val)
+      # Test that using a tensor of rank > 1 creates a
+      # tensor of equal rank where the elemts are concatenated
+      # across axis 0.
       gathered = within_replica_ops.all_gather([shard0, shard1])
       return gathered
 
@@ -143,7 +173,7 @@ class WithinReplicasTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertEqual(gathered[1].shape, (4, 3))
 
   @tu.test_uses_ipus(num_ipus=2)
-  def testAllGatherWithinReplicaConcatAxis(self):
+  def testAllGatherConcatAxis(self):
     self._cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(self._cfg)
     self._cfg.configure_ipu_system()
@@ -153,6 +183,8 @@ class WithinReplicasTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         a = val1 + 1
       with ipu.scopes.ipu_shard(1):
         b = val2 + 7
+      # Test that we can use a custom axis when concatenating results
+      # for tensors of rank > 1.
       gathered = within_replica_ops.all_gather([a, b], axis=1)
       return gathered
 
@@ -171,30 +203,31 @@ class WithinReplicasTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertEqual(gathered[1].shape, (1, 5, 3))
 
   @tu.test_uses_ipus(num_ipus=2)
-  def testAllGatherWithinReplicaScalar(self):
+  def testAllGatherScalar(self):
     self._cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(self._cfg)
     self._cfg.configure_ipu_system()
 
     shard_count = 2
 
-    def my_net(ones_val):
-      shard0, shard1 = increment_val_over_shards(shard_count, ones_val)
+    def my_net(zero_val):
+      shard0, shard1 = increment_val_over_shards(shard_count, zero_val)
       gathered = within_replica_ops.all_gather([shard0, shard1], axis=0)
       return gathered
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
-      ones_val = constant_op.constant(1, shape=[], dtype=np.int32)
-      res = ipu.ipu_compiler.compile(my_net, inputs=[ones_val])
+      zero_val = constant_op.constant(0, shape=[], dtype=np.int32)
+      res = ipu.ipu_compiler.compile(my_net, inputs=[zero_val])
 
     with session.Session() as sess:
       gathered = sess.run(res)
-      self.assertEqual(len(gathered), shard_count)
-      self.assertAllEqual(gathered[0], [2, 3])
-      self.assertAllEqual(gathered[1], [2, 3])
+
+      expected_gathered_data = [1, 2]
+      self.assertCountEqual(ndarrays_to_lists(gathered),
+                            [expected_gathered_data] * shard_count)
 
   @tu.test_uses_ipus(num_ipus=2)
-  def testAllGatherWithinReplicaInvalidAxis(self):
+  def testAllGatherInvalidAxis(self):
     self._cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(self._cfg)
     self._cfg.configure_ipu_system()
@@ -204,8 +237,9 @@ class WithinReplicasTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         a = val1 + 1
       with ipu.scopes.ipu_shard(1):
         b = val2 + 1
-      # This requires that all dimensions, except the one specified by axis,
-      # be the same. Since that's not true here an exception should be thrown.
+      # Concatenating requires that all dimensions, except the one specified by
+      # axis, be the same. Since that's not true here an exception should be
+      # thrown.
       gathered = within_replica_ops.all_gather([a, b], axis=0)
       return gathered
 
@@ -218,7 +252,7 @@ class WithinReplicasTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                         inputs=[val1, val2])
 
   @tu.test_uses_ipus(num_ipus=4)
-  def testAllGatherWithinReplicaDifferentRanks(self):
+  def testAllGatherDifferentRanks(self):
     self._cfg.auto_select_ipus = 4
     tu.add_hw_ci_connection_options(self._cfg)
     self._cfg.configure_ipu_system()
@@ -246,55 +280,270 @@ class WithinReplicasTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                         my_net,
                         inputs=[val1, val2, val3, val4])
 
+  @parameterized.named_parameters(*dtype_test_cases())
   @tu.test_uses_ipus(num_ipus=2)
-  def testAllGatherWithinReplicaShardOrder(self):
+  def testReduceScatter(self, dtype):
     self._cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(self._cfg)
     self._cfg.configure_ipu_system()
 
-    def my_net():
-      with ipu.scopes.ipu_shard(0):
-        a = constant_op.constant(1, shape=[2], dtype=np.int32)
-      with ipu.scopes.ipu_shard(1):
-        b = constant_op.constant(2, shape=[2], dtype=np.int32)
-      gathered = within_replica_ops.all_gather([b, a])
-      return gathered
+    shard_count = 2
+
+    def my_net(zero_val):
+      shard0, shard1 = increment_val_over_shards(shard_count, zero_val)
+      reduced = within_replica_ops.reduce_scatter([shard0, shard1],
+                                                  op="COLLECTIVE_OP_ADD")
+      return reduced
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
-      res = ipu.ipu_compiler.compile(my_net, inputs=[])
+      # Same number of elements as ipus, so each ipu will recieve
+      # the reduction 1+2.
+      zero_val = constant_op.constant(0, shape=[2], dtype=dtype)
+      res = ipu.ipu_compiler.compile(my_net, inputs=[zero_val])
+
+    with session.Session() as sess:
+      reduced = sess.run(res)
+      self.assertEqual(type(reduced), list)
+
+      # 2 elements since we have 2 shards.
+      self.assertCountEqual(reduced, [[3], [3]])
+
+  @parameterized.named_parameters(*reduce_op_numeric_test_cases())
+  @tu.test_uses_ipus(num_ipus=2)
+  def testReduceScatterNumericOps(self, ipu_reduce_op, py_reduce_op):
+    self._cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(self._cfg)
+    self._cfg.configure_ipu_system()
+
+    shard_count = 2
+
+    def my_net(zero_val):
+      shard0, shard1 = increment_val_over_shards(shard_count, zero_val)
+      # Reduce scatter [1, 1], [2, 2] using the given op.
+      reduced = within_replica_ops.reduce_scatter([shard0, shard1],
+                                                  op=ipu_reduce_op)
+      return reduced
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      zero_val = constant_op.constant(0, shape=[2], dtype=np.float32)
+      res = ipu.ipu_compiler.compile(my_net, inputs=[zero_val])
+
+    with session.Session() as sess:
+      reduced = sess.run(res)
+
+      expected_result = [
+          py_reduce_op(*ab) for ab in zip([1.0, 1.0], [2.0, 2.0])
+      ]
+      self.assertCountEqual(reduced, expected_result)
+
+  @parameterized.named_parameters(*reduce_op_logical_test_cases())
+  @tu.test_uses_ipus(num_ipus=2)
+  def testReduceScatterLogicalOps(self, ipu_reduce_op, py_reduce_op):
+    self._cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(self._cfg)
+    self._cfg.configure_ipu_system()
+
+    def my_net(val):
+      with ipu.scopes.ipu_shard(0):
+        a = math_ops.greater_equal(val, 2)
+      with ipu.scopes.ipu_shard(1):
+        b = math_ops.greater_equal(val, 1)
+      # Reduction with args [0, 1] and [1, 1]
+      reduced = within_replica_ops.reduce_scatter([a, b], op=ipu_reduce_op)
+      return reduced
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      val = constant_op.constant([1, 2], shape=[2], dtype=np.int32)
+      res = ipu.ipu_compiler.compile(my_net, inputs=[val])
+
+    with session.Session() as sess:
+      reduced = sess.run(res)
+
+      expected_result = [py_reduce_op(*ab) for ab in zip([0, 1], [1, 1])]
+      self.assertCountEqual(reduced, expected_result)
+
+  @tu.test_uses_ipus(num_ipus=4)
+  def testReduceScatterMoreElementsThanShards(self):
+    self._cfg.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(self._cfg)
+    self._cfg.configure_ipu_system()
+
+    shard_count = 4
+
+    def my_net(zero_val):
+      shard0, shard1, shard2, shard3 = increment_val_over_shards(
+          shard_count, zero_val)
+      reduced = within_replica_ops.reduce_scatter(
+          [shard0, shard1, shard2, shard3], op="COLLECTIVE_OP_ADD")
+      return reduced
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      # We have more elements than ipus here so the reductions
+      # won't be evenly distributed among the IPUs.
+      zero_val = constant_op.constant(0, shape=[5], dtype=np.int32)
+      res = ipu.ipu_compiler.compile(my_net, inputs=[zero_val])
+
+    with session.Session() as sess:
+      reduced = sess.run(res)
+
+      # 4 elements since we have 4 shards.
+      self.assertCountEqual(ndarrays_to_lists(reduced),
+                            [[10, 0], [10, 10], [10, 0], [10, 0]])
+
+  @tu.test_uses_ipus(num_ipus=4)
+  def testReduceScatterFewerElementsThanShards(self):
+    self._cfg.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(self._cfg)
+    self._cfg.configure_ipu_system()
+
+    shard_count = 4
+
+    def my_net(zero_val):
+      shard0, shard1, shard2, shard3 = increment_val_over_shards(
+          shard_count, zero_val)
+      reduced = within_replica_ops.reduce_scatter(
+          [shard0, shard1, shard2, shard3], op="COLLECTIVE_OP_ADD")
+      return reduced
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      # Fewer elements than ipus, so only 2 ipus will recieve the reduction
+      # while the others will be padded with 0.
+      zero_val = constant_op.constant(0, shape=[2], dtype=np.int32)
+      res = ipu.ipu_compiler.compile(my_net, inputs=[zero_val])
+
+    with session.Session() as sess:
+      reduced = sess.run(res)
+      self.assertCountEqual(reduced, [[0], [10], [10], [0]])
+
+  @tu.test_uses_ipus(num_ipus=2)
+  def testReduceScatterMixedSizes(self):
+    self._cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(self._cfg)
+    self._cfg.configure_ipu_system()
+
+    def my_net(val):
+      with ipu.scopes.ipu_shard(0):
+        a = val + 1
+      with ipu.scopes.ipu_shard(1):
+        b = array_ops.concat([val, val], axis=0)
+      # Reductions with mixed tensor sizes should behave as if the smaller tensor
+      # is padded with 0s to match the size of the largest. In this case we should
+      # be doing the equivalent of [2,0] + [1,1]
+      reduced = within_replica_ops.reduce_scatter([a, b],
+                                                  op="COLLECTIVE_OP_ADD")
+      return reduced
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      val = constant_op.constant(1, shape=[1], dtype=np.int32)
+      res = ipu.ipu_compiler.compile(my_net, inputs=[val])
+
+    with session.Session() as sess:
+      reduced = sess.run(res)
+      self.assertCountEqual(reduced, [[3], [1]])
+
+  @tu.test_uses_ipus(num_ipus=2)
+  def testReduceScatterScalar(self):
+    self._cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(self._cfg)
+    self._cfg.configure_ipu_system()
+
+    shard_count = 2
+
+    def my_net(zero_scalar):
+      shard0, shard1 = increment_val_over_shards(shard_count, zero_scalar)
+      # We expect the scalar input to be treated as a tensor of shape [1] so
+      # we're doing [1] + [2]]
+      reduced = within_replica_ops.reduce_scatter([shard0, shard1],
+                                                  op="COLLECTIVE_OP_ADD")
+      return reduced
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      zero_scalar = constant_op.constant(0, shape=[], dtype=np.int32)
+      res = ipu.ipu_compiler.compile(my_net, inputs=[zero_scalar])
+
+    with session.Session() as sess:
+      reduced = sess.run(res)
+      self.assertCountEqual(reduced, [[0], [3]])
+
+  @tu.test_uses_ipus(num_ipus=2)
+  def testReduceScatterRank1Only(self):
+    self._cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(self._cfg)
+    self._cfg.configure_ipu_system()
+
+    shard_count = 2
+
+    def my_net(zero_val):
+      shard0, shard1 = increment_val_over_shards(shard_count, zero_val)
+      reduced = within_replica_ops.reduce_scatter([shard0, shard1],
+                                                  op="COLLECTIVE_OP_ADD")
+      return reduced
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      zero_val = constant_op.constant(0, shape=[2, 2], dtype=np.int32)
+      self.assertRaises(ValueError,
+                        ipu.ipu_compiler.compile,
+                        my_net,
+                        inputs=[zero_val])
+
+  @parameterized.named_parameters(*within_replica_ops_test_cases())
+  @tu.test_uses_ipus(num_ipus=2)
+  def testOpShardOrder(self, within_replica_op):
+    self._cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(self._cfg)
+    self._cfg.configure_ipu_system()
+
+    shard_count = 2
+
+    def my_net(val):
+      shard0, shard1 = increment_val_over_shards(shard_count, val)
+      result = within_replica_op([shard1, shard0])
+      return result
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      val = constant_op.constant(1, shape=[2], dtype=np.int32)
+      res = ipu.ipu_compiler.compile(my_net, inputs=[val])
 
     with session.Session() as sess:
       # Should throw an error since the order of ops passed to all_gather
       # is not in shard order.
       self.assertRaises(errors.FailedPreconditionError, sess.run, res)
 
-  def testAllGatherWithinReplicaMixedTypeShards(self):
-    def my_net():
-      with ipu.scopes.ipu_shard(0):
-        a = constant_op.constant(1, shape=[2], dtype=np.int32)
-      with ipu.scopes.ipu_shard(1):
-        b = constant_op.constant(2.0, shape=[2], dtype=np.float32)
-      gathered = within_replica_ops.all_gather([a, b])
-      return gathered
+  @parameterized.named_parameters(*within_replica_ops_test_cases())
+  def testOpMixedTypeShards(self, within_replica_op):
+    shard_count = 2
+
+    def my_net(int_val):
+      shard0_int, shard1_int = increment_val_over_shards(shard_count, int_val)
+      shard0_float = math_ops.cast(shard0_int, np.float32)
+      result = within_replica_op([shard0_float, shard1_int])
+      return result
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       # Should throw an error since we're trying to gather tensors of
       # different types.
-      self.assertRaises(ValueError, ipu.ipu_compiler.compile, my_net)
+      int_val = constant_op.constant(1, shape=[2], dtype=np.int32)
+      self.assertRaises(ValueError,
+                        ipu.ipu_compiler.compile,
+                        my_net,
+                        inputs=[int_val])
 
-  def testAllGatherWithinReplicaUniqueArgs(self):
-    def my_net():
-      with ipu.scopes.ipu_shard(0):
-        a = constant_op.constant(1, shape=[2], dtype=np.int32)
-      with ipu.scopes.ipu_shard(1):
-        b = constant_op.constant(2, shape=[2], dtype=np.int32)  #pylint: disable=unused-variable
-      gathered = within_replica_ops.all_gather([a, a])
-      return gathered
+  @parameterized.named_parameters(*within_replica_ops_test_cases())
+  def testOpUniqueArgs(self, within_replica_op):
+    shard_count = 2
+
+    def my_net(val):
+      shard0, shard1 = increment_val_over_shards(shard_count, val)  #pylint: disable=unused-variable
+      result = within_replica_op([shard0, shard0])
+      return result
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
-      # Should throw an error since we're trying to gather tensors of
-      # different types.
-      self.assertRaises(ValueError, ipu.ipu_compiler.compile, my_net)
+      # Should throw an error since we're trying to reuse the same tensors.
+      val = constant_op.constant(1, shape=[2], dtype=np.int32)
+      self.assertRaises(ValueError,
+                        ipu.ipu_compiler.compile,
+                        my_net,
+                        inputs=[val])
 
 
 if __name__ == "__main__":

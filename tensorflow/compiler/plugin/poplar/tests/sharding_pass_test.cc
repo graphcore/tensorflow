@@ -15,8 +15,11 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 
 #include "tensorflow/compiler/xla/service/call_graph.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
@@ -2037,6 +2040,54 @@ main {
   EXPECT_EQ(t->sharding().tuple_elements()[1].GetUniqueDevice(), 0);
 }
 
+struct WithinReplicaOpSharingPassTest : ParameterizedHloTestFixture<> {
+  HloInstruction* FindWithinReplicaOpInstruction(const HloComputation* comp) {
+    auto instructions = comp->instructions();
+
+    auto iter = std::find_if(instructions.begin(), instructions.end(),
+                             IsGCLWithinReplicaOp);
+    if (iter != instructions.end()) {
+      return *iter;
+    }
+
+    return nullptr;
+  }
+};
+
+TEST_P(WithinReplicaOpSharingPassTest, ShardingInfo) {
+  TF_ASSERT_OK_AND_ASSIGN(bool success, CustomOpReplacer().Run(hlo_module_));
+  ASSERT_TRUE(success);
+
+  TF_ASSERT_OK_AND_ASSIGN(success, ShardingPass().Run(hlo_module_));
+  ASSERT_TRUE(success);
+
+  const HloInstruction* within_replica_op =
+      FindWithinReplicaOpInstruction(hlo_module_->entry_computation());
+  ASSERT_TRUE(within_replica_op);
+
+  // Check that sharding info comes from the tuple and propogate to the users,
+  // so tuple[i] uses shard i as does user[i].
+  const auto within_replica_op_sharding = within_replica_op->sharding();
+  ASSERT_TRUE(within_replica_op_sharding.IsTuple());
+
+  const auto shard_count = 4u;
+
+  const auto tuple_sharding = within_replica_op_sharding.tuple_elements();
+  ASSERT_EQ(tuple_sharding.size(), shard_count);
+
+  const auto users = within_replica_op->users();
+  ASSERT_EQ(users.size(), shard_count);
+
+  for (auto i = 0; i < shard_count; ++i) {
+    ASSERT_TRUE(tuple_sharding[i].HasUniqueDevice());
+    ASSERT_EQ(tuple_sharding[i].GetUniqueDevice(), i)
+        << "Expected output i to be on shard/ipu i";
+
+    const auto* user = users[i];
+    ASSERT_EQ(tuple_sharding[i], user->sharding());
+  }
+}
+
 const char* all_gather_within_replica_hlo = R"(
 HloModule top
 
@@ -2052,39 +2103,28 @@ main {
   ROOT gathered_shard3 = f32[4] get-tuple-element(all_gather), index=3
 }
 )";
-TEST_F(ShardingPassTest, AllGatherWithinReplicaSharding) {
-  TF_ASSERT_OK_AND_ASSIGN(
-      auto module, ParseAndReturnVerifiedModule(all_gather_within_replica_hlo));
-  ASSERT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
 
-  ASSERT_TRUE(ShardingPass().Run(module.get()).ValueOrDie());
+const char* reduce_scatter_within_replica_hlo = R"(
+HloModule top
 
-  const HloInstruction* all_gather =
-      FindInstruction(module.get(), "all-gather-within-replica");
-  ASSERT_TRUE(all_gather);
-
-  // Check that sharding info comes from the tuple and propogate to the users,
-  // so tuple[i] uses shard i as does user[i].
-  const auto all_gather_sharding = all_gather->sharding();
-  ASSERT_TRUE(all_gather_sharding.IsTuple());
-
-  const auto shard_count = 4u;
-
-  const auto tuple_sharding = all_gather_sharding.tuple_elements();
-  ASSERT_EQ(tuple_sharding.size(), shard_count);
-
-  const auto users = all_gather->users();
-  ASSERT_EQ(users.size(), shard_count);
-
-  for (auto i = 0; i < shard_count; ++i) {
-    ASSERT_TRUE(tuple_sharding[i].HasUniqueDevice());
-    ASSERT_EQ(tuple_sharding[i].GetUniqueDevice(), i)
-        << "Expected output i to be on shard/ipu i";
-
-    const auto* user = users[i];
-    ASSERT_EQ(tuple_sharding[i], user->sharding());
-  }
+main {
+  shard0 = f32[1] constant(0), sharding={maximal device=0}
+  shard1 = f32[1] constant(1), sharding={maximal device=1}
+  shard2 = f32[1] constant(2), sharding={maximal device=2}
+  shard3 = f32[1] constant(3), sharding={maximal device=3}
+  reduce_scatter = (f32[1], f32[1], f32[1], f32[1]) custom-call(shard0, shard1, shard2, shard3), custom_call_target="ReduceScatterWithinReplica", backend_config="{\"op\": \"COLLECTIVE_OP_MUL\"}\n"
+  reduced_shard0 = f32[1] get-tuple-element(reduce_scatter), index=0
+  reduced_shard1 = f32[1] get-tuple-element(reduce_scatter), index=1
+  reduced_shard2 = f32[1] get-tuple-element(reduce_scatter), index=2
+  ROOT reduced_shard3 = f32[1] get-tuple-element(reduce_scatter), index=3
 }
+)";
+
+INSTANTIATE_TEST_SUITE_P(
+    ShardingPassHLO, WithinReplicaOpSharingPassTest,
+    ::testing::Values(MAKE_HLO_TEST_CASE(all_gather_within_replica_hlo),
+                      MAKE_HLO_TEST_CASE(reduce_scatter_within_replica_hlo)),
+    HloTestCaseName);
 
 }  // namespace
 }  // namespace poplarplugin
