@@ -124,10 +124,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
   @parameterized.named_parameters(
       *test_util.generate_combinations_with_testcase_name(
           use_gradient_accumulation=[False, True],
-          reduction_method=[
-              ga.GradientAccumulationReductionMethod.SUM,
-              ga.GradientAccumulationReductionMethod.MEAN
-          ]))
+          reduction_method=list(ga.GradientAccumulationReductionMethod)))
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
   def testTrainReplicatedOnRegressionDataset(self, use_gradient_accumulation,

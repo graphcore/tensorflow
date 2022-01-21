@@ -788,14 +788,16 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       results = sess.run(outfeed_op)
       self.assertAllClose(results[0], [[0.], [2.], [8.], [18.], [32.], [0.]])
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.named_parameters(
+      *test_util.generate_combinations_with_testcase_name(
+          dtype=[dtypes.float16, dtypes.float32],
+          reduction_method=list(ga.GradientAccumulationReductionMethod)))
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare1(self, reduction_method):
+  def testPipelineCompare1(self, reduction_method, dtype):
     def dataset_fn():
-      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
+      dataset = tu.create_single_increasing_dataset(7,
+                                                    shape=[4, 4, 2],
+                                                    dtype=dtype)
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
       def dataset_parser(value):
@@ -807,7 +809,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+    lr = 0.01
+    if reduction_method != ga.GradientAccumulationReductionMethod.SUM:
+      lr /= 20
+    optimizer = gradient_descent.GradientDescentOptimizer(lr)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -841,7 +846,9 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     def inputs_fn():
       with ops.device('cpu'):
-        return [array_ops.placeholder(np.float32, shape=[])]
+        return [array_ops.placeholder(dtype, shape=[])]
+
+    rtol = 1e-6 if dtype == dtypes.float32 else 2e-3
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4],
@@ -853,12 +860,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         self,
         15500,
         schedule=pipelining_ops.PipelineSchedule.Interleaved,
-        reduction_method=reduction_method)
+        reduction_method=reduction_method,
+        rtol=rtol)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self, reduction_method):
     # Resnet like network.
@@ -967,10 +972,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         schedule=pipelining_ops.PipelineSchedule.Interleaved,
         reduction_method=reduction_method)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self, reduction_method):
     if utils.running_on_ipu_model():
@@ -1031,10 +1033,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         schedule=pipelining_ops.PipelineSchedule.Interleaved,
         reduction_method=reduction_method)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testPipelineCompareSharedWeights(self, reduction_method):
     def dataset_fn():
@@ -1435,10 +1434,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       actual = np.array(sess.run(outfed)).flatten()
       self.assertAllEqual(expected, actual)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testOutfeedLossAccumulated(self, reduction_method):
     """ Tests accumulating the loss from the optimizer function. """
@@ -1496,10 +1492,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ]
     self.assert_compute_sets_contain_list(report_json, ok)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedTraining(self, reduction_method):
     """
@@ -1558,10 +1551,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ]
     self.assert_compute_sets_contain_list(report_json, ok)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedTrainingSetDtype(self, reduction_method):
     """
@@ -1625,10 +1615,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       val = sess.run(outfed2)[0]
       self.assertAllEqual([[240008]], [val])
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedTrainingMultipleOutputs(self, reduction_method):
     """
@@ -1688,10 +1675,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ]
     self.assert_compute_sets_contain_list(report_json, ok)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedInference(self, reduction_method):
     """ Tests accumulating an output from the last computational stage. """
@@ -1736,10 +1720,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     ok = ['GradientAccumulatorAddWithScale']
     self.assert_compute_sets_contain_list(report_json, ok)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedInferenceMultipleOutputs(self, reduction_method):
     """ Tests accumulating 2 outputs from the last computational stage. """
@@ -2484,10 +2465,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       with self.assertRaisesRegex(ValueError, 'No variables to optimize.'):
         ipu_compiler.compile(my_net, inputs=[x])
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testPipelineCompareMultiIPUStage(self, reduction_method):
     # Resnet like network.
@@ -2597,10 +2575,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         device_mapping=[pipelining_ops._ALL_DEVICES, 0, 1],  # pylint: disable=W0212
         reduction_method=reduction_method)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testPipelineCompareParStages(self, reduction_method):
     # Resnet like network.
@@ -2715,10 +2690,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         device_mapping=[0, [0, 1], 1],
         reduction_method=reduction_method)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testPipelineCompareParStagesInfeed(self, reduction_method):
     # Resnet like network.
@@ -2882,13 +2854,15 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with ops.device("/device:IPU:0"):
       with self.assertRaisesRegex(
-          ValueError, 'reduction_method must be set to SUM, MEAN or '
-          'RUNNING_MEAN in training mode'):
+          ValueError, 'reduction_method must be set to one '
+          'of GradientAccumulationReductionMethod'):
         ipu_compiler.compile(my_net, inputs=[])
 
   @parameterized.parameters([
-      'SUM', 'MEAN', ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
+      'SUM', 'MEAN', 'RUNNING_MEAN',
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN,
+      ga.GradientAccumulationReductionMethod.RUNNING_MEAN
   ])
   @test_util.deprecated_graph_mode_only
   def testPipelineGAReduceMethodSupported(self, reduction_method):
@@ -2897,19 +2871,6 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with ops.device("/device:IPU:0"):
       ipu_compiler.compile(my_net, inputs=[])
 
-  @parameterized.parameters(
-      ['RUNNING_MEAN', ga.GradientAccumulationReductionMethod.RUNNING_MEAN])
-  @test_util.deprecated_graph_mode_only
-  def testPipelineGAReduceMethodUnsupported(self, reduction_method):
-    my_net = self.__makePipelineGATestNetwork(reduction_method)
-
-    with ops.device("/device:IPU:0"):
-      with self.assertRaisesRegex(
-          ValueError, 'Only GradientAccumulationReductionMethod.SUM and '
-          'GradientAccumulationReductionMethod.MEAN are '
-          'supported at the moment'):
-        ipu_compiler.compile(my_net, inputs=[])
-
   @parameterized.parameters(['Exp', 10])
   @test_util.deprecated_graph_mode_only
   def testPipelineGAReduceMethodInvalid(self, reduction_method):
@@ -2917,8 +2878,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with ops.device("/device:IPU:0"):
       with self.assertRaisesRegex(
-          ValueError, 'reduction_method must be set to SUM, MEAN '
-          'or RUNNING_MEAN'):
+          ValueError, 'reduction_method must be set to one '
+          'of GradientAccumulationReductionMethod'):
         ipu_compiler.compile(my_net, inputs=[])
 
 

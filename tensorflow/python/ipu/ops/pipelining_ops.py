@@ -19,6 +19,7 @@ Pipelining operators
 # Function captures are based on /tensorflow/python/ops/cond_v2.py
 
 from enum import Enum, IntEnum
+from functools import reduce
 from google.protobuf import json_format
 import numpy as np
 
@@ -29,6 +30,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ipu import functional_ops
+from tensorflow.python.ipu import internal_ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import scopes
@@ -661,16 +663,11 @@ def pipeline(computational_stages,
                             dtype_hint=dtypes.int32), dtypes.int32)
 
   if optimizer_function is not None and reduction_method is None:
-    raise ValueError('reduction_method must be set to SUM, MEAN or '
-                     'RUNNING_MEAN in training mode')
+    raise ValueError('reduction_method must be set to one '
+                     'of GradientAccumulationReductionMethod')
 
   reduction_method = op_util.parse_gradient_accumulation_method(
       reduction_method)
-  if reduction_method != ga.GradientAccumulationReductionMethod.SUM and \
-      reduction_method != ga.GradientAccumulationReductionMethod.MEAN:
-    raise ValueError('Only GradientAccumulationReductionMethod.SUM and '
-                     'GradientAccumulationReductionMethod.MEAN are '
-                     'supported at the moment')
 
   if reduction_method != ga.GradientAccumulationReductionMethod.SUM and\
     batch_serialization_iterations != 1:
@@ -857,20 +854,32 @@ def pipeline(computational_stages,
   control_outputs = []
 
   def _pipeline(*args):
-    outputs = args[1:]
     captured_gradient_accumulation_count = args[0]
+    outputs = args[1:]
     training = optimizer_function is not None
 
     outfeed_sinks = []
 
-    def _grad_scale(gac):
+    def _acc_grad_scale(gac):
       one = np.float32(1.0)
       if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
-        return None
+        accum_scale = one
+        grad_scale = None
       elif reduction_method == ga.GradientAccumulationReductionMethod.MEAN:
-        return one / math_ops.cast(gac, dtypes.float32)
+        accum_scale = one
+        grad_scale = one / math_ops.cast(gac, dtypes.float32)
+      elif reduction_method == \
+          ga.GradientAccumulationReductionMethod.RUNNING_MEAN:
+        n = internal_ops.get_current_iteration_counter(
+            lower_into_pipeline_stage=True)
+        n = math_ops.cast(n, np.float32)
+        inv_n_plus_1 = 1.0 / (n + 1)
+        accum_scale = n * inv_n_plus_1
+        grad_scale = inv_n_plus_1
       else:
-        raise ValueError('reduction_method must be SUM or MEAN')
+        raise ValueError('reduction_method must be SUM, MEAN or RUNNING_MEAN')
+
+      return accum_scale, grad_scale
 
     def _enqueue_or_accumulate(tensor_or_tensors):
       # Enqueue the outfeed data now or create accumulators for it
@@ -887,7 +896,7 @@ def pipeline(computational_stages,
           acc = gen_poputil_ops.gradient_accumulator_create_from_shape(
               shape=tensor.shape, output_type=dtype)
           acc = gen_poputil_ops.gradient_accumulator_add_with_scale(
-              acc, tensor, math_ops.cast(1.0, dtype))
+              acc, tensor, 1.0)
           sink = gen_poputil_ops.gradient_accumulator_sink(acc)
           outfeed_sinks.append(sink)
 
@@ -958,10 +967,20 @@ def pipeline(computational_stages,
       grads_and_vars = opt.compute_gradients(loss, *compute_gradients_args,
                                              **compute_gradients_kwargs)
 
+      if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+        accum_scale, grad_scale = \
+          _acc_grad_scale(captured_gradient_accumulation_count)
+      else:
+        deps = list(
+            filter(lambda x: x is not None,
+                   reduce(lambda l, p: l + [p[0]], grads_and_vars, [])))
+        with ops.control_dependencies(deps):
+          accum_scale, grad_scale = \
+            _acc_grad_scale(captured_gradient_accumulation_count)
+
       # Insert gradient accumulation ops.
       accumulated_grads_and_vars = op_util.accumulate_gradients(
-          grads_and_vars, gradient_accumulation_dtype,
-          _grad_scale(captured_gradient_accumulation_count))
+          grads_and_vars, gradient_accumulation_dtype, accum_scale, grad_scale)
 
     elif not isinstance(outputs, ops.Operation) and accumulate_outfeed:
       # In inference, we never expect tensor outputs from the final stage,

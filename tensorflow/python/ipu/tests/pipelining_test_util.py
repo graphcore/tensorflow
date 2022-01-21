@@ -38,6 +38,8 @@ from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as 
 from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour
 from tensorflow.compat.v1 import data as compat_v1_data
 
+DEFAULT_GRAD_ACCUM_METHOD = ga.GradientAccumulationReductionMethod.RUNNING_MEAN
+
 
 def get_num_ipus(device_mapping):
   device_mapping = pipelining_ops._to_flat_list(device_mapping)  # pylint: disable=W0212
@@ -107,19 +109,37 @@ class PipelineTester(object):
         ]
         grads = optimizer.compute_gradients(loss, trainable_variables)
 
-        one = np.float32(1.0)
-        if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
-          grad_scale = one
-        elif reduction_method == ga.GradientAccumulationReductionMethod.MEAN:
-          grad_scale = one / math_ops.cast(num_batches_to_accumulate,
-                                           np.float32)
-        else:
-          raise ValueError('reduction_method must be SUM or MEAN')
+        def get_accum_ops(n):
+          one = np.float32(1.0)
+          if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
+            accum_scale = one
+            grad_scale = one
+          elif reduction_method == \
+              ga.GradientAccumulationReductionMethod.MEAN:
+            accum_scale = one
+            grad_scale = one / math_ops.cast(num_batches_to_accumulate,
+                                             np.float32)
+          elif reduction_method == \
+              ga.GradientAccumulationReductionMethod.RUNNING_MEAN:
+            n2 = np.float32(n)
+            inv_n_plus_1 = one / (n2 + one)
+            accum_scale = n2 * inv_n_plus_1
+            grad_scale = inv_n_plus_1
+          else:
+            raise ValueError(
+                'reduction_method must be SUM, MEAN or RUNNING_MEAN')
 
-        accum_ops = [
-            accum_vars[i].assign_add(gv[0] * grad_scale)
-            for i, gv in enumerate(grads)
-        ]
+          accum_ops = []
+          for i, (_, gv) in enumerate(zip(accum_vars, grads)):
+            accum_scale_op = accum_vars[i].assign(
+                accum_vars[i] *
+                math_ops.cast(accum_scale, accum_vars[i].dtype))
+            with ops.control_dependencies([accum_scale_op]):
+              accum_ops.append(accum_vars[i].assign_add(
+                  gv[0] * math_ops.cast(grad_scale, gv[0].dtype)))
+
+          return accum_ops
+
         train_step = optimizer.apply_gradients([(accum_vars[i], gv[1])
                                                 for i, gv in enumerate(grads)])
 
@@ -128,7 +148,8 @@ class PipelineTester(object):
       with ops.device("cpu"):
         for _ in range(repeat_count):
           session.run(zero_ops)
-          for _ in range(num_batches_to_accumulate):
+          for n in range(num_batches_to_accumulate):
+            accum_ops = get_accum_ops(n)
             l, _ = session.run([loss, accum_ops],
                                feed_dict=dict(zip(inputs, input_values)))
             losses.append(l)
@@ -138,8 +159,15 @@ class PipelineTester(object):
       return losses
 
   @staticmethod
-  def run_on_cpu(test_wrapper, stages, inputs_fn, input_values, repeat_count,
-                 gradient_accumulation_count, dataset_fn, optimizer):
+  def run_on_cpu(test_wrapper,
+                 stages,
+                 inputs_fn,
+                 input_values,
+                 repeat_count,
+                 gradient_accumulation_count,
+                 dataset_fn,
+                 optimizer,
+                 reduction_method=DEFAULT_GRAD_ACCUM_METHOD):
     return PipelineTester._cpu_with_grad_accum(
         test_wrapper,
         stages,
@@ -149,7 +177,7 @@ class PipelineTester(object):
         gradient_accumulation_count,
         dataset_fn,
         optimizer,
-        reduction_method=ga.GradientAccumulationReductionMethod.MEAN)
+        reduction_method=reduction_method)
 
   @staticmethod
   def _sharded_on_ipu(
@@ -289,7 +317,8 @@ class PipelineTester(object):
       process_count=None,
       process_index=None,
       cross_replica_optimizer_cls=None,
-      reduction_method=ga.GradientAccumulationReductionMethod.MEAN):
+      reduction_method=DEFAULT_GRAD_ACCUM_METHOD,
+      gradient_accumulation_dtype=None):
 
     use_constant = number_of_io_tiles != 0
 
@@ -343,7 +372,8 @@ class PipelineTester(object):
               offload_activations=offload_activations,
               replicated_optimizer_state_sharding=
               replicated_optimizer_state_sharding,
-              reduction_method=reduction_method)
+              reduction_method=reduction_method,
+              gradient_accumulation_dtype=gradient_accumulation_dtype)
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=inputs)
@@ -418,26 +448,26 @@ class PipelineTester(object):
       return out
 
   @staticmethod
-  def compare_pipeline_to_cpu(
-      stages,
-      inputs_fn,
-      input_values,
-      repeat_count,
-      gradient_accumulation_count,
-      dataset_fn,
-      optimizer,
-      test_wrapper,
-      expected_max_tile_memory,
-      recomp=False,
-      schedule=None,
-      device_mapping=None,
-      batch_serialization_iterations=1,
-      recomputation_mode=None,
-      number_of_io_tiles=0,
-      return_report=False,
-      reduction_method=ga.GradientAccumulationReductionMethod.MEAN,
-      rtol=1e-6,
-      atol=1e-6):
+  def compare_pipeline_to_cpu(stages,
+                              inputs_fn,
+                              input_values,
+                              repeat_count,
+                              gradient_accumulation_count,
+                              dataset_fn,
+                              optimizer,
+                              test_wrapper,
+                              expected_max_tile_memory,
+                              recomp=False,
+                              schedule=None,
+                              device_mapping=None,
+                              batch_serialization_iterations=1,
+                              recomputation_mode=None,
+                              number_of_io_tiles=0,
+                              return_report=False,
+                              reduction_method=DEFAULT_GRAD_ACCUM_METHOD,
+                              rtol=1e-6,
+                              atol=1e-6,
+                              gradient_accumulation_dtype=None):
 
     if batch_serialization_iterations > 1:
       assert device_mapping is None
@@ -463,7 +493,8 @@ class PipelineTester(object):
         recomputation_mode,
         number_of_io_tiles=number_of_io_tiles,
         return_report=return_report,
-        reduction_method=reduction_method)
+        reduction_method=reduction_method,
+        gradient_accumulation_dtype=gradient_accumulation_dtype)
 
     if return_report:
       pipeline_losses, report_json, report_helper = pipeline_losses
@@ -512,7 +543,9 @@ class PipelineTester(object):
       replication_factor=1,
       replicated_optimizer_state_sharding=False,
       minimum_remote_tensor_size=128,
-      reduction_method=ga.GradientAccumulationReductionMethod.MEAN):
+      reduction_method=DEFAULT_GRAD_ACCUM_METHOD,
+      rtol=1e-6,
+      atol=1e-6):
     if batch_serialization_iterations > 1:
       assert device_mapping is None
       device_mapping = [0] * len(stages)
@@ -569,5 +602,11 @@ class PipelineTester(object):
         return_vars=True,
         reduction_method=reduction_method)
 
-    test_wrapper.assertAllClose(sharded_losses, pipeline_losses)
-    test_wrapper.assertAllClose(sharded_vars, pipeline_vars)
+    test_wrapper.assertAllClose(sharded_losses,
+                                pipeline_losses,
+                                rtol=rtol,
+                                atol=atol)
+    test_wrapper.assertAllClose(sharded_vars,
+                                pipeline_vars,
+                                rtol=rtol,
+                                atol=atol)

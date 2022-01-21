@@ -34,7 +34,6 @@ from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.ops import math_grad
 from tensorflow.python.ops import nn_grad
-from tensorflow.python.ops import math_ops
 from tensorflow.python.util import tf_contextlib
 
 
@@ -309,11 +308,13 @@ def parse_gradient_accumulation_method(reduction_method):
     elif reduction_method.upper() == 'RUNNING_MEAN':
       return gradient_accumulation_optimizer.GradientAccumulationReductionMethod.RUNNING_MEAN  # pylint: disable=line-too-long
 
-  raise ValueError('reduction_method must be set to SUM, MEAN or RUNNING_MEAN')
+  raise ValueError('reduction_method must be set to one '
+                   'of GradientAccumulationReductionMethod')
 
 
 def accumulate_gradients(grads_and_vars,
                          gradient_accumulation_dtype,
+                         accum_scale=1.0,
                          grad_scale=None):
   """
   Create ops that accumulate the gradients in `grads_and_vars`.
@@ -338,16 +339,25 @@ def accumulate_gradients(grads_and_vars,
       with ops.colocate_with(grad):
         # Find the data type for the accumulator.
         dtype = get_accumulator_dtype(var, gradient_accumulation_dtype)
+
         # Create an accumulator - variable is used as reference for shape/layout.
         accumulator = gen_poputil_ops.gradient_accumulator_create(
             var, output_type=dtype)
 
         # Add the gradients to the accumulator.
         if grad_scale is not None:
-          grad = grad * math_ops.cast(grad_scale, grad.dtype)
+          if grad.dtype == dtypes.float32:
+            grad = grad * grad_scale
+          else:
+            grad_dtype = grad.dtype
+            grad = math_ops.cast(
+                math_ops.cast(grad, dtypes.float32) * grad_scale, grad_dtype)
+            # These casts are used to leave the gradient scale in float32, and will be removed
+            # in case 4/10 in SerializeGradientAccumulate before being passed to the
+            # ScaledInplaceXbY and ScaledInplaceaXbY ops
 
         accumulator = gen_poputil_ops.gradient_accumulator_add_with_scale(
-            accumulator, grad, math_ops.cast(1.0, dtype))
+            accumulator, grad, accum_scale)
 
         # Sink the accumulators.
         grad = gen_poputil_ops.gradient_accumulator_sink(accumulator)

@@ -131,10 +131,7 @@ class HorovodTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         self.assertEqual(1.0 * hvd_size, strategy_sum.eval())
         self.assertEqual(1.0, strategy_mean.eval())
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def test_pipelining(self, reduction_method):
     gradient_accumulation_count = 4

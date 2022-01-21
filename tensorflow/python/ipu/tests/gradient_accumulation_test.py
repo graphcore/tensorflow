@@ -637,10 +637,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
     self._compare6(rmsprop.RMSPropOptimizer(0.01),
                    replicated_optimizer_state_sharding)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testGradientAccumulationDtype(self, reduction_method):
@@ -650,10 +647,14 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
     x = np.finfo(np.float16).max
     y = np.array(0.0, dtype=np.float16)
     initial_w = np.array(1.0, dtype=np.float16)
+
+    x = np.array([[0, 0, x, 0]], np.float16)
+    y = np.array([[0.0]], dtype=np.float16)
+    initial_w = np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float16)
     learning_rate = 2**-10
 
-    features = np.repeat(x, gradient_accumulation_count)
-    labels = np.repeat(y, gradient_accumulation_count)
+    features = np.repeat(x, gradient_accumulation_count, 0)
+    labels = np.repeat(y, gradient_accumulation_count, 0)
     dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
 
     infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
@@ -728,11 +729,12 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
       # This would overflow in fp16:
       if reduction_method == ga.GradientAccumulationReductionMethod.SUM:
         expected_accumulated_gradient = gradient_accumulation_count * x.astype(
-            gradient_accumulation_dtype)
+            gradient_accumulation_dtype)[0]
       else:
-        expected_accumulated_gradient = x.astype(gradient_accumulation_dtype)
+        expected_accumulated_gradient = x.astype(
+            gradient_accumulation_dtype)[0]
 
-      self.assertAllEqual(expected_accumulated_gradient,
+      self.assertAllClose(expected_accumulated_gradient,
                           actual_accumulated_gradient)
 
       sess.run(infeed_queue.deleter)
@@ -820,37 +822,27 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
   @test_util.deprecated_graph_mode_only
   def testGAReduceMethodNone(self):
     with self.assertRaisesRegex(
-        ValueError, 'reduction_method must be set to SUM, MEAN or '
-        'RUNNING_MEAN'):
+        ValueError, 'reduction_method must be set to one '
+        'of GradientAccumulationReductionMethod'):
       self.__makeGATestNetwork(None)
 
   @parameterized.parameters([
-      'SUM', 'sum', 'MEAN', 'mean', ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
+      'SUM', 'sum', 'MEAN', 'mean', 'RUNNING_MEAN', 'running_mean',
+      ga.GradientAccumulationReductionMethod.SUM,
+      ga.GradientAccumulationReductionMethod.MEAN,
+      ga.GradientAccumulationReductionMethod.RUNNING_MEAN
   ])
   @test_util.deprecated_graph_mode_only
   def testGAReduceMethodSupported(self, reduction_method):
     with ops.device("/device:IPU:0"):
       self.__makeGATestNetwork(reduction_method)
 
-  @parameterized.parameters([
-      'RUNNING_MEAN', 'running_mean',
-      ga.GradientAccumulationReductionMethod.RUNNING_MEAN
-  ])
-  @test_util.deprecated_graph_mode_only
-  def testGAReduceMethodUnsupported(self, reduction_method):
-    with self.assertRaisesRegex(
-        ValueError, 'Only GradientAccumulationReductionMethod.SUM and '
-        'GradientAccumulationReductionMethod.MEAN are '
-        'supported at the moment'):
-      self.__makeGATestNetwork(reduction_method)
-
   @parameterized.parameters(['Exp', 10])
   @test_util.deprecated_graph_mode_only
   def testGAReduceMethodInvalid(self, reduction_method):
     with self.assertRaisesRegex(
-        ValueError, 'reduction_method must be set to SUM, MEAN '
-        'or RUNNING_MEAN'):
+        ValueError, 'reduction_method must be set to one '
+        'of GradientAccumulationReductionMethod'):
       self.__makeGATestNetwork(reduction_method)
 
 

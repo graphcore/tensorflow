@@ -122,6 +122,7 @@ ENTRY main {
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
       accumulator_add));
   auto accumulator = accumulator_add->operand(0);
+  auto accumulator_scale = accumulator_add->operand(2);
 
   SerializeGradientAccumulation sga;
   EXPECT_TRUE(sga.Run(module).ValueOrDie());
@@ -161,10 +162,12 @@ ENTRY main {
     EXPECT_TRUE(Match(accumulator_add->fused_expression_root()->operand(0),
                       m::Parameter(accumulator_index)));
   } else {
-    EXPECT_TRUE(
-        Match(accumulator_add->fused_expression_root()->operand(0),
-              m::Multiply(m::Parameter(accumulator_index),
-                          m::Broadcast(m::ConstantScalar(param.acc_scale)))));
+    const auto accumulator_scale_index =
+        accumulator_add->operand_index(accumulator_scale);
+    EXPECT_TRUE(Match(
+        accumulator_add->fused_expression_root()->operand(0),
+        m::Multiply(m::Parameter(accumulator_index),
+                    m::Broadcast(m::Parameter(accumulator_scale_index)))));
   }
 }
 
@@ -207,6 +210,7 @@ ENTRY main {
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
       accumulator_add));
   auto accumulator = accumulator_add->operand(0);
+  auto accumulator_scale = accumulator_add->operand(2);
 
   SerializeGradientAccumulation sga;
   EXPECT_TRUE(sga.Run(module).ValueOrDie());
@@ -259,13 +263,15 @@ ENTRY main {
                           ->operand(0),
                       m::Parameter(accumulator_index)));
   } else {
-    EXPECT_TRUE(
-        Match(accumulator_add->fused_expression_root()
-                  ->operand(0)
-                  ->operand(0)
-                  ->operand(0),
-              m::Multiply(m::Parameter(accumulator_index),
-                          m::Broadcast(m::ConstantScalar(param.acc_scale)))));
+    const auto accumulator_scale_index =
+        accumulator_add->operand_index(accumulator_scale);
+    EXPECT_TRUE(Match(
+        accumulator_add->fused_expression_root()
+            ->operand(0)
+            ->operand(0)
+            ->operand(0),
+        m::Multiply(m::Parameter(accumulator_index),
+                    m::Broadcast(m::Parameter(accumulator_scale_index)))));
   }
 }
 
@@ -312,6 +318,7 @@ ENTRY main {
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
       accumulator_add));
   auto accumulator = accumulator_add->operand(0);
+  auto accumulator_scale = accumulator_add->operand(2);
 
   SerializeGradientAccumulation sga;
   EXPECT_TRUE(sga.Run(module).ValueOrDie());
@@ -394,9 +401,11 @@ ENTRY main {
       EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
       EXPECT_EQ(next->parameter_number(), 0);
     } else {
+      const auto accumulator_scale_index =
+          accumulator_add->operand_index(accumulator_scale);
       EXPECT_TRUE(Match(
-          next, m::Multiply(m::Parameter(0),
-                            m::Broadcast(m::ConstantScalar(param.acc_scale)))));
+          next, m::Multiply(m::Parameter(0), m::Broadcast(m::Parameter(
+                                                 accumulator_scale_index)))));
       EXPECT_EQ(next->operand(0)->parameter_number(), 0);
     }
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
@@ -443,6 +452,7 @@ ENTRY main {
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
       accumulator_add));
   auto accumulator = accumulator_add->operand(0);
+  auto accumulator_scale = accumulator_add->operand(2);
 
   SerializeGradientAccumulation sga;
   EXPECT_TRUE(sga.Run(module).ValueOrDie());
@@ -510,9 +520,11 @@ ENTRY main {
       EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
       EXPECT_EQ(next->parameter_number(), 0);
     } else {
+      const auto accumulator_scale_index =
+          accumulator_add->operand_index(accumulator_scale);
       EXPECT_TRUE(Match(
-          next, m::Multiply(m::Parameter(0),
-                            m::Broadcast(m::ConstantScalar(param.acc_scale)))));
+          next, m::Multiply(m::Parameter(0), m::Broadcast(m::Parameter(
+                                                 accumulator_scale_index)))));
       EXPECT_EQ(next->operand(0)->parameter_number(), 0);
     }
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
@@ -557,6 +569,7 @@ ENTRY main {
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
       accumulator_add));
   auto accumulator = accumulator_add->operand(0);
+  auto accumulator_scale = accumulator_add->operand(2);
 
   SerializeGradientAccumulation sga;
   EXPECT_TRUE(sga.Run(module).ValueOrDie());
@@ -565,9 +578,12 @@ ENTRY main {
     EXPECT_EQ(accumulator_add, accumulator);
   } else {
     auto* fused_root = accumulator_add->fused_expression_root();
+    const auto accumulator_scale_index =
+        accumulator_add->operand_index(accumulator_scale);
     EXPECT_TRUE(Match(
-        fused_root, m::Multiply(m::Parameter(0), m::Broadcast(m::ConstantScalar(
-                                                     param.acc_scale)))));
+        fused_root,
+        m::Multiply(m::Parameter(0),
+                    m::Broadcast(m::Parameter(accumulator_scale_index)))));
   }
   EXPECT_EQ(accumulator_add->shape().element_type(), param.accumulator_type);
 }
@@ -616,6 +632,7 @@ ENTRY main {
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
       accumulator_add));
   auto accumulator = accumulator_add->operand(0);
+  auto accumulator_scale = accumulator_add->operand(2);
 
   SerializeGradientAccumulation sga;
   EXPECT_TRUE(sga.Run(module).ValueOrDie());
@@ -699,9 +716,11 @@ ENTRY main {
       EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
       EXPECT_EQ(next->parameter_number(), 0);
     } else {
+      const auto accumulator_scale_index =
+          accumulator_add->operand_index(accumulator_scale);
       EXPECT_TRUE(Match(
-          next, m::Multiply(m::Parameter(0),
-                            m::Broadcast(m::ConstantScalar(param.acc_scale)))));
+          next, m::Multiply(m::Parameter(0), m::Broadcast(m::Parameter(
+                                                 accumulator_scale_index)))));
       EXPECT_EQ(next->operand(0)->parameter_number(), 0);
     }
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
@@ -749,6 +768,7 @@ ENTRY main {
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
       accumulator_add));
   auto accumulator = accumulator_add->operand(0);
+  auto accumulator_scale = accumulator_add->operand(2);
 
   SerializeGradientAccumulation sga;
   EXPECT_TRUE(sga.Run(module).ValueOrDie());
@@ -809,9 +829,11 @@ ENTRY main {
       EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
       EXPECT_EQ(next->parameter_number(), 0);
     } else {
+      const auto accumulator_scale_index =
+          accumulator_add->operand_index(accumulator_scale);
       EXPECT_TRUE(Match(
-          next, m::Multiply(m::Parameter(0),
-                            m::Broadcast(m::ConstantScalar(param.acc_scale)))));
+          next, m::Multiply(m::Parameter(0), m::Broadcast(m::Parameter(
+                                                 accumulator_scale_index)))));
       EXPECT_EQ(next->operand(0)->parameter_number(), 0);
     }
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
@@ -854,6 +876,7 @@ ENTRY main {
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
       accumulator_add));
   auto accumulator = accumulator_add->operand(0);
+  auto accumulator_scale = accumulator_add->operand(2);
 
   SerializeGradientAccumulation sga;
   EXPECT_TRUE(sga.Run(module).ValueOrDie());
@@ -890,10 +913,12 @@ ENTRY main {
         Match(accumulator_add->fused_expression_root()->operand(0)->operand(0),
               m::Parameter(accumulator_index)));
   } else {
-    EXPECT_TRUE(
-        Match(accumulator_add->fused_expression_root()->operand(0)->operand(0),
-              m::Multiply(m::Parameter(accumulator_index),
-                          m::Broadcast(m::ConstantScalar(param.acc_scale)))));
+    const auto accumulator_scale_index =
+        accumulator_add->operand_index(accumulator_scale);
+    EXPECT_TRUE(Match(
+        accumulator_add->fused_expression_root()->operand(0)->operand(0),
+        m::Multiply(m::Parameter(accumulator_index),
+                    m::Broadcast(m::Parameter(accumulator_scale_index)))));
   }
 }
 
@@ -912,7 +937,7 @@ ENTRY main {
   multiply1 = $GT[16,100] multiply(grads1, bscale1)
   multiply2 = $GT[16,100] multiply(grads2, bscale2)
   add_grads = $GT[16,100] add(multiply1, multiply2)
-  acc_scale = $AT[] constant($ACC_SCALE)
+  acc_scale = f32[] constant($ACC_SCALE)
   add = $AT[16,100] custom-call(accumulator, add_grads, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
   ROOT t = ($AT[16,100]) tuple(add)
 }
@@ -936,6 +961,7 @@ ENTRY main {
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
       accumulator_add));
   auto accumulator = accumulator_add->operand(0);
+  auto accumulator_scale = accumulator_add->operand(2);
 
   SerializeGradientAccumulation sga;
   EXPECT_TRUE(sga.Run(module).ValueOrDie());
@@ -950,21 +976,75 @@ ENTRY main {
   const auto* scaled_add_1 = accumulator_add->fused_expression_root();
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ScaledInplaceXbY)(scaled_add_1));
   const auto* scaled_add_0 = scaled_add_1->operand(0);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ScaledInplaceXbY)(scaled_add_0));
+  if (param.acc_scale == 1.0f) {
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ScaledInplaceXbY)(scaled_add_0));
+  } else {
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ScaledInplaceaXbY)(scaled_add_0));
+  }
+
+  int64 scaled_add_1_p1_idx = 3;
+  int64 scaled_add_1_p2_idx = 4;
+
+  int64 scaled_add_0_p0_idx = 0;
+  int64 scaled_add_0_p1_idx = 1;
+  int64 scaled_add_0_p2_idx = 2;
+
+  if (param.acc_scale != 1.0f) {
+    // Additional accumulator scale paramter at position 1.
+    scaled_add_1_p1_idx++;
+    scaled_add_1_p2_idx++;
+    scaled_add_0_p0_idx++;
+    scaled_add_0_p1_idx++;
+    scaled_add_0_p2_idx++;
+  }
 
   if (param.gradient_type == param.accumulator_type) {
-    EXPECT_TRUE(Match(
-        scaled_add_1,
-        m::CustomCall(
-            m::CustomCall(m::Op() /* acc */, m::Parameter(1), m::Parameter(2)),
-            m::Parameter(3), m::Parameter(4))));
+    if (param.acc_scale == 1.0f) {
+      // This creates a fusion operation within which we match against
+      // ScaledInplaceXbY(ScaledInplaceXbY(accumulator, grads1, scale1), grads2,
+      // scale2)
+      EXPECT_TRUE(
+          Match(scaled_add_1,
+                m::CustomCall(m::CustomCall(m::Op() /* acc */,
+                                            m::Parameter(scaled_add_0_p1_idx),
+                                            m::Parameter(scaled_add_0_p2_idx)),
+                              m::Parameter(scaled_add_1_p1_idx),
+                              m::Parameter(scaled_add_1_p2_idx))));
+    } else {
+      // This creates a fusion operation within which we match against
+      // ScaledInplaceXbY(ScaledInplaceaXbY(accumulator, grads1, acc_scale,
+      // scale1), grads2, scale2)
+      EXPECT_TRUE(
+          Match(scaled_add_1,
+                m::CustomCall(m::CustomCall(m::Op() /* acc */,
+                                            m::Parameter(scaled_add_0_p0_idx),
+                                            m::Parameter(scaled_add_0_p1_idx),
+                                            m::Parameter(scaled_add_0_p2_idx)),
+                              m::Parameter(scaled_add_1_p1_idx),
+                              m::Parameter(scaled_add_1_p2_idx))));
+    }
   } else {
-    EXPECT_TRUE(
-        Match(scaled_add_1,
-              m::CustomCall(
-                  m::CustomCall(m::Op() /* acc */, m::Convert(m::Parameter(3)),
-                                m::Convert(m::Parameter(4))),
-                  m::Convert(m::Parameter(1)), m::Convert(m::Parameter(2)))));
+    if (param.acc_scale == 1.0f) {
+      // This creates a fusion operation within which we match against
+      // ScaledInplaceXbY(ScaledInplaceXbY(accumulator, Convert(grads1),
+      // scale1), Convert(grads2), scale2)
+      EXPECT_TRUE(
+          Match(scaled_add_1,
+                m::CustomCall(
+                    m::CustomCall(m::Op() /* acc */,
+                                  m::Convert(m::Parameter(2)), m::Parameter(3)),
+                    m::Convert(m::Parameter(1)), m::Parameter(4))));
+    } else {
+      // This creates a fusion operation within which we match against
+      // ScaledInplaceXbY(ScaledInplaceaXbY(accumulator, Convert(grads1),
+      // acc_scale, scale1), Convert(grads2), scale2)
+      EXPECT_TRUE(Match(
+          scaled_add_1,
+          m::CustomCall(
+              m::CustomCall(m::Op() /* acc */, m::Convert(m::Parameter(2)),
+                            m::Parameter(3), m::Parameter(4)),
+              m::Convert(m::Parameter(1)), m::Parameter(5))));
+    }
   }
 
   if (param.acc_scale == 1.0f) {
@@ -972,10 +1052,11 @@ ENTRY main {
         Match(accumulator_add->fused_expression_root()->operand(0)->operand(0),
               m::Parameter(accumulator_index)));
   } else {
+    const auto accumulator_scale_index =
+        accumulator_add->operand_index(accumulator_scale);
     EXPECT_TRUE(
         Match(accumulator_add->fused_expression_root()->operand(0)->operand(0),
-              m::Multiply(m::Parameter(accumulator_index),
-                          m::Broadcast(m::ConstantScalar(param.acc_scale)))));
+              m::Parameter(accumulator_index)));
   }
 }
 
@@ -1012,6 +1093,7 @@ ENTRY main {
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
       accumulator_add));
   auto accumulator = accumulator_add->operand(0);
+  auto accumulator_scale = accumulator_add->operand(2);
 
   SerializeGradientAccumulation sga;
   EXPECT_TRUE(sga.Run(module).ValueOrDie());
@@ -1039,9 +1121,11 @@ ENTRY main {
       EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
       EXPECT_EQ(next->parameter_number(), 0);
     } else {
+      const auto accumulator_scale_index =
+          accumulator_add->operand_index(accumulator_scale);
       EXPECT_TRUE(Match(
-          next, m::Multiply(m::Parameter(0),
-                            m::Broadcast(m::ConstantScalar(param.acc_scale)))));
+          next, m::Multiply(m::Parameter(0), m::Broadcast(m::Parameter(
+                                                 accumulator_scale_index)))));
       EXPECT_EQ(next->operand(0)->parameter_number(), 0);
     }
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);

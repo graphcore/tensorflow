@@ -104,10 +104,7 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase,
           batch_serialization_iterations=4,
           reduction_method=ga.GradientAccumulationReductionMethod.SUM)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare1(self, reduction_method):
     def dataset_fn():
@@ -121,8 +118,8 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase,
 
       return dataset.map(dataset_parser)
 
-    gradient_accumulation_count = 24
-    repeat_count = 2
+    gradient_accumulation_count = 8
+    repeat_count = 3
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
@@ -169,13 +166,9 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase,
         self,
         19826,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
-        batch_serialization_iterations=1,
         reduction_method=reduction_method)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self, reduction_method):
     # Resnet like network.

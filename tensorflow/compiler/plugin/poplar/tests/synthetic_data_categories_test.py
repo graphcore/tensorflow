@@ -250,10 +250,7 @@ class SyntheticDataMemoryUsage(absl.testing.parameterized.TestCase):
                   lambda category:
                   (category != "hostembedding" and category != "seed"),
                   categories)),
-          reduction_method=[
-              ga.GradientAccumulationReductionMethod.SUM,
-              ga.GradientAccumulationReductionMethod.MEAN
-          ]))
+          reduction_method=list(ga.GradientAccumulationReductionMethod)))
   def testCategories(self, category, reduction_method):
     self.assertIsNotNone(
         SyntheticDataMemoryUsage.reference_usage[reduction_method])
@@ -303,10 +300,7 @@ class SyntheticDataMemoryUsage(absl.testing.parameterized.TestCase):
 
     self.assertEqual(output, expected_output)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   def testFlagsCanBeUsedWithSyntheticDataInitializer(self, reduction_method):
     flags = " --synthetic_data_categories=infeed --synthetic_data_initializer=2"
     output = run_graph(memory_test_graph, reduction_method, flags)

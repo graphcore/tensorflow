@@ -234,10 +234,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase,
       # Check the indices are correct, but the real test is no timeout.
       self.assertAllClose(result[0][0], i_h)
 
-  @parameterized.parameters([
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN
-  ])
+  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
   @test_util.deprecated_graph_mode_only
   def testModel(self, reduction_method):
     shape = [1000, 256]

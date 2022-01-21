@@ -242,10 +242,8 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
   @combinations.generate(
       combinations.combine(gradient_accumulation_count=[4, 8],
                            num_weight_updates_per_loop=[1, 2],
-                           reduction_method=[
-                               ga.GradientAccumulationReductionMethod.SUM,
-                               ga.GradientAccumulationReductionMethod.MEAN
-                           ]))
+                           reduction_method=list(
+                               ga.GradientAccumulationReductionMethod)))
   def testTrainWithAnalyticalGradientReference(self,
                                                gradient_accumulation_count,
                                                num_weight_updates_per_loop,
@@ -313,11 +311,11 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
           expected_w -= learning_rate * x
 
       expected_losses.append(np.mean(step_losses))
-      self.assertEqual(expected_w, estimator.get_variable_value("w"))
+      self.assertAllClose([expected_w], [estimator.get_variable_value("w")])
 
     logged_losses = _get_summary_values(estimator.model_dir,
                                         model_fn_lib.LOSS_METRIC_KEY)
-    self.assertEqual(expected_losses, logged_losses)
+    self.assertAllClose(expected_losses, logged_losses)
 
   @combinations.generate(
       combinations.combine(
