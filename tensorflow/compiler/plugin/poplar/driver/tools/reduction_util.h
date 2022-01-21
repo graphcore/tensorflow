@@ -19,10 +19,13 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+
 namespace popops {
 namespace expr {
 enum class BinaryOpType;
 }
+enum class CollectiveOperator;
 enum class Operation;
 }  // namespace popops
 
@@ -65,6 +68,10 @@ StatusOr<popops::Operation> GetPoplibsReductionOperation(
 // instruction and dtype.
 Literal GetIdentityConstantLiteral(const HloInstruction* inst,
                                    const PrimitiveType& dtype);
+
+// Convert a xla::poplarplugin::CollectiveOperator to a popops one.
+StatusOr<popops::CollectiveOperator> ToPoplarCollectiveOperator(
+    CollectiveOperator op);
 
 }  // namespace poplarplugin
 }  // namespace xla

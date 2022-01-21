@@ -237,6 +237,7 @@ poplar_cc_library(
     ],
     deps = [
         "//tensorflow/compiler/plugin/poplar/driver:tensor",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:within_replicas",
     ],
     alwayslink = True,
 )

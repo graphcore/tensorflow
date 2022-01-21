@@ -276,6 +276,8 @@ void SetRuntimeReplicaOptions(poplar::OptionFlags* option_flags,
 
 bool HasIOTiles(CompilerResources& res);
 
+int64 GetNumIPUs(CompilerResources& res);
+
 void CheckPoplarPackageHash();
 }  // namespace poplarplugin
 }  // namespace xla

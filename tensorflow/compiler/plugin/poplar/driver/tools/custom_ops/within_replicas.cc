@@ -27,74 +27,100 @@ namespace xla {
 namespace poplarplugin {
 
 // Constructor.
-HloPoplarAllGatherWithinReplicaInstruction::
-    HloPoplarAllGatherWithinReplicaInstruction(
-        absl::Span<HloInstruction* const> inputs, const Shape& output_shape)
-    : HloPoplarInstruction(output_shape, inputs,
-                           PoplarOp::AllGatherWithinReplica) {}
+HloWithinReplicaInstruction::HloWithinReplicaInstruction(
+    absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
+    PoplarOp op)
+    : HloPoplarInstruction(output_shape, inputs, op) {}
 
-absl::flat_hash_set<int64>
-HloPoplarAllGatherWithinReplicaInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64> HloWithinReplicaInstruction::AllocatingIndices()
+    const {
   return {};
 }
 
-bool HloPoplarAllGatherWithinReplicaInstruction::AllocatingOutput() const {
-  return false;
-}
+bool HloWithinReplicaInstruction::AllocatingOutput() const { return false; }
 
 absl::flat_hash_map<int64, int64>
-HloPoplarAllGatherWithinReplicaInstruction::LayoutDependencies() const {
+HloWithinReplicaInstruction::LayoutDependencies() const {
   return {};
 }
 
-HloPoplarUseDescriptions
-HloPoplarAllGatherWithinReplicaInstruction::GetUseDescriptions() const {
+HloPoplarUseDescriptions HloWithinReplicaInstruction::GetUseDescriptions()
+    const {
   return UseDescriptionsNoInputOutputAlias();
 }
 
-HloPoplarBufferDescriptions
-HloPoplarAllGatherWithinReplicaInstruction::GetBufferDescriptions() const {
+HloPoplarBufferDescriptions HloWithinReplicaInstruction::GetBufferDescriptions()
+    const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
-const FindConsumersExtensionResults
-HloPoplarAllGatherWithinReplicaInstruction::FindConsumers(
+const FindConsumersExtensionResults HloWithinReplicaInstruction::FindConsumers(
     FindConsumersExtensionParams params) const {
   return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
-bool HloPoplarAllGatherWithinReplicaInstruction::AllowNonInplaceLowering()
-    const {
+bool HloWithinReplicaInstruction::AllowNonInplaceLowering() const {
   return false;
 }
 
-bool HloPoplarAllGatherWithinReplicaInstruction::IsPopOpsElementwise() const {
-  return false;
-}
+bool HloWithinReplicaInstruction::IsPopOpsElementwise() const { return false; }
 
-// Creates an instance of a HloPoplarAllGatherWithinReplicaInstruction
-std::unique_ptr<HloInstruction> CreatePoplarAllGatherWithinReplica(
-    absl::Span<HloInstruction* const> inputs, const Shape& output_shape) {
-  return absl::make_unique<HloPoplarAllGatherWithinReplicaInstruction>(
-      inputs, output_shape);
+HloAllGatherWithinReplicaInstruction::HloAllGatherWithinReplicaInstruction(
+    absl::Span<HloInstruction* const> inputs, const Shape& output_shape)
+    : HloWithinReplicaInstruction(inputs, output_shape,
+                                  PoplarOp::AllGatherWithinReplica) {}
+
+std::vector<std::string>
+HloAllGatherWithinReplicaInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
 }
 
 std::unique_ptr<HloInstruction>
-HloPoplarAllGatherWithinReplicaInstruction::CloneWithNewOperandsImpl(
+HloAllGatherWithinReplicaInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
   return CreatePoplarAllGatherWithinReplica(operands, shape);
 }
 
+HloReduceScatterWithinReplicaInstruction::
+    HloReduceScatterWithinReplicaInstruction(
+        absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
+        CollectiveOperator op)
+    : HloWithinReplicaInstruction(inputs, output_shape,
+                                  PoplarOp::ReduceScatterWithinReplica),
+      op_(op) {}
+
 std::vector<std::string>
-HloPoplarAllGatherWithinReplicaInstruction::ExtraPoplarAttributesToStringImpl(
+HloReduceScatterWithinReplicaInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  return {};
+  std::vector<std::string> attributes;
+  attributes.push_back(absl::StrCat("op=", CollectiveOperator_Name(op_)));
+  return attributes;
+}
+
+std::unique_ptr<HloInstruction>
+HloReduceScatterWithinReplicaInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloCloneContext*) const {
+  return CreatePoplarReduceScatterWithinReplica(operands, shape, op_);
+}
+
+std::unique_ptr<HloInstruction> CreatePoplarAllGatherWithinReplica(
+    absl::Span<HloInstruction* const> inputs, const Shape& output_shape) {
+  return absl::make_unique<HloAllGatherWithinReplicaInstruction>(inputs,
+                                                                 output_shape);
+}
+
+std::unique_ptr<HloInstruction> CreatePoplarReduceScatterWithinReplica(
+    absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
+    CollectiveOperator op) {
+  return absl::make_unique<HloReduceScatterWithinReplicaInstruction>(
+      inputs, output_shape, op);
 }
 
 namespace {
-
-static HloPoplarInstructionFactory factory(
+static HloPoplarInstructionFactory all_gather_factory(
     PoplarOp::AllGatherWithinReplica,
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
@@ -102,7 +128,22 @@ static HloPoplarInstructionFactory factory(
                                                 call->shape());
     });
 
-}  // namespace
+static HloPoplarInstructionFactory reduce_scatter_factory(
+    PoplarOp::ReduceScatterWithinReplica,
+    [](HloCustomCallInstruction* call)
+        -> StatusOr<std::unique_ptr<HloInstruction>> {
+      auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
 
+      CollectiveOperator op;
+      TF_ASSIGN_OR_RETURN(std::string op_string,
+                          attribute_map.GetAttributeAsString("op"));
+      if (!CollectiveOperator_Parse(op_string, &op)) {
+        return InternalError("Failed to parse reduce-scatter `op` attribute.");
+      }
+
+      return CreatePoplarReduceScatterWithinReplica(call->operands(),
+                                                    call->shape(), op);
+    });
+}  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

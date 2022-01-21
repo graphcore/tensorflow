@@ -24,6 +24,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_scatter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/reduction_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -31,32 +32,6 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-
-StatusOr<popops::CollectiveOperator> ToPoplarCollectiveOperator(
-    CollectiveOperator op) {
-  switch (op) {
-    case CollectiveOperator::COLLECTIVE_OP_ADD:
-      return popops::CollectiveOperator::ADD;
-    case CollectiveOperator::COLLECTIVE_OP_MUL:
-      return popops::CollectiveOperator::MUL;
-    case CollectiveOperator::COLLECTIVE_OP_MIN:
-      return popops::CollectiveOperator::MIN;
-    case CollectiveOperator::COLLECTIVE_OP_MAX:
-      return popops::CollectiveOperator::MAX;
-    case CollectiveOperator::COLLECTIVE_OP_LOGICAL_AND:
-      return popops::CollectiveOperator::LOGICAL_AND;
-    case CollectiveOperator::COLLECTIVE_OP_LOGICAL_OR:
-      return popops::CollectiveOperator::LOGICAL_OR;
-    case CollectiveOperator::COLLECTIVE_OP_SQUARE_ADD:
-      return popops::CollectiveOperator::SQUARE_ADD;
-    case CollectiveOperator::COLLECTIVE_OP_LOCAL:
-      return popops::CollectiveOperator::LOCAL;
-    case CollectiveOperator::COLLECTIVE_OP_MEAN:
-      return popops::CollectiveOperator::MEAN;
-    default:
-      return InternalError("Invalid collective operator type.");
-  }
-}
 
 class ReduceScatterOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(

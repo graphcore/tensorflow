@@ -14,12 +14,17 @@ limitations under the License.
 ==============================================================================*/
 #include <gcl/Collectives.hpp>
 #include <poplar/DebugContext.hpp>
+#include <popops/Pad.hpp>
+
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/within_replicas.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/reduction_util.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
 
@@ -27,7 +32,44 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
+Status ValidateInputSharding(const HloInstruction* inst,
+                             unsigned int ipu_count) {
+  const auto operand_count = inst->operand_count();
+  if (operand_count == ipu_count) {
+    for (auto i = 0u; i < ipu_count; ++i) {
+      const auto* operand = inst->operand(i);
+
+      if (operand->has_sharding()) {
+        const auto& sharding = operand->sharding();
+
+        const auto sharding_vector =
+            GetShardingDeviceIdVector(operand->sharding());
+        const bool valid_sharding =
+            sharding_vector.size() == 1 && sharding_vector.front() == i;
+        if (!valid_sharding) {
+          return FailedPrecondition(
+              "'%s' has sharding '%s' but expected it to be on shard %i. "
+              "Operands can only be sharded on 1 device and must be "
+              "must be provided in incrementing shard order.",
+              operand->name(), sharding.ToString(), i);
+        }
+      } else {
+        return FailedPrecondition("Missing shard information on %s",
+                                  operand->name());
+      }
+    }
+  } else {
+    return FailedPrecondition(
+        "'%s' should have an operand for each ipu, but got %i operands for "
+        "%i IPUs.",
+        inst->name(), operand_count, ipu_count);
+  }
+
+  return Status::OK();
+}
+
 class AllGatherWithinReplicaOp : public PoplarOpDef {
+ public:
   StatusOr<poplar::program::Sequence> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
@@ -35,16 +77,14 @@ class AllGatherWithinReplicaOp : public PoplarOpDef {
     PoplarOpDefDebugInfo debug_info(debug_context, "AllGatherWithinReplicaOp");
     poplar::program::Sequence seq({}, debug_info);
 
-    auto& master_graph = GetMasterGraph(res);
-    const auto ipu_count = master_graph.getTarget().getNumIPUs();
-
+    const auto ipu_count = GetNumIPUs(res);
     TF_RETURN_IF_ERROR(ValidateInputSharding(inst, ipu_count));
     TF_ASSIGN_OR_RETURN(
         auto chunks, BuildInputChunks(inst, res, tensor_map, seq, debug_info));
 
-    poplar::Tensor output =
-        gcl::allGatherWithinReplica(master_graph, chunks, seq, {debug_info},
-                                    GetReplicatedCollectiveOptions(res));
+    poplar::Tensor output = gcl::allGatherWithinReplica(
+        GetMasterGraph(res), chunks, seq, {debug_info},
+        GetReplicatedCollectiveOptions(res));
 
     CHECK_EQ(ipu_count, output.dim(0))
         << "Expecting the gathered tensor to have an output on each IPU.";
@@ -56,43 +96,6 @@ class AllGatherWithinReplicaOp : public PoplarOpDef {
   }
 
  private:
-  static Status ValidateInputSharding(const HloInstruction* inst,
-                                      unsigned int ipu_count) {
-    const auto operand_count = inst->operand_count();
-    if (operand_count == ipu_count) {
-      for (auto i = 0u; i < ipu_count; ++i) {
-        const auto* operand = inst->operand(i);
-
-        if (operand->has_sharding()) {
-          const auto& sharding = operand->sharding();
-
-          const auto sharding_vector =
-              GetShardingDeviceIdVector(operand->sharding());
-          const bool valid_sharding =
-              sharding_vector.size() == 1 && sharding_vector.front() == i;
-          if (!valid_sharding) {
-            return FailedPrecondition(
-                "'%s' has sharding '%s' but expected it to be on shard %i. "
-                "allGatherWithinReplica operands can only be sharded on 1 "
-                "device "
-                "and must be provided in incrementing shard order.",
-                operand->name(), sharding.ToString(), i);
-          }
-        } else {
-          return FailedPrecondition("Missing shard information on %s",
-                                    operand->name());
-        }
-      }
-    } else {
-      return FailedPrecondition(
-          "'%s' should have an operand for each ipu, but got %i operands for "
-          "%i IPUs.",
-          inst->name(), operand_count, ipu_count);
-    }
-
-    return Status::OK();
-  }
-
   static StatusOr<gcl::Chunks> BuildInputChunks(
       const HloInstruction* inst, CompilerResources& res, TensorMap& tensor_map,
       poplar::program::Sequence& seq, const PoplarOpDefDebugInfo& debug_info) {
@@ -122,6 +125,99 @@ class AllGatherWithinReplicaOp : public PoplarOpDef {
 };
 
 REGISTER_POPLAR_OP(AllGatherWithinReplica, AllGatherWithinReplicaOp);
+
+class ReduceScatterWithinReplicaOp : public PoplarOpDef {
+ public:
+  StatusOr<poplar::program::Sequence> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context,
+                                    "ReduceScatterWithinReplicaOp");
+    poplar::program::Sequence seq({}, debug_info);
+
+    const auto ipu_count = GetNumIPUs(res);
+    TF_RETURN_IF_ERROR(ValidateInputSharding(inst, ipu_count));
+
+    TF_ASSIGN_OR_RETURN(
+        auto sharded_input,
+        BuildInputTensor(inst, res, tensor_map, seq, debug_info));
+
+    const auto* reduce_scatter_inst =
+        Cast<HloReduceScatterWithinReplicaInstruction>(inst);
+    TF_ASSIGN_OR_RETURN(auto op,
+                        ToPoplarCollectiveOperator(
+                            reduce_scatter_inst->GetCollectiveOperator()));
+
+    auto chunks = gcl::reduceScatterWithinReplica(
+        GetMasterGraph(res), sharded_input, op, seq,
+        {debug_info, "ReduceScatterWithinReplica"},
+        GetReplicatedCollectiveOptions(res));
+
+    CHECK_EQ(ipu_count, chunks.chunks.size())
+        << "Expecting to have a chunk for each IPU.";
+    TF_CHECK_OK(SetOutputs(chunks.chunks, inst, res, tensor_map));
+
+    return seq;
+  }
+
+ private:
+  static StatusOr<poplar::Tensor> BuildInputTensor(
+      const HloInstruction* inst, CompilerResources& res, TensorMap& tensor_map,
+      poplar::program::Sequence& seq, const PoplarOpDefDebugInfo& debug_info) {
+    std::vector<poplar::Tensor> input_shards;
+
+    for (auto i = 0u; i < inst->operand_count(); ++i) {
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor input,
+          FindInstructionInput(tensor_map, res, inst, i, seq, {debug_info}));
+
+      CHECK_EQ(input.rank(), 1);
+      input_shards.push_back(input.expand({0}));
+    }
+
+    const auto sharded_input = poplar::concat(input_shards, 0);
+    return sharded_input;
+  }
+
+  Status SetOutputs(std::vector<gcl::Chunk>& output_chunks,
+                    const HloInstruction* inst, CompilerResources& res,
+                    TensorMap& tensor_map) {
+    const auto output_tensor_shape =
+        ShapeUtil::GetTupleElementShape(inst->shape(), 0);
+    CHECK_EQ(output_tensor_shape.rank(), 1);
+    // Each tuple element is a rank 1 tensor of the same size.
+    const auto output_tensor_size = output_tensor_shape.dimensions(0);
+
+    for (auto i = 0; i < output_chunks.size(); ++i) {
+      auto tensor = output_chunks[i].tensor;
+      CHECK_EQ(tensor.rank(), 1);
+
+      // Pad everything to a consistent shape. We don't know how
+      // reduceScatterWithinReplica will distribute the results, so to generate
+      // the HLO with the real sizes we'd have to know some implementation
+      // detail of gcl. It's easier to say everything will be size
+      // Ceil(num_elements, num_replicas), like reduceScatterCrossReplica, and
+      // pad the difference.
+      const auto size = tensor.dim(0);
+      const auto missing_elements = size != output_tensor_size;
+      if (missing_elements) {
+        CHECK_LT(size, output_tensor_size);
+
+        const auto pad_count = output_tensor_size - size;
+        auto& graph_shard = GetGraphWithOutputIndex(res, inst, i);
+        tensor = popops::pad(graph_shard, tensor, /*paddingLower*/ 0,
+                             /*paddingUpper*/ pad_count, /*dim*/ 0, /*val*/ 0);
+      }
+
+      TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, i, tensor));
+    }
+
+    return Status::OK();
+  }
+};
+
+REGISTER_POPLAR_OP(ReduceScatterWithinReplica, ReduceScatterWithinReplicaOp);
 
 }  // namespace
 }  // namespace poplarplugin

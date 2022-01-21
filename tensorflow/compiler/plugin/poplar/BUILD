@@ -725,6 +725,7 @@ xla_test(
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
+        ":test_utils",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
