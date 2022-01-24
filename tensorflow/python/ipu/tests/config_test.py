@@ -116,9 +116,10 @@ class TestConfig(ipu.config._ConfigBase):
     """
     This is an attribute with a very advanced type hint
     """
-    self.attr6: typing.Tuple[typing.List[typing.Union[float,
-                                                      typing.Tuple[str]]],
-                             ...] = ([1.0],)
+    self.attr6: typing.Tuple[typing.List[typing.Union[float, typing.
+                                                      Tuple[str]]], ...] = ([
+                                                          1.0
+                                                      ],)
     """
     This is the docstring for the nested1 category
     """
@@ -1156,10 +1157,10 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
   def testOptimizationsMergeInfeedIOCopies(self):
     cfg = ipu.config.IPUConfig()
     pb = cfg._create_protobuf()
-    self.assertEqual(pb.speed_size_config.merge_infeed_io_copies, False)
-    cfg.optimizations.merge_infeed_io_copies = True
-    pb = cfg._create_protobuf()
     self.assertEqual(pb.speed_size_config.merge_infeed_io_copies, True)
+    cfg.optimizations.merge_infeed_io_copies = False
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.speed_size_config.merge_infeed_io_copies, False)
 
   def testOptimizationsMaximumCrossReplicaSumBufferSize(self):
     cfg = ipu.config.IPUConfig()

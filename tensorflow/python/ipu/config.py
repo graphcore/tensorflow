@@ -1678,7 +1678,7 @@ class _OptimizationConfig(_ConfigBase):
     one larger copy.  This may reduce the time to copy data from the host, at
     the expense of increasing the live tensor memory on the device.
     """
-    self.merge_infeed_io_copies = False
+    self.merge_infeed_io_copies = True
     """
     The maximum number of bytes that can be waiting before a cross replica sum
     op is scheduled. 0 (default) means that they are scheduled immediately.
