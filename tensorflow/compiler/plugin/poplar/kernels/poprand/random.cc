@@ -70,6 +70,98 @@ class PopopsTruncatedNormalOp : public XlaOpKernel, IpuOpKernel {
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsTruncatedNormalOp);
 };
 
+class PopopsStatelessRandomGetKeyCounterOp : public XlaOpKernel,
+                                             public IpuOpKernel {
+ public:
+  explicit PopopsStatelessRandomGetKeyCounterOp(OpKernelConstruction* ctx)
+      : XlaOpKernel(ctx) {}
+
+  void Compile(XlaOpKernelContext* ctx) override {
+    // #TODO: T54602
+    // We do not support any RNG algorithms, so in order to ensure compatibility
+    // we pass the seed directly to the next Op instead of converting it to a
+    // key and counter pair.
+    const auto seed = ConvertElementType(
+        ConvertElementType(ctx->Input(0), xla::U32), xla::U64);
+    ctx->SetOutput(0, seed);
+    ctx->SetOutput(1, seed);
+  }
+};
+
+REGISTER_XLA_OP(Name("StatelessRandomGetKeyCounter").Device(DEVICE_IPU_XLA_JIT),
+                PopopsStatelessRandomGetKeyCounterOp);
+
+template <PoplarOp Op>
+class PopopsStatelessV2Op : public XlaOpKernel, public IpuOpKernel {
+ public:
+  explicit PopopsStatelessV2Op(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {}
+
+  void Compile(XlaOpKernelContext* ctx) override {
+    // #TODO: T54602
+    constexpr int key_input_idx = 1;
+    constexpr int minval_input_idx = 4;
+    constexpr int maxval_input_idx = 5;
+
+    const DataType dtype = output_type(0);
+
+    TensorShape shape;
+    OP_REQUIRES_OK(ctx, ctx->ConstantInputAsShape(0, &shape));
+    xla::Shape xla_shape;
+    OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
+
+    std::vector<xla::XlaOp> operands = {ctx->Input(key_input_idx)};
+
+    switch (Op) {
+      case PoplarOp::StatelessRandomUniform: {
+        attribute_map_.AddAttribute("min_val", 0.0F);
+        attribute_map_.AddAttribute("max_val", 1.0F);
+      } break;
+      case PoplarOp::StatelessRandomUniformInt: {
+        operands.emplace_back(ctx->Input(minval_input_idx));
+        operands.emplace_back(ctx->Input(maxval_input_idx));
+      } break;
+      default:
+        break;
+    }
+
+    // Currently we do not support any different RNG state algorithms, except
+    // for the default one in Poplar.
+    xla::XlaOp output =
+        xla::CustomCall(ctx->builder(), PoplarOp_Name(Op), std::move(operands),
+                        xla_shape, attribute_map_.Serialise());
+
+    ctx->SetOutput(0, output);
+  }
+};
+
+REGISTER_XLA_OP(Name("StatelessTruncatedNormalV2")
+                    .Device(DEVICE_IPU_XLA_JIT)
+                    .CompileTimeConstantInput("shape")
+                    .CompileTimeConstantInput("alg")
+                    .TypeConstraint("dtype", {DT_FLOAT, DT_HALF}),
+                PopopsStatelessV2Op<PoplarOp::StatelessTruncatedNormal>);
+
+REGISTER_XLA_OP(Name("StatelessRandomNormalV2")
+                    .Device(DEVICE_IPU_XLA_JIT)
+                    .CompileTimeConstantInput("shape")
+                    .CompileTimeConstantInput("alg")
+                    .TypeConstraint("dtype", {DT_FLOAT, DT_HALF}),
+                PopopsStatelessV2Op<PoplarOp::StatelessRandomNormal>);
+
+REGISTER_XLA_OP(Name("StatelessRandomUniformV2")
+                    .Device(DEVICE_IPU_XLA_JIT)
+                    .CompileTimeConstantInput("shape")
+                    .CompileTimeConstantInput("alg")
+                    .TypeConstraint("dtype", {DT_FLOAT, DT_HALF}),
+                PopopsStatelessV2Op<PoplarOp::StatelessRandomUniform>);
+
+REGISTER_XLA_OP(Name("StatelessRandomUniformIntV2")
+                    .Device(DEVICE_IPU_XLA_JIT)
+                    .CompileTimeConstantInput("shape")
+                    .CompileTimeConstantInput("alg")
+                    .TypeConstraint("dtype", {DT_INT32}),
+                PopopsStatelessV2Op<PoplarOp::StatelessRandomUniformInt>);
+
 class PopopsStatelessOp : public XlaOpKernel, public IpuOpKernel {
  public:
   explicit PopopsStatelessOp(OpKernelConstruction* ctx, PoplarOp op_type)
