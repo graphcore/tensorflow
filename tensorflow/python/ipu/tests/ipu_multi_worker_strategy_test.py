@@ -18,6 +18,7 @@ import glob
 import json
 import multiprocessing
 import os
+import re
 
 import numpy as np
 
@@ -963,8 +964,10 @@ class IPUMultiWorkerStrategyV1MultiProcessTest(googletest.TestCase):
 
       # There should be 2 reductions on the CPU per repeat loop iteration
       # (one for each gradient).
-      self.assertEqual(2 * repeat_count,
-                       sum(1 for n in cpu_nodes if "CollectiveReduce" in n))
+      self.assertEqual(
+          2 * repeat_count,
+          sum(1 for n in cpu_nodes
+              if re.match(r".*CollectiveReduce[^\/]*$", n)))
 
       # There should be 1 XLA run on the IPU
       self.assertEqual(1, sum(1 for n in ipu_nodes if "xla_run" in n))
