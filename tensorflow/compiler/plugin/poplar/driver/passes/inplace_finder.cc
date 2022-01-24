@@ -230,9 +230,75 @@ std::vector<HloInstruction*> FindInplaceCandidates(
   return OrderInplaceCandidates(std::move(candidates), comp);
 }
 
+bool ConstantSharedBetweenInplaceLoops(const HloInstruction* inst) {
+  // Effectively scalar consts. This will accept scalars with extra
+  // singular dims too. Clone wide consts because they are broadcasts of scalar.
+  bool supported_const = (inst->opcode() == HloOpcode::kConstant &&
+                          ShapeUtil::IsEffectiveScalar(inst->shape())) ||
+                         IsWideConstant(inst) ||
+                         IsPoplarInstruction(PoplarOp::Uninitialised, inst);
+  if (!supported_const) {
+    return false;
+  }
+  // Only consider constants used in while/repeat loops.
+  if (!absl::c_any_of(inst->users(), [](const HloInstruction* inst) {
+        return IsRepeatLoop(inst) || inst->opcode() == HloOpcode::kWhile ||
+               (inst->opcode() == HloOpcode::kTuple &&
+                absl::c_any_of(inst->users(), [](const HloInstruction* user) {
+                  return user->opcode() == HloOpcode::kWhile;
+                }));
+      })) {
+    return false;
+  }
+  // Only if there's more than one (potentially) inplace user.
+  std::size_t count =
+      absl::c_count_if(inst->users(), [](const HloInstruction* user) {
+        return GetInplaceDescription(user).IsInplaceType();
+      });
+  return count > 1;
+}
+
+StatusOr<bool> CloneConstantsSharedBetweenInplaceLoops(HloModule* module) {
+  bool changed = false;
+  for (auto* comp : module->MakeComputationPostOrder()) {
+    for (auto* inst : comp->MakeInstructionPostOrder()) {
+      if (!ConstantSharedBetweenInplaceLoops(inst)) {
+        continue;
+      }
+      VLOG(3) << "Found shared constant to clone: " << inst->name();
+      auto users = inst->users();
+      for (auto* user : users) {
+        auto indices = user->OperandIndices(inst);
+        for (int64_t idx : indices) {
+          TF_RETURN_IF_ERROR(user->ReplaceOperandWith(
+              idx, comp->AddInstruction(inst->Clone(""))));
+        }
+      }
+      TF_RETURN_IF_ERROR(comp->RemoveInstruction(inst));
+    }
+  }
+  return changed;
+}
+
 }  // namespace
 
 StatusOr<bool> InplaceFinder::Run(HloModule* module) {
+  // Remove situation when sharing constant between inplace ops will prevent
+  // inplace finder from inplacing them. The simpliest example would be
+  // (pseudocode):
+  //   loop = while((counter, limit), condition=(counter < limit))
+  //   ROOT tuple = (loop, counter, limit, learning_rate)
+  // The loop above can't be lowered inplace, because it's read/write on its
+  // arguments. Following the logic in ConvertToInplaceReadWrite,
+  // inplace operand users should be scheduled after root tuple, but it's
+  // impossible to do so. To resolve this situation, we can clone scalar
+  // constants if they have inplace instructions among their users. This
+  // optimisation temporarily limited to the loops only, but it could be used
+  // for any other inplace instructions too.
+
+  TF_ASSIGN_OR_RETURN(bool changed,
+                      CloneConstantsSharedBetweenInplaceLoops(module));
+
   auto call_graph = CallGraph::Build(module);
   if (!call_graph->IsFlattened()) {
     return FailedPrecondition(
@@ -241,7 +307,6 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
 
   TF_ASSIGN_OR_RETURN(auto dataflow, HloPoplarDataflowAnalysis::Run(
                                          module, annotations, *call_graph));
-  bool changed = false;
   for (auto* comp : module->MakeComputationPostOrder()) {
     if (!AllowedComputation(*call_graph, comp)) {
       continue;
@@ -303,9 +368,14 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
       } else {
         operands_to_copy.emplace_back(inst);
         for (auto op_index : inplace_description.GetInplaceOperandIndices()) {
-          auto* operand = inst->operand(op_index);
-          if (operand->user_count() == 1 &&
-              IsPoplarInstruction(PoplarOp::Uninitialised, operand)) {
+          auto* op = inst->operand(op_index);
+          if (op->user_count() == 1 &&
+              IsPoplarInstruction(PoplarOp::Uninitialised, op)) {
+            VLOG(3) << "Do not copy uninitialised " << op->name();
+            continue;
+          }
+          if (IsWideConstant(op) && op->user_count() == 1) {
+            VLOG(3) << "Do not copy wide copy with unique user " << op->name();
             continue;
           }
           operands_to_copy.back().operands.push_back(op_index);

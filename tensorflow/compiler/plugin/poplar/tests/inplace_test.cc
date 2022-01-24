@@ -1158,6 +1158,60 @@ ENTRY entry {
               ::testing::ElementsAre(2, 3));
 }
 
+TEST_F(HloInplaceDependencyTest, InplaceLoopWithSharedConstant) {
+  const char* const hlo = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[],f32[10],f32[10]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  const = s32[] constant(1)
+  add = s32[] add(p_body.0, const)
+  p_body.1 = s32[] get-tuple-element(p_body), index=1
+  p_body.2 = f32[10] get-tuple-element(p_body), index=2
+  p_body.3 = f32[10] get-tuple-element(p_body), index=3
+  add2 = f32[10] add(p_body.2, p_body.3)
+  ROOT root = (s32[],s32[],f32[10],f32[10]) tuple(add, p_body.1, add2, p_body.3)
+}
+
+condition {
+  p_cond = (s32[],s32[],f32[10],f32[10]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[] constant(10)
+  p0 = f32[10] parameter(0)
+  p1 = f32[10] parameter(1)
+  while_init = (s32[],s32[],f32[10],f32[10]) tuple(const_0, const_1, p0, p1)
+  while_output = (s32[],s32[],f32[10],f32[10]) while(while_init), condition=condition, body=body
+  ROOT root = (s32[], s32[], (s32[],s32[],f32[10],f32[10])) tuple(const_0, const_1, while_output)
+}
+)";
+
+  auto module =
+      HloRunner::CreateModuleFromString(hlo, GetDebugOptionsForTest());
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  EXPECT_TRUE(WhileLoopToRepeatSimplify().Run(module0).ValueOrDie());
+  EXPECT_TRUE(HloDCE().Run(module0).ValueOrDie());
+  auto* entry = module0->entry_computation();
+  auto* root = entry->root_instruction();
+  auto* loop = root->operand(2);
+  CHECK_NOTNULL(loop);
+  EXPECT_TRUE(IsRepeatLoop(loop));
+  EXPECT_TRUE(
+      InplaceFinder(CompilerAnnotations(module0)).Run(module0).ValueOrDie());
+
+  EXPECT_TRUE(IsLoweredInplace(loop));
+  auto inplace_instructions = GetInplaceInstructions(entry);
+  EXPECT_THAT(inplace_instructions.size(), 2);
+}
+
 TEST_F(HloInplaceDependencyTest, InplaceNoInplace) {
   const char* const hlo = R"(
 HloModule top
