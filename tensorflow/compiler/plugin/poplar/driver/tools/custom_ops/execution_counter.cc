@@ -17,14 +17,17 @@ limitations under the License.
 
 #include "absl/memory/memory.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 
-HloExecutionCounter::HloExecutionCounter()
+HloExecutionCounter::HloExecutionCounter(bool lower_into_pipeline_stage)
     : HloPoplarInstruction(ShapeUtil::MakeShape(S32, {}), {},
-                           PoplarOp::ExecutionCounter) {}
+                           PoplarOp::ExecutionCounter,
+                           lower_into_pipeline_stage),
+      lower_into_pipeline_stage_(lower_into_pipeline_stage) {}
 
 absl::flat_hash_set<int64> HloExecutionCounter::AllocatingIndices() const {
   return {};
@@ -56,7 +59,14 @@ bool HloExecutionCounter::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloExecutionCounter::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  return {};
+  std::vector<std::string> attributes;
+  attributes.push_back(
+      absl::StrCat("lower_into_pipeline_stage=", lower_into_pipeline_stage_));
+  return attributes;
+}
+
+bool HloExecutionCounter::CanLowerIntoPipelineStage() const {
+  return lower_into_pipeline_stage_;
 }
 
 std::unique_ptr<HloInstruction> HloExecutionCounter::CloneWithNewOperandsImpl(
@@ -64,17 +74,24 @@ std::unique_ptr<HloInstruction> HloExecutionCounter::CloneWithNewOperandsImpl(
     HloCloneContext*) const {
   CHECK_EQ(shape.rank(), 0);
   CHECK_EQ(shape.element_type(), S32);
-  return CreateExecutionCounter();
+  return CreateExecutionCounter(lower_into_pipeline_stage_);
 }
 
-std::unique_ptr<HloInstruction> CreateExecutionCounter() {
-  return absl::make_unique<HloExecutionCounter>();
+std::unique_ptr<HloInstruction> CreateExecutionCounter(
+    bool lower_into_pipeline_stage) {
+  return absl::make_unique<HloExecutionCounter>(lower_into_pipeline_stage);
 }
 
 namespace {
 static HloPoplarInstructionFactory execution_counter_factory(
-    PoplarOp::ExecutionCounter,
-    [](HloCustomCallInstruction* call) { return CreateExecutionCounter(); });
+    PoplarOp::ExecutionCounter, [](HloCustomCallInstruction* call) {
+      auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+      auto attribute =
+          attribute_map.GetAttributeAsBool("lower_into_pipeline_stage");
+      bool lower_into_pipeline_stage =
+          attribute.ok() ? attribute.ValueOrDie() : false;
+      return CreateExecutionCounter(lower_into_pipeline_stage);
+    });
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

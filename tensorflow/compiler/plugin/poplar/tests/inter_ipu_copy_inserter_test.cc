@@ -827,7 +827,7 @@ HloModule top
 
 cluster_1  {
   arg0 = s32[] parameter(0), sharding={maximal device=0}
-  s = s32[] custom-call(), custom_call_target="ExecutionCounter", backend_config="", sharding={maximal device=0}
+  s = s32[] custom-call(), custom_call_target="ExecutionCounter", backend_config="{}", sharding={maximal device=0}
   ROOT mul = s32[] multiply(arg0, s), sharding={maximal device=1}
 }
   )";

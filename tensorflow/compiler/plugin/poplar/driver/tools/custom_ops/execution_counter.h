@@ -27,7 +27,7 @@ namespace poplarplugin {
 
 class HloExecutionCounter : public HloPoplarInstruction {
  public:
-  HloExecutionCounter();
+  explicit HloExecutionCounter(bool lower_into_pipeline_stage);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -39,6 +39,13 @@ class HloExecutionCounter : public HloPoplarInstruction {
   bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
+  // Specify whether this execution counter should be
+  // lowered into a pipeline stage or now. The gradient
+  // accumulation running-mean operation requires
+  // the execution counter to be lowered to avoid
+  // reading a cached copy of the counter.
+  bool CanLowerIntoPipelineStage() const;
+
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
@@ -47,9 +54,12 @@ class HloExecutionCounter : public HloPoplarInstruction {
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const;
+
+  const bool lower_into_pipeline_stage_;
 };
 
-std::unique_ptr<HloInstruction> CreateExecutionCounter();
+std::unique_ptr<HloInstruction> CreateExecutionCounter(
+    bool lower_into_pipeline_stage = false);
 
 }  // namespace poplarplugin
 }  // namespace xla

@@ -158,10 +158,14 @@ def print_tensor(input, name=""):
   return gen_poputil_ops.ipu_print_tensor(input, tensor_name=name)
 
 
-def get_current_iteration_counter(name=None):
+def get_current_iteration_counter(name=None, **kwargs):
   """Returns which gradient accumulation iteration the pipeline is in.
 
   Returns:
     A scalar tensor with the iteration count.
   """
-  return gen_poputil_ops.execution_counter(name)
+
+  lower_into_pipeline_stage = kwargs.get('lower_into_pipeline_stage', False)
+
+  return gen_poputil_ops.execution_counter(
+      name=name, lower_into_pipeline_stage=lower_into_pipeline_stage)
