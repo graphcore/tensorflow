@@ -20,6 +20,7 @@ namespace tensorflow {
 
 REGISTER_OP("ExecutionCounter")
     .Output("output: int32")
+    .Attr("lower_into_pipeline_stage: bool = false")
     .SetShapeFn(shape_inference::ScalarShape);
 
 }  // namespace tensorflow

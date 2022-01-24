@@ -42,7 +42,13 @@ namespace tensorflow {
 class PoputilExecutionCounterOp : public XlaOpKernel, IpuOpKernel {
  public:
   explicit PoputilExecutionCounterOp(OpKernelConstruction* ctx)
-      : XlaOpKernel(ctx), IpuOpKernel() {}
+      : XlaOpKernel(ctx), IpuOpKernel() {
+    bool lower_into_pipeline_stage;
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("lower_into_pipeline_stage",
+                                     &lower_into_pipeline_stage));
+    attribute_map_.AddAttribute("lower_into_pipeline_stage",
+                                lower_into_pipeline_stage);
+  }
 
   void Compile(XlaOpKernelContext* ctx) override {
     xla::XlaBuilder* b = ctx->builder();

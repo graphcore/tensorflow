@@ -304,6 +304,7 @@ poplar_cc_library(
     ],
     deps = [
         ":util",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:execution_counter",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:fifo",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:stateful_noop",
         "//tensorflow/compiler/xla/service:hlo",

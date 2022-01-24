@@ -20,12 +20,14 @@ limitations under the License.
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/execution_counter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_ipu_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -1445,9 +1447,13 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
       }
     }
     case HloOpcode::kCustomCall: {
-      if (IsGradientAccumulatorCreate(inst) || IsExecutionCounter(inst) ||
+      if (IsGradientAccumulatorCreate(inst) ||
           IsPoplarInstruction(PoplarOp::InterTilesetCopy)(inst)) {
         return false;
+      } else if (IsExecutionCounter(inst)) {
+        const HloExecutionCounter* execution_counter_inst =
+            Cast<HloExecutionCounter>(inst);
+        return execution_counter_inst->CanLowerIntoPipelineStage();
       } else if (IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(inst)) {
         // The sink op combines the same gradient accumulation buffer being
         // the output from different pipeline stages residing on the same IPU.
