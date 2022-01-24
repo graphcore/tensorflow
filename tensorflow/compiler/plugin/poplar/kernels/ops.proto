@@ -122,6 +122,7 @@ enum PoplarOp {
   GeluErf = 117;
   AllGatherWithinReplica = 118;
   ReduceScatterWithinReplica = 119;
+  AllReduceWithinReplica = 120;
 
   // Supported Fusions.
   Conv_biasadd = 200;

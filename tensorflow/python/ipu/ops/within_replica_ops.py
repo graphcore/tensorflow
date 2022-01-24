@@ -22,6 +22,45 @@ from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 from tensorflow.python.ops import array_ops
 
 
+def all_reduce(input_shards, op):
+  """
+  Perform a `reduce_scatter` using the given op, followed by an `all_gather`
+  on the results, so each shard contains all the reduced results. Inputs
+  are 0 padded to the same size. Example:
+
+  .. code-block: none
+
+    Input: IPU0 [x0, y0]
+           IPU1 [x1, y1, z1]
+           IPU2 [x2, y2, z2]
+           IPU3 [x3, y3, z3]
+
+    Output: IPU0 [op(x0, x1, x2, x3), op(y0, y1, y2, y3), op(0, z1, z2, z3)]
+            IPU1 [op(x0, x1, x2, x3), op(y0, y1, y2, y3), op(0, z1, z2, z3)]
+            IPU2 [op(x0, x1, x2, x3), op(y0, y1, y2, y3), op(0, z1, z2, z3)]
+            IPU3 [op(x0, x1, x2, x3), op(y0, y1, y2, y3), op(0, z1, z2, z3)]
+
+  Args:
+    input_shards: The tensors to reduce. These are expected to be supplied in
+      increasing shard order, so that input_shards[0] is on shard0 and
+      input_shard[i] is on shard i. Additionally these tensors must be of the
+      same type and of rank 0 or 1.
+    op: Reduce operation, valid ops are: COLLECTIVE_OP_ADD,
+      COLLECTIVE_OP_MUL, COLLECTIVE_OP_MIN, COLLECTIVE_OP_MAX,
+      COLLECTIVE_OP_LOGICAL_AND, COLLECTIVE_OP_LOGICAL_OR,
+      COLLECTIVE_OP_LOCAL.
+
+  Returns:
+    A tuple of tensors that contains a copy of all the reduced data. Element
+    i is the `Tensor` mapped to shard i.
+  """
+  _validate_inputs(input_shards)
+
+  input_shards = _reshape_scalars(input_shards)
+  return gen_popops_ops.ipu_all_reduce_within_replica(
+      _pad_to_equal_size(input_shards), op)
+
+
 def reduce_scatter(input_shards, op):
   """
   Reduce the given sharded tensors with the results scattered across the
@@ -35,7 +74,7 @@ def reduce_scatter(input_shards, op):
            IPU2 [x2, y2, z2]
            IPU3 [x3, y3, z3]
 
-    Input: IPU0 [0]
+    Output: IPU0 [0]
            IPU1 [op(y0, y1, y2)]
            IPU2 [op(z0, z1, z2)]
            IPU3 [op(x0, x1, x2)]

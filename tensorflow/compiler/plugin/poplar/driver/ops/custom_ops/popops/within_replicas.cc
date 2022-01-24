@@ -68,6 +68,24 @@ Status ValidateInputSharding(const HloInstruction* inst,
   return Status::OK();
 }
 
+StatusOr<poplar::Tensor> BuildReductionInputTensor(
+    const HloInstruction* inst, CompilerResources& res, TensorMap& tensor_map,
+    poplar::program::Sequence& seq, const PoplarOpDefDebugInfo& debug_info) {
+  std::vector<poplar::Tensor> input_shards;
+
+  for (auto i = 0u; i < inst->operand_count(); ++i) {
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor input,
+        FindInstructionInput(tensor_map, res, inst, i, seq, {debug_info}));
+
+    CHECK_EQ(input.rank(), 1);
+    input_shards.push_back(input.expand({0}));
+  }
+
+  auto sharded_input = poplar::concat(input_shards, 0);
+  return sharded_input;
+}
+
 class AllGatherWithinReplicaOp : public PoplarOpDef {
  public:
   StatusOr<poplar::program::Sequence> Creator(
@@ -141,7 +159,7 @@ class ReduceScatterWithinReplicaOp : public PoplarOpDef {
 
     TF_ASSIGN_OR_RETURN(
         auto sharded_input,
-        BuildInputTensor(inst, res, tensor_map, seq, debug_info));
+        BuildReductionInputTensor(inst, res, tensor_map, seq, debug_info));
 
     const auto* reduce_scatter_inst =
         Cast<HloReduceScatterWithinReplicaInstruction>(inst);
@@ -162,24 +180,6 @@ class ReduceScatterWithinReplicaOp : public PoplarOpDef {
   }
 
  private:
-  static StatusOr<poplar::Tensor> BuildInputTensor(
-      const HloInstruction* inst, CompilerResources& res, TensorMap& tensor_map,
-      poplar::program::Sequence& seq, const PoplarOpDefDebugInfo& debug_info) {
-    std::vector<poplar::Tensor> input_shards;
-
-    for (auto i = 0u; i < inst->operand_count(); ++i) {
-      TF_ASSIGN_OR_RETURN(
-          poplar::Tensor input,
-          FindInstructionInput(tensor_map, res, inst, i, seq, {debug_info}));
-
-      CHECK_EQ(input.rank(), 1);
-      input_shards.push_back(input.expand({0}));
-    }
-
-    const auto sharded_input = poplar::concat(input_shards, 0);
-    return sharded_input;
-  }
-
   Status SetOutputs(std::vector<gcl::Chunk>& output_chunks,
                     const HloInstruction* inst, CompilerResources& res,
                     TensorMap& tensor_map) {
@@ -218,6 +218,44 @@ class ReduceScatterWithinReplicaOp : public PoplarOpDef {
 };
 
 REGISTER_POPLAR_OP(ReduceScatterWithinReplica, ReduceScatterWithinReplicaOp);
+
+class AllReduceWithinReplicaOp : public PoplarOpDef {
+ public:
+  StatusOr<poplar::program::Sequence> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "AllReduceWithinReplicaOp");
+    poplar::program::Sequence seq({}, debug_info);
+
+    const auto ipu_count = GetNumIPUs(res);
+    TF_RETURN_IF_ERROR(ValidateInputSharding(inst, ipu_count));
+
+    TF_ASSIGN_OR_RETURN(
+        auto sharded_input,
+        BuildReductionInputTensor(inst, res, tensor_map, seq, debug_info));
+
+    const auto* all_reduce_inst =
+        Cast<HloAllReduceWithinReplicaInstruction>(inst);
+    TF_ASSIGN_OR_RETURN(auto op, ToPoplarCollectiveOperator(
+                                     all_reduce_inst->GetCollectiveOperator()));
+
+    auto output =
+        gcl::allReduceWithinReplica(GetMasterGraph(res), sharded_input, op, seq,
+                                    {debug_info, "AllReduceWithinReplica"},
+                                    GetReplicatedCollectiveOptions(res));
+
+    CHECK_EQ(ipu_count, output.dim(0))
+        << "Expecting the reduced tensor to have an output on each IPU.";
+    for (auto ipu = 0; ipu < ipu_count; ++ipu) {
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, ipu, output[ipu]));
+    }
+
+    return seq;
+  }
+};
+
+REGISTER_POPLAR_OP(AllReduceWithinReplica, AllReduceWithinReplicaOp);
 
 }  // namespace
 }  // namespace poplarplugin

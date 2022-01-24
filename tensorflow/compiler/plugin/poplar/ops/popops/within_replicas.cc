@@ -69,4 +69,24 @@ REGISTER_OP("IpuReduceScatterWithinReplica")
       return Status::OK();
     });
 
+REGISTER_OP("IpuAllReduceWithinReplica")
+    .Input("inputs: T")
+    .Output("output: T")
+    .Attr("T: list(type) >= 2")
+    .Attr("collective_op: string")
+    .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
+      // Copy input shape -> output shape tuple with rank checks.
+      const auto shard_count = c->num_inputs();
+      for (size_t i = 0; i < shard_count; ++i) {
+        ::tensorflow::shape_inference::ShapeHandle input_shape;
+        TF_RETURN_IF_ERROR(c->WithRank(c->input(i), 1, &input_shape));
+
+        shape_inference::DimensionHandle d = c->Dim(input_shape, 0);
+        const auto output_length = c->Value(d);
+        c->set_output(i, c->MakeShape({output_length}));
+      }
+
+      return Status::OK();
+    });
+
 }  // namespace tensorflow

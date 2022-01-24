@@ -255,7 +255,7 @@ tf_py_test(
 
 tf_py_test(
     name = "within_replicas_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/within_replicas_test.py"],
     shard_count = 2,
     tags = ["hw_poplar_test_4_ipus"],

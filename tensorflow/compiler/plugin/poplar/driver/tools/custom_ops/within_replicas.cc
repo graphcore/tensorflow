@@ -26,7 +26,6 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-// Constructor.
 HloWithinReplicaInstruction::HloWithinReplicaInstruction(
     absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
     PoplarOp op)
@@ -83,29 +82,6 @@ HloAllGatherWithinReplicaInstruction::CloneWithNewOperandsImpl(
   return CreatePoplarAllGatherWithinReplica(operands, shape);
 }
 
-HloReduceScatterWithinReplicaInstruction::
-    HloReduceScatterWithinReplicaInstruction(
-        absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
-        CollectiveOperator op)
-    : HloWithinReplicaInstruction(inputs, output_shape,
-                                  PoplarOp::ReduceScatterWithinReplica),
-      op_(op) {}
-
-std::vector<std::string>
-HloReduceScatterWithinReplicaInstruction::ExtraPoplarAttributesToStringImpl(
-    const HloPrintOptions& options) const {
-  std::vector<std::string> attributes;
-  attributes.push_back(absl::StrCat("op=", CollectiveOperator_Name(op_)));
-  return attributes;
-}
-
-std::unique_ptr<HloInstruction>
-HloReduceScatterWithinReplicaInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> operands,
-    HloCloneContext*) const {
-  return CreatePoplarReduceScatterWithinReplica(operands, shape, op_);
-}
-
 std::unique_ptr<HloInstruction> CreatePoplarAllGatherWithinReplica(
     absl::Span<HloInstruction* const> inputs, const Shape& output_shape) {
   return absl::make_unique<HloAllGatherWithinReplicaInstruction>(inputs,
@@ -115,8 +91,14 @@ std::unique_ptr<HloInstruction> CreatePoplarAllGatherWithinReplica(
 std::unique_ptr<HloInstruction> CreatePoplarReduceScatterWithinReplica(
     absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
     CollectiveOperator op) {
-  return absl::make_unique<HloReduceScatterWithinReplicaInstruction>(
-      inputs, output_shape, op);
+  return HloReduceScatterWithinReplicaInstruction::Create(inputs, output_shape,
+                                                          op);
+}
+
+std::unique_ptr<HloInstruction> CreatePoplarAllReduceWithinReplica(
+    absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
+    CollectiveOperator op) {
+  return HloAllReduceWithinReplicaInstruction::Create(inputs, output_shape, op);
 }
 
 namespace {
@@ -128,22 +110,31 @@ static HloPoplarInstructionFactory all_gather_factory(
                                                 call->shape());
     });
 
+template <class ReductionType>
+StatusOr<std::unique_ptr<HloInstruction>> ReductionFactory(
+    HloCustomCallInstruction* call) {
+  auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+
+  CollectiveOperator op;
+  TF_ASSIGN_OR_RETURN(std::string op_string,
+                      attribute_map.GetAttributeAsString("op"));
+  if (!CollectiveOperator_Parse(op_string, &op)) {
+    return InternalError("Failed to parse `op` attribute.");
+  }
+
+  std::unique_ptr<HloInstruction> inst =
+      ReductionType::Create(call->operands(), call->shape(), op);
+  return inst;
+}
+
 static HloPoplarInstructionFactory reduce_scatter_factory(
     PoplarOp::ReduceScatterWithinReplica,
-    [](HloCustomCallInstruction* call)
-        -> StatusOr<std::unique_ptr<HloInstruction>> {
-      auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+    ReductionFactory<HloReduceScatterWithinReplicaInstruction>);
 
-      CollectiveOperator op;
-      TF_ASSIGN_OR_RETURN(std::string op_string,
-                          attribute_map.GetAttributeAsString("op"));
-      if (!CollectiveOperator_Parse(op_string, &op)) {
-        return InternalError("Failed to parse reduce-scatter `op` attribute.");
-      }
+static HloPoplarInstructionFactory all_reduce_factory(
+    PoplarOp::AllReduceWithinReplica,
+    ReductionFactory<HloAllReduceWithinReplicaInstruction>);
 
-      return CreatePoplarReduceScatterWithinReplica(call->operands(),
-                                                    call->shape(), op);
-    });
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

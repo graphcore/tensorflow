@@ -61,31 +61,55 @@ class HloAllGatherWithinReplicaInstruction
       HloCloneContext*) const override;
 };
 
-class HloReduceScatterWithinReplicaInstruction
-    : public HloWithinReplicaInstruction {
+template <PoplarOp ReductionOp>
+class HloReduceWithinReplicaInstruction : public HloWithinReplicaInstruction {
  public:
-  explicit HloReduceScatterWithinReplicaInstruction(
+  static std::unique_ptr<HloReduceWithinReplicaInstruction<ReductionOp>> Create(
       absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
-      CollectiveOperator op);
+      CollectiveOperator op) {
+    return absl::make_unique<HloReduceWithinReplicaInstruction<ReductionOp>>(
+        inputs, output_shape, op);
+  }
+
+  explicit HloReduceWithinReplicaInstruction(
+      absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
+      CollectiveOperator op)
+      : HloWithinReplicaInstruction(inputs, output_shape, ReductionOp),
+        op_(op) {}
 
   CollectiveOperator GetCollectiveOperator() const { return op_; }
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
-      const HloPrintOptions& options) const override;
+      const HloPrintOptions& options) const override {
+    std::vector<std::string> attributes;
+    attributes.push_back(absl::StrCat("op=", CollectiveOperator_Name(op_)));
+    return attributes;
+  }
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      HloCloneContext*) const override {
+    return Create(operands, shape, op_);
+  }
 
   CollectiveOperator op_;
 };
+
+using HloReduceScatterWithinReplicaInstruction =
+    HloReduceWithinReplicaInstruction<ReduceScatterWithinReplica>;
+using HloAllReduceWithinReplicaInstruction =
+    HloReduceWithinReplicaInstruction<AllReduceWithinReplica>;
 
 std::unique_ptr<HloInstruction> CreatePoplarAllGatherWithinReplica(
     absl::Span<HloInstruction* const> inputs, const Shape& output_shape);
 
 std::unique_ptr<HloInstruction> CreatePoplarReduceScatterWithinReplica(
+    absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
+    CollectiveOperator op);
+
+std::unique_ptr<HloInstruction> CreatePoplarAllReduceWithinReplica(
     absl::Span<HloInstruction* const> inputs, const Shape& output_shape,
     CollectiveOperator op);
 
