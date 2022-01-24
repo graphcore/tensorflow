@@ -2120,10 +2120,27 @@ main {
 }
 )";
 
+const char* all_reduce_within_replica_hlo = R"(
+HloModule top
+
+main {
+  shard0 = f32[1] constant(0), sharding={maximal device=0}
+  shard1 = f32[1] constant(1), sharding={maximal device=1}
+  shard2 = f32[1] constant(2), sharding={maximal device=2}
+  shard3 = f32[1] constant(3), sharding={maximal device=3}
+  all_reduce = (f32[4], f32[4], f32[4], f32[4]) custom-call(shard0, shard1, shard2, shard3), custom_call_target="AllReduceWithinReplica", backend_config="{\"op\": \"COLLECTIVE_OP_MUL\"}\n"
+  reduced_shard0 = f32[4] get-tuple-element(all_reduce), index=0
+  reduced_shard1 = f32[4] get-tuple-element(all_reduce), index=1
+  reduced_shard2 = f32[4] get-tuple-element(all_reduce), index=2
+  ROOT reduced_shard3 = f32[4] get-tuple-element(all_reduce), index=3
+}
+)";
+
 INSTANTIATE_TEST_SUITE_P(
     ShardingPassHLO, WithinReplicaOpSharingPassTest,
     ::testing::Values(MAKE_HLO_TEST_CASE(all_gather_within_replica_hlo),
-                      MAKE_HLO_TEST_CASE(reduce_scatter_within_replica_hlo)),
+                      MAKE_HLO_TEST_CASE(reduce_scatter_within_replica_hlo),
+                      MAKE_HLO_TEST_CASE(all_reduce_within_replica_hlo)),
     HloTestCaseName);
 
 }  // namespace
