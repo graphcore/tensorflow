@@ -1157,10 +1157,10 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
   def testOptimizationsMergeInfeedIOCopies(self):
     cfg = ipu.config.IPUConfig()
     pb = cfg._create_protobuf()
-    self.assertEqual(pb.speed_size_config.merge_infeed_io_copies, False)
-    cfg.optimizations.merge_infeed_io_copies = True
-    pb = cfg._create_protobuf()
     self.assertEqual(pb.speed_size_config.merge_infeed_io_copies, True)
+    cfg.optimizations.merge_infeed_io_copies = False
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.speed_size_config.merge_infeed_io_copies, False)
 
   def testOptimizationsMaximumCrossReplicaSumBufferSize(self):
     cfg = ipu.config.IPUConfig()

@@ -174,7 +174,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = 128
     cfg.io_tiles.num_io_tiles = 32
-    cfg.optimizations.merge_infeed_io_copies = True
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
 
