@@ -97,7 +97,8 @@ model layers are assigned to *pipeline stages*. Each pipeline stage can be
 assigned to a different device and different devices can execute in parallel.
 
 The method to pipeline your model depends on whether your model is a
-``Sequential`` or a ``Functional`` model.
+``Sequential`` model, a ``Functional`` model, or is subclassed from the ``Model``
+class.
 
 Sequential model
 ________________
@@ -143,6 +144,12 @@ different pipeline stages as follows:
   :start-at: input_layer = tf.keras.layers.Input((28, 28))
   :end-at: model = tf.keras.Model(inputs=input_layer, outputs=x)
 
+.. note::
+Layers *constructed* within an `ipu.keras.PipelineStage` context will have that
+pipeline stage assigned to all invocations of the layer. These assignments are
+overridden if the layer calls happen within a different
+`ipu.keras.PipelineStage` context.
+
 Pipelining an existing functional model
 =======================================
 
@@ -175,9 +182,91 @@ everything else to the second stage, as follows:
 
 .. note::
 
-  This method of pipelining can also be used with ``Functional`` models you are
-  writing yourself, as well as ``Sequential`` models using the
-  :py:class:`~tensorflow.python.ipu.keras.extensions.SequentialExtension`
+  This method of assigning pipeline stages can also be used with ``Functional``
+  models you are writing yourself, as well as with ``Sequential``
+  models and ``Model`` subclasses using the
+  :py:class:`~tensorflow.python.ipu.keras.extensions.SequentialExtension` and
+  :py:class:`~tensorflow.python.ipu.keras.extensions.ModelExtension`
+  equivalents.
+
+Model subclass
+______________
+
+``Model`` subclasses are subclasses of `tf.keras.Model`, which override the call
+method. There are two ways to enable IPU pipelining for an instance of a
+``Model`` subclass, depending on if you're pipelining a model you are writing
+yourself or an existing model. These are very similar to the methods available
+for ``Functional`` models.
+
+Pipelining a model you are writing yourself
+===========================================
+
+To pipeline a ``Model`` subclass you are writing yourself, each layer call
+must happen within the scope of an `ipu.keras.PipelineStage` context.
+
+For example, a simple four layer ``Model`` subclass could be assigned to four
+different pipeline stages as follows:
+
+.. literalinclude:: keras_tf2_example11.py
+  :language: python
+  :linenos:
+  :start-at: input_layer = tf.keras.layers.Input((28, 28))
+  :end-at: model = tf.keras.Model(inputs=input_layer, outputs=x)
+
+.. note::
+Layers *constructed* within an `ipu.keras.PipelineStage` context will have that
+pipeline stage assigned to all invocations of the layer. These assignments are
+overridden if the layer calls happen within a different
+`ipu.keras.PipelineStage` context.
+
+Pipelining an existing model
+============================
+
+To pipeline an existing ``Model`` subclass, you must use
+:py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension.get_pipeline_stage_assignment`.
+Each layer invocation in the model has an associated
+:py:class:`~tensorflow.python.ipu.keras.extensions.ModelLayerPipelineStageAssignment`
+object, which indicates what pipeline stage that invocation is assigned to.
+`get_pipeline_stage_assignment` returns a list of these stage assignments,
+which you can inspect and modify. Note that the list is in post-order, which
+means the assignments are returned in the order they will be executed.
+
+Once you are done modifying the stage assignments, you should use
+:py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension.set_pipeline_stage_assignment`
+to set them on the model.
+
+Before you can get or set pipeline stage assignments, you must first call
+:py:meth:`keras.Model.build` on your model, specifying the input shapes.
+This traces the model's call function using the shapes specified. The resulting
+graph is what will be used for pipelined execution. You can update the graph by
+calling build again, though this will invalidate existing pipeline stage
+assignments if the structure of the updated graph is different.
+
+.. note::
+
+  If you need to specify input dtypes when calling :py:meth:`keras.Model.build`,
+  you can pass in :py:class:`keras.Input` objects instead of plain shapes.
+
+For example, an existing ``Model`` subclass with four layers, could be assigned
+to four different pipeline stages as follows:
+
+.. literalinclude:: keras_tf2_example12.py
+  :language: python
+  :linenos:
+  :start-at: strategy = ipu.ipu_strategy.IPUStrategy()
+
+.. note::
+
+  You can use :py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension.print_pipeline_stage_assignment_summary`
+  to print the pipeline stage assignments of the model's layer invocations.
+
+.. note::
+
+  This method of assigning pipeline stages can also be used with ``Model``
+  subclasses you are writing yourself, as well as with ``Functional`` and
+  ``Sequential`` models using the
+  :py:class:`~tensorflow.python.ipu.keras.extensions.SequentialExtension` and
+  :py:class:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension`
   equivalents.
 
 

@@ -3741,6 +3741,28 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "keras_tf2_example11",
+    size = "large",
+    srcs = ["docs/keras_tf2_example11.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example12",
+    size = "large",
+    srcs = ["docs/keras_tf2_example12.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "keras_porting_example",
     size = "large",
     srcs = ["docs/keras_porting_example.py"],
