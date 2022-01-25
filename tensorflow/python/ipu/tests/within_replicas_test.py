@@ -20,6 +20,7 @@ from absl.testing import parameterized
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session
+from tensorflow.python.eager import backprop
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import constant_op
@@ -27,6 +28,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python import ipu
 from tensorflow.python.ipu.ops import within_replica_ops
+from tensorflow.python.ipu.ops import within_replica_ops_grad  # pylint: disable=unused-import
 from tensorflow.python.platform import test
 
 
@@ -116,6 +118,42 @@ class WithinReplicasTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       expected_gathered_data = [1, 1, 2, 2, 3, 3, 4, 4]
       self.assertCountEqual(ndarrays_to_lists(gathered),
                             [expected_gathered_data] * shard_count)
+
+  @tu.test_uses_ipus(num_ipus=2)
+  def testAllGatherGrad(self):
+    self._cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(self._cfg)
+    self._cfg.configure_ipu_system()
+
+    shard_count = 2
+
+    def my_net(zero_val):
+      shard0, shard1 = increment_val_over_shards(shard_count, zero_val)
+
+      with backprop.GradientTape() as tape:
+        tape.watch(shard0)
+        tape.watch(shard1)
+
+        gathered = within_replica_ops.all_gather([shard0, shard1])
+        lossA = math_ops.reduce_mean(gathered[0]**2)
+        lossB = math_ops.reduce_mean(gathered[1]**2)
+        loss = lossA + lossB
+      grad = tape.gradient(loss, [shard0, shard1])
+      return grad
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      zero_val = constant_op.constant(0, shape=[2], dtype=np.float32)
+      res = ipu.ipu_compiler.compile(my_net, inputs=[zero_val])
+
+    with session.Session() as sess:
+      grad_gathered = sess.run(res)
+      self.assertEqual(type(grad_gathered), list)
+
+      # gathered = [[1, 1, 2, 2], [1, 1, 2, 2]]
+      # dLoss/dGathered = 0.5*gathered
+      # dLoss/dShard = reduce_scatter([[0.5, 0.5, 1, 1], [0.5, 0.5, 1, 1], op=ADD)
+      expected_grad = [[1, 1], [2, 2]]
+      self.assertCountEqual(ndarrays_to_lists(grad_gathered), expected_grad)
 
   @tu.test_uses_ipus(num_ipus=4)
   def testAllGatherMixedSizes(self):
@@ -454,13 +492,7 @@ class CommonReduction:
         reduced = sess.run(res)
 
         expected_reduction = self.reduce(sum, [1, 1, 1, 1, 1], [2, 2, 2, 2, 2],
-                                         [3, 3, 3, 3, 3], [
-                                             4,
-                                             4,
-                                             4,
-                                             4,
-                                             4,
-                                         ])
+                                         [3, 3, 3, 3, 3], [4, 4, 4, 4, 4])
         self.assertCountEqual(ndarrays_to_lists(reduced), expected_reduction)
 
     @tu.test_uses_ipus(num_ipus=4)
@@ -563,6 +595,7 @@ class CommonReduction:
                           inputs=[zero_val])
 
 
+@test_util.deprecated_graph_mode_only
 class ReduceScatterWithinReplicaTest(CommonReduction.Tests):
   def setUp(self):
     super().setUp()
@@ -587,7 +620,45 @@ class ReduceScatterWithinReplicaTest(CommonReduction.Tests):
 
     return output
 
+  @tu.test_uses_ipus(num_ipus=2)
+  def testGrad(self):
+    self._cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(self._cfg)
+    self._cfg.configure_ipu_system()
 
+    shard_count = 2
+
+    def my_net(zero_val):
+      shard0, shard1 = increment_val_over_shards(shard_count, zero_val)
+
+      with backprop.GradientTape() as tape:
+        tape.watch(shard0)
+        tape.watch(shard1)
+
+        reduced = within_replica_ops.reduce_scatter([shard0, shard1],
+                                                    op="COLLECTIVE_OP_ADD")
+        lossA = math_ops.reduce_mean(reduced[0]**2)
+        lossB = math_ops.reduce_mean(reduced[1]**2)
+        loss = lossA + lossB
+      grad = tape.gradient(loss, [shard0, shard1])
+      return grad
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      zero_val = constant_op.constant(0, shape=[2], dtype=np.float32)
+      res = ipu.ipu_compiler.compile(my_net, inputs=[zero_val])
+
+    with session.Session() as sess:
+      grad = sess.run(res)
+      self.assertEqual(type(grad), list)
+
+      # reduced = [[3.0], [3.0]]
+      # dLoss/dReduced = 2*reduced
+      # dLoss/dShard = all_gather([[6.0], [6.0]])
+      self.assertCountEqual(ndarrays_to_lists(grad),
+                            [[6.0, 6.0]] * shard_count)
+
+
+@test_util.deprecated_graph_mode_only
 class AllReduceWithinReplicaTest(CommonReduction.Tests):
   def setUp(self):
     super().setUp()
@@ -599,6 +670,43 @@ class AllReduceWithinReplicaTest(CommonReduction.Tests):
     shard_count = len(shard_vals)
     reduced = [op(vals) for vals in zip(*shard_vals)]
     return [reduced] * shard_count
+
+  @tu.test_uses_ipus(num_ipus=2)
+  def testGrad(self):
+    self._cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(self._cfg)
+    self._cfg.configure_ipu_system()
+
+    shard_count = 2
+
+    def my_net(zero_val):
+      shard0, shard1 = increment_val_over_shards(shard_count, zero_val)
+
+      with backprop.GradientTape() as tape:
+        tape.watch(shard0)
+        tape.watch(shard1)
+
+        reduced = within_replica_ops.all_reduce([shard0, shard1],
+                                                op="COLLECTIVE_OP_ADD")
+        lossA = math_ops.reduce_mean(reduced[0]**2)
+        lossB = math_ops.reduce_mean(reduced[1]**2)
+        loss = lossA + lossB
+      grad = tape.gradient(loss, [shard0, shard1])
+      return grad
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      zero_val = constant_op.constant(0, shape=[2], dtype=np.float32)
+      res = ipu.ipu_compiler.compile(my_net, inputs=[zero_val])
+
+    with session.Session() as sess:
+      grad = sess.run(res)
+      self.assertEqual(type(grad), list)
+
+      # reduced = [[3.0, 3.0], [3.0, 3.0]]
+      # dLoss/dReduced = reduced
+      # dLoss/dShard = all_reduce([[3.0, 3.0], [3.0, 3.0]], op=original_op)
+      self.assertCountEqual(ndarrays_to_lists(grad),
+                            [[6.0, 6.0]] * shard_count)
 
 
 if __name__ == "__main__":

@@ -66,6 +66,7 @@ py_library(
         "ops/rand_ops_grad.py",
         "ops/rnn_ops_grad.py",
         "ops/slicing_ops_grad.py",
+        "ops/within_replica_ops_grad.py",
     ],
     srcs_version = "PY2AND3",
     deps = [
