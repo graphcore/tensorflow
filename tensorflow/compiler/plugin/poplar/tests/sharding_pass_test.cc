@@ -12,8 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
+#include "absl/strings/str_replace.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_wide_const.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
@@ -2041,6 +2044,10 @@ main {
 }
 
 struct WithinReplicaOpSharingPassTest : ParameterizedHloTestFixture<> {
+  // Empty override as the default tries to setup the hlo module, which we cant
+  // since the hlo string is just a template and needs to be filled in.
+  void SetUp() override {}
+
   HloInstruction* FindWithinReplicaOpInstruction(const HloComputation* comp) {
     auto instructions = comp->instructions();
 
@@ -2052,9 +2059,22 @@ struct WithinReplicaOpSharingPassTest : ParameterizedHloTestFixture<> {
 
     return nullptr;
   }
+
+  int shard_count_ = 4;
 };
 
-TEST_P(WithinReplicaOpSharingPassTest, ShardingInfo) {
+TEST_P(WithinReplicaOpSharingPassTest, ShardingInfoOfUsers) {
+  // Setup HLO with simple constant inputs
+  const std::string sharded_input = R"(
+  shard0 = f32[2] constant(0), sharding={maximal device=0}
+  shard1 = f32[2] constant(1), sharding={maximal device=1}
+  shard2 = f32[2] constant(2), sharding={maximal device=2}
+  shard3 = f32[2] constant(3), sharding={maximal device=3}
+  )";
+  const auto full_hlo_string =
+      absl::StrReplaceAll(GetParam().hlo, {{"$SHARDED_INPUT", sharded_input}});
+  ASSERT_TRUE(SetUpHloModule(full_hlo_string));
+
   TF_ASSERT_OK_AND_ASSIGN(bool success, CustomOpReplacer().Run(hlo_module_));
   ASSERT_TRUE(success);
 
@@ -2070,15 +2090,13 @@ TEST_P(WithinReplicaOpSharingPassTest, ShardingInfo) {
   const auto within_replica_op_sharding = within_replica_op->sharding();
   ASSERT_TRUE(within_replica_op_sharding.IsTuple());
 
-  const auto shard_count = 4u;
-
   const auto tuple_sharding = within_replica_op_sharding.tuple_elements();
-  ASSERT_EQ(tuple_sharding.size(), shard_count);
+  ASSERT_EQ(tuple_sharding.size(), shard_count_);
 
   const auto users = within_replica_op->users();
-  ASSERT_EQ(users.size(), shard_count);
+  ASSERT_EQ(users.size(), shard_count_);
 
-  for (auto i = 0; i < shard_count; ++i) {
+  for (auto i = 0; i < shard_count_; ++i) {
     ASSERT_TRUE(tuple_sharding[i].HasUniqueDevice());
     ASSERT_EQ(tuple_sharding[i].GetUniqueDevice(), i)
         << "Expected output i to be on shard/ipu i";
@@ -2088,19 +2106,62 @@ TEST_P(WithinReplicaOpSharingPassTest, ShardingInfo) {
   }
 }
 
+TEST_P(WithinReplicaOpSharingPassTest, ShardingInfoOfOperands) {
+  const std::string sharded_input = R"(
+  const0 = f32[] constant(0), sharding={maximal device=0}
+  shard0 = f32[2] broadcast(const0), sharding={maximal device=0}, dimensions={}
+  const1 = f32[] constant(1)
+  shard1 = f32[2] broadcast(const1), sharding={maximal device=1}, dimensions={}
+  shard2 = f32[2] constant(2)
+  shard3 = f32[2] constant(3)
+  )";
+  const auto full_hlo_string =
+      absl::StrReplaceAll(GetParam().hlo, {{"$SHARDED_INPUT", sharded_input}});
+  ASSERT_TRUE(SetUpHloModule(full_hlo_string));
+
+  TF_ASSERT_OK_AND_ASSIGN(bool success, CustomOpReplacer().Run(hlo_module_));
+  ASSERT_TRUE(success);
+  // FuseWideConst doesn't preserve sharding info, so the new instructions will
+  // have no sharding.
+  TF_ASSERT_OK_AND_ASSIGN(success,
+                          FuseWideConst(*annotations_).Run(hlo_module_));
+  ASSERT_TRUE(success);
+
+  // We want to check that the pass will run when there is no explicit sharding.
+  // This can happen with fusing instructions as there's no guarantee that the
+  // sharding will persist through the fusion.
+  TF_ASSERT_OK_AND_ASSIGN(success, ShardingPass().Run(hlo_module_));
+  ASSERT_TRUE(success);
+
+  const HloInstruction* within_replica_op =
+      FindWithinReplicaOpInstruction(hlo_module_->entry_computation());
+  ASSERT_TRUE(within_replica_op);
+
+  // Operands that arent explicitly sharded are stil implicitly sharded when
+  // being used by a WithinRepliacOp, since these ops assume input i to be on
+  // shard i. We want to check that this sharding gets propogated.
+  const auto within_replica_op_sharding = within_replica_op->sharding();
+  const auto tuple_sharding = within_replica_op_sharding.tuple_elements();
+
+  const auto operands = within_replica_op->operands();
+  ASSERT_EQ(operands.size(), shard_count_);
+
+  for (auto i = 0; i < shard_count_; ++i) {
+    const auto* operand = operands[i];
+    ASSERT_EQ(tuple_sharding[i], operand->sharding());
+  }
+}
+
 const char* all_gather_within_replica_hlo = R"(
 HloModule top
 
 main {
-  shard0 = f32[1] constant(0), sharding={maximal device=0}
-  shard1 = f32[1] constant(1), sharding={maximal device=1}
-  shard2 = f32[1] constant(2), sharding={maximal device=2}
-  shard3 = f32[1] constant(3), sharding={maximal device=3}
-  all_gather = (f32[4], f32[4], f32[4], f32[4]) custom-call(shard0, shard1, shard2, shard3), custom_call_target="AllGatherWithinReplica"
-  gathered_shard0 = f32[4] get-tuple-element(all_gather), index=0
-  gathered_shard1 = f32[4] get-tuple-element(all_gather), index=1
-  gathered_shard2 = f32[4] get-tuple-element(all_gather), index=2
-  ROOT gathered_shard3 = f32[4] get-tuple-element(all_gather), index=3
+  $SHARDED_INPUT
+  all_gather = (f32[8], f32[8], f32[8], f32[8]) custom-call(shard0, shard1, shard2, shard3), custom_call_target="AllGatherWithinReplica"
+  gathered_shard0 = f32[8] get-tuple-element(all_gather), index=0
+  gathered_shard1 = f32[8] get-tuple-element(all_gather), index=1
+  gathered_shard2 = f32[8] get-tuple-element(all_gather), index=2
+  ROOT gathered_shard3 = f32[8] get-tuple-element(all_gather), index=3
 }
 )";
 
@@ -2108,10 +2169,7 @@ const char* reduce_scatter_within_replica_hlo = R"(
 HloModule top
 
 main {
-  shard0 = f32[1] constant(0), sharding={maximal device=0}
-  shard1 = f32[1] constant(1), sharding={maximal device=1}
-  shard2 = f32[1] constant(2), sharding={maximal device=2}
-  shard3 = f32[1] constant(3), sharding={maximal device=3}
+  $SHARDED_INPUT
   reduce_scatter = (f32[1], f32[1], f32[1], f32[1]) custom-call(shard0, shard1, shard2, shard3), custom_call_target="ReduceScatterWithinReplica", backend_config="{\"op\": \"COLLECTIVE_OP_MUL\"}\n"
   reduced_shard0 = f32[1] get-tuple-element(reduce_scatter), index=0
   reduced_shard1 = f32[1] get-tuple-element(reduce_scatter), index=1
@@ -2124,10 +2182,7 @@ const char* all_reduce_within_replica_hlo = R"(
 HloModule top
 
 main {
-  shard0 = f32[1] constant(0), sharding={maximal device=0}
-  shard1 = f32[1] constant(1), sharding={maximal device=1}
-  shard2 = f32[1] constant(2), sharding={maximal device=2}
-  shard3 = f32[1] constant(3), sharding={maximal device=3}
+  $SHARDED_INPUT
   all_reduce = (f32[4], f32[4], f32[4], f32[4]) custom-call(shard0, shard1, shard2, shard3), custom_call_target="AllReduceWithinReplica", backend_config="{\"op\": \"COLLECTIVE_OP_MUL\"}\n"
   reduced_shard0 = f32[4] get-tuple-element(all_reduce), index=0
   reduced_shard1 = f32[4] get-tuple-element(all_reduce), index=1
