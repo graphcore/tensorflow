@@ -781,39 +781,38 @@ class PopnnDynamicGRU(PopnnGRU):
                available_memory_proportion_bwd=None):
     """Creates a PopnnDynamicGRU model from model spec.
 
-      Args:
-        num_units: the number of units within the RNN model.
-        dtype: tf.float16 or tf.float32
-        partials_dtype: the type used by Popnn to perform partial calculations.
-          Either tf.float16 or tf.float32.
-        seed: A Python integer. Used to create the default Glorot uniform
-          initializer weights_initializer.
-        weights_initializer: starting value to initialize the weight
-          (default is Glorot uniform initializer).
-        bias_initializer: starting value to initialize the bias
-          (default is all zeros).
-        activation: Activation function. Defaults to "tanh".
-          Accepted values: "tanh", "relu", "softmax", "sigmoid", "hard_sigmoid".
-        recurrent_activation: Recurrent activation function. Defaults to
-          "sigmoid". Must generate output in the [0,1] range.
-          Accepted values: "tanh", "softmax", "sigmoid", "hard_sigmoid".
-        name: VariableScope for the created subgraph; defaults to class name.
-          This only serves the default scope if later no scope is specified when
-          invoking ``__call__()``.
-        reset_after:  GRU convention (whether to apply reset gate
-          after or before matrix multiplication). False = "before" (default),
-          True = "after".
-          Leave as default (False) to match the behaviour of the standard
-          TensorFlow GRU.
-        available_memory_proportion_fwd: Maximum fraction of IPU memory which
-          can be used as temporary scratch space during computation, for the
-          forward propagation layer. A value of -1. or None indicates that the
-          default in Popnn should be used. If available_memory_proportion_bwd is
-          set to None, then this value applies to both phases.
-        available_memory_proportion_bwd: Maximum fraction of IPU memory which
-          can be used as temporary scratch space during computation, for the
-          backward propagation layer. A value of -1. or None indicates that the
-          default in Popnn should be used.
+    Args:
+      num_units: the number of units within the RNN model.
+      dtype: tf.float16 or tf.float32
+      partials_dtype: the type used by Popnn to perform partial calculations.
+        Either tf.float16 or tf.float32.
+      seed: A Python integer. Used to create the default Glorot uniform
+        initializer weights_initializer.
+      weights_initializer: starting value to initialize the weight
+        (default is Glorot uniform initializer).
+      bias_initializer: starting value to initialize the bias
+        (default is all zeros).
+      activation: Activation function. Defaults to "tanh".
+        Accepted values: "tanh", "relu", "softmax", "sigmoid", "hard_sigmoid".
+      recurrent_activation: Recurrent activation function. Defaults to
+        "sigmoid". Must generate output in the [0,1] range.
+        Accepted values: "tanh", "softmax", "sigmoid", "hard_sigmoid".
+      name: VariableScope for the created subgraph; defaults to class name.
+        This only serves the default scope if later no scope is specified when
+        invoking ``__call__()``.
+      reset_after:  GRU convention (whether to apply reset gate after or before
+        matrix multiplication). False = "before" (default), True = "after".
+        Leave as default (False) to match the behaviour of the standard
+        TensorFlow GRU.
+      available_memory_proportion_fwd: Maximum fraction of IPU memory which can
+        be used as temporary scratch space during computation, for the forward
+        propagation layer. A value of -1. or None indicates that the default in
+        Popnn should be used. If available_memory_proportion_bwd is set to None,
+        then this value applies to both phases.
+      available_memory_proportion_bwd: Maximum fraction of IPU memory which can
+        be used as temporary scratch space during computation, for the backward
+        propagation layer. A value of -1. or None indicates that the default in
+        Popnn should be used.
     """
     super(PopnnDynamicGRU, self).__init__(
         num_units=num_units,
@@ -842,23 +841,22 @@ class PopnnDynamicGRU(PopnnGRU):
            time_major=True):
     """Runs the forward step for the DynamicGRU model.
 
-      Args:
-        inputs: 3-D tensor with shape [batch_size, time_len, input_size].
-        seq_len: 1-D tensor with the sequence length of samples in each batch.
-        initial_state: Initial state tensor, shaped `[batch_size, num_units]`.
-          If not provided, the state is initialized to zeros.
-        training: whether this operation will be used in training or inference.
-        time_major: whether the time dimension is the first demension.
+    Args:
+      inputs: 3-D tensor with shape [batch_size, time_len, input_size].
+      seq_len: 1-D tensor with the sequence length of samples in each batch.
+      initial_state: Initial state tensor, shaped `[batch_size, num_units]`.
+        If not provided, the state is initialized to zeros.
+      training: whether this operation will be used in training or inference.
+      time_major: whether the time dimension is the first demension.
 
-      Returns:
-        A tuple of output and output state.
+    Returns:
+      A tuple of output and output state.
 
-        * output: a tensor of shape [time_len, batch_size, num_units].
-        * output_state: The output state of the last cell.
+      * output: a tensor of shape [time_len, batch_size, num_units].
+      * output_state: The output state of the last cell.
 
-      Raises:
-        ValueError: if initial_state is not valid.
-
+    Raises:
+      ValueError: if initial_state is not valid.
     """
 
     dtype = self.dtype
