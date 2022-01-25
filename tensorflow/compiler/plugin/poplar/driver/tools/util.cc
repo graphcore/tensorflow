@@ -111,7 +111,8 @@ HloSharding GetShardingForOperand(const HloInstruction* inst, int operand) {
       return get_sub_sharding();
     }
     default: {
-      if (IsPoplarInstruction(PoplarOp::Barrier)(inst)) {
+      if (IsPoplarInstruction(PoplarOp::Barrier)(inst) ||
+          IsGCLWithinReplicaOp(inst)) {
         return get_sub_sharding();
       } else {
         return inst->sharding();
@@ -139,6 +140,12 @@ std::vector<int64> GetShardingDeviceIdVector(const HloSharding& sharding) {
 bool HaveSharding(HloComputation* comp) {
   for (auto* inst : comp->instructions()) {
     if (inst->has_sharding()) {
+      return true;
+    }
+
+    // Having a GCL withinReplica inst implicitly means there will be sharding,
+    // since it generates sharding output and expects sharded input.
+    if (IsGCLWithinReplicaOp(inst)) {
       return true;
     }
   }
