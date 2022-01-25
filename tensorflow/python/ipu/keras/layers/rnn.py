@@ -259,6 +259,31 @@ class _PopnnRNN(ipu_layer.IPULayer):
                             noise_shape=noise_shape,
                             name=self.name + "_dropout")
 
+  @property
+  def _options_with_amp(self):
+    available_memory_proportion_fwd = -1. \
+        if self._available_memory_proportion_fwd is None \
+        else self._available_memory_proportion_fwd
+
+    options = dict()
+    if available_memory_proportion_fwd != -1:
+      options['availableMemoryProportion'] = available_memory_proportion_fwd
+
+    return options
+
+  @property
+  def _options_bwd_with_amp(self):
+    available_memory_proportion_bwd = -1. \
+        if self._available_memory_proportion_bwd is None \
+        else self._available_memory_proportion_bwd
+
+    options_bwd = dict()
+    if available_memory_proportion_bwd != -1:
+      options_bwd[
+          'availableMemoryProportion'] = available_memory_proportion_bwd
+
+    return options_bwd
+
 
 class PopnnLSTM(_PopnnRNN):
   # pylint:disable=line-too-long
@@ -567,12 +592,8 @@ class PopnnLSTM(_PopnnRNN):
     bias_tensor = array_ops.reshape(
         self.biases, [self._num_gates_per_layer, self._num_units])
 
-    available_memory_proportion_fwd = -1. \
-        if self._available_memory_proportion_fwd is None \
-        else self._available_memory_proportion_fwd
-    available_memory_proportion_bwd = -1. \
-        if self._available_memory_proportion_bwd is None \
-        else self._available_memory_proportion_bwd
+    options = json.dumps(self._options_with_amp)
+    options_bwd = json.dumps(self._options_bwd_with_amp)
 
     output, output_h, output_c, _ = gen_popnn_ops.popnn_lstm_layer(
         inputs=inputs,
@@ -586,8 +607,8 @@ class PopnnLSTM(_PopnnRNN):
         is_training=training,
         partials_dtype=self._partials_dtype,
         name=self._name,
-        available_memory_proportion_fwd=available_memory_proportion_fwd,
-        available_memory_proportion_bwd=available_memory_proportion_bwd)
+        options=options,
+        options_bwd=options_bwd)
 
     if self._stateful:
       updates = []
@@ -966,12 +987,8 @@ class PopnnGRU(_PopnnRNN):
       bias_tensor = array_ops.reshape(
           self.biases, [self._num_gates_per_layer, self._num_units])
 
-    available_memory_proportion_fwd = -1. \
-        if self._available_memory_proportion_fwd is None \
-        else self._available_memory_proportion_fwd
-    available_memory_proportion_bwd = -1. \
-        if self._available_memory_proportion_bwd is None \
-        else self._available_memory_proportion_bwd
+    options = json.dumps(self._options_with_amp)
+    options_bwd = json.dumps(self._options_bwd_with_amp)
 
     output, output_state, _ = gen_popnn_ops.popnn_gru_layer(
         inputs=inputs,
@@ -985,8 +1002,8 @@ class PopnnGRU(_PopnnRNN):
         partials_dtype=self._partials_dtype,
         name=self._name,
         reset_after=self._reset_after,
-        available_memory_proportion_fwd=available_memory_proportion_fwd,
-        available_memory_proportion_bwd=available_memory_proportion_bwd)
+        options=options,
+        options_bwd=options_bwd)
 
     if self._stateful:
       updates = [state_ops.assign(self.states[0], output_state)]
