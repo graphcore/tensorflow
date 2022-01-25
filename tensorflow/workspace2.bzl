@@ -1113,7 +1113,7 @@ def _tf_repositories():
         strip_prefix = "boost_1_68_0",
         urls = [
             "https://storage.googleapis.com/mirror.tensorflow.org/dl.bintray.com/boostorg/release/1.68.0/source/boost_1_68_0.tar.gz",
-            "https://dl.bintray.com/boostorg/release/1.68.0/source/boost_1_68_0.tar.gz",
+            "https://boostorg.jfrog.io/artifactory/main/release/1.68.0/source/boost_1_68_0.tar.gz",
         ],
     )
 
