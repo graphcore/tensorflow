@@ -51,6 +51,8 @@ from tensorflow.python.ipu.ops import slicing_ops
 from tensorflow.python.ipu.ops import slicing_ops_grad
 from tensorflow.python.ipu.ops import statistics_ops
 from tensorflow.python.ipu.ops import summary_ops
+from tensorflow.python.ipu.ops import within_replica_ops
+from tensorflow.python.ipu.ops import within_replica_ops_grad
 
 from tensorflow.python.ipu import data
 from tensorflow.python.ipu import config
