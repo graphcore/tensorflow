@@ -39,6 +39,19 @@ def _archive_name(url):
         fail("Couldn't find the beginning of the archive name in "+url)
     return url[index:]
 
+# Executes specified command with arguments and calls 'fail' if it exited with
+# non-zero code
+def _execute_and_check_ret_code(repo_ctx, cmd_and_args):
+    result = repo_ctx.execute(cmd_and_args, timeout = 60)
+    if result.return_code != 0:
+        fail(("Non-zero return code({1}) when executing '{0}':\n" + "Stdout: {2}\n" +
+              "Stderr: {3}").format(
+            " ".join([str(x) for x in cmd_and_args]),
+            result.return_code,
+            result.stdout,
+            result.stderr,
+        ))
+
 def _tf_http_archive_impl(ctx):
     # Construct all labels early on to prevent rule restart. We want the
     # attributes to be strings instead of labels because they refer to files
@@ -89,6 +102,16 @@ def _tf_http_archive_impl(ctx):
             type = ctx.attr.type,
             stripPrefix = ctx.attr.strip_prefix,
         )
+
+        if create_mirror_script:
+            ctx.download(
+                urls,
+                archive_name,
+                ctx.attr.sha256,
+            )
+            _execute_and_check_ret_code(ctx,
+                                        [create_mirror_script, archive_path, archive_name, mirror])
+
         if patch_file:
             ctx.patch(patch_file, strip = 1)
 
