@@ -15,6 +15,7 @@ limitations under the License.
 
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -92,6 +93,29 @@ static Status AddPopEFEntryAnchors(const FeedInfos& infos,
   return Status::OK();
 }
 
+static void DeduplicatePopEFAnchors(popef::Metadata& metadata) {
+  std::map<std::string, int> counts;
+  for (auto& anchor : metadata.anchors()) {
+    counts[anchor.name()]++;
+  }
+  for (auto it = std::begin(counts); it != std::end(counts);) {
+    if (it->second < 2) {
+      it = counts.erase(it);
+      continue;
+    }
+    VLOG(1) << "Warning: duplicate anchor name " << it->first
+            << " will have numeric suffixes added in the exported executable.";
+    it->second = 0;
+    ++it;
+  }
+  for (auto& anchor : metadata.anchors()) {
+    auto name = anchor.name();
+    if (counts.find(name) == std::end(counts)) continue;
+    anchor.setName(name + std::to_string(counts[name]));
+    counts[name]++;
+  }
+}
+
 static StatusOr<popef::Metadata> ToPopEFMetadata(
     const std::string& executable_name, const PoplarExecutableInfo& info,
     const InputOutputAliasingMap& io_map, const poplar::OptionFlags& opts) {
@@ -137,6 +161,7 @@ static StatusOr<popef::Metadata> ToPopEFMetadata(
                                           popef::TensorType::INPUT, metadata));
   TF_RETURN_IF_ERROR(AddPopEFEntryAnchors(io_map.GetEntryOutputInfos(),
                                           popef::TensorType::OUTPUT, metadata));
+  DeduplicatePopEFAnchors(metadata);
   return metadata;
 }
 
