@@ -3458,6 +3458,16 @@ xla_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "dummy_input_test",
+    size = "small",
+    srcs = ["tests/dummy_input_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -3504,6 +3514,7 @@ test_suite(
         "device_connection_test",
         "distributed_batch_norm_decomposer_test",
         "distributed_batch_norm_test",
+        "dummy_input_test",
         "dump_poplar_info",
         "dynamic_slice_layout_test",
         "dynamic_slice_test",
