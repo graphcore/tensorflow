@@ -533,14 +533,10 @@ build:elinux_armhf --config=elinux
 build:elinux_armhf --cpu=armhf
 # END TF REMOTE BUILD EXECUTION OPTIONS
 
-<<<<<<< HEAD
 # Config-specific options should come above this line.
-=======
+
 # IPU specific options.
 build:ipu_horovod --action_env TF_NEED_IPU_HOROVOD=1
-
-# Default options should come above this line
->>>>>>> poplar/r2.4/release
 
 # Load rc file written by ./configure.
 try-import %workspace%/.tf_configure.bazelrc
