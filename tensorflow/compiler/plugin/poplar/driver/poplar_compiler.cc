@@ -756,6 +756,17 @@ absl::optional<Tilesets> PartitionTiles(const poplar::Graph& main_graph,
   return Tilesets{compute_tiles, io_tiles};
 }
 
+IpuSelectionOrder GetIpuSelectionOrder(const HloModule* module,
+                                       PoplarExecutor* poplar_executor) {
+  IpuSelectionOrder order = poplar_executor->GetSelectionOrder();
+  if (order == IpuSelectionOrder::AUTO) {
+    order = HasPipeliningWithDefaultSharding(module)
+                ? IpuSelectionOrder::SNAKE
+                : IpuSelectionOrder::ZIGZAG;
+  }
+  return order;
+}
+
 Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
                           PoplarExecutor* poplar_executor) {
   try {
@@ -783,12 +794,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
       PartitionTiles(main_graph, resources.num_io_tiles, tiles_per_ipu);
 
   if (ShardingEnabled(module)) {
-    IpuSelectionOrder order = poplar_executor->GetSelectionOrder();
-    if (order == IpuSelectionOrder::AUTO) {
-      order = HasPipeliningWithDefaultSharding(module)
-                  ? IpuSelectionOrder::SNAKE
-                  : IpuSelectionOrder::ZIGZAG;
-    }
+    IpuSelectionOrder order = GetIpuSelectionOrder(module, poplar_executor);
 
     absl::flat_hash_set<int64> shards_with_io_instructions;
     for (const HloComputation* comp : module->computations()) {
@@ -968,12 +974,19 @@ Status GetOperatingSystemInfo(utsname& details) {
   return Status::OK();
 }
 
-StatusOr<std::string> GetFrameworkInfo(const std::string& module_name) {
+StatusOr<std::string> GetFrameworkInfo(const HloModule* module,
+                                       PoplarExecutor* poplar_executor) {
   // tf info
   Json::Value tf_info;
   tf_info["Version"] = TF_VERSION_STRING;
   tf_info["Githash"] = tf_git_version();
-  tf_info["Cluster"] = module_name;
+  tf_info["Cluster"] = module->name();
+
+  // Determine the selection order - only valid is sharding is enabled
+  if (ShardingEnabled(module)) {
+    tf_info["SelectionOrder"] =
+        IpuSelectionOrder_Name(GetIpuSelectionOrder(module, poplar_executor));
+  }
 
   Json::Value root;
   root["TensorFlow"] = tf_info;
@@ -1407,7 +1420,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<HloCSE>(true);
       pipeline.AddPass<HloDCE>();
       pipeline.AddPass<HloPassFix<WhileLoopInvariantCodeMotion>>(
-          /*hoist_constants=*/ false, /*hoist_size_inflating_ops=*/ false);
+          /*hoist_constants=*/false, /*hoist_size_inflating_ops=*/false);
       pipeline.AddPass<TupleSimplifier>(true);
       pipeline.AddPass<HloPassFix<WhileLoopSimplifier>>();
       pipeline.AddPass<WideConstFinder>();
@@ -1729,7 +1742,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
     // Generate a framework.json if autoReport.all or directory is configured.
     TF_ASSIGN_OR_RETURN(std::string tensorflow_info,
-                        GetFrameworkInfo(module->name()));
+                        GetFrameworkInfo(module, poplar_executor));
     if (GetPoplarEngineOption("autoReport.all").has_value()) {
       // The current behaviour is to output the frameworks.json into the sub
       // director for each module.
