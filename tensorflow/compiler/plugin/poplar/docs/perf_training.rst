@@ -125,8 +125,6 @@ See the `Poplar and PopLibs User Guide
 <https://docs.graphcore.ai/projects/poplar-user-guide/>`_ for more background
 about replicated graphs.
 
-.. note:: Replicated graphs are not supported when running on an IPU Model.
-
 The Graphcore tutorials repository also has a `tutorial on
 using replication in TensorFlow to train a simple model. <https://github.com/graphcore/tutorials/tree/sdk-release-2.4/feature_examples/tensorflow/replication>`_.
 

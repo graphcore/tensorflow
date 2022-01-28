@@ -146,9 +146,7 @@ Running on the IPU Model simulator
 
 You can also run the graph on an "IPU Model" running on the host.
 The IPU Model is a simulation of the *behaviour* of the IPU hardware.
-It does not implement every aspect of a real IPU. For example, the
-IPU Model does not support replicated graphs in TensorFlow
-(see :ref:`replicated_graphs`).
+It does not implement every aspect of a real IPU.
 
 When using an IPU Model instead of actual IPU hardware, the runtime operations
 will behave exactly as they would on hardware. However, the profiler will
