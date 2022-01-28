@@ -1,3 +1,5 @@
+.. _tutorial:
+
 Tutorial
 --------
 
@@ -161,7 +163,6 @@ that is actually executed by the IPU Model). In this case, the reported
 IPU memory usage will include the memory used for code.
 
 The IPU Model can be a useful tool for debugging OOM-related issues.
-See :ref:`using_the_ipu_model` for more information.
 
 By default, the code will be run on IPU hardware. To run on the
 IPU Model instead, you need to set the environment variable

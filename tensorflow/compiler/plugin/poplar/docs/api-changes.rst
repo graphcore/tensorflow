@@ -10,7 +10,7 @@ This may require you to change your code.
 Non-breaking changes
 ____________________
 
-.. layers-moved-to-addons:
+.. _layers-moved-to-addons:
 
 Deprecated layers
 '''''''''''''''''

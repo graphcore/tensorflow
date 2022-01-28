@@ -29,10 +29,10 @@ to that training operation need to provide a stream of values.  Standard
 TensorFlow Python feed dictionaries cannot provide data in this form, so when
 training in a loop, data must be fed from a TensorFlow DataSet.
 
-More information can be found on the DataSet class and its use in normal
-operation at https://www.tensorflow.org/guide/performance/datasets. TensorFlow
-provides many pre-configured DataSets for use in training models.  See the site
-https://www.tensorflow.org/datasets.
+You can find more information about the DataSet class and its use in normal
+operation on the TensorFlow `Better performance with the tf.data API <https://www.tensorflow.org/guide/data_performance>`__ web page. TensorFlow
+provides many pre-configured DataSets for use in training models, see
+`TensorFlow Datasets <https://www.tensorflow.org/datasets>`__ for more information.
 
 To construct a system that will train in a loop, you will need to do the
 following:

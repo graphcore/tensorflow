@@ -1,3 +1,5 @@
+.. _device_selection:
+
 Targeting the Poplar XLA device
 -------------------------------
 

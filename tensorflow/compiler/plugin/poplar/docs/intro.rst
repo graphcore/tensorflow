@@ -52,10 +52,10 @@ These will be described in the appropriate sections of this document.
 Document overview
 ~~~~~~~~~~~~~~~~~
 
-* This document starts with :any:`a tutorial overview <tutorial>` of TensorFlow
+* This document starts with :ref:`a tutorial overview <tutorial>` of TensorFlow
   for the IPU. This describes how to execute a graph on an IPU, how to select
   the IPU hardware to run on, and a simple approach to using multiple IPUs.
-* The next section provides information about :any:`selecting specific IPU
+* The next section provides information about :ref:`selecting specific IPU
   <device_selection>` hardware and configuring the code to run on it.
 * The following sections provide information on various methods related to
   training a model on the IPU.

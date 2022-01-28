@@ -1,3 +1,5 @@
+.. _ipu_estimator_example:
+
 Example using IPUEstimator
 --------------------------
 
