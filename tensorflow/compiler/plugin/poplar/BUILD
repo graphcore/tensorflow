@@ -574,6 +574,18 @@ xla_test(
 )
 
 xla_test(
+    name = "while_loop_optimiser_test",
+    srcs = ["tests/while_loop_optimiser_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "while_loop_to_repeat_simplify_test",
     srcs = ["tests/while_loop_to_repeat_simplify_test.cc"],
     backends = ["poplar"],
@@ -3966,6 +3978,7 @@ test_suite(
         "weights_transpose_chans_flip_xy_test",
         "while_loop_alias_copy_test",
         "while_loop_condition_simplify_test",
+        "while_loop_optimiser_test",
         "while_loop_perf_test",
         "while_loop_sharded_test",
         "while_loop_test",

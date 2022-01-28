@@ -218,6 +218,19 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "slice_util",
+    srcs = [
+        "slice_util.cc",
+    ],
+    hdrs = [
+        "slice_util.h",
+    ],
+    deps = [
+        ":util",
+    ],
+)
+
+poplar_cc_library(
     name = "inplace_util",
     srcs = [
         "inplace_util.cc",
