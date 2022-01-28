@@ -182,6 +182,7 @@ everything else to the second stage, as follows:
 
 
 .. _automatic-data-parallelism:
+
 Automatic data parallelism
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -278,7 +279,7 @@ For reference, the following table details APIs that have been removed and
 their replacements:
 
 +---------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------+
-| **TF2.1**                                         | **TF2.4**                                                                                                                                |
+| **TensorFlow 2.1**                                | **TensorFlow 2.4**                                                                                                                       |
 +---------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------+
 | `ipu.keras.IPUModel` / `ipu.keras.Model`          | Removed, use `tensorflow.keras.Model`                                                                                                    |
 +---------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------+
@@ -319,11 +320,11 @@ their replacements:
 | `offload_weights`                                 |                                                                                                                                          |
 +---------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------+
 
-As an example, the following snippets show equivalent TF2.1 and TF2.4 code for
+As an example, the following snippets show equivalent TensorFlow 2.1 and TensorFlow 2.4 code for
 creating and fitting a pipelined sequential keras model.
 
-TF2.1
-_____
+TensorFlow 2.1
+______________
 
 .. code:: python
 
@@ -346,8 +347,8 @@ _____
 
     model.fit(dataset, epochs=2, steps_per_epoch=128)
 
-TF2.4
-_____
+TensorFlow 2.4
+______________
 
 .. literalinclude:: keras_porting_example.py
   :language: python

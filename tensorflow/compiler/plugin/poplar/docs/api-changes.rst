@@ -10,13 +10,13 @@ This may require you to change your code.
 Non-breaking changes
 ____________________
 
-.. layers-moved-to-addons:
+.. _layers-moved-to-addons:
 
 Deprecated layers
 '''''''''''''''''
 
 Keras layers from `tensorflow.python.ipu.keras.layers` and
-`tensorflow.python.ipu.keras.losses` have been moved to the 
+`tensorflow.python.ipu.keras.losses` have been moved to the
 `ipu_tensorflow_addons.keras.layers` namespace in IPU TensorFlow Addons.
 
 Additionally, the TensorFlow layers from `tensorflow.python.ipu.ops.rnn_ops`

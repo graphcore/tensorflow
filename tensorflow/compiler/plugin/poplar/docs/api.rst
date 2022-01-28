@@ -350,18 +350,21 @@ In addition to the `tensorflow.python.ipu.optimizers` namespace, it is also poss
 
 .. note:: The `ipu.optimizers` optimizer classes can only be used with subclasses of `tensorflow.compat.v1.train.Optimizer`.
 
-:class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2` and :class:`~tensorflow.python.ipu.optimizers.CrossReplicaGradientAccumulationOptimizerV2`
-can be configured with a optional reduction method on how to accumulate gradients (see enumerated class :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)
+You can configure :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2` and :class:`~tensorflow.python.ipu.optimizers.CrossReplicaGradientAccumulationOptimizerV2`
+with an optional reduction method (see :numref:`table_gradient_reduction_options`) defining how to accumulate gradients (see enumerated class :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`).
+
+.. table:: Gradient reduction options
+  :name: table_gradient_reduction_options
 
   +---------------------------+-------------------------------------------------------------------------------+
   | Reduction method          | Behaviour                                                                     |
   +===========================+===============================================================================+
-  | `SUM`                     | Sum gradients across the mini-batch.                                      |
+  | `SUM`                     | Sum gradients across the mini-batch.                                          |
   +---------------------------+-------------------------------------------------------------------------------+
-  | `MEAN`                    | Sum gradients across the mini-batch after scaling them                    |
+  | `MEAN`                    | Sum gradients across the mini-batch after scaling them                        |
   |                           | by (1 / mini-batch-size)                                                      |
   +---------------------------+-------------------------------------------------------------------------------+
-  | `RUNNING_MEAN`            | Compute a running mean of gradients across the mini-batch                  |
+  | `RUNNING_MEAN`            | Compute a running mean of gradients across the mini-batch                     |
   |                           | using the expression `acc <- acc*n/(n+1) + grad/(n+1)` for the nth iteration  |
   |                           | within the mini-batch.                                                        |
   +---------------------------+-------------------------------------------------------------------------------+
