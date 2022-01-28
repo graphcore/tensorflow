@@ -79,6 +79,18 @@ is being deprecated and will be removed in future. This feature will be provided
 methods being added via the `reduction_method` parameter
 (`tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`).
 
+RNN available_memory_proportion_fwd/available_memory_proportion_bwd deprecated
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+The ``available_memory_proportion_fwd`` and ``available_memory_proportion_bwd`` arguments have been deprecated and will be removed from the following layers in a future release:
+
+  - tensorflow.python.ipu.ops.rnn_ops.PopnnLSTM
+  - tensorflow.python.ipu.ops.rnn_ops.PopnnDynamicLSTM
+  - tensorflow.python.ipu.ops.rnn_ops.PopnnGRU
+  - tensorflow.python.ipu.ops.rnn_ops.PopnnDynamicGRU
+  - tensorflow.python.ipu.ops.rnn_ops.PopnnAUGRU
+
+These values are now set using the ``'availableMemoryProportion'`` key of the ``options`` and ``options_bwd`` arguments correspondingly.
 
 Release 2.4
 ~~~~~~~~~~~
