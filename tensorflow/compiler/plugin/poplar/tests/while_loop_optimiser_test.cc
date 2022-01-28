@@ -1,0 +1,124 @@
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+#include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_optimiser.h"
+
+#include <stdlib.h>
+
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/service/hlo_matchers.h"
+#include "tensorflow/compiler/xla/service/hlo_parser.h"
+#include "tensorflow/compiler/xla/service/hlo_pass_fix.h"
+#include "tensorflow/compiler/xla/service/pattern_matcher.h"
+#include "tensorflow/compiler/xla/test.h"
+#include "tensorflow/compiler/xla/tests/hlo_test_base.h"
+#include "tensorflow/core/lib/core/status_test_util.h"
+
+namespace xla {
+namespace m = match;
+namespace poplarplugin {
+namespace {
+
+using WhileLoopOptimiserTest = HloTestBase;
+
+TEST_F(WhileLoopOptimiserTest, DetectSingleBroadcast) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  one = s32[] constant(1)
+  zero = s32[] constant(0)
+  add = s32[] add(p_body.0, one)
+  two = s32[] constant(2)
+  slice-input = s32[1, 1] reshape(two)
+  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+}
+
+condition {
+  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_2 = s32[] constant(1)
+  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
+  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10, 1] get-tuple-element(while), index=1
+  ROOT slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  auto count = PoplarWhileLoopOptimiser().CountOptimisations(module.get());
+  ASSERT_EQ(count, 1);
+}
+
+TEST_F(WhileLoopOptimiserTest, UsedByRoot) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  one = s32[] constant(1)
+  zero = s32[] constant(0)
+  add = s32[] add(p_body.0, one)
+  two = s32[] constant(2)
+  slice-input = s32[1, 1] reshape(two)
+  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+}
+
+condition {
+  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_2 = s32[] constant(1)
+  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
+  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
+  ROOT broadcast = s32[10, 1] get-tuple-element(while), index=1
+  slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  auto count = PoplarWhileLoopOptimiser().CountOptimisations(module.get());
+  ASSERT_EQ(count, 0);
+}
+
+}  // namespace
+}  // namespace poplarplugin
+}  // namespace xla
