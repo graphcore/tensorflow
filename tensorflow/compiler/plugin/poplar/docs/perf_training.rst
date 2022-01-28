@@ -158,8 +158,6 @@ See the `Poplar and PopLibs User Guide
 <https://docs.graphcore.ai/projects/poplar-user-guide/>`_ for more background
 about replicated graphs.
 
-.. note:: Replicated graphs are not supported when running on an IPU Model.
-
 Selecting the number of replicas
 ________________________________
 
