@@ -284,7 +284,21 @@ StatusOr<bool> EmbeddingPlansPreplanning::Run(HloModule* module) {
        entry_computation->MakeInstructionPostOrder()) {
     if (IsMultiSliceOrUpdate(inst)) {
       slice_ops.push_back(inst);
-      slice_ops_map[inst->operand(0)].push_back(inst);
+
+      auto get_target_operand =
+          [](const HloInstruction* inst) -> const HloInstruction* {
+        const HloInstruction* operand = inst->operand(0);
+
+        // When gradient accumulation is used, we want to try and create a joint
+        // plan for the tensor which the gradients are accumulated for.
+        const bool look_through =
+            IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(operand) &&
+            operand->operand_count();
+
+        return look_through ? operand->operand(0) : operand;
+      };
+
+      slice_ops_map[get_target_operand(inst)].push_back(inst);
     }
   }
 

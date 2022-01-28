@@ -418,6 +418,77 @@ ENTRY main {
   EXPECT_NE(plan2, plan3);
 }
 
+TEST_F(SlicePlanTest, JointPlanGradientAccumulation) {
+  const std::string hlo_string = R"(
+HloModule top
+
+stage_0_fwd {
+  input = f32[100,16] parameter(0)
+  offsets = s32[24,1] parameter(1)
+  slice1 = f32[24,16] custom-call(input, offsets), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}", sharding={maximal device=0}
+  ROOT stage_0_fwd_tuple = (f32[24,16]) tuple(slice1)
+}
+
+stage_0_bwd {
+  gradient_accumulation_buffer = f32[100,16] parameter(0)
+  offsets = s32[24,1] parameter(1)
+  updates = f32[24,16] parameter(2)
+  lr = f32[] constant(-0.1)
+  gradient_accumulation_buffer_updated = f32[100,16] custom-call(gradient_accumulation_buffer, offsets, updates, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n", sharding={maximal device=0}
+  ROOT stage_0_bwd_tuple = (f32[100,16]) tuple(gradient_accumulation_buffer_updated)
+}
+
+resource_update {
+  resource_update_p0 = f32[100,16] parameter(0)
+  ga_buffer = f32[100,16] parameter(1)
+  updated_param = f32[100,16] add(resource_update_p0, ga_buffer)
+  ROOT t = (f32[100,16]) tuple(updated_param)
+}
+
+pipeline {
+  pipeline_p0 = f32[100,16] parameter(0), sharding={maximal device=0}
+  pipeline_p1 = s32[24, 1] parameter(1), sharding={maximal device=0}
+  pipeline_stage_0 = (f32[24,16]) call(pipeline_p0, pipeline_p1), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  pipeline_stage_0.0 = f32[24,16] get-tuple-element(pipeline_stage_0), index=0
+
+  pipeline_accumulator = f32[100,16] custom-call(pipeline_p0), custom_call_target="GradientAccumulatorCreate", backend_config="{}"
+  pipeline_stage_0_bwd = (f32[100,16]) call(pipeline_accumulator, pipeline_p1, pipeline_stage_0.0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0_bwd.0 = f32[100,16] get-tuple-element(pipeline_stage_0_bwd), index=0
+
+  pipeline_accumulator_sink = f32[100,16] custom-call(pipeline_stage_0_bwd.0), custom_call_target="GradientAccumulatorSink", backend_config="{\"num_mini_batches\":1}\n"
+
+  call_ru = (f32[100,16]) call(pipeline_p0, pipeline_accumulator_sink), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  pipeline_p0_updated = f32[100,16] get-tuple-element(call_ru), index=0
+  ROOT pipeline_tuple = (f32[100,16], s32[24, 1]) tuple(pipeline_p0_updated, pipeline_p1)
+}
+
+ENTRY e {
+  e.weights0 = f32[100,16] parameter(0), parameter_replication={false}
+  e.weights1 = s32[24, 1] parameter(1), parameter_replication={false}
+  ROOT e.call = (f32[100,16], s32[24, 1]) call(e.weights0, e.weights1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":0}}}"
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), false);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  TF_EXPECT_OK(
+      EmbeddingPlansPreplanning(*resources).Run(module.get()).status());
+
+  const HloInstruction* multi_slice =
+      FindInstruction(module.get(), "multi-slice");
+  const HloInstruction* multi_update_add =
+      FindInstruction(module.get(), "multi-update-add");
+
+  // Plan is shared, even though gradient accumulation is used.
+  TF_ASSERT_OK_AND_ASSIGN(auto multi_slice_plan,
+                          GetSlicePlan(*resources, multi_slice));
+  TF_ASSERT_OK_AND_ASSIGN(auto multi_update_add_plan,
+                          GetSlicePlan(*resources, multi_update_add));
+  EXPECT_EQ(multi_slice_plan, multi_update_add_plan);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
