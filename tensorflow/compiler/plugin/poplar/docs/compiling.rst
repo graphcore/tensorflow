@@ -58,7 +58,7 @@ For example:
 .. literalinclude:: pre_compile_example.py
   :language: python
   :linenos:
-  :emphasize-lines: 16-21
+  :emphasize-lines: 9-14
 
 In the above example we create an IPU system configuration with pre-compile mode
 for a single IPU device (IPU version 2) and with remote buffers enabled, with
