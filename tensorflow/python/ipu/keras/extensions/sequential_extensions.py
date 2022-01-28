@@ -28,7 +28,7 @@ from tensorflow.python.util import deprecation
 
 
 class SequentialLayerPipelineStageAssignment:
-  """A class used to indicate in which pipeline stage a layer in a `Sequential`
+  """A class used to indicate which pipeline stage a layer in a `Sequential`
   model should be executed in.
   """
   def __init__(self, layer, pipeline_stage=None):
@@ -146,13 +146,16 @@ class SequentialExtension(keras_extension_base.KerasExtensionBase):  # pylint: d
     """Sets the asynchronous callbacks options when calling `fit()`, `evaluate()`
     and `predict()`.
 
-    When running `fit()`, `evaluate()` and `predict()` the callbacks the model
-    is configured with are executed after `steps_per_execution` have executed.
+    When running `fit()`, `evaluate()` and `predict()`, the callback functions
+    are called after executing the number of steps specified by
+    `steps_per_execution`, where each step processes one batch.
+
     Enabling asynchronous callbacks means that the callbacks are invoked after
     every step, even when `steps_per_execution > 1`. This can reduce the latency
-    of receiving per step results and metrics at a cost of an extra thread
+    of receiving per-step results and metrics, at the cost of an extra thread
     running in the background of the application.
-    Note that this option is ignored for the `fit()` and `evaluate()` when
+
+    Note that this option is ignored for `fit()` and `evaluate()` when
     running a pipelined model and `accumulate_outfeed=True` (configured via
     `set_pipelining_options`).
 
