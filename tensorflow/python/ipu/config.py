@@ -1033,7 +1033,7 @@ class SelectionOrder(Enum):
         o3 = o2 + pd
         return o3
 
-  and a typical machine with 8 Graphcore C2 cards:
+  and a Graphcore Pod system with 16 IPUs:
 
   .. code-block:: none
 
@@ -1077,19 +1077,21 @@ class SelectionOrder(Enum):
     |   0   |=============|   1   |
     |_______|             |_______|
 
-  (where each numbered square represents an IPU with the given device ID and the
-  == and || connections represent IPUs being directly connected via IPU-Links)
+  Here, each numbered square represents an IPU with the given device ID and the
+  `== `and `||` connections represent IPUs directly connected via IPU-Links.
 
   We can see that the `ipu_shard(0)` directly communicates with `ipu_shard(1)`
   and that `ipu_shard(1)` directly communicates with `ipu_shard(2)`.
+
   If the shards 0, 1, 2 were mapped to IPUs 0, 1, 2 in that order, then the
   communication between shards 1 and 2 would not have a direct connection via an
   IPU-Link and would have to perform a "hop" through an intermediate IPU.
+
   If the shards 0, 1, 2 were mapped to IPUs 0, 1, 3 in that order, then the
   communication between shards 1 and 2 would have a direct connection via an
-  IPU-Link which will reduce the communication cost.
+  IPU-Link, which will reduce the communication cost.
 
-  This Enum class is used to control the order in which the IPUs are selected.
+  This enumeration is used to control the order in which the IPUs are selected.
   Currently, the following IPU selection orderings are supported:
 
   * `AUTO`: automatically try and select the best selection given the network.
@@ -1101,8 +1103,8 @@ class SelectionOrder(Enum):
     the IPUs would be selected in the following order:
     `0, 1, 3, 2, 4, 5, 7, 6, 8, 9, 11, 10, 12, 13, 15, 14`.
   * `HOOF`: select IPUs such that each consecutive shard is directly
-    connected via IPU-Links to the shard before and after and the last and first
-    shard are on the same C2 cards. In the above example, the IPUs would be
+    connected via IPU-Links to the shard before and after, and the last and first
+    shard are on adjacent IPUs. In the above example, the IPUs would be
     selected in the following order:
     `0, 2, 4, 6, 8, 10, 12, 14, 15, 13, 11, 9, 7, 5, 3, 1`.
 

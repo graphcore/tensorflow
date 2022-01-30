@@ -71,7 +71,7 @@ the rest of the program unchanged.
 
   .. code-block:: console
 
-    $ gc-info -d 0 -I
+    $ gc-info -d 0 -i
 
   If you see ``remote buffers supported: 1`` in the output, that means that remote
   buffers are supported on your system. For more information, see the
