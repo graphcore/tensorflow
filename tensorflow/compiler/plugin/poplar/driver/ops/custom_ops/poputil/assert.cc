@@ -21,12 +21,14 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_op_metadata.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/core/lib/core/errors.h"
 
 #include <popops/ElementWise.hpp>
 #include "absl/container/flat_hash_map.h"
+#include "absl/strings/str_cat.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -48,7 +50,10 @@ class AssertOp : public PoplarOpDef {
         FindInstructionInput(tensor_map, res, inst, 0, seq, false));
     auto not_input = popops::map(graph, popops::expr::UnaryOpType::LOGICAL_NOT,
                                  input, seq, {debug_info, "logical_not"}, {});
-    seq.add(poplar::program::AbortOnCondition(not_input));
+    const std::string message =
+        absl::StrCat("Assertion op with metadata={",
+                     xla::OpMetadataToString(inst->metadata()), "} failed.");
+    seq.add(poplar::program::AbortOnCondition(not_input, message));
 
     return seq;
   }
