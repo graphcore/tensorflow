@@ -17,7 +17,11 @@
 set -e
 
 # Get the latest version of pip so it recognize manylinux2010
-wget https://bootstrap.pypa.io/get-pip.py
+if python3 --version 2>&1 | grep -q '^Python 3\.6'; then
+  wget -O get-pip.py https://bootstrap.pypa.io/pip/3.6/get-pip.py
+else
+  wget -O get-pip.py https://bootstrap.pypa.io/pip/get-pip.py
+fi
 python3 get-pip.py
 rm -f get-pip.py
 
