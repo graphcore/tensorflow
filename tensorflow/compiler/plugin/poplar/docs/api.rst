@@ -81,15 +81,18 @@ For example, this will not work:
 
 .. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
   :members: IPUMultiWorkerStrategy
+  :special-members: __init__
 
 .. automodule:: tensorflow.python.ipu.horovod
   :members:
 
 .. automodule:: tensorflow.python.ipu.horovod.ipu_horovod_strategy
   :members: IPUHorovodStrategy
+  :special-members: __init__
 
 .. automodule:: tensorflow.python.ipu.horovod.popdist_strategy
   :members: PopDistStrategy
+  :special-members: __init__
 
 .. _datasets-api:
 
