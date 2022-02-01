@@ -89,16 +89,19 @@ For example, this will not work:
 .. Distributed training
 
 .. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
-  :members: IPUMultiWorkerStrategyV1
+  :members: IPUMultiWorkerStrategy
+  :special-members: __init__
 
 .. automodule:: tensorflow.python.ipu.horovod
   :members:
 
 .. automodule:: tensorflow.python.ipu.horovod.ipu_horovod_strategy
-  :members: IPUHorovodStrategyV1
+  :members: IPUHorovodStrategy
+  :special-members: __init__
 
 .. automodule:: tensorflow.python.ipu.horovod.popdist_strategy
   :members: PopDistStrategy
+  :special-members: __init__
 
 .. _datasets-api:
 
