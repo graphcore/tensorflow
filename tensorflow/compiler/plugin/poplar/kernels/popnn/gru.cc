@@ -83,13 +83,6 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("reset_after", &reset_after_));
     attribute_map_.AddAttribute("reset_after", reset_after_);
 
-    // TODO(T53098): Remove setting of `available_memory_proportion`.
-    float available_memory_proportion;
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("available_memory_proportion_fwd",
-                                     &available_memory_proportion));
-    attribute_map_.AddAttribute("available_memory_proportion",
-                                available_memory_proportion);
-
     std::string options;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("options", &options));
     attribute_map_.AddAttribute("options", options);
@@ -253,13 +246,6 @@ class PopnnGRULayerBackpropOp : public XlaOpKernel, IpuOpKernel {
     tensorflow::DataType partials_dtype;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("partials_dtype", &partials_dtype));
     attribute_map_.AddAttribute("partials_dtype", partials_dtype);
-
-    // TODO(T53098): Remove setting of `available_memory_proportion`.
-    float available_memory_proportion;
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("available_memory_proportion_bwd",
-                                     &available_memory_proportion));
-    attribute_map_.AddAttribute("available_memory_proportion",
-                                available_memory_proportion);
 
     std::string options;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("options", &options));

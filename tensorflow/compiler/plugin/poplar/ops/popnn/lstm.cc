@@ -36,10 +36,6 @@ REGISTER_OP("PopnnLstmLayer")
     .Attr("is_training: bool")
     .Attr("dtype: {float16, float32}")
     .Attr("partials_dtype: {float16, float32} = DT_FLOAT")
-    // TODO(T53098): Remove `available_memory_proportion_fwd` &
-    // `available_memory_proportion_bwd`.
-    .Attr("available_memory_proportion_fwd: float = -1.0")
-    .Attr("available_memory_proportion_bwd: float = -1.0")
     .Attr("options: string = '{}'")
     .Attr("options_bwd: string = '{}'")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
@@ -86,10 +82,6 @@ REGISTER_OP("PopnnLstmLayerBackprop")
     .Attr("is_training: bool")
     .Attr("dtype: {float16, float32}")
     .Attr("partials_dtype: {float16, float32}")
-    // TODO(T53098): Remove `available_memory_proportion_fwd` &
-    // `available_memory_proportion_bwd`.
-    .Attr("available_memory_proportion_fwd: float = -1.0")
-    .Attr("available_memory_proportion_bwd: float = -1.0")
     .Attr("options: string = '{}'")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
@@ -126,10 +118,6 @@ REGISTER_OP("PopnnDynamicLstmLayer")
     .Attr("dtype: {float16, float32}")
     .Attr("seq_dtype: {int32}")
     .Attr("partials_dtype: {float16, float32} = DT_FLOAT")
-    // TODO(T53098): Remove `available_memory_proportion_fwd` &
-    // `available_memory_proportion_bwd`.
-    .Attr("available_memory_proportion_fwd: float = -1.0")
-    .Attr("available_memory_proportion_bwd: float = -1.0")
     .Attr("options: string = '{}'")
     .Attr("options_bwd: string = '{}'")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
@@ -178,10 +166,6 @@ REGISTER_OP("PopnnDynamicLstmLayerBackprop")
     .Attr("dtype: {float16, float32}")
     .Attr("seq_dtype: {int32}")
     .Attr("partials_dtype: {float16, float32}")
-    // TODO(T53098): Remove `available_memory_proportion_fwd` &
-    // `available_memory_proportion_bwd`.
-    .Attr("available_memory_proportion_fwd: float = -1.0")
-    .Attr("available_memory_proportion_bwd: float = -1.0")
     .Attr("options: string = '{}'")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);

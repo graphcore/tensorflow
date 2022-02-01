@@ -35,10 +35,6 @@ REGISTER_OP("PopnnGRULayer")
     .Attr("dtype: {float16, float32}")
     .Attr("partials_dtype: {float16, float32} = DT_FLOAT")
     .Attr("reset_after: bool = false")
-    // TODO(T53098): Remove `available_memory_proportion_fwd` &
-    // `available_memory_proportion_bwd`.
-    .Attr("available_memory_proportion_fwd: float = -1.0")
-    .Attr("available_memory_proportion_bwd: float = -1.0")
     .Attr("options: string = '{}'")
     .Attr("options_bwd: string = '{}'")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
@@ -81,10 +77,6 @@ REGISTER_OP("PopnnGRULayerBackprop")
     .Attr("dtype: {float16, float32}")
     .Attr("partials_dtype: {float16, float32}")
     .Attr("reset_after: bool = false")
-    // TODO(T53098): Remove `available_memory_proportion_fwd` &
-    // `available_memory_proportion_bwd`.
-    .Attr("available_memory_proportion_fwd: float = -1.0")
-    .Attr("available_memory_proportion_bwd: float = -1.0")
     .Attr("options: string = '{}'")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
@@ -118,10 +110,6 @@ REGISTER_OP("PopnnDynamicGRULayer")
     .Attr("seq_dtype: {int32}")
     .Attr("partials_dtype: {float16, float32} = DT_FLOAT")
     .Attr("reset_after: bool = false")
-    // TODO(T53098): Remove `available_memory_proportion_fwd` &
-    // `available_memory_proportion_bwd`.
-    .Attr("available_memory_proportion_fwd: float = -1.0")
-    .Attr("available_memory_proportion_bwd: float = -1.0")
     .Attr("options: string = '{}'")
     .Attr("options_bwd: string = '{}'")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
@@ -166,10 +154,6 @@ REGISTER_OP("PopnnDynamicGRULayerBackprop")
     .Attr("seq_dtype: {int32}")
     .Attr("partials_dtype: {float16, float32}")
     .Attr("reset_after: bool = false")
-    // TODO(T53098): Remove `available_memory_proportion_fwd` &
-    // `available_memory_proportion_bwd`.
-    .Attr("available_memory_proportion_fwd: float = -1.0")
-    .Attr("available_memory_proportion_bwd: float = -1.0")
     .Attr("options: string = '{}'")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
@@ -204,10 +188,6 @@ REGISTER_OP("PopnnAUGRULayer")
     .Attr("seq_dtype: {int32}")
     .Attr("partials_dtype: {float16, float32} = DT_FLOAT")
     .Attr("reset_after: bool = false")
-    // TODO(T53098): Remove `available_memory_proportion_fwd` &
-    // `available_memory_proportion_bwd`.
-    .Attr("available_memory_proportion_fwd: float = -1.0")
-    .Attr("available_memory_proportion_bwd: float = -1.0")
     .Attr("options: string = '{}'")
     .Attr("options_bwd: string = '{}'")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
@@ -254,10 +234,6 @@ REGISTER_OP("PopnnAUGRULayerBackprop")
     .Attr("seq_dtype: {int32}")
     .Attr("partials_dtype: {float16, float32}")
     .Attr("reset_after: bool = false")
-    // TODO(T53098): Remove `available_memory_proportion_fwd` &
-    // `available_memory_proportion_bwd`.
-    .Attr("available_memory_proportion_fwd: float = -1.0")
-    .Attr("available_memory_proportion_bwd: float = -1.0")
     .Attr("options: string = '{}'")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);

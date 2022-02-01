@@ -38,8 +38,7 @@ struct GRUAttributes : public RNNAttributes {
                 xla::PrimitiveType partials_xla_type,
                 rnn_helper::ActivationType activation,
                 rnn_helper::ActivationType recurrent_activation,
-                float available_memory_proportion, bool reset_after,
-                const std::string& options);
+                bool reset_after, const std::string& options);
 };
 }  // namespace rnn_helper
 
@@ -57,12 +56,14 @@ class HloGRUInstructionCommon {
 class HloGRUFwdInstruction : public HloRNNFwdInstruction,
                              public HloGRUInstructionCommon {
  public:
-  explicit HloGRUFwdInstruction(
-      const Shape& shape, absl::Span<HloInstruction* const> operands,
-      bool is_training, rnn_helper::ActivationType activation,
-      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-      xla::PrimitiveType partials_type, float available_memory_proportion,
-      bool reset_after, const std::string& options);
+  explicit HloGRUFwdInstruction(const Shape& shape,
+                                absl::Span<HloInstruction* const> operands,
+                                bool is_training,
+                                rnn_helper::ActivationType activation,
+                                rnn_helper::ActivationType recurrent_activation,
+                                int32 num_channels,
+                                xla::PrimitiveType partials_type,
+                                bool reset_after, const std::string& options);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -76,12 +77,14 @@ class HloGRUFwdInstruction : public HloRNNFwdInstruction,
 class HloGRUBwdInstruction : public HloRNNBwdInstruction,
                              public HloGRUInstructionCommon {
  public:
-  explicit HloGRUBwdInstruction(
-      const Shape& shape, absl::Span<HloInstruction* const> operands,
-      bool is_training, rnn_helper::ActivationType activation,
-      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-      xla::PrimitiveType partials_type, float available_memory_proportion,
-      bool reset_after, const std::string& options);
+  explicit HloGRUBwdInstruction(const Shape& shape,
+                                absl::Span<HloInstruction* const> operands,
+                                bool is_training,
+                                rnn_helper::ActivationType activation,
+                                rnn_helper::ActivationType recurrent_activation,
+                                int32 num_channels,
+                                xla::PrimitiveType partials_type,
+                                bool reset_after, const std::string& options);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -93,15 +96,15 @@ std::unique_ptr<HloInstruction> CreateGRUFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after, const std::string& options);
+    xla::PrimitiveType partials_type, bool reset_after,
+    const std::string& options);
 
 std::unique_ptr<HloInstruction> CreateGRUBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after, const std::string& options);
+    xla::PrimitiveType partials_type, bool reset_after,
+    const std::string& options);
 
 class HloDynamicGRUFwdInstruction : public HloRNNFwdInstruction,
                                     public HloGRUInstructionCommon {
@@ -110,8 +113,8 @@ class HloDynamicGRUFwdInstruction : public HloRNNFwdInstruction,
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-      xla::PrimitiveType partials_type, float available_memory_proportion,
-      bool reset_after, const std::string& options);
+      xla::PrimitiveType partials_type, bool reset_after,
+      const std::string& options);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -129,8 +132,8 @@ class HloDynamicGRUBwdInstruction : public HloRNNBwdInstruction,
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-      xla::PrimitiveType partials_type, float available_memory_proportion,
-      bool reset_after, const std::string& options);
+      xla::PrimitiveType partials_type, bool reset_after,
+      const std::string& options);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -142,15 +145,15 @@ std::unique_ptr<HloInstruction> CreateDynamicGRUFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after, const std::string& options);
+    xla::PrimitiveType partials_type, bool reset_after,
+    const std::string& options);
 
 std::unique_ptr<HloInstruction> CreateDynamicGRUBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after, const std::string& options);
+    xla::PrimitiveType partials_type, bool reset_after,
+    const std::string& options);
 
 class HloAUGRUFwdInstruction : public HloRNNFwdInstruction,
                                public HloGRUInstructionCommon {
@@ -159,8 +162,8 @@ class HloAUGRUFwdInstruction : public HloRNNFwdInstruction,
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-      xla::PrimitiveType partials_type, float available_memory_proportion,
-      bool reset_after, const std::string& options);
+      xla::PrimitiveType partials_type, bool reset_after,
+      const std::string& options);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -178,8 +181,8 @@ class HloAUGRUBwdInstruction : public HloRNNBwdInstruction,
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       bool is_training, rnn_helper::ActivationType activation,
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-      xla::PrimitiveType partials_type, float available_memory_proportion,
-      bool reset_after, const std::string& options);
+      xla::PrimitiveType partials_type, bool reset_after,
+      const std::string& options);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -191,15 +194,15 @@ std::unique_ptr<HloInstruction> CreateAUGRUFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after, const std::string& options);
+    xla::PrimitiveType partials_type, bool reset_after,
+    const std::string& options);
 
 std::unique_ptr<HloInstruction> CreateAUGRUBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
     rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    bool reset_after, const std::string& options);
+    xla::PrimitiveType partials_type, bool reset_after,
+    const std::string& options);
 
 }  // namespace poplarplugin
 }  // namespace xla

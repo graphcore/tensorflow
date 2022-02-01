@@ -31,12 +31,10 @@ HloLSTMFwdInstruction::HloLSTMFwdInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    const std::string& options)
+    xla::PrimitiveType partials_type, const std::string& options)
     : HloRNNFwdInstruction(PoplarOp::LstmLayerFwd, shape, operands, is_training,
                            activation, recurrent_activation, num_channels,
-                           partials_type, available_memory_proportion,
-                           options) {}
+                           partials_type, options) {}
 
 absl::flat_hash_set<int64> HloLSTMFwdInstruction::AllocatingIndices() const {
   return {0, 1, 2, 3, 4};
@@ -49,60 +47,54 @@ std::unique_ptr<HloInstruction> HloLSTMFwdInstruction::CloneWithNewOperandsImpl(
     HloCloneContext* ctx) const {
   return CreateLSTMFwd(shape, operands, is_training(), activation(),
                        recurrent_activation(), num_channels(), partials_type(),
-                       available_memory_proportion(), options());
+                       options());
 }
 
 std::unique_ptr<HloInstruction> CreateLSTMFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    const std::string& options) {
+    xla::PrimitiveType partials_type, const std::string& options) {
   return absl::make_unique<HloLSTMFwdInstruction>(
       shape, operands, is_training, activation, recurrent_activation,
-      num_channels, partials_type, available_memory_proportion, options);
+      num_channels, partials_type, options);
 }
 
 HloLSTMBwdInstruction::HloLSTMBwdInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    const std::string& options)
+    xla::PrimitiveType partials_type, const std::string& options)
     : HloRNNBwdInstruction(PoplarOp::LstmLayerBwd, shape, operands, is_training,
                            activation, recurrent_activation, num_channels,
-                           partials_type, available_memory_proportion,
-                           options) {}
+                           partials_type, options) {}
 
 std::unique_ptr<HloInstruction> HloLSTMBwdInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext* ctx) const {
   return CreateLSTMBwd(shape, operands, is_training(), activation(),
                        recurrent_activation(), num_channels(), partials_type(),
-                       available_memory_proportion(), options());
+                       options());
 }
 
 std::unique_ptr<HloInstruction> CreateLSTMBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    const std::string& options) {
+    xla::PrimitiveType partials_type, const std::string& options) {
   return absl::make_unique<HloLSTMBwdInstruction>(
       shape, operands, is_training, activation, recurrent_activation,
-      num_channels, partials_type, available_memory_proportion, options);
+      num_channels, partials_type, options);
 }
 
 HloDynamicLSTMFwdInstruction::HloDynamicLSTMFwdInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    const std::string& options)
+    xla::PrimitiveType partials_type, const std::string& options)
     : HloRNNFwdInstruction(PoplarOp::DynamicLstmLayerFwd, shape, operands,
                            is_training, activation, recurrent_activation,
-                           num_channels, partials_type,
-                           available_memory_proportion, options) {}
+                           num_channels, partials_type, options) {}
 
 absl::flat_hash_set<int64> HloDynamicLSTMFwdInstruction::AllocatingIndices()
     const {
@@ -117,31 +109,27 @@ HloDynamicLSTMFwdInstruction::CloneWithNewOperandsImpl(
     HloCloneContext* ctx) const {
   return CreateDynamicLSTMFwd(shape, operands, is_training(), activation(),
                               recurrent_activation(), num_channels(),
-                              partials_type(), available_memory_proportion(),
-                              options());
+                              partials_type(), options());
 }
 
 std::unique_ptr<HloInstruction> CreateDynamicLSTMFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    const std::string& options) {
+    xla::PrimitiveType partials_type, const std::string& options) {
   return absl::make_unique<HloDynamicLSTMFwdInstruction>(
       shape, operands, is_training, activation, recurrent_activation,
-      num_channels, partials_type, available_memory_proportion, options);
+      num_channels, partials_type, options);
 }
 
 HloDynamicLSTMBwdInstruction::HloDynamicLSTMBwdInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    const std::string& options)
+    xla::PrimitiveType partials_type, const std::string& options)
     : HloRNNBwdInstruction(PoplarOp::DynamicLstmLayerBwd, shape, operands,
                            is_training, activation, recurrent_activation,
-                           num_channels, partials_type,
-                           available_memory_proportion, options) {}
+                           num_channels, partials_type, options) {}
 
 std::unique_ptr<HloInstruction>
 HloDynamicLSTMBwdInstruction::CloneWithNewOperandsImpl(
@@ -149,19 +137,17 @@ HloDynamicLSTMBwdInstruction::CloneWithNewOperandsImpl(
     HloCloneContext* ctx) const {
   return CreateDynamicLSTMBwd(shape, operands, is_training(), activation(),
                               recurrent_activation(), num_channels(),
-                              partials_type(), available_memory_proportion(),
-                              options());
+                              partials_type(), options());
 }
 
 std::unique_ptr<HloInstruction> CreateDynamicLSTMBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, ActivationType activation,
     ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, float available_memory_proportion,
-    const std::string& options) {
+    xla::PrimitiveType partials_type, const std::string& options) {
   return absl::make_unique<HloDynamicLSTMBwdInstruction>(
       shape, operands, is_training, activation, recurrent_activation,
-      num_channels, partials_type, available_memory_proportion, options);
+      num_channels, partials_type, options);
 }
 
 namespace {
@@ -174,7 +160,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloLSTMFwdFactoryFunc(
       call->shape(), call->operands(), parsed_attributes.is_training,
       parsed_attributes.activation, parsed_attributes.recurrent_activation,
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
-      parsed_attributes.available_memory_proportion, parsed_attributes.options);
+      parsed_attributes.options);
 }
 
 static HloPoplarInstructionFactory lstm_fwd_factory(PoplarOp::LstmLayerFwd,
@@ -189,7 +175,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloLSTMBwdFactoryFunc(
       call->shape(), call->operands(), parsed_attributes.is_training,
       parsed_attributes.activation, parsed_attributes.recurrent_activation,
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
-      parsed_attributes.available_memory_proportion, parsed_attributes.options);
+      parsed_attributes.options);
 }
 
 static HloPoplarInstructionFactory lstm_bwd_factory(PoplarOp::LstmLayerBwd,
@@ -204,7 +190,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloDynamicLSTMFwdFactoryFunc(
       call->shape(), call->operands(), parsed_attributes.is_training,
       parsed_attributes.activation, parsed_attributes.recurrent_activation,
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
-      parsed_attributes.available_memory_proportion, parsed_attributes.options);
+      parsed_attributes.options);
 }
 
 static HloPoplarInstructionFactory dynamic_lstm_fwd_factory(
@@ -219,7 +205,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloDynamicLSTMBwdFactoryFunc(
       call->shape(), call->operands(), parsed_attributes.is_training,
       parsed_attributes.activation, parsed_attributes.recurrent_activation,
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
-      parsed_attributes.available_memory_proportion, parsed_attributes.options);
+      parsed_attributes.options);
 }
 
 static HloPoplarInstructionFactory dynamic_lstm_bwd_factory(
