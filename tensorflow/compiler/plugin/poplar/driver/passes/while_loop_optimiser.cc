@@ -32,6 +32,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
+#include "tensorflow/compiler/xla/service/while_loop_analysis.h"
 #include "tensorflow/compiler/xla/service/while_util.h"
 
 namespace xla {
@@ -424,6 +425,54 @@ bool SliceDimensionsAreCorrect(
   });
 }
 
+bool BroadcastIndexIsTripCounter(HloInstruction* while_loop,
+                                 const SliceAndIndex& broadcast) {
+  auto* gte = broadcast.dynamic_update->mutable_operand(2);
+  auto* root = while_loop->while_body()->root_instruction();
+  if (!Match(
+          root->mutable_operand(gte->tuple_index()),
+          m::AddAnyOrder(m::GetTupleElement(m::Parameter(), gte->tuple_index()),
+                         m::ConstantScalar(1)))) {
+    return false;
+  }
+  auto init = GetConstantValue<int>(
+      while_loop->operand(0)->operand(gte->tuple_index()));
+  if (!init) {
+    return false;
+  }
+  return *init == 0;
+}
+
+bool SliceIndexAlreadyWrittenTo(HloInstruction* while_loop,
+                                const SliceAndIndex& broadcast,
+                                const HloInstruction* slice) {
+  auto slice_index = GetConstantValue<int>(slice->operand(1));
+  auto trip_count = ComputeWhileLoopTripCount(while_loop, 0);
+  if (slice_index && trip_count) {
+    if ((*slice_index) < (*trip_count)) {
+      return true;
+    }
+    return false;
+  }
+  // Handle case where non constant in other diff
+  VLOG(10) << "Can't optimise because don't know index of " << slice->name()
+           << " " << static_cast<bool>(slice_index) << " , "
+           << static_cast<bool>(trip_count);
+  return false;
+}
+
+bool SliceIndexAlreadyWrittenTo(HloInstruction* while_loop,
+                                const SliceAndIndex& broadcast,
+                                const UsesAndIntermediates& slices) {
+  if (!BroadcastIndexIsTripCounter(while_loop, broadcast)) {
+    VLOG(10) << "Broadcast index is not trip counter";
+    return false;
+  }
+  return absl::c_all_of(slices.uses, [&](HloInstruction* slice) {
+    return SliceIndexAlreadyWrittenTo(while_loop, broadcast, slice);
+  });
+}
+
 std::vector<BroadcastAndSlice> FindBroadcastsOnlyUsedBySlices(
     HloInstruction* while_loop, std::vector<SliceAndIndex> broadcasts) {
   std::vector<BroadcastAndSlice> result;
@@ -439,6 +488,10 @@ std::vector<BroadcastAndSlice> FindBroadcastsOnlyUsedBySlices(
     }
     if (!SliceDimensionsAreCorrect(users.uses)) {
       VLOG(10) << "Skipping as dimensions are wrong";
+      continue;
+    }
+    if (!SliceIndexAlreadyWrittenTo(while_loop, broadcast, users)) {
+      VLOG(10) << "Slice index is unknown or too large";
       continue;
     }
     VLOG(10) << "Found candidate";
