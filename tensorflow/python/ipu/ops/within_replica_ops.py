@@ -75,9 +75,9 @@ def reduce_scatter(input_shards, op):
            IPU3 [x3, y3, z3]
 
     Output: IPU0 [0]
-           IPU1 [op(y0, y1, y2)]
-           IPU2 [op(z0, z1, z2)]
-           IPU3 [op(x0, x1, x2)]
+           IPU1 [op(y0, y1, y2, y3)]
+           IPU2 [op(z0, z1, z2, z3)]
+           IPU3 [op(x0, x1, x2, x3)]
 
   Args:
     input_shards: The tensors to reduce. These are expected to be supplied in
