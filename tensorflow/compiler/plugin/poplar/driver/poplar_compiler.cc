@@ -982,7 +982,7 @@ StatusOr<std::string> GetFrameworkInfo(const HloModule* module,
 
   // Determine the selection order - only valid is sharding is enabled
   if (ShardingEnabled(module)) {
-    tf_info["SelectionOrder"] =
+    tf_info["IpuSelectionOrder"] =
         IpuSelectionOrder_Name(GetIpuSelectionOrder(module, poplar_executor));
   }
 
