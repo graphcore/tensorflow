@@ -51,14 +51,12 @@ RNNAttributes::RNNAttributes(int32 num_channels, bool is_training,
                              xla::PrimitiveType partials_xla_type,
                              ActivationType activation,
                              ActivationType recurrent_activation,
-                             float available_memory_proportion,
                              const std::string& options)
     : num_channels(num_channels),
       is_training(is_training),
       partials_xla_type(partials_xla_type),
       activation(activation),
       recurrent_activation(recurrent_activation),
-      available_memory_proportion(available_memory_proportion),
       options(options) {}
 // Helper for parsing the attribute map when converting the custom call
 // instruction.
@@ -79,10 +77,6 @@ StatusOr<RNNAttributes> RNNAttributes::Parse(
                       attribute_map.GetAttributeAsString("activation"));
 
   TF_ASSIGN_OR_RETURN(
-      float available_memory_proportion,
-      attribute_map.GetAttributeAsFloat("available_memory_proportion"));
-
-  TF_ASSIGN_OR_RETURN(
       std::string recurrent_activation_string,
       attribute_map.GetAttributeAsString("recurrent_activation"));
 
@@ -98,8 +92,7 @@ StatusOr<RNNAttributes> RNNAttributes::Parse(
   xla::PrimitiveType partials_xla_type;
   TF_CHECK_OK(DataTypeToPrimitiveType(partials_dtype, &partials_xla_type));
   return RNNAttributes(num_channels, is_training, partials_xla_type, activation,
-                       recurrent_activation, available_memory_proportion,
-                       options);
+                       recurrent_activation, options);
 }
 }  // namespace rnn_helper
 
@@ -112,9 +105,6 @@ int32 HloRNNInstruction::num_channels() const { return num_channels_; }
 xla::PrimitiveType HloRNNInstruction::partials_type() const {
   return partials_type_;
 }
-float HloRNNInstruction::available_memory_proportion() const {
-  return available_memory_proportion_;
-}
 const std::string& HloRNNInstruction::options() const { return options_; }
 
 std::vector<std::string> HloRNNInstruction::ExtraPoplarAttributesToStringImpl(
@@ -124,9 +114,6 @@ std::vector<std::string> HloRNNInstruction::ExtraPoplarAttributesToStringImpl(
   attributes.push_back("num_channels=" + std::to_string(num_channels_));
   attributes.push_back("partials_type=" +
                        xla::PrimitiveType_Name(partials_type_));
-  attributes.push_back("available_memory_proportion=" +
-                       std::to_string(available_memory_proportion_));
-
   return attributes;
 }
 
