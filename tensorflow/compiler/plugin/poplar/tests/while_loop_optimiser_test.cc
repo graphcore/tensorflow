@@ -119,6 +119,61 @@ ENTRY entry {
   ASSERT_EQ(count, 0);
 }
 
+TEST_F(WhileLoopOptimiserTest, TestReshaping) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  one = s32[] constant(1)
+  zero = s32[] constant(0)
+  add = s32[] add(p_body.0, one)
+  two = s32[] constant(2)
+  slice-input = s32[1, 1] reshape(two)
+  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+}
+
+condition {
+  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+func {
+  p_func = s32[10, 1] parameter(0)
+  unused = s32[10, 1] parameter(1)
+  ROOT copym = s32[10, 1] copy(p_func)
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  new_shape = s32[11, 1] broadcast(const_0), dimensions={}
+  const_2 = s32[] constant(1)
+  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
+  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
+  call = s32[10, 1] call(const_1, const_1), to_apply=func
+  broadcast = s32[10, 1] get-tuple-element(while), index=1
+  ROOT slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<VerifiedHloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  auto* comp = module->GetComputationWithName("entry");
+  auto* replacement = comp->GetInstructionWithName("const_1");
+  auto* producer = comp->GetInstructionWithName("new_shape");
+  TF_ASSERT_OK(replacement->ReplaceAllUsesWithDifferentShape(producer));
+  std::vector<HloInstruction*> new_shapes = {producer};
+  TF_ASSERT_OK(PoplarWhileLoopOptimiser().PropagateNewShapes(new_shapes));
+  module->VerifyOrAddFailure("End of test check");
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

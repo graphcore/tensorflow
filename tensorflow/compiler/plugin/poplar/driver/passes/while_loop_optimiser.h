@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_WHILE_LOOP_OPTIMISER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_WHILE_LOOP_OPTIMISER_H_
 
+#include <vector>
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
@@ -32,6 +33,19 @@ class PoplarWhileLoopOptimiser : public HloModulePass {
   StatusOr<bool> Run(HloModule* module) override;
   // for testing only
   int64 CountOptimisations(HloModule* module) const;
+
+  // Propagate a new shape through the module.
+  // This method isn't general yet and should only be used
+  // when reshaping conditions are satisfied. These include:
+  //  - Can't propogate backwards through operands, only
+  //    forward through users
+  //  - Only a subset of opcodes are supported
+  //  - If changing a computations parameters it must have
+  //    only one callsite.
+  //  - New instruction shapes must be able to be consistently
+  //    propagated through the module
+  static Status PropagateNewShapes(
+      const std::vector<HloInstruction*>& instructions_with_new_shapes);
 };
 
 }  // namespace poplarplugin
