@@ -33,6 +33,19 @@ The table below lists all of the deprecated layers, and their new locations:
 | tensorflow.python.ipu.ops.rnn_ops.PopnnLSTM        | ipu_tensorflow_addons.layers.rnn_ops.PopnnLSTM        |
 +----------------------------------------------------+-------------------------------------------------------+
 
+RNN available_memory_proportion_fwd/available_memory_proportion_bwd deprecated
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+The ``available_memory_proportion_fwd`` and ``available_memory_proportion_bwd`` arguments have been deprecated and will be removed from the following layers in a future release:
+
+  - tensorflow.python.ipu.ops.rnn_ops.PopnnLSTM
+  - tensorflow.python.ipu.ops.rnn_ops.PopnnDynamicLSTM
+  - tensorflow.python.ipu.ops.rnn_ops.PopnnGRU
+  - tensorflow.python.ipu.ops.rnn_ops.PopnnDynamicGRU
+  - tensorflow.python.ipu.ops.rnn_ops.PopnnAUGRU
+
+These values are now set using the ``'availableMemoryProportion'`` key of the ``options`` and ``options_bwd`` arguments correspondingly.
+
 Release 2.4
 ~~~~~~~~~~~
 
