@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/xla/service/while_loop_invariant_code_motion.h"
+
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -30,12 +31,7 @@ using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::InlinedVector;
 
-// Copies `to_hoist` to the computation containing `while_instr`, hoisting its
-// operands as needed.  All of its transitive operands are expected to be either
-// in `hoisted_instructions` or `unhoisted_invariant_instructions`.  This
-// function hoists the operands in `unhoisted_invariant_instructions` and moves
-// them into `hoisted_instructions`.
-static void CreateLoopInvariantCopy(
+void WhileLoopInvariantCodeMotion::CreateLoopInvariantCopy(
     flat_hash_map<HloInstruction*, HloInstruction*>* hoisted_instructions,
     flat_hash_set<HloInstruction*>* unhoisted_invariant_instructions,
     HloInstruction* while_instr, HloInstruction* to_hoist) {
