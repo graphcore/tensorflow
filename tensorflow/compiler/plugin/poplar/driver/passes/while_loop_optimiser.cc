@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_optimiser.h"
 
+#include <queue>
 #include <stack>
 #include <string>
 #include <utility>
@@ -24,6 +25,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
+#include "tensorflow/compiler/xla/service/shape_inference.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
 #include "absl/container/flat_hash_set.h"
@@ -398,7 +400,150 @@ void RemoveTensorListBroadcasts(HloInstruction* inst,
   // Does nothing for now, as this diff only adds detection phase
 }
 
+static StatusOr<Shape> DynamicSliceShape(HloInstruction* inst) {
+  return ShapeInference::InferDynamicSliceShape(
+      inst->operand(0)->shape(),
+      Cast<HloDynamicSliceInstruction>(inst)->index_shapes(),
+      inst->dynamic_slice_sizes());
+}
+
+static Shape DynamicUpdateShape(HloInstruction* inst) {
+  return inst->operand(0)->shape();
+}
+
+static Shape GetTupleShape(HloInstruction* inst) {
+  std::vector<Shape> shapes;
+  shapes.reserve(inst->operands().size());
+  for (const auto* op : inst->operands()) {
+    shapes.emplace_back(op->shape());
+  }
+  return ShapeUtil::MakeTupleShape(shapes);
+}
+
+static StatusOr<Shape> WorkOutShapeFromOperands(HloInstruction* inst) {
+  switch (inst->opcode()) {
+    case HloOpcode::kGetTupleElement: {
+      return ShapeUtil::GetTupleElementShape(inst->operand(0)->shape(),
+                                             inst->tuple_index());
+    }
+    case HloOpcode::kTuple: {
+      return GetTupleShape(inst);
+    }
+    case HloOpcode::kCopy:
+    case HloOpcode::kWhile: {
+      return inst->operand(0)->shape();
+    }
+    case HloOpcode::kDynamicSlice: {
+      return DynamicSliceShape(inst);
+    }
+    case HloOpcode::kDynamicUpdateSlice: {
+      return DynamicUpdateShape(inst);
+    }
+    case HloOpcode::kCall: {
+      return inst->to_apply()->root_instruction()->shape();
+    }
+    default: {
+      return xla::FailedPrecondition("Unhandled type %s", inst->name());
+    }
+  }
+}
+
+static void ReplaceInstructionWithNewShape(HloInstruction* inst,
+                                           const Shape& new_shape) {
+  *(inst->mutable_shape()) = new_shape;
+}
+
+struct InstructionAndShape {
+  HloInstruction* inst;
+  Shape shape;
+  InstructionAndShape(HloInstruction* inst, Shape shape)
+      : inst(inst), shape(std::move(shape)) {}
+};
+
+static std::vector<InstructionAndShape> FindMismatchedParmeters(
+    HloInstruction* inst) {
+  std::vector<InstructionAndShape> result;
+  switch (inst->opcode()) {
+    case HloOpcode::kCall: {
+      for (int64 i = 0; i < inst->operand_count(); ++i) {
+        auto* param = inst->to_apply()->parameter_instruction(i);
+        const Shape& new_shape = inst->operand(i)->shape();
+        if (new_shape != param->shape()) {
+          result.emplace_back(InstructionAndShape(param, new_shape));
+        }
+      }
+      return result;
+    }
+    case HloOpcode::kWhile: {
+      for (auto* comp : inst->called_computations()) {
+        if (inst->operand(0)->shape() !=
+            comp->parameter_instruction(0)->shape()) {
+          result.emplace_back(InstructionAndShape(
+              comp->parameter_instruction(0), inst->operand(0)->shape()));
+        }
+      }
+      return result;
+    }
+    default: {
+      if (inst->called_computations().size()) {
+        LOG(FATAL) << "Op calling computations not handled " << inst->name();
+      }
+      return {};
+    }
+  }
+}
+
+static Status ReplaceInstructionAndPushUsersToQueue(
+    std::queue<HloInstruction*>& to_visit, HloInstruction* inst,
+    const Shape& new_shape, const CallGraph& call_graph) {
+  ReplaceInstructionWithNewShape(inst, new_shape);
+  for (auto* user : inst->users()) {
+    to_visit.emplace(user);
+  }
+  // If change the shape of a root instruction we
+  // have changed the shape of it's callers so put them
+  // in the list
+  if (inst == inst->parent()->root_instruction()) {
+    CHECK(!inst->parent()->IsEntryComputation());
+    for (const auto& callsite :
+         call_graph.GetNode(inst->parent()).caller_callsites()) {
+      to_visit.emplace(callsite.instruction());
+    }
+  }
+
+  return Status::OK();
+}
+
 }  // namespace
+
+Status PoplarWhileLoopOptimiser::PropagateNewShapes(
+    const std::vector<HloInstruction*>& instructions_with_new_shapes) {
+  std::queue<HloInstruction*> to_visit;
+  for (auto* inst : instructions_with_new_shapes) {
+    for (auto* user : inst->users()) {
+      to_visit.push(user);
+    }
+  }
+  if (to_visit.empty()) {
+    return Status::OK();
+  }
+  auto call_graph = CallGraph::Build(to_visit.front()->GetModule());
+  while (to_visit.size()) {
+    auto* inst = to_visit.front();
+    to_visit.pop();
+    TF_ASSIGN_OR_RETURN(auto new_shape, WorkOutShapeFromOperands(inst));
+    if (inst->shape() != new_shape) {
+      TF_RETURN_IF_ERROR(ReplaceInstructionAndPushUsersToQueue(
+          to_visit, inst, new_shape, *call_graph));
+    }
+    auto mismatched_params = FindMismatchedParmeters(inst);
+    for (auto& param : mismatched_params) {
+      TF_RETURN_IF_ERROR(ReplaceInstructionAndPushUsersToQueue(
+          to_visit, param.inst, param.shape, *call_graph));
+    }
+  }
+  return Status::OK();
+}
 
 StatusOr<bool> PoplarWhileLoopOptimiser::Run(HloModule* module) {
   bool changed = false;
