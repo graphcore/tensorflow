@@ -1525,11 +1525,10 @@ class _MatmulConfig(_ConfigBase):
     of what the datatypes should be called). An example showing how to use this
     parameter is shown below:
 
-    ```python
-    cfg = config.IPUConfig()
-    cfg.matmuls.poplar_options['partialsType'] = "half"
-    cfg.configure_ipu_system()
-    ```
+    .. code-block:: python
+      cfg = config.IPUConfig()
+      cfg.matmuls.poplar_options['partialsType'] = "half"
+      cfg.configure_ipu_system()
     """
     self.poplar_options = {}
 
@@ -1567,11 +1566,10 @@ class _ConvolutionConfig(_ConfigBase):
     of what the datatypes should be called). An example showing how to use this
     parameter is shown below:
 
-    ```python
-    cfg = config.IPUConfig()
-    cfg.convolutions.poplar_options['partialsType'] = "half"
-    cfg.configure_ipu_system()
-    ```
+    .. code-block:: python
+      cfg = config.IPUConfig()
+      cfg.convolutions.poplar_options['partialsType'] = "half"
+      cfg.configure_ipu_system()
     """
     self.poplar_options = {}
 
