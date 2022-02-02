@@ -1404,14 +1404,15 @@ class _IPUDeviceConnectionConfig(_ConfigBase):
     `connection_type` is not `DeviceConnectionType.ALWAYS`. If the
     `connection_type` is `DeviceConnectionType.ALWAYS` then the
     `enable_remote_buffers` parameter is ignored because in that case it is
-    possible to query the device.
+    possible to query the device and check if remote buffers are supported on
+    it (if they are, they will be used automatically).
 
     In order to check whether your target system supports remote buffers you can
     run the command:
 
     .. code-block:: console
 
-      $ gc-info -d 0 -I
+      $ gc-info -d 0 -i | grep "remote buffers supported:"
 
     If you see ``remote buffers supported: 1`` in the output, that means that
     remote buffers are supported on your system. For more information, see the
