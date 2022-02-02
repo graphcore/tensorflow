@@ -1153,10 +1153,89 @@ ENTRY cluster {
   // Check that expanded broadcast didn't end on tile 0.
   auto& graph = GetGraph(*resources, root);
   auto copy2_mapping = graph.getTileMapping(copy2_output);
-  CHECK_EQ(poputil::getTileImbalance(copy2_mapping), 1);
+  CHECK_LE(poputil::getTileImbalance(copy2_mapping), 1);
 
   // Check bypass
   CHECK_EQ(copy4_input, copy4_output);
+}
+
+TEST_F(DeferredVisitorTest, TestCopyDeduce) {
+  const string& hlo_string = R"(
+
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[],f32[10],f32[10],f32[10]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  const = s32[] constant(1)
+  add = s32[] add(p_body.0, const)
+  p_body.1 = s32[] get-tuple-element(p_body), index=1
+  p_body.2 = f32[10] get-tuple-element(p_body), index=2
+  p_body.3 = f32[10] get-tuple-element(p_body), index=3
+  p_body.4 = f32[10] get-tuple-element(p_body), index=4
+  add2 = f32[10] add(p_body.2, p_body.3)
+  add3 = f32[10] add(p_body.2, p_body.4)
+  ROOT root = (s32[],s32[],f32[10],f32[10],f32[10]) tuple(add, p_body.1, add3, p_body.3, p_body.4)
+}
+
+condition {
+  p_cond = (s32[],s32[],f32[10],f32[10],f32[10]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[] constant(10)
+  p0 = f32[10] parameter(0)
+  p1 = f32[10] parameter(1)
+  p2 = f32[10] parameter(2)
+  p0.copy = f32[10] copy(p0), backend_config="{\"copy_config\":{\"clone_method\": [\"CloneMethod_DeduceNewOrderOrExpandAliases\"]}}"
+  p1.copy = f32[10] copy(p1), backend_config="{\"copy_config\":{\"clone_method\": [\"CloneMethod_DeduceNewOrderOrPreserveAliases\"]}}"
+  p2.copy = f32[10] copy(p2), backend_config="{\"copy_config\":{\"clone_method\": [\"CloneMethod_Bypass\"]}}"
+  while_init = (s32[],s32[],f32[10],f32[10],f32[10]) tuple(const_0, const_1, p0.copy, p1.copy, p2.copy)
+  while = (s32[],s32[],f32[10],f32[10],f32[10]) while(while_init), condition=condition, body=body
+  r0 = f32[10] get-tuple-element(while), index=2
+  r1 = f32[10] get-tuple-element(while), index=3
+  r2 = f32[10] get-tuple-element(while), index=4
+  ROOT root = (f32[10],f32[10],f32[10]) tuple(r0, r1, r2)
+}
+
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto device = CreateIpuModel(/*num_ipus=*/1, /*num_tiles=*/4);
+  auto resources = GetMockResources(device, module.get());
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  HloInstruction* p0_copy = FindInstruction(module.get(), "p0.copy");
+  CHECK_NOTNULL(p0_copy);
+  HloInstruction* p1_copy = FindInstruction(module.get(), "p1.copy");
+  CHECK_NOTNULL(p1_copy);
+  // Bypass should preserve original parameter tensor
+  HloInstruction* p2 = FindInstruction(module.get(), "p2");
+  CHECK_NOTNULL(p2);
+
+  auto tensor_map = resources->tensor_maps.GetTensorMapForComputation(
+      entry_computation->name());
+  auto root = entry_computation->root_instruction();
+  auto root_outputs = FindInstructionOutputs(tensor_map, *resources, root);
+  poplar::Tensor gte_0 = root_outputs[0];
+  poplar::Tensor gte_1 = root_outputs[1];
+  poplar::Tensor gte_2 = root_outputs[2];
+  poplar::Tensor copy_0 =
+      FindInstructionOutputs(tensor_map, *resources, p0_copy)[0];
+  poplar::Tensor copy_1 =
+      FindInstructionOutputs(tensor_map, *resources, p1_copy)[0];
+  poplar::Tensor copy_2 = FindInstructionOutputs(tensor_map, *resources, p2)[0];
+  EXPECT_EQ(gte_0, copy_0);
+  EXPECT_EQ(gte_1, copy_1);
+  EXPECT_EQ(gte_2, copy_2);
 }
 
 }  // namespace

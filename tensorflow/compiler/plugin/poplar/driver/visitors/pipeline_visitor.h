@@ -103,7 +103,6 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleAddDependency);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleConstant);
 
-  Status HandleCopy(HloInstruction* hlo) override;
   Status HandleOutfeed(HloInstruction* hlo) override;
 
   virtual Status HandleExecutionCounter(HloInstruction* hlo);

@@ -40,8 +40,6 @@ class FullVisitor : public BaseVisitor {
 
   Status HandleDot(HloInstruction* inst) override;
 
-  Status HandleCopy(HloInstruction* inst) override;
-
   Status HandleReverse(HloInstruction* inst) override;
 
   Status HandleReduce(HloInstruction* inst) override;

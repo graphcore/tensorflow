@@ -267,67 +267,6 @@ StatusOr<poplar::program::Sequence> CreateIota(
   return seq;
 }
 
-StatusOr<poplar::program::Sequence> CreateCopy(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map,
-    const poplar::DebugNameAndId& debug_name_and_id) {
-  poplar::program::Sequence seq({}, debug_name_and_id);
-
-  CHECK_EQ(inst->operand_count(), 1);
-  poplar::Graph& graph = GetGraph(res, inst);
-  auto& shape = inst->operand(0)->shape();
-  auto inputs =
-      FindInstructionInputs(tensor_map, res, inst, 0, seq, debug_name_and_id,
-                            /*expand_aliasing=*/false);
-
-  TF_ASSIGN_OR_RETURN(auto clone_method_tree, GetCopyCloneMethod(inst));
-  CHECK_EQ(clone_method_tree.leaf_count(), inputs.size());
-
-  int64 tuple_idx = 0;
-  for (auto& leaf : clone_method_tree.leaves()) {
-    if (inputs[tuple_idx].IsTensor()) {
-      auto input = inputs[tuple_idx].AsTensor();
-      poplar::Tensor out;
-      const auto clone_method = leaf.second;
-      switch (clone_method) {
-        case CloneMethod_PreserveOrderAndAliases: {
-          out = poputil::duplicate(
-              graph, input, seq, {debug_name_and_id, std::to_string(tuple_idx)},
-              poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-          break;
-        }
-        case CloneMethod_PreserveOrderUnlessAliases: {
-          out = TensorCloneAndRebalanceAliasing(graph, res, input,
-                                                {debug_name_and_id});
-          seq.add(
-              poplar::program::Copy(input, out, false, {debug_name_and_id}));
-          break;
-        }
-        case CloneMethod_Bypass: {
-          out = input;
-          break;
-        }
-        default:
-          return xla::FailedPrecondition(
-              "Found invalid clone method for a copy instruction '%s' at input "
-              "%d.",
-              inst->name(), tuple_idx);
-      }
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, out));
-    } else if (inputs[tuple_idx].IsOpaque()) {
-      TF_CHECK_OK(
-          AddOutputOpaque(tensor_map, inst, tuple_idx, inputs[tuple_idx]));
-    } else {
-      return xla::FailedPrecondition(
-          "Found illegal remote buffer as the input to a copy instruction '%s' "
-          "at input %d.",
-          inst->ToString(), tuple_idx);
-    }
-    ++tuple_idx;
-  }
-  return seq;
-}
-
 StatusOr<poplar::program::Sequence> CreateSlice(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
