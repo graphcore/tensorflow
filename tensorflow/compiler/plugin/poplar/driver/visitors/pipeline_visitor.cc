@@ -692,6 +692,16 @@ Status PipelineVisitor::AddSequenceForInstruction(
       }
       return Status::OK();
     }
+    case HloOpcode::kCopy: {
+      if (hlo->user_count() == 1 && IsResourceUpdate(hlo->users()[0])) {
+        resource_update_.add(seq);
+      } else {
+        TF_ASSIGN_OR_RETURN(auto stage,
+                            GetPipelineStage(inst_stage_mapping_, hlo));
+        copy_sequences_[stage].add(seq);
+      }
+      return Status::OK();
+    }
     case HloOpcode::kGetTupleElement: {
       const HloInstruction* gte_input = hlo->operand(0);
       if (IsResourceUpdate(gte_input)) {
@@ -1033,22 +1043,6 @@ Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
     } else {
       return HandleNotImplemented(hlo);
     }
-  }
-
-  return Status::OK();
-}
-
-Status PipelineVisitor::HandleCopy(HloInstruction* hlo) {
-  VLOG(1) << "Processing " << hlo->name();
-  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(hlo);
-  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
-                      CreateCopy(resources_, hlo, GetOutputShape(hlo),
-                                 tensor_map, debug_name_and_id));
-  if (hlo->user_count() == 1 && IsResourceUpdate(hlo->users()[0])) {
-    resource_update_.add(prog);
-  } else {
-    TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
-    copy_sequences_[stage].add(prog);
   }
 
   return Status::OK();

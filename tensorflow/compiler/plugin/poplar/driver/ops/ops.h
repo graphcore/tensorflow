@@ -271,11 +271,6 @@ StatusOr<poplar::program::Sequence> CreateIota(
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateCopy(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map,
-    const poplar::DebugNameAndId& debug_name_and_id);
-
 StatusOr<poplar::program::Sequence> CreateSlice(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,

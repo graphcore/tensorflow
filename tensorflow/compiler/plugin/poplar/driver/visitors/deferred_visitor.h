@@ -264,6 +264,8 @@ class DeferredVisitor : public FullVisitor {
   // Returns whether an input to this computation is used.
   bool InputIsUsed(int64 param, unsigned int index) const;
 
+  Status HandleCopy(HloInstruction* inst) override;
+
   // Explicitly override all the handlers for deferred allocations as final so
   // that any inheriting visitor is aware of deferred allocations.
   Status HandleGetTupleElement(HloInstruction* inst) final;
