@@ -17,6 +17,8 @@ Recurrent Keras layers
 ~~~~~~~~~~~~~~~~~~~~~~
 """
 
+import json
+
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import ops
