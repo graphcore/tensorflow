@@ -3,9 +3,9 @@ Distributed training
 
 We support distributed training for two different types of systems:
 
-1. IPU-POD systems: An IPU-M2000-based system where IPUs in a rack are
+1. Pod systems: An IPU-Machine-based system where IPUs in a rack are
    interconnected by IPU-Links, and IPUs in different racks are interconnected
-   by GW-Links. Distributed training on IPU-PODs uses these links to perform
+   by GW-Links. Distributed training on Pod systems use these links to perform
    collective operations without host involvement. When using multiple
    instances (host processes), there may however still be a need for
    communication over the host network, for example for broadcasting the
@@ -31,7 +31,7 @@ Their main differences can be summarized like this:
 +-----------------------------+------------+--------------------+
 | Distribution strategy       | System     | Host communication |
 +=============================+============+====================+
-| ``IPUMultiReplicaStrategy`` | IPU-POD    | Horovod (OpenMPI)  |
+| ``IPUMultiReplicaStrategy`` | Pod        | Horovod (OpenMPI)  |
 +-----------------------------+------------+--------------------+
 | ``IPUHorovodStrategy``      | IPU-Server | Horovod (OpenMPI)  |
 +-----------------------------+------------+--------------------+
@@ -49,7 +49,7 @@ There are some things they have in common:
 
 And these are the main differences:
 
-* With the ``IPUMultiReplicaStrategy`` designed for IPU-POD systems, a
+* With the ``IPUMultiReplicaStrategy`` designed for Pod systems, a
   collective operation (performed either explicitly by calling a member function
   like ``reduce()`` or implicitly by using an optimizer under the strategy
   scope) will be performed directly on the IPU by using compiled communications
@@ -69,7 +69,7 @@ A distinction should be made between these distribution strategies and
 the ``IPUStrategy`` provided in TensorFlow 2. The ``IPUStrategy`` targets
 a single system with one or more IPUs attached, while the distribution
 strategies we discuss here target distributed systems like those described
-above (IPU-PODs or multiple IPU-Servers). Also, unlike the ``IPUStrategy``,
+above (Pod systems or multiple IPU-Servers). Also, unlike the ``IPUStrategy``,
 these distribution strategies do not currently support the Keras
 ``Model.fit()`` family of APIs, and the use of ``ipu_compiler.compile()``
 is still required to ensure a single XLA graph is compiled, except when
