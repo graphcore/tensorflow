@@ -10,7 +10,7 @@ Prefetch elements
 ~~~~~~~~~~~~~~~~~
 The option to prefetch multiple dataset elements allows TensorFlow and Poplar
 to move input data logically closer to the IPU before it is needed. This can
-be in the Streaming Memory (DRAM attached to the IPU-M2000). A symptom of data
+be in the Streaming Memory (DRAM attached to the IPU-Machine, for example an IPU-M2000 or a Bow-2000). A symptom of data
 not being available to the IPU when required is large ``StreamCopyBegin``
 programs in the PopVision execution
 trace.
