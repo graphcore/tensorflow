@@ -55,6 +55,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/tools:matmul_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:poplar_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:reduction_util",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:slice_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:subcomputation_graph_caching",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:cast_to_gfloat_hlo",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:slice_apply",

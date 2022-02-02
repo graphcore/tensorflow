@@ -16,14 +16,31 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_SLICE_UTIL_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_SLICE_UTIL_H_
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+
 namespace xla {
 
 class HloInstruction;
+class HloDynamicIndexInstruction;
 
 namespace poplarplugin {
 
+// Helper for Dynamic(Update)Slice where we recognize dynamic and constant slice
+// dimensions.
+struct DynamicSliceHelper {
+  explicit DynamicSliceHelper(const HloDynamicIndexInstruction* inst);
+  DynamicSliceHelper() = delete;
+
+  SliceInfo dynamic_slice_info;
+  SliceInfo constant_slice_info;
+
+  bool has_constant_slice = false;
+  bool has_dynamic_slice = false;
+};
+
 bool Is1DSliceInFirstDimension(const HloInstruction* slice);
-}
+
+}  // namespace poplarplugin
 }  // namespace xla
 
 #endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_SLICE_UTIL_H_
