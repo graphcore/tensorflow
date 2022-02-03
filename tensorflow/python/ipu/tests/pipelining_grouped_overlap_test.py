@@ -198,7 +198,7 @@ class PipeliningGroupedOverlapTest(test_util.TensorFlowTestCase,
     def stage3(x, label):
       with variable_scope.variable_scope("stage3", use_resource=True):
         x = math_ops.reduce_mean(x, axis=[1, 2])
-        x = fc(x, 100)
+        x = fc(x, 50)
         loss = math_ops.reduce_mean(
             nn.sparse_softmax_cross_entropy_with_logits(logits=x,
                                                         labels=label))
