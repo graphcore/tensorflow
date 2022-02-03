@@ -90,6 +90,10 @@ class PopDistStrategy(distribute_lib.StrategyV1,
     config.experimental.multi_replica_distribution.process_count = size()
     config.experimental.multi_replica_distribution.process_index = rank()
 
+  @property
+  def supports_loss_scaling(self):
+    return True
+
 
 class PopDistExtendedV1(IPUMultiWorkerExtendedV1):
   def __init__(self, container_strategy, cluster_resolver, ipu_device,
