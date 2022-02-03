@@ -205,6 +205,14 @@ class HostEmbeddingOptimizerSpec:
       The result of the embedding lookup in an IPU tensor.
 
     """
+    if self.get_learning_rate() == 0:
+      return gen_pop_datastream_ops.ipu_device_embedding_lookup(
+          indices,
+          embedding_id=name,
+          embedding_shape=embedding_tensor.shape,
+          dtype=embedding_tensor.dtype,
+          partition_strategy=partition_strategy)
+
     with variable_scope.variable_scope(name, reuse=variable_scope.AUTO_REUSE):
       dummy = variable_scope.get_variable("__dummy",
                                           shape=[],
