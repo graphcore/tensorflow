@@ -17,18 +17,22 @@ import numpy as np
 import pva
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import init_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.ipu import embedding_ops
-from tensorflow.python.training import gradient_descent as gd
+from tensorflow.python.training import training as train
+from tensorflow import __version__ as version
 
-from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
+TF1 = version.split('.')[0] == '1'
 
 
 class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
@@ -234,6 +238,110 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
 
       # Check the indices are correct, but the real test is no timeout.
       self.assertAllClose(result[0][0], i_h)
+
+  @tu.test_may_use_ipus_or_model(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def testNoTrain(self):
+    shape = [4, 1024]
+    lookup_count = 2
+
+    # Training with the host embedding optimizer_spec
+    # set to None *or* with learning rate 0.0 should
+    # disable updates on the host embeddings.
+    optimizer_spec = embedding_ops.HostEmbeddingOptimizerSpec(0.0)
+    if TF1:
+      initializer = init_ops.ones_initializer()
+    else:
+      initializer = array_ops.ones(shape, np.float32)
+    host_embedding = embedding_ops.create_host_embedding(
+        "my_host_embedding",
+        shape,
+        np.float32,
+        initializer=initializer,
+        optimizer_spec=optimizer_spec)
+
+    def my_net(i):
+      lookup = host_embedding.lookup(i)
+      weight = variable_scope.get_variable(
+          "w",
+          shape=(shape[1], 1),
+          dtype=np.float32,
+          initializer=init_ops.zeros_initializer(),
+          trainable=True,
+      )
+      activations = math_ops.matmul(lookup, weight)
+      loss = math_ops.reduce_mean(
+          math_ops.square(activations - np.ones(i.shape[0])))
+      optimizer = train.GradientDescentOptimizer(learning_rate=0.0001)
+      grads_and_vars = optimizer.compute_gradients(loss)
+      train_op = optimizer.apply_gradients(grads_and_vars)
+      with ops.control_dependencies([train_op]):
+        return loss
+
+    with ops.device('cpu'):
+      i = array_ops.placeholder(np.int32, [lookup_count])
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      r = ipu.ipu_compiler.compile(my_net, inputs=[i])
+
+    cfg = ipu.config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.ipu_model.compile_ipu_code = False
+    if tu.has_ci_ipus():
+      tu.add_hw_ci_connection_options(cfg)
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+
+    cfg.configure_ipu_system()
+    with sl.Session() as sess:
+
+      i_h = np.arange(1, 1 + lookup_count).reshape([lookup_count])
+
+      sess.run(variables.global_variables_initializer())
+
+      with host_embedding.register(sess):
+
+        v = sess.run(host_embedding.get_embedding_tensor())
+        embeddings_before = np.take(v, i_h, axis=0)
+
+        result = sess.run([r], {i: i_h})
+        loss = result[0][0]
+        v = sess.run(host_embedding.get_embedding_tensor())
+        embeddings_after = np.take(v, i_h, axis=0)
+
+        self.assertEqual(loss, 1.0)
+        self.assertAllEqual(embeddings_before, embeddings_after)
+
+        result = sess.run([r], {i: i_h})
+        loss = result[0][0]
+
+        v = sess.run(host_embedding.get_embedding_tensor())
+        embeddings_after = np.take(v, i_h, axis=0)
+
+        reports = report_helper.find_reports()
+        r = pva.openReport(reports[-1])
+
+        # Sum stream copy bytes back to the host.
+        run_streamcopy_out = None
+        if r.execution.runs:
+          run = r.execution.runs[0]
+          run_streamcopy_out = 0
+          for step in run.steps:
+            if step.program.type == pva.Program.Type.StreamCopyMid:
+              run_streamcopy_out += sum([ipu.dataOut for ipu in step.ipus])
+
+        # When not training,
+        #  - final loss should change since the matrix is still trainable
+        #  - embeddings should remain unchanged since this are not trained
+        #  - IpuDeviceEmbeddingLookupTrainable should not be used
+        #  - Streamcopy out bytes should NOT include lookup grads
+        self.assertNotEqual(loss, 1.0)
+        self.assertAllEqual(embeddings_before, embeddings_after)
+        if run_streamcopy_out is not None:
+          approx_lookup_grads = lookup_count * shape[-1] * 4
+          self.assertTrue(run_streamcopy_out < approx_lookup_grads)
+        self.assert_compute_sets_not_in_blacklist(
+            r, ["IpuDeviceEmbeddingLookupTrainable"])
 
 
 if __name__ == "__main__":
