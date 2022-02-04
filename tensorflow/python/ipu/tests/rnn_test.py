@@ -228,21 +228,21 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       {
           'testcase_name': 'tf_rnn1',
           'build': build_tf_rnn1,
-          'cycles': 86697385 if TF1 else 87860863,
-          'total_memory': 12378522 if TF1 else 12409375,
+          'cycles': 110245333 if TF1 else 110651826,
+          'total_memory': 12378522 if TF1 else 12274053,
           'max_memory': 3117577 if TF1 else 3123543
       },
       {
           'testcase_name': 'tf_rnn2',
           'build': build_tf_rnn2,
-          'cycles': 61482649 if TF1 else 62027730,
-          'total_memory': 8761227 if TF1 else 8660003,
-          'max_memory': 2272901 if TF1 else 2187333
+          'cycles': 82610641 if TF1 else 83020686,
+          'total_memory': 8761227 if TF1 else 8566111,
+          'max_memory': 2272901 if TF1 else 2160043
       },
       {
           'testcase_name': 'tf_lstm1',
           'build': build_tf_lstm1,
-          'cycles': 1086942603 if TF1 else 1081003611,
+          'cycles': 1065802610 if TF1 else 1069656879,
           'total_memory': 151061717,
           'max_memory': 37776657,
       },
@@ -264,21 +264,21 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       {
           'testcase_name': 'tf_gru1',
           'build': build_tf_gru1,
-          'cycles': 463011327 if TF1 else 468068883,
-          'total_memory': 57075050 if TF1 else 57145333,
-          'max_memory': 14295671 if TF1 else 14289524
+          'cycles': 551307807 if TF1 else 551993103,
+          'total_memory': 56067348 if TF1 else 56077548,
+          'max_memory': 14047956 if TF1 else 14049800
       },
       {
           'testcase_name': 'model_rnn1',
           'build': build_model_rnn1,
-          'cycles': 86929788 if TF1 else 75404503,
+          'cycles': 164885777 if TF1 else 110193955,
           'total_memory': 12141874 if TF1 else 12359011,
-          'max_memory': 3044815 if TF1 else 3106806
+          'max_memory': 3044815 if TF1 else 3070915
       },
       {
           'testcase_name': 'model_rnn2',
           'build': build_model_rnn2,
-          'cycles': 144427061 if TF1 else 129967459,
+          'cycles': 257035469 if TF1 else 188977915,
           'total_memory': 18177930 if TF1 else 17409220,
           'max_memory': 4550619 if TF1 else 4362290
       },
@@ -296,9 +296,9 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       {
           'testcase_name': 'trivial_multiply',
           'build': build_trivial_while,
-          'cycles': 130861194,
-          'total_memory': 8394238,
-          'max_memory': 2099364,
+          'cycles': 25541778 if TF1 else 33571626,
+          'total_memory': 6445978 if TF1 else 8458874,
+          'max_memory': 1612208 if TF1 else 2115524,
           'options': {
               'batch_size': 4,
               'steps': 32,
