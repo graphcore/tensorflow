@@ -117,11 +117,6 @@ struct SliceAndIndex {
   }
 };
 
-struct UsesAndIntermediates {
-  absl::InlinedVector<HloInstruction*, 1> uses;
-  absl::InlinedVector<HloInstruction*, 4> intermediates;
-};
-
 // Formatter that converts to string by calling the name attribute,
 // works for pointes as well as references
 class NameFormatter {
@@ -157,6 +152,14 @@ class ToStringFormatter {
   template <class T>
   void operator()(std::string* out, const T& t) const {
     return dispatch(out, t, std::is_pointer<T>());
+  }
+};
+
+struct UsesAndIntermediates {
+  absl::InlinedVector<HloInstruction*, 1> uses;
+  absl::InlinedVector<HloInstruction*, 4> intermediates;
+  std::string ToString() const {
+    return absl::StrCat("Uses {", absl::StrJoin(uses, ", ", NameFormatter()));
   }
 };
 
@@ -285,13 +288,55 @@ std::vector<SliceAndIndex> FindTensorListBroadcasts(HloInstruction* while_op) {
 }
 
 template <class ArgsTemplate>
+bool IsWhileLoopInvariant(HloInstruction* inst, HloInstruction* user,
+                          ArgsTemplate& args) {
+  // not a while loop body
+  if (!args.while_bodies.contains(user->parent())) {
+    return false;
+  }
+  // not of expected form
+  if (inst->opcode() != HloOpcode::kGetTupleElement ||
+      user->opcode() != HloOpcode::kTuple ||
+      inst->operand(0) != user->parent()->parameter_instruction(0)) {
+    return false;
+  }
+  // Before adding this to the pipeline remove this for loop
+  // as I expect it is too expensive
+  for (int64 i = 0; i < user->operands().size(); ++i) {
+    if (i == inst->tuple_index()) {
+      if (inst == user->operand(i)) {
+        continue;
+      } else {
+        return false;
+      }
+    }
+    if (inst == user->operand(i)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Check if we have got to the end that, it's not a get tuple
+// index of wrong element and so wouldn't be a real use.
+bool IsActualUse(HloInstruction* user, const std::stack<int64>& tuple_indices) {
+  return user->opcode() != HloOpcode::kGetTupleElement ||
+         user->tuple_index() == tuple_indices.top();
+}
+
+template <class ArgsTemplate>
 void FindNonTrivialUses(HloInstruction* inst, ArgsTemplate& args,
                         std::stack<int64>& tuple_indices) {
   for (auto* user : inst->users()) {
-    if (user == user->parent()->root_instruction()) {
-      // If is root instruction treat as a non trivial use
-      // and exit out
-      args.DefaultAction(user);
+    if (user == user->parent()->root_instruction() &&
+        IsActualUse(user, tuple_indices)) {
+      // If is a while loop invariant it is not really used anymore
+      // so can skip
+      if (!IsWhileLoopInvariant(inst, user, args)) {
+        // If is root instruction treat as a non trivial use
+        // and exit out
+        args.DefaultAction(user);
+      }
       continue;
     }
     VLOG(10) << "Visiting " << user->name();
@@ -299,9 +344,11 @@ void FindNonTrivialUses(HloInstruction* inst, ArgsTemplate& args,
       case HloOpcode::kGetTupleElement: {
         if (tuple_indices.top() == user->tuple_index()) {
           args.GTEAction(user);
-          std::stack<int64> sub_tuple_indices = tuple_indices;
-          sub_tuple_indices.pop();
-          FindNonTrivialUses(user, args, sub_tuple_indices);
+          tuple_indices.pop();
+          FindNonTrivialUses(user, args, tuple_indices);
+          // Restore the tuple indices back to current state as
+          // still inside a for loop of users
+          tuple_indices.push(user->tuple_index());
         }
         break;
       }
@@ -309,9 +356,10 @@ void FindNonTrivialUses(HloInstruction* inst, ArgsTemplate& args,
         for (int64 i = 0; i < user->operands().size(); ++i) {
           args.TupleAction(user);
           if (user->mutable_operand(i) == inst) {
-            std::stack<int64> sub_tuple_indices = tuple_indices;
-            sub_tuple_indices.push(i);
-            FindNonTrivialUses(user, args, sub_tuple_indices);
+            tuple_indices.push(i);
+            FindNonTrivialUses(user, args, tuple_indices);
+            // restore tuple indices back to old state
+            tuple_indices.pop();
           }
         }
         break;
@@ -323,11 +371,8 @@ void FindNonTrivialUses(HloInstruction* inst, ArgsTemplate& args,
                            tuple_indices);
         FindNonTrivialUses(user->while_condition()->parameter_instruction(0),
                            args, tuple_indices);
-        // Don't need to check the users of the while because if the parameter
-        // gets to the root instruction of the while body it will be marked
-        // as non trivial and not be hit by AreAllSlices. If we wanted to make
-        // this function more general we would have to edit uses of root
-        // instructions to jump to instructions that call the computation
+        FindNonTrivialUses(user, args, tuple_indices);
+
         break;
       }
       default: {
@@ -341,6 +386,7 @@ void FindNonTrivialUses(HloInstruction* inst, ArgsTemplate& args,
 struct FindUsesTemplate {
   absl::InlinedVector<HloInstruction*, 1> result;
   absl::InlinedVector<HloInstruction*, 4> path;
+  absl::flat_hash_set<HloComputation*> while_bodies;
 
   void DefaultAction(HloInstruction* user) {
     result.emplace_back(user);
@@ -348,7 +394,10 @@ struct FindUsesTemplate {
   }
   void GTEAction(HloInstruction* user) { path.emplace_back(user); }
   void TupleAction(HloInstruction* user) { path.emplace_back(user); }
-  void WhileAction(HloInstruction* user) { path.emplace_back(user); }
+  void WhileAction(HloInstruction* user) {
+    path.emplace_back(user);
+    while_bodies.emplace(user->while_body());
+  }
 };
 
 UsesAndIntermediates FindNonTrivialUses(HloInstruction* inst,
@@ -385,11 +434,14 @@ std::vector<BroadcastAndSlice> FindBroadcastsOnlyUsedBySlices(
     start.push(broadcast.input_index);
     auto users = FindNonTrivialUses(while_loop, start);
     if (!AllAreSlices(users.uses)) {
+      VLOG(10) << "Skipping as not all slices";
       continue;
     }
     if (!SliceDimensionsAreCorrect(users.uses)) {
+      VLOG(10) << "Skipping as dimensions are wrong";
       continue;
     }
+    VLOG(10) << "Found candidate";
     result.emplace_back(std::move(broadcast), std::move(users));
   }
   return result;
