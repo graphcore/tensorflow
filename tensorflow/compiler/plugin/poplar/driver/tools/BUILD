@@ -227,6 +227,7 @@ poplar_cc_library(
     ],
     deps = [
         ":util",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:multi_slice",
     ],
 )
 
