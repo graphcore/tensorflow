@@ -20,9 +20,8 @@ import copy
 import enum
 import math
 import sys
-import threading
-import time
 import six
+import numpy as np
 import libpvti
 import popdist
 
@@ -37,6 +36,9 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.keras.extensions import data_adapter as ipu_data_adapter
+from tensorflow.python.ipu.keras.extensions import keras_polling_thread
+from tensorflow.python.ipu.keras.extensions import keras_util
+from tensorflow.python.ipu.keras.extensions import keras_data_feed_manager
 from tensorflow.python.ipu.keras import optimizers as ipu_optimizers
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.keras import callbacks as callbacks_module
@@ -83,249 +85,33 @@ class _Mode(enum.Enum):
   PREDICT = 3
 
 
-class _InfeedManager:
-  """Class for re-using infeed names.
-
-  Re-using infeed names for different execution modes means that the internal
-  tf.function does not need to be retraced."""
-  def __init__(self):
-    self._infeed_names = dict()
-    self._infeeds = dict()
-
-  def get_infeed(self, mode, dataset, infeed_kwargs):
-    kwargs = dict(infeed_kwargs)
-    if not mode in self._infeed_names:
-      self._infeed_names[mode] = ipu_infeed_queue._generate_unique_name()  # pylint: disable=protected-access
-
-    # Re-use the infeed name.
-    kwargs[ipu_infeed_queue._internal_id] = self._infeed_names[mode]  # pylint: disable=pointless-statement,protected-access
-
-    # De-register the existing infeed.
-    if mode in self._infeeds:
-      with context.eager_mode():
-        self._infeeds[mode]._infeed_queue.deleter  # pylint: disable=pointless-statement,protected-access
-
-    # Create a new infeed.
-    self._infeeds[mode] = ipu_infeed_queue.IPUIterator(dataset, **kwargs)
-    return self._infeeds[mode]
-
-  def reset(self):
-    self._infeed_names = dict()
-    for infeed in self._infeeds.values():
-      with context.eager_mode():
-        infeed._infeed_queue.deleter  # pylint: disable=pointless-statement,protected-access
-    self._infeeds = dict()
-
-  def __del__(self):
-    self.reset()
-
-
-class _OutfeedManager:
-  """Class for re-using outfeeds.
-
-  Re-using outfeeds for different execution modes means that the internal
-  tf.function does not need to be retraced."""
-  def __init__(self):
-    self._outfeeds = dict()
-
-  def get_outfeed(self, mode, outfeed_kwargs):
-    """Returns the outfeed queue to use for the particular mode."""
-    if not mode in self._outfeeds:
-      self._outfeeds[mode] = ipu_outfeed_queue.IPUOutfeedQueue(
-          **outfeed_kwargs)
-    return self._outfeeds[mode]
-
-  def reset(self):
-    for outfeed in self._outfeeds.values():
-      # Delete the outfeed queue.
-      with context.eager_mode():
-        outfeed.deleter  # pylint: disable=pointless-statement
-    self._outfeeds = dict()
-
-  def __del__(self):
-    self.reset()
-
-
-class _PollingThread(threading.Thread):
-  def __init__(self,
-               output_iterator,
-               num_steps,
-               global_replication_factor,
-               local_replication_factor,
-               batch_begin_fn,
-               batch_end_fn,
-               unpack_step_results=False):
-    super().__init__()
-    self._cancelled = threading.Event()
-    self._result = None
-    self._output_iterator = output_iterator
-    self._num_steps = num_steps
-    self._global_replication_factor = global_replication_factor
-    self._local_replication_factor = local_replication_factor
-    self._batch_begin_fn = batch_begin_fn
-    self._batch_end_fn = batch_end_fn
-    self._unpack_step_results = unpack_step_results
-
-    # The polling mechanism works as follows:
-    # 1. Until there is data, wait for `initial_wait_time` seconds.
-    # 2. Get the time stamp when the outfeed first has data (first_timestamp).
-    # 3. Get the time stamp when the outfeed has data for the second time
-    #    (second_timestamp).
-    # 4. Update the `wait_time` to:
-    #    min((second_timestamp - first_timestamp) /
-    #        (number_of_samples_processed * fudge_factor),
-    #        initial_wait_time)
-    self._initial_wait_time = 0.001
-    self._first_timestamp = None
-    self._second_timestamp = None
-    self._fudge_factor = 1.9
-    self._wait_time = self._initial_wait_time
-
-  def postprocess(self, num_samples_processed):
-    """Functions which should be called after an iteration of a polling loop is
-    complete. If no results were processed, a sleep is inserted."""
-
-    if num_samples_processed:
-      if not self._first_timestamp:
-        self._first_timestamp = time.time()
-      elif not self._second_timestamp:
-        self._second_timestamp = time.time()
-        self._wait_time = min(
-            (self._second_timestamp - self._first_timestamp) /
-            (num_samples_processed * self._fudge_factor),
-            self._initial_wait_time)
-    else:
-      time.sleep(self._wait_time)
-
-  def cancel(self):
-    """A thread should only be cancelled when an exception occurs."""
-    self._cancelled.set()
-    self.join()
-
-  def cancelled(self):
-    return self._cancelled.is_set()
-
-  def get_result(self):
-    return self._result
-
-  def _iterate_over_replica_results(self, data):
-    """Function which slices out the per replica results."""
-    if self._local_replication_factor == 1:
-      yield data
-      return
-
-    # Each tensor has an extra dimension
-    for replica in range(self._local_replication_factor):
-      yield nest.map_structure(lambda t: t[replica], data)  # pylint: disable=cell-var-from-loop
-
-  def run(self):
-    step = 0
-    end_step = self._num_steps / popdist.getNumInstances()
-
-    self._batch_begin_fn(step)
-
-    while step != end_step:
-      # Check whether the thread was cancelled (could be an exception).
-      if self.cancelled():
-        return
-
-      begin_step = step
-
-      # Get the data (including replication).
-      for all_data in self._output_iterator:
-        # Get each step outputs.
-        for data in self._iterate_over_replica_results(all_data):
-          data = data[0] if self._unpack_step_results else data
-
-          # Call the callbacks for this step.
-          self._batch_end_fn(step, data)
-
-          self._result = data
-          step += 1
-
-          # Call the callbacks for the next step.
-          if step != end_step:
-            self._batch_begin_fn(step)
-
-      self.postprocess(step - begin_step)
-
-
-class _PredictPollingThread(_PollingThread):
-  """Optimized version of the PollingThread for predict function."""
-  def run(self):
-    step = 0
-    end_step = self._num_steps / popdist.getNumInstances()
-
-    self._batch_begin_fn(step)
-
-    while step != end_step:
-      # Check whether the thread was cancelled (could be an exception).
-      if self.cancelled():
-        return
-
-      results = self._output_iterator.dequeue()
-      flat_results = nest.flatten(results)
-      # Skip if no results are ready.
-      if not flat_results:
-        self.postprocess(0)
-        continue
-
-      num_iterations = array_ops.shape(flat_results[0]).numpy()[0]
-      if not num_iterations:
-        self.postprocess(0)
-        continue
-
-      begin_step = step
-
-      # Call the callback for each step.
-      for iteration in range(num_iterations):
-        all_replicas_data_flat = [result[iteration] for result in flat_results]
-        for flat_data in self._iterate_over_replica_results(
-            all_replicas_data_flat):
-          data = nest.pack_sequence_as(results, flat_data)
-          self._batch_end_fn(step, data)
-
-          step += 1
-
-          # Call the callbacks for the next step.
-          if step != end_step:
-            self._batch_begin_fn(step)
-
-      # Append the results.
-      merged_results = _merge_into_batch_dimension(
-          results, self._local_replication_factor)
-      if self._result is None:
-        self._result = [merged_results]
-      else:
-        self._result.append(merged_results)
-
-      self.postprocess(step - begin_step)
-
-
 class KerasExtensionBase(base_layer.KerasExtension):
   @trackable.no_automatic_dependency_tracking
   def __init__(self):
     # Following values need to be serializable.
-    self._gradient_accumulation_steps_per_replica = None
-    self._gradient_accumulation_optimizer_kwargs = dict()
-    self._experimental_gradient_accumulation_normalize_gradients = None
+
+    # Pipelining.
     self._pipelining_gradient_accumulation_steps_per_replica = None
     self._pipelining_device_mapping = None
     self._pipelining_accumulate_outfeed = None
+    self._pipelining_kwargs = dict()
     self._experimental_pipelining_normalize_gradients = None
+
+    # Gradient accumulation.
+    self._gradient_accumulation_steps_per_replica = None
+    self._gradient_accumulation_optimizer_kwargs = dict()
     self._gradient_accumulation_reduction_method = \
       gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
-    self._pipelining_kwargs = dict()
+    self._experimental_gradient_accumulation_normalize_gradients = None
+
+    # Asynchronous callbacks.
     self._asynchronous_callbacks = False
+
+    # Datafeed managers.
     self._infeed_kwargs = dict()
     self._outfeed_kwargs = dict()
 
     # Following values are runtime only.
-    self._ipu_train_function = None
-    self._ipu_test_function = None
-    self._ipu_predict_function = None
-    self._local_replication_factor = None
-    self._global_replication_factor = None
     self._use_synthetic_data = utils.use_synthetic_data_for(
         utils.SyntheticDataCategory.Outfeed)
     self._compiled_gradient_accumulation_steps_per_replica = None
@@ -333,26 +119,33 @@ class KerasExtensionBase(base_layer.KerasExtension):
     self._compiled_pipeline_train_iterations = None
     self._compiled_pipeline_test_iterations = None
     self._compiled_pipeline_predict_iterations = None
-    self._outfeed_manager = _OutfeedManager()
-    self._infeed_manager = _InfeedManager()
 
-  def _log_steps_per_execution_warning(self, steps_per_execution,
-                                       steps_per_execution_per_replica):
+    self._reset_ipu_extension()
+
+  def _log_steps_per_execution_warning(self, steps_per_execution):
+    """If `steps_per_execution = 1`, a warning is logged so the user
+    is notified that additional performance can be gained by increasing
+    `steps_per_execution`.
+
+    Args:
+        steps_per_execution (integer): Number of steps to compile in
+        one Poplar program.
+    """
     global logged_steps_per_execution_warning
-    if steps_per_execution_per_replica == 1:
-      replica_message = ""
-      if steps_per_execution != steps_per_execution_per_replica:
-        replica_message = " ({} steps per execution per replica)".format(
-            steps_per_execution_per_replica)
+    if steps_per_execution == 1:
       logging.info("The model `{}` has been configured with only {} steps per "
-                   "execution{}. Consider increasing the value for the "
+                   "execution. Consider increasing the value for the "
                    "`steps_per_execution` argument passed to the `compile()` "
                    "method to improve performance.".format(
-                       self.name, steps_per_execution, replica_message))
+                       self.name, steps_per_execution))
       logged_steps_per_execution_warning = True
 
   def _get_shard_count(self):
-    """Returns how many shards/IPUs the model is parallelized over."""
+    """Returns how many shards the model is parallelized over.
+
+    Returns:
+        integer: Number of shards.
+    """
     if self._is_pipelined():
       if self._pipelining_device_mapping:
         return max(self._pipelining_device_mapping) + 1
@@ -360,72 +153,89 @@ class KerasExtensionBase(base_layer.KerasExtension):
     return 1
 
   def _is_pipelined(self):
-    """Returns whether the model is pipelined."""
+    """Returns whether the model is pipelined or not.
+
+    Raises:
+        NotImplementedError: This is the base class and this method needs
+        to be implemented in the extended classes.
+    """
     raise NotImplementedError
 
   def _check_mode(self):
+    """Asserts that the mode that we run the model in is supported on the IPU.
+
+    Raises:
+        RuntimeError: When the model is in eager mode.
+    """
     if self.run_eagerly:
       raise RuntimeError(
           "Keras models cannot run eagerly when using `IPUStrategy`. Set "
           "`run_eagerly=False` when calling `compile`.")
 
+  def _get_num_ipus(self):
+    """Returns the number of physical IPUs in the current tf.Device.
+
+    Raises:
+        ValueError: When the current TF device is not an IPU.
+
+    Returns:
+        integer: Number of physical IPUs in the current TF device.
+    """
+    device_string = self.distribute_strategy.extended.non_slot_devices(None)
+    current_device = tf_device.DeviceSpec.from_string(device_string)
+
+    if current_device.device_type != "IPU":
+      raise ValueError(self.__class__.__name__ +
+                       " can only be used on an IPU device.")
+
+    # get_num_of_ipus_in_device() returns the number of devices for all instances combined.
+    return int(
+        utils.get_num_of_ipus_in_device(device_string) /
+        popdist.getNumInstances())
+
   def _get_replication_factor(self):
-    """Get the replication of the model."""
-    if self._global_replication_factor is None:
-      device_string = self.distribute_strategy.extended.non_slot_devices(None)
-      current_device = tf_device.DeviceSpec.from_string(device_string)
+    """Calculate the replication factor of the current model. This is calculated
+    by `num_ipus / shard_count`.
 
-      if current_device.device_type != "IPU":
-        raise ValueError(self.__class__.__name__ +
-                         " can only be used on an IPU device.")
+    Raises:
+        ValueError: When the `shard_count` is greater than the number of
+        physical IPUs.
 
-      num_ipus = utils.get_num_of_ipus_in_device(device_string)
-
-      shard_count = self._get_shard_count()
-      # Round the shard count to the next power of two.
-      shard_count = 2**int(math.ceil(math.log2(shard_count)))
+    Returns:
+        integer: The replication factor of the current model.
+    """
+    if self._replication_factor is None:
+      num_ipus = self._get_num_ipus()
+      shard_count = 2**int(math.ceil(math.log2(self._get_shard_count())))
 
       if self._get_shard_count() > num_ipus:
         raise ValueError(
             "Current device has {} IPUs attached, however the current model "
             "requires a multiple of {} IPUs.".format(num_ipus, shard_count))
-      self._global_replication_factor = num_ipus // shard_count
-      self._local_replication_factor = int(self._global_replication_factor /\
-        popdist.getNumInstances())
 
-    return self._global_replication_factor
+      self._replication_factor = int(num_ipus // shard_count)
 
-  def _get_steps_per_execution_per_replica(self, inferred_steps,
-                                           original_steps_per_execution_value,
-                                           data_steps_per_execution_value):
-    if self._steps_per_execution is None:
-      self._configure_steps_per_execution(1)
-
-    replication_factor = self._get_replication_factor()
-
-    if data_steps_per_execution_value % replication_factor != 0:
-      if data_steps_per_execution_value != original_steps_per_execution_value:
-        truncation_message = \
-            " (truncated from {} due to {} steps per epoch)".format(
-                original_steps_per_execution_value, inferred_steps)
-      else:
-        truncation_message = ""
-      raise RuntimeError(
-          "Currently `steps_per_execution` is set to {}{} and the current IPU "
-          "system configuration and model configuration means that your Keras "
-          "model will automatically execute in a data-parallel fashion across "
-          "{} replicas. However the number of replicas needs to divide "
-          "`steps_per_execution`. Either make sure that `steps_per_execution` "
-          "is a multiple of {} or adjust your IPU system configuration to "
-          "reduce the number of IPUs used for this IPUStrategy.".format(
-              data_steps_per_execution_value, truncation_message,
-              replication_factor, replication_factor))
-
-    return data_steps_per_execution_value // replication_factor
+    return self._replication_factor
 
   def _verify_and_get_gradient_accumulation_steps_per_replica(
-      self, inferred_steps, original_steps_per_execution_value,
-      data_steps_per_execution_value):
+      self, steps_per_execution):
+    """Verifies the number of steps necessary for the defined gradient
+    accumulation settings.
+
+    Args:
+        steps_per_execution (integer): Number of steps to compile in
+        one Poplar program.
+
+    Raises:
+        ValueError: When the model is pipelined, but no gradient
+        accumulation steps have been defined in the gradient accumulation
+        settings.
+        RuntimeError: When `steps_per_execution` is not divisible by
+        `gradient_accumulation_steps`.
+
+    Returns:
+        integer: The number of steps to run gradient accumulation over.
+    """
     model_mode_message = ""
 
     if self._is_pipelined():
@@ -446,46 +256,40 @@ class KerasExtensionBase(base_layer.KerasExtension):
       gradient_accumulation_steps_per_replica = \
         self._gradient_accumulation_steps_per_replica
 
-    replication_factor = self._get_replication_factor()
-    gradient_accumulation_steps = (gradient_accumulation_steps_per_replica *
-                                   replication_factor)
+    gradient_accumulation_steps = gradient_accumulation_steps_per_replica
 
-    if data_steps_per_execution_value % gradient_accumulation_steps != 0:
-      if data_steps_per_execution_value != original_steps_per_execution_value:
-        truncation_message = \
-            " - truncated from {} due to {} steps per epoch".format(
-                original_steps_per_execution_value, inferred_steps)
-      else:
-        truncation_message = ""
+    if steps_per_execution % gradient_accumulation_steps != 0:
       raise RuntimeError(
           "The {}model has been configured to use gradient accumulation for "
           "training, however the current `steps_per_execution` value (set to "
-          "{}{}) is not divisible by "
-          "`gradient_accumulation_steps_per_replica * number of replicas` "
-          "(`gradient_accumulation_steps_per_replica` is set to {} and there "
-          "are {} replicas). You need to adjust either `steps_per_execution` or"
+          "{}) is not divisible by `gradient_accumulation_steps_per_replica` "
+          "({}). You need to adjust either `steps_per_execution` or"
           "`gradient_accumulation_steps_per_replica` to make sure that "
           "`steps_per_execution` is divisible by "
-          "`gradient_accumulation_steps_per_replica * number of "
-          "replicas`.".format(model_mode_message,
-                              data_steps_per_execution_value,
-                              truncation_message,
-                              gradient_accumulation_steps_per_replica,
-                              replication_factor))
+          "`gradient_accumulation_steps_per_replica`.".format(
+              model_mode_message,
+              steps_per_execution,
+              gradient_accumulation_steps_per_replica,
+          ))
 
     return gradient_accumulation_steps_per_replica
 
   def _reset_ipu_extension(self):
-    """Function which resets any internal state of the extension when
-    configuration changes."""
+    """Resets any internal state of the extension when the configuration changes.
+    The internal state is represented by:
+    - The train function
+    - The test function
+    - The predict function
+    - The replication factor
+    - The in- and outfeed managers
+    """
     with trackable.no_automatic_dependency_tracking_scope(self):
       self._ipu_train_function = None
       self._ipu_test_function = None
       self._ipu_predict_function = None
-      self._global_replication_factor = None
-      self._local_replication_factor = None
-      self._outfeed_manager = _OutfeedManager()
-      self._infeed_manager = _InfeedManager()
+      self._replication_factor = None
+      self._outfeed_manager = keras_data_feed_manager.OutfeedManager()
+      self._infeed_manager = keras_data_feed_manager.InfeedManager()
 
   def _assert_weights_created_supported(self):
     return True
@@ -522,9 +326,18 @@ class KerasExtensionBase(base_layer.KerasExtension):
     self._ipu_predict_function = ipu_predict_function
     return functions
 
-  def _get_last_batch_results(self, outfeed_queue, local_replication_factor):
+  def _get_last_batch_results(self, outfeed_queue, replication_factor):
     """Returns the last batch from the outfeed queue (handling replication) if
-    synthetic data is not used, otherwise returns a batch of zeros."""
+    synthetic data is not used. Otherwise returns a batch of zeros.
+
+    Args:
+        outfeed_queue (IPUOutfeedQueue): The outfeed queue to fetch the data
+        from.
+        replication_factor (integer): The replication factor.
+
+    Returns:
+        Tensor: A Tensor containing only the last batch for every replica.
+    """
     if self._use_synthetic_data:
       shapes = outfeed_queue._flat_shapes  # pylint: disable=protected-access
       dtypes = outfeed_queue._flat_types  # pylint: disable=protected-access
@@ -539,16 +352,26 @@ class KerasExtensionBase(base_layer.KerasExtension):
     results = outfeed_queue.dequeue()
     results = nest.map_structure(lambda x: x[-1], results)
 
-    if local_replication_factor > 1:
+    if replication_factor > 1:
       results = nest.map_structure(lambda x: x[-1], results)
 
     return results
 
-  def _get_all_batch_results(self, outfeed_queue, local_replication_factor,
+  def _get_all_batch_results(self, outfeed_queue, replication_factor,
                              num_steps):
-    """Returns all the batches of data from the outfeed queue (if synthetic data
-    is not used, otherwise returns batches of zeros."""
+    """Returns all the batches of data from the outfeed queue if synthetic data
+    is not used. Otherwise returns batches of zeros.
 
+    Args:
+        outfeed_queue (IPUOutfeedQueue): The outfeed queue to fetch the data
+        from.
+        replication_factor (integer): The replication factor.
+        num_steps (integer): The number of steps that have been performed to
+        complete all batches.
+
+    Returns:
+        Tensor: A tensor containing the results of all batches for each replica.
+    """
     if self._use_synthetic_data:
       shapes = outfeed_queue._flat_shapes  # pylint: disable=protected-access
       if num_steps > 1:
@@ -563,7 +386,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
           flat_buffers)
 
     results = outfeed_queue.dequeue()
-    return _merge_into_batch_dimension(results, local_replication_factor)
+
+    return keras_util.merge_into_batch_dimension(results, replication_factor)
 
   def _make_single_ipu_train_function(self):
     @def_function.function(experimental_compile=True)
@@ -608,7 +432,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
 
     @def_function.function(experimental_compile=True)
     def train_function(steps_per_execution, iterator, outfeed):
-      for _ in math_ops.range(steps_per_execution):
+      for _ in math_ops.range(np.int64(steps_per_execution)):
         outfeed.enqueue(train_step(next(iterator)))
 
     return train_function
@@ -1331,9 +1155,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
     training_module._disallow_inside_tf_function('fit')  # pylint: disable=protected-access
 
     self._check_mode()
-    global_replication_factor = self._get_replication_factor()
-    local_replication_factor = int(global_replication_factor /\
-      popdist.getNumInstances())
+    replication_factor = self._get_replication_factor()
 
     if verbose == 'auto':
       if self.distribute_strategy._should_use_with_coordinator:  # pylint: disable=protected-access
@@ -1370,7 +1192,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
           workers=workers,
           use_multiprocessing=use_multiprocessing,
           model=self,
-          steps_per_execution=self._steps_per_execution)
+          steps_per_execution=self._steps_per_execution,
+          replication_factor=replication_factor)
 
       # Container that configures and calls `tf.keras.Callback`s.
       if not isinstance(callbacks, callbacks_module.CallbackList):
@@ -1393,22 +1216,17 @@ class KerasExtensionBase(base_layer.KerasExtension):
           self._maybe_load_initial_epoch_from_ckpt(initial_epoch))
       logs = None
 
-      original_steps_per_execution_value = \
-          data_handler.steps_per_execution_value
       outfeed = self._outfeed_manager.get_outfeed(mode, self._outfeed_kwargs)  # pylint:disable=unused-variable
 
       for epoch, iterator in data_handler.enumerate_epochs_with_reuse(
           self._infeed_manager, mode, self._infeed_kwargs):
+
         inferred_steps = data_handler.inferred_steps
-        steps_per_execution_value = data_handler.steps_per_execution_value
-        steps_per_execution_per_replica = \
-          self._get_steps_per_execution_per_replica(
-              inferred_steps, original_steps_per_execution_value,
-              steps_per_execution_value)
+        steps_per_execution = data_handler.steps_per_execution_value
+
         gradient_accumulation_steps_per_replica = \
           self._verify_and_get_gradient_accumulation_steps_per_replica(
-              inferred_steps, original_steps_per_execution_value,
-              steps_per_execution_value)
+              steps_per_execution)
 
         # Indicates how many steps the statistics are accumulated over.
         steps_accumulation_factor = (gradient_accumulation_steps_per_replica
@@ -1424,13 +1242,12 @@ class KerasExtensionBase(base_layer.KerasExtension):
         asynchronous_callbacks = (self._asynchronous_callbacks
                                   and steps_accumulation_factor == 1)
 
-        pipeline_iterations = (steps_per_execution_per_replica //
+        pipeline_iterations = (steps_per_execution //
                                gradient_accumulation_steps_per_replica)
         train_function = train_function_wrapper(
             pipeline_iterations, gradient_accumulation_steps_per_replica)
 
-        self._log_steps_per_execution_warning(steps_per_execution_value,
-                                              steps_per_execution_per_replica)
+        self._log_steps_per_execution_warning(steps_per_execution)
 
         self.reset_metrics()
         callbacks.on_epoch_begin(epoch)
@@ -1444,11 +1261,10 @@ class KerasExtensionBase(base_layer.KerasExtension):
 
         outfeed_thread = None
         if asynchronous_callbacks:
-          outfeed_thread = _PollingThread(
+          outfeed_thread = keras_polling_thread.PollingThread(
               outfeed,
               inferred_steps,
-              global_replication_factor,
-              local_replication_factor,
+              replication_factor,
               batch_begin_fn,
               batch_end_fn,
               unpack_step_results=unpack_step_results)
@@ -1465,20 +1281,19 @@ class KerasExtensionBase(base_layer.KerasExtension):
               batch_begin_fn(step)
 
             try:
-              self.distribute_strategy.run(
-                  train_function,
-                  args=(steps_per_execution_per_replica, iterator, outfeed))
+              self.distribute_strategy.run(train_function,
+                                           args=(steps_per_execution, iterator,
+                                                 outfeed))
             except Exception:  # pylint:disable=broad-except
               if outfeed_thread:
                 # Make sure to stop the thread.
                 outfeed_thread.cancel()
               six.reraise(*sys.exc_info())
 
-            self._train_counter.assign_add(steps_per_execution_value)
+            self._train_counter.assign_add(steps_per_execution)
 
             if not asynchronous_callbacks:
-              data = self._get_last_batch_results(outfeed,
-                                                  local_replication_factor)
+              data = self._get_last_batch_results(outfeed, replication_factor)
               logs = data[0] if unpack_step_results else data
               batch_end_fn(end_step, logs)
 
@@ -1568,9 +1383,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
     training_module._disallow_inside_tf_function('evaluate')  # pylint: disable=protected-access
 
     self._check_mode()
-    global_replication_factor = self._get_replication_factor()
-    local_replication_factor = int(global_replication_factor /\
-      popdist.getNumInstances())
+    replication_factor = self._get_replication_factor()
 
     with self.distribute_strategy.scope(), \
          libpvti.Tracepoint(_pvti_trace_channel, self.name + ".evaluate()"):
@@ -1593,7 +1406,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
             workers=workers,
             use_multiprocessing=use_multiprocessing,
             model=self,
-            steps_per_execution=self._steps_per_execution)
+            steps_per_execution=self._steps_per_execution,
+            replication_factor=replication_factor)
 
       # Container that configures and calls `tf.keras.Callback`s.
       if not isinstance(callbacks, callbacks_module.CallbackList):
@@ -1612,29 +1426,21 @@ class KerasExtensionBase(base_layer.KerasExtension):
       self._test_counter.assign(0)
       callbacks.on_test_begin()
 
-      original_steps_per_execution_value = \
-          data_handler.steps_per_execution_value
       outfeed = self._outfeed_manager.get_outfeed(mode, self._outfeed_kwargs)  # pylint:disable=unused-variable
 
       # Single epoch.
       for _, iterator in data_handler.enumerate_epochs_with_reuse(
           self._infeed_manager, mode, self._infeed_kwargs):
         inferred_steps = data_handler.inferred_steps
-        steps_per_execution_value = data_handler.steps_per_execution_value
-        steps_per_execution_per_replica = \
-          self._get_steps_per_execution_per_replica(
-              inferred_steps, original_steps_per_execution_value,
-              steps_per_execution_value)
+        steps_per_execution = data_handler.steps_per_execution_value
 
-        test_function = test_function_wrapper(steps_per_execution_per_replica)
+        test_function = test_function_wrapper(steps_per_execution)
 
-        self._log_steps_per_execution_warning(steps_per_execution_value,
-                                              steps_per_execution_per_replica)
+        self._log_steps_per_execution_warning(steps_per_execution)
 
         # Indicates how many steps the statistics are accumulated over.
-        steps_accumulation_factor = (steps_per_execution_per_replica
-                                     if self._pipelining_accumulate_outfeed
-                                     else 1)
+        steps_accumulation_factor = (
+            steps_per_execution if self._pipelining_accumulate_outfeed else 1)
 
         # Due to accumulating, the outfeed is nested.
         unpack_step_results = steps_accumulation_factor > 1
@@ -1654,11 +1460,10 @@ class KerasExtensionBase(base_layer.KerasExtension):
 
         outfeed_thread = None
         if asynchronous_callbacks:
-          outfeed_thread = _PollingThread(
+          outfeed_thread = keras_polling_thread.PollingThread(
               outfeed,
               inferred_steps,
-              global_replication_factor,
-              local_replication_factor,
+              replication_factor,
               batch_begin_fn,
               batch_end_fn,
               unpack_step_results=unpack_step_results)
@@ -1671,20 +1476,19 @@ class KerasExtensionBase(base_layer.KerasExtension):
               batch_begin_fn(step)
 
             try:
-              self.distribute_strategy.run(
-                  test_function,
-                  args=(steps_per_execution_per_replica, iterator, outfeed))
+              self.distribute_strategy.run(test_function,
+                                           args=(steps_per_execution, iterator,
+                                                 outfeed))
             except Exception:  # pylint:disable=broad-except
               if outfeed_thread:
                 # Make sure to stop the thread.
                 outfeed_thread.cancel()
               six.reraise(*sys.exc_info())
 
-            self._test_counter.assign_add(steps_per_execution_value)
+            self._test_counter.assign_add(steps_per_execution)
 
             if not asynchronous_callbacks:
-              data = self._get_last_batch_results(outfeed,
-                                                  local_replication_factor)
+              data = self._get_last_batch_results(outfeed, replication_factor)
               logs = data[0] if unpack_step_results else data
               batch_end_fn(end_step, logs)
 
@@ -1733,9 +1537,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
     training_module._disallow_inside_tf_function('predict')  # pylint: disable=protected-access
 
     self._check_mode()
-    global_replication_factor = self._get_replication_factor()
-    local_replication_factor = int(global_replication_factor /\
-      popdist.getNumInstances())
+    replication_factor = self._get_replication_factor()
 
     outputs = None
     with self.distribute_strategy.scope(), \
@@ -1751,7 +1553,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
           workers=workers,
           use_multiprocessing=use_multiprocessing,
           model=self,
-          steps_per_execution=self._steps_per_execution)
+          steps_per_execution=self._steps_per_execution,
+          replication_factor=replication_factor)
 
       # Container that configures and calls `tf.keras.Callback`s.
       if not isinstance(callbacks, callbacks_module.CallbackList):
@@ -1769,25 +1572,17 @@ class KerasExtensionBase(base_layer.KerasExtension):
       callbacks.on_predict_begin()
       batch_outputs = None
 
-      original_steps_per_execution_value = \
-          data_handler.steps_per_execution_value
       outfeed = self._outfeed_manager.get_outfeed(mode, self._outfeed_kwargs)  # pylint:disable=unused-variable
 
       # Single epoch.
       for _, iterator in data_handler.enumerate_epochs_with_reuse(
           self._infeed_manager, mode, self._infeed_kwargs):
+        steps_per_execution = data_handler.steps_per_execution_value
         inferred_steps = data_handler.inferred_steps
-        steps_per_execution_value = data_handler.steps_per_execution_value
-        steps_per_execution_per_replica = \
-          self._get_steps_per_execution_per_replica(
-              inferred_steps, original_steps_per_execution_value,
-              steps_per_execution_value)
 
-        predict_function = predict_function_wrapper(
-            steps_per_execution_per_replica)
+        predict_function = predict_function_wrapper(steps_per_execution)
 
-        self._log_steps_per_execution_warning(steps_per_execution_value,
-                                              steps_per_execution_per_replica)
+        self._log_steps_per_execution_warning(steps_per_execution)
 
         def batch_begin_fn(step):
           callbacks.on_predict_batch_begin(step)
@@ -1808,10 +1603,9 @@ class KerasExtensionBase(base_layer.KerasExtension):
 
         outfeed_thread = None
         if self._asynchronous_callbacks:
-          outfeed_thread = _PredictPollingThread(outfeed, inferred_steps,
-                                                 global_replication_factor,
-                                                 local_replication_factor,
-                                                 batch_begin_fn, batch_end_fn)
+          outfeed_thread = keras_polling_thread.PollingThreadPredict(
+              outfeed, inferred_steps, replication_factor, batch_begin_fn,
+              batch_end_fn)
           outfeed_thread.start()
 
         for step in data_handler.steps():
@@ -1822,19 +1616,19 @@ class KerasExtensionBase(base_layer.KerasExtension):
 
           try:
             self.distribute_strategy.run(predict_function,
-                                         args=(steps_per_execution_per_replica,
-                                               iterator, outfeed))
+                                         args=(steps_per_execution, iterator,
+                                               outfeed))
           except Exception:  # pylint:disable=broad-except
             if outfeed_thread:
               # Make sure to stop the thread.
               outfeed_thread.cancel()
             six.reraise(*sys.exc_info())
 
-          self._predict_counter.assign_add(steps_per_execution_value)
+          self._predict_counter.assign_add(steps_per_execution)
 
           if not self._asynchronous_callbacks:
             batch_outputs = self._get_all_batch_results(
-                outfeed, local_replication_factor, steps_per_execution_value)
+                outfeed, replication_factor, steps_per_execution)
             batch_end_fn(end_step, batch_outputs)
             outputs = process_batch(outputs, batch_outputs)
 
@@ -1938,17 +1732,3 @@ class KerasExtensionBase(base_layer.KerasExtension):
   def _make_predict_function_overridden(self):
     return (self.make_predict_function.__func__ !=
             training_module.Model.make_predict_function)
-
-
-def _merge_into_batch_dimension(tensors, local_replication_factor):
-  """Merges steps (and replication) into batch dimension"""
-  def merge_fn(x):
-    # Merge the steps, batches (and replication) dimensions.
-    flat_shape = [x.shape[0] * x.shape[1]] + x.shape[2:]
-
-    if local_replication_factor > 1:
-      flat_shape = [flat_shape[0] * flat_shape[1]] + flat_shape[2:]
-
-    return array_ops.reshape(x, flat_shape)
-
-  return nest.map_structure(merge_fn, tensors)

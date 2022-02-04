@@ -137,9 +137,8 @@ class IPUSequentialPipelineTest(test.TestCase):
           r"The pipelined model has been configured to use gradient "
           r"accumulation for training, however the current "
           r"`steps_per_execution` value \(set to 16\) is not divisible by "
-          r"`gradient_accumulation_steps_per_replica \* number of replicas` "
-          r"\(`gradient_accumulation_steps_per_replica` is set to 7 and there "
-          r"are 1 replicas\)"):
+          r"`gradient_accumulation_steps_per_replica` "
+          r"\(7\)"):
         m.fit(test_dataset(length=64), epochs=4)
 
   @test_util.run_v2_only

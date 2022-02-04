@@ -23,7 +23,7 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 
 
 def get_mnist_dataset(batch_size):
@@ -93,14 +93,14 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
       replication_factor=[1, 2],
       optimizer=['sgd',
                  gradient_descent.GradientDescentOptimizer(0.001)],
-      reduction_method=list(ga.GradientAccumulationReductionMethod))
+      reduction_method=list(gradient_accumulation_optimizer.GradientAccumulationReductionMethod))  # pylint: disable=line-too-long
 
   @parameterized.named_parameters(*TESTCASES)
   @test_util.run_v2_only
   def testModels(self, model_fn, replication_factor, optimizer,
                  reduction_method):
     experimental_normalize_gradients = \
-        reduction_method == ga.GradientAccumulationReductionMethod.SUM
+        reduction_method == gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM  # pylint: disable=line-too-long
 
     tu.skip_if_not_enough_ipus(self, replication_factor)
 

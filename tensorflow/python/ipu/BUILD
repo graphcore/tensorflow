@@ -126,7 +126,10 @@ py_library(
         "keras/extensions/__init__.py",
         "keras/extensions/data_adapter.py",
         "keras/extensions/functional_extensions.py",
+        "keras/extensions/keras_data_feed_manager.py",
         "keras/extensions/keras_extension_base.py",
+        "keras/extensions/keras_polling_thread.py",
+        "keras/extensions/keras_util.py",
         "keras/extensions/model_extensions.py",
         "keras/extensions/sequential_extensions.py",
         "keras/layers/__init__.py",
@@ -2009,6 +2012,23 @@ tf_py_test(
     ],
 )
 
+poprun_py_test(
+    name = "keras_poprun_test",
+    size = "large",
+    srcs = ["tests/keras/keras_poprun_test.py"],
+    main = "tests/keras/keras_poprun_test.py",
+    num_instances = 2,
+    num_replicas = 2,
+    deps = [
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -2064,6 +2084,7 @@ test_suite(
         "keras_pipeline_save_restore_test",
         "keras_pipeline_sequential_replication_test",
         "keras_pipeline_test",
+        "keras_poprun_test",
         "keras_sequential_pipeline_save_restore_test",
         "keras_sequential_pipeline_test",
         "keras_sequential_replication_test",

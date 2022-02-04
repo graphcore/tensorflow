@@ -109,7 +109,7 @@ class CountingCallback(keras.callbacks.Callback):
     self._predict_batch_end_count += 1
 
 
-class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
+class KerasAsynchronousCallbacksTest(test.TestCase, parameterized.TestCase):
   TESTCASES = [{
       "testcase_name": "sequential",
       "model_fn": simple_sequential_model,
@@ -187,7 +187,8 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
     with strategy.scope():
       optimizer = gradient_descent.SGD(learning_rate=lr)
       m = model_fn(pipelined)
-      steps_per_execution = gradient_accumulation_steps * 2
+
+      steps_per_execution = gradient_accumulation_steps_per_replica
       m.compile(optimizer=optimizer,
                 loss=keras.losses.SparseCategoricalCrossentropy(),
                 steps_per_execution=steps_per_execution)
@@ -205,7 +206,7 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
       cb = CountingCallback()
       m.fit(train_ds,
             steps_per_epoch=steps_per_epoch,
-            epochs=epochs,
+            epochs=2,
             callbacks=[cb])
       self.assertEqual(cb._train_batch_begin_count, steps_per_epoch * epochs)  # pylint: disable=protected-access
       self.assertEqual(cb._train_batch_end_count, steps_per_epoch * epochs)  # pylint: disable=protected-access
@@ -232,10 +233,10 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
         m.evaluate(eval_ds, steps=steps_per_epoch, callbacks=[cb])
         self.assertEqual(
             cb._test_batch_begin_count,  # pylint: disable=protected-access
-            steps_per_epoch // steps_per_execution)
+            steps_per_epoch // (steps_per_execution * replication_factor))
         self.assertEqual(
             cb._test_batch_end_count,  # pylint: disable=protected-access
-            steps_per_epoch // steps_per_execution)
+            steps_per_epoch // (steps_per_execution * replication_factor))
 
         # Predict should still get per step results.
         m.predict(predict_ds, steps=steps_per_epoch, callbacks=[cb])

@@ -76,7 +76,7 @@ class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
       x = keras.layers.Dense(2, name="layer1", kernel_initializer=init)(x)
       m = keras.Model(input_layer, x)
 
-      m.compile('sgd', loss='mse', steps_per_execution=6)
+      m.compile('sgd', loss='mse', steps_per_execution=3)
 
       # Input data
       input_x = np.full([60, 32], 1.0, dtype=np.single)

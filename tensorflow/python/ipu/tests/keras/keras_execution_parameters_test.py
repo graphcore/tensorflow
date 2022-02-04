@@ -40,7 +40,7 @@ def simple_sequential_model():
   return keras.Sequential([
       keras.layers.Flatten(),
       keras.layers.Dense(4),
-      keras.layers.Dense(8),
+      keras.layers.Dense(2),
   ])
 
 
@@ -48,52 +48,12 @@ def simple_functional_model():
   d = keras.layers.Input(32)
   x = keras.layers.Flatten()(d)
   x = keras.layers.Dense(4)(x)
-  x = keras.layers.Dense(8)(x)
+  x = keras.layers.Dense(2)(x)
   return keras.Model(d, x)
 
 
 class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase,
                                         parameterized.TestCase):
-  @tu.test_uses_ipus(num_ipus=8)
-  @test_util.run_v2_only
-  def testMismatchStepsPerExecutionAndReplicationFactor(self):
-    cfg = IPUConfig()
-    cfg.auto_select_ipus = 8
-    tu.add_hw_ci_connection_options(cfg)
-    cfg.configure_ipu_system()
-
-    strategy = ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      m = simple_sequential_model()
-      m.compile('sgd', loss='mse')
-
-      with self.assertRaisesRegex(
-          RuntimeError,
-          r"Currently `steps_per_execution` is set to 1 and the current IPU "
-          r"system configuration and model configuration means that your Keras "
-          r"model will automatically execute in a data-parallel fashion across "
-          r"8 replicas"):
-        m.fit(test_dataset(length=4))
-
-  @tu.test_uses_ipus(num_ipus=8)
-  @test_util.run_v2_only
-  def testMismatchStepsPerExecutionAndReplicationFactorAndTruncated(self):
-    cfg = IPUConfig()
-    cfg.auto_select_ipus = 8
-    tu.add_hw_ci_connection_options(cfg)
-    cfg.configure_ipu_system()
-
-    strategy = ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      m = simple_sequential_model()
-      m.compile('sgd', loss='mse', steps_per_execution=8)
-
-      with self.assertRaisesRegex(
-          RuntimeError,
-          r"Currently `steps_per_execution` is set to 7 \(truncated from 8 due "
-          r"to 7 steps per epoch\) and the current IPU."):
-        m.fit(test_dataset(length=7))
-
   @parameterized.parameters([simple_sequential_model, simple_functional_model])
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.run_v2_only
@@ -112,24 +72,11 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase,
           RuntimeError,
           r"The model has been configured to use gradient accumulation for "
           r"training, however the current `steps_per_execution` value \(set to "
-          r"8\) is not divisible by `gradient_accumulation_steps_per_replica "
-          r"\* number of replicas` \(`gradient_accumulation_steps_per_replica` "
-          r"is set to 3 and there are 1 replicas\)"):
+          r"8\) is not divisible by `gradient_accumulation_steps_per_replica` "
+          r"\(3\)"):
         m.set_gradient_accumulation_options(
             gradient_accumulation_steps_per_replica=3)
         m.fit(test_dataset(length=8))
-
-      with self.assertRaisesRegex(
-          RuntimeError,
-          r"The model has been configured to use gradient accumulation for "
-          r"training, however the current `steps_per_execution` value \(set to "
-          r"7 - truncated from 8 due to 7 steps per epoch\) is not divisible "
-          r"by `gradient_accumulation_steps_per_replica \* number of replicas` "
-          r"\(`gradient_accumulation_steps_per_replica` is set to 3 and there "
-          r"are 1 replicas\)"):
-        m.set_gradient_accumulation_options(
-            gradient_accumulation_steps_per_replica=3)
-        m.fit(test_dataset(length=7))
 
   @parameterized.parameters([simple_sequential_model, simple_functional_model])
   @tu.test_uses_ipus(num_ipus=8)
@@ -143,15 +90,14 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase,
     strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = model_fn()
-      m.compile('sgd', loss='mse', steps_per_execution=64)
+      m.compile('sgd', loss='mse', steps_per_execution=8)
 
       with self.assertRaisesRegex(
           RuntimeError,
           r"The model has been configured to use gradient accumulation for "
           r"training, however the current `steps_per_execution` value \(set to "
-          r"64\) is not divisible by `gradient_accumulation_steps_per_replica "
-          r"\* number of replicas` \(`gradient_accumulation_steps_per_replica` "
-          r"is set to 3 and there are 8 replicas\)"):
+          r"8\) is not divisible by `gradient_accumulation_steps_per_replica` "
+          r"\(3\)"):
         m.set_gradient_accumulation_options(
             gradient_accumulation_steps_per_replica=3)
         m.fit(test_dataset(length=64))

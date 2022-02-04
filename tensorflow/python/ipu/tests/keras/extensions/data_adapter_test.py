@@ -122,7 +122,7 @@ class DataHandlerTest(keras_parameterized.TestCase):
       data_handler = data_adapter.IPUDataHandler(filtered_ds,
                                                  initial_epoch=0,
                                                  epochs=2)
-      del data_handler
+      data_handler.inferred_steps  # pylint: disable=pointless-statement
 
   def test_insufficient_data(self):
     ds = dataset_ops.DatasetV2.from_tensor_slices([0, 1])
@@ -261,18 +261,18 @@ class DataHandlerTest(keras_parameterized.TestCase):
                                                  steps_per_epoch=6)
       del data_handler
 
-  def test_steps_per_execution(self):
-    x = np.ones((10, 1))
+  def test_dataset_not_big_enough_with_replication(self):
+    x = np.ones((6, 1))
+    x = dataset_ops.Dataset.from_tensor_slices(x).batch(2, drop_remainder=True)
     with self.assertRaisesRegex(
         ValueError,
-        r"The inferred number of steps per epoch \(6\) is not divisible by the "
-        r"steps per execution \(4\)"):
-      data_handler = data_adapter.IPUDataHandler(
-          x,
-          epochs=2,
-          batch_size=2,
-          steps_per_epoch=6,
-          steps_per_execution=ops.convert_to_tensor(4))
+        r"The provided dataset contains 3 items, but all 4 replicas are "
+        r"requested to run 1 steps each. Make sure the dataset contains "
+        r"at least 4 items."):
+      data_handler = data_adapter.IPUDataHandler(x,
+                                                 epochs=1,
+                                                 batch_size=2,
+                                                 replication_factor=4)
       del data_handler
 
 

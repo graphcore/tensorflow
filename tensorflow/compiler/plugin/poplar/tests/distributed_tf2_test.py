@@ -22,13 +22,43 @@ import popdist.tensorflow
 import tensorflow as tf
 from tensorflow.python import ipu
 from tensorflow.python.client import session
+from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import constant_op, test_util
 from tensorflow.python.ipu.horovod import popdist_strategy
 from tensorflow.python.ipu import horovod as hvd
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.platform import test
+from tensorflow.python.keras import Model, Input
+from tensorflow.python.keras import layers
 from tensorflow.python.keras.engine import data_adapter
 from tensorflow.python.ops import control_flow_v2_toggles
+
+
+def simple_model():
+  random_seed = 1234
+
+  np.random.seed(random_seed)
+  test_util.random_seed.set_seed(random_seed)
+
+  bias = tf.keras.initializers.Constant(value=popdist.getInstanceIndex())
+
+  inputs = Input(shape=(32,))
+  outputs = layers.Dense(1, bias_initializer=bias, name='test_bias')(inputs)
+
+  return Model(inputs, outputs)
+
+
+def test_dataset(length=None, batch_size=1, x_val=1.0, y_val=0.2):
+  constant_d = constant_op.constant(x_val, shape=[32])
+  constant_l = constant_op.constant(y_val, shape=[1])
+
+  ds = dataset_ops.Dataset.from_tensors((constant_d, constant_l))
+  ds = ds.repeat(length)
+  ds = ds.shard(num_shards=popdist.getNumInstances(),
+                index=popdist.getInstanceIndex())
+  ds = ds.batch(batch_size, drop_remainder=True)
+
+  return ds
 
 
 class DistributedTF2Test(test_util.TensorFlowTestCase):
@@ -89,30 +119,33 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
     popdist.tensorflow.set_ipu_config(config, ipus_per_replica=1)
     config.configure_ipu_system()
 
+    steps_to_run = 10
+    batch_size = 8
+
     hvd.init()
 
     strategy = ipu_strategy.IPUStrategy()
 
     with strategy.scope():
-      dataset = self.prepare_dataset()
-      model = self.prepare_model()
+      dataset = test_dataset(popdist.getNumInstances() * batch_size *
+                             steps_to_run,
+                             batch_size=batch_size)
+      model = simple_model()
       optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
-      loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+      loss_fn = tf.keras.losses.MeanSquaredError()
 
       model.compile(optimizer=optimizer,
                     loss=loss_fn,
-                    steps_per_execution=popdist.getNumTotalReplicas())
+                    steps_per_execution=steps_to_run)
 
       # Build the model separately so we can assert that the biases are
       # broadcasted properly before training.
-      model.build((1, 4, 4, 1))
+      model.build((1, 32))
 
       layer = model.get_layer(name='test_bias')
       self.assert_all_instances_not_equal(layer.get_weights()[1])
 
-      history = model.fit(dataset,
-                          steps_per_epoch=popdist.getNumTotalReplicas(),
-                          epochs=1)
+      history = model.fit(dataset, epochs=1)
 
       # Make sure the losses and weights are not equal
       self.assert_all_instances_not_equal(history.history['loss'])
@@ -123,15 +156,20 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
     popdist.tensorflow.set_ipu_config(config, ipus_per_replica=1)
     config.configure_ipu_system()
 
+    steps_to_run = 10
+    batch_size = 8
+
     hvd.init()
 
     strategy = popdist_strategy.PopDistStrategy()
 
     with strategy.scope():
-      dataset = self.prepare_dataset()
-      model = self.prepare_model()
+      dataset = test_dataset(popdist.getNumInstances() * batch_size *
+                             steps_to_run,
+                             batch_size=batch_size)
+      model = simple_model()
       optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
-      loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+      loss_fn = tf.keras.losses.MeanSquaredError()
 
       model.compile(optimizer=optimizer,
                     loss=loss_fn,
@@ -139,14 +177,12 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
       # Build the model separately so we can assert that the biases are
       # broadcasted properly before training.
-      model.build((1, 4, 4, 1))
+      model.build((1, 32))
 
       layer = model.get_layer(name='test_bias')
       self.assert_all_instances_equal(layer.get_weights()[1])
 
-      history = model.fit(dataset,
-                          steps_per_epoch=popdist.getNumTotalReplicas(),
-                          epochs=1)
+      history = model.fit(dataset, epochs=1)
 
       # Make sure the losses and weights are identical as we reduce over all
       # IPUs
@@ -225,11 +261,8 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
       def loss_fn(_, y_pred):
         return y_pred
 
-      num_replicas = popdist.getNumTotalReplicas()
       reference_w = initial_w
-      model.compile(loss=loss_fn,
-                    optimizer=optimizer,
-                    steps_per_execution=num_replicas)
+      model.compile(loss=loss_fn, optimizer=optimizer, steps_per_execution=1)
       model.build((1, 1))
 
       for x in range(10):
@@ -240,7 +273,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
                                                axis=0),
             np.array([[x]], np.float32).repeat(popdist.getNumLocalReplicas(),
                                                axis=0),
-            steps_per_epoch=num_replicas,
+            batch_size=1,
             epochs=1)
         self.assertEqual(reference_w * x, history.history['loss'][0])
 
@@ -311,11 +344,10 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
       model_keras.compile(optimizer=optimizer,
                           loss=loss_fn,
-                          steps_per_execution=popdist.getNumTotalReplicas())
+                          steps_per_execution=1)
 
       def run_training_step_keras(x, y):
-        history = model_keras.fit(
-            x, y, steps_per_epoch=popdist.getNumTotalReplicas(), epochs=1)
+        history = model_keras.fit(x, y, batch_size=1, epochs=1)
 
         return history.history['loss'][0]
 
@@ -401,7 +433,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def single_training_step_equal_tf1(self):
-    num_iterations = 2
+    num_iterations = 1
     learning_rate = 0.5
     batch_size = 2
 
@@ -494,7 +526,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
   def single_training_step_equal_keras(self):
     # This test verifies that a training loop in raw TensorFlow 1 and Keras
     # yield the same losses, gradients and weight updates.
-    num_iterations = 2
+    num_iterations = popdist.getNumLocalReplicas()
     learning_rate = 0.5
     batch_size = 2
 
@@ -573,11 +605,10 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
       model_keras = ModelKeras(initialize_model_with_seed())
       model_keras.compile(optimizer=optimizer,
                           loss=loss_fn,
-                          steps_per_execution=popdist.getNumTotalReplicas() *
-                          num_iterations)
+                          steps_per_execution=1)
+      model_keras.build((1, 4, 4, 1))
       history = model_keras.fit(dataset,
-                                steps_per_epoch=popdist.getNumTotalReplicas() *
-                                num_iterations,
+                                steps_per_epoch=num_iterations,
                                 epochs=1)
       loss = history.history['loss'][0]
 

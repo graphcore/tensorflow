@@ -21,10 +21,34 @@ import popdist.tensorflow
 
 import tensorflow as tf
 from tensorflow.python import ipu
+from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.horovod import popdist_strategy
 from tensorflow.python.ipu import horovod as hvd
+from tensorflow.python.keras import Model, Input
+from tensorflow.python.keras import layers
 from tensorflow.python.platform import test
+
+
+def test_dataset(length=None, batch_size=1, x_val=1.0, y_val=0.2):
+  constant_d = constant_op.constant(x_val, shape=[32])
+  constant_l = constant_op.constant(y_val, shape=[1])
+
+  ds = dataset_ops.Dataset.from_tensors((constant_d, constant_l))
+  ds = ds.repeat(length)
+  ds = ds.shard(num_shards=popdist.getNumInstances(),
+                index=popdist.getInstanceIndex())
+  ds = ds.batch(batch_size, drop_remainder=True)
+
+  return ds
+
+
+def simple_model():
+  inputs = Input(shape=(32,))
+  outputs = layers.Dense(1)(inputs)
+
+  return Model(inputs, outputs)
 
 
 class PoprunPopDistStrategyTest(test_util.TensorFlowTestCase,
@@ -50,13 +74,7 @@ class PoprunPopDistStrategyTest(test_util.TensorFlowTestCase,
 
     with strategy.scope():
       learning_rate = 0.5
-      initial_w = 2.0
-      model = tf.keras.Sequential([
-          tf.keras.layers.Dense(
-              8,
-              kernel_initializer=tf.keras.initializers.Constant(initial_w),
-              use_bias=False)
-      ])
+      model = simple_model()
       model.set_asynchronous_callbacks(enable_asynchronous_callbacks)
       optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate)
 
@@ -68,28 +86,13 @@ class PoprunPopDistStrategyTest(test_util.TensorFlowTestCase,
       model.compile(loss=loss_fn,
                     optimizer=optimizer,
                     steps_per_execution=num_replicas)
-      model.build((1, 8))
+      model.build((1, 32))
 
-      model.fit(np.array([[i for i in range(8)]],
-                         np.float32).repeat(popdist.getNumLocalReplicas(),
-                                            axis=0),
-                np.array([[0]],
-                         np.float32).repeat(popdist.getNumLocalReplicas(),
-                                            axis=0),
-                steps_per_epoch=num_replicas,
-                epochs=1)
+      model.fit(test_dataset(20), epochs=1, verbose=False)
 
-      model.evaluate(np.array([[i for i in range(8)]],
-                              np.float32).repeat(popdist.getNumLocalReplicas(),
-                                                 axis=0),
-                     np.array([[0]], np.float32).repeat(
-                         popdist.getNumLocalReplicas()),
-                     steps=popdist.getNumTotalReplicas())
+      model.evaluate(test_dataset(20), verbose=False)
 
-      model.predict(np.array([[i for i in range(8)]],
-                             np.float32).repeat(popdist.getNumLocalReplicas(),
-                                                axis=0),
-                    steps=popdist.getNumTotalReplicas())
+      model.predict(test_dataset(20, batch_size=4), verbose=False)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import math
 import numpy as np
 from typing import Generator, Iterator
 from tensorflow.python.data.experimental.ops import cardinality
@@ -63,7 +64,8 @@ class IPUDataHandler(data_adapter.DataHandler):
       workers=1,
       use_multiprocessing=False,
       model=None,
-      steps_per_execution=None):
+      steps_per_execution=None,
+      replication_factor=1):
 
     self._initial_epoch = initial_epoch
     self._epochs = epochs
@@ -90,20 +92,21 @@ class IPUDataHandler(data_adapter.DataHandler):
     if (y is not None and isinstance(y, np.ndarray)
         and _call_counter("y_is_ndarray") == 1):
       logging.warn(numpy_warning.format("y", "`fit()` and `evaluate()`"))
-    strategy = ds_context.get_strategy()
     adapter_cls = data_adapter.select_data_adapter(x, y)
-    self._adapter = adapter_cls(x,
-                                y,
-                                batch_size=batch_size,
-                                steps=steps_per_epoch,
-                                epochs=epochs - initial_epoch,
-                                sample_weights=sample_weight,
-                                shuffle=shuffle,
-                                max_queue_size=max_queue_size,
-                                workers=workers,
-                                use_multiprocessing=use_multiprocessing,
-                                distribution_strategy=strategy,
-                                model=model)
+    self._adapter = adapter_cls(
+        x,
+        y,
+        batch_size=batch_size,
+        steps=steps_per_epoch,
+        epochs=epochs - initial_epoch,
+        sample_weights=sample_weight,
+        shuffle=shuffle,
+        max_queue_size=max_queue_size,
+        workers=workers,
+        use_multiprocessing=use_multiprocessing,
+        distribution_strategy=ds_context.get_strategy(),
+        model=model)
+
     if isinstance(self._adapter, data_adapter.GeneratorDataAdapter):
       hint = ("use `tf.data.Dataset.from_generator()` to specify the shape of "
               "your data.")
@@ -120,6 +123,7 @@ class IPUDataHandler(data_adapter.DataHandler):
 
     dataset = self._get_and_post_process_dataset(class_weight)
 
+    self._replication_factor = replication_factor
     self._inferred_steps = self._infer_steps(steps_per_epoch, dataset)
 
     self._validate_dataset(dataset)
@@ -131,6 +135,22 @@ class IPUDataHandler(data_adapter.DataHandler):
 
     self._validate_data_handler()
 
+  def _validate_data_handler(self):
+    super()._validate_data_handler()
+
+    with self._truncate_execution_to_epoch():
+      if self.inferred_steps == 0:
+        steps_per_replica = math.ceil(
+            super()._infer_steps(None, self._dataset) /
+            self._replication_factor)
+        raise ValueError(
+            "The provided dataset contains {} items, but all {} replicas "
+            "are requested to run {} steps each. Make sure the dataset "
+            "contains at least {} items.".format(
+                len(self._dataset), self._replication_factor,
+                steps_per_replica,
+                steps_per_replica * self._replication_factor))
+
   def _infer_steps(self, steps, dataset):
     """Infers steps_per_epoch needed to loop through a dataset."""
     steps = super()._infer_steps(steps, dataset)
@@ -138,7 +158,8 @@ class IPUDataHandler(data_adapter.DataHandler):
       raise ValueError(
           "Could not infer the size of the data. You must specify the number "
           "of steps to run.")
-    return steps
+
+    return int(steps // self._replication_factor)
 
   def _get_and_post_process_dataset(self, class_weight):
     original_dataset = self._adapter.get_dataset()
@@ -203,16 +224,6 @@ class IPUDataHandler(data_adapter.DataHandler):
   @property
   def steps_per_execution_value(self):
     return self._steps_per_execution_value
-
-  def _validate_data_handler(self):
-    super()._validate_data_handler()
-    with self._truncate_execution_to_epoch():
-      if self.inferred_steps % self._steps_per_execution_value != 0:
-        raise ValueError(
-            "The inferred number of steps per epoch ({}) is not divisible by "
-            "the steps per execution ({}). Adjust your steps per epoch and/or "
-            "steps per execution to ensure this requirement is met.".format(
-                self.inferred_steps, self._steps_per_execution_value))
 
   def enumerate_epochs_with_reuse(self, manager, mode, infeed_kwargs):
     """Yields `(epoch, InfeedQueue)`."""
