@@ -80,6 +80,7 @@ def _poplar_autoconf_impl(repository_ctx):
             if not repository_ctx.path(poplar_base + "/poplibs/include").exists:
                 fail("Cannot find poplibs/include path.")
 
+            repository_ctx.symlink(poplar_base + "/gccs/include", "poplar/gccs/include")
             repository_ctx.symlink(poplar_base + "/popef/include", "poplar/popef/include")
             repository_ctx.symlink(poplar_base + "/popef/lib", "poplar/lib/popef")
             repository_ctx.symlink(poplar_base + "/popef/lib/python", "poplar/lib/python")

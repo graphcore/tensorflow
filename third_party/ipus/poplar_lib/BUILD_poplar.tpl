@@ -21,6 +21,7 @@ cc_library(
         "openmpi/include",
         "popef/include",
         "libpva/include",
+        "gccs/include",
     ],
 )
 
