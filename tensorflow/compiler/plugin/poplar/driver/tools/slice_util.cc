@@ -12,17 +12,93 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <algorithm>
+#include <memory>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/slice_util.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
+
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
 namespace xla {
 namespace poplarplugin {
+namespace {
+
+std::unique_ptr<HloInstruction> CreateShuffledInput(HloInstruction* input,
+                                                    int64 dim) {
+  const auto ShuffleDimToFront = [&](absl::Span<int64> values) {
+    std::rotate(values.begin(), values.begin() + dim, values.begin() + dim + 1);
+  };
+
+  auto shuffled_shape = input->shape();
+  ShuffleDimToFront(shuffled_shape.mutable_dimensions());
+
+  std::vector<int64> shuffled_dim_order(shuffled_shape.dimensions_size(), 0);
+  std::iota(shuffled_dim_order.begin(), shuffled_dim_order.end(), 0);
+  ShuffleDimToFront(absl::MakeSpan(shuffled_dim_order));
+
+  return HloInstruction::CreateTranspose(shuffled_shape, input,
+                                         shuffled_dim_order);
+}
+
+std::unique_ptr<HloInstruction> CreateFlattened2DInput(HloInstruction* input) {
+  auto shape = input->shape();
+  const auto dim0 = shape.dimensions(0);
+  const auto flattened_elements = ShapeUtil::ElementsIn(shape) / dim0;
+  const auto flattened_2d_shape =
+      ShapeUtil::MakeShape(shape.element_type(), {dim0, flattened_elements});
+  return HloInstruction::CreateReshape(flattened_2d_shape, input);
+}
+
+}  // namespace
+
+StatusOr<HloInstruction*> TryReplaceDynamicWithMultiSlice(
+    HloDynamicSliceInstruction* dynamic_slice) {
+  const auto dynamic_slice_helper = DynamicSliceHelper(dynamic_slice);
+  if (dynamic_slice_helper.has_dynamic_slice) {
+    const auto slice_info = dynamic_slice_helper.dynamic_slice_info;
+    const auto slice_dims = slice_info.sliced_dims;
+    const auto slice_sizes = slice_info.slice_sizes;
+
+    // Limiting to size 1 slices, since HloMultiSliceInstruction is hard coded
+    // to size 1 slices. If needed we can work around this by doing an N
+    // multi-slice for a size N slice.
+    const auto can_replace = slice_dims.size() == 1 && slice_sizes.front() == 1;
+    if (can_replace) {
+      const auto slice_dim = slice_dims.front();
+
+      auto comp = dynamic_slice->parent();
+      // Shuffle the dimension being sliced to the front, since
+      // HloMultiSliceInstruction is hard coded to slice dim 0.
+      auto input = dynamic_slice->mutable_operand(0);
+      auto shuffled_input =
+          comp->AddInstruction(CreateShuffledInput(input, slice_dim));
+      // Flatten since the HloMultiSliceInstruction planner
+      // (EmbeddingPlansPreplanning) expects a 2D input tensor.
+      auto flattened_2d_input =
+          comp->AddInstruction(CreateFlattened2DInput(shuffled_input));
+      // Reshape the offset since dynamic-slice offsets are scalar.
+      auto dim_offset = dynamic_slice->mutable_operand(1 + slice_dim);
+      auto offset = comp->AddInstruction(HloInstruction::CreateReshape(
+          ShapeUtil::MakeShape(S32, {1}), dim_offset));
+
+      auto multislice = comp->AddInstruction(
+          CreateMultiSlice(dynamic_slice->shape(), flattened_2d_input, offset));
+      TF_RETURN_IF_ERROR(dynamic_slice->ReplaceAllUsesWith(multislice));
+      TF_RETURN_IF_ERROR(comp->RemoveInstruction(dynamic_slice));
+
+      return multislice;
+    }
+  }
+
+  return nullptr;
+}
 
 DynamicSliceHelper::DynamicSliceHelper(const HloDynamicIndexInstruction* inst) {
   auto index_operands = inst->index_operands();

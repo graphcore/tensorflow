@@ -1329,6 +1329,27 @@ xla_test(
 )
 
 xla_test(
+    name = "dynamic_slice_replacement_test",
+    size = "medium",
+    srcs = ["tests/dynamic_slice_replacement_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":poplar_test_base",
+        ":test_utils",
+        "//tensorflow/compiler/xla:shape_util",
+        "//tensorflow/compiler/xla:status_macros",
+        "//tensorflow/compiler/xla:statusor",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/compiler/xla:util",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:test",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+xla_test(
     name = "create_buffer_test",
     size = "medium",
     srcs = ["tests/create_buffer_test.cc"],
