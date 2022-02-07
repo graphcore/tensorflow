@@ -110,11 +110,16 @@ std::vector<HloInstruction*> FindSingleUseParameters(HloComputation* comp) {
 struct SliceAndIndex {
   int64 input_index;
   HloInstruction* dynamic_update;
-  SliceAndIndex(int64 input_index, HloInstruction* dynamic_update)
-      : input_index(input_index), dynamic_update(dynamic_update) {}
+  int64 index_index;
+  SliceAndIndex(int64 input_index, HloInstruction* dynamic_update,
+                int64 index_index)
+      : input_index(input_index),
+        dynamic_update(dynamic_update),
+        index_index(index_index) {}
   std::string ToString() const {
     return absl::StrCat("{", input_index, ", ", dynamic_update->name(), ",",
-                        dynamic_update->shape().ToString(), "}");
+                        dynamic_update->shape().ToString(), ", ", index_index,
+                        "}");
   }
 };
 
@@ -158,7 +163,6 @@ class ToStringFormatter {
 
 struct UsesAndIntermediates {
   absl::InlinedVector<HloInstruction*, 1> uses;
-  absl::InlinedVector<HloInstruction*, 4> intermediates;
   std::string ToString() const {
     return absl::StrCat("Uses {", absl::StrJoin(uses, ", ", NameFormatter()));
   }
@@ -283,7 +287,8 @@ std::vector<SliceAndIndex> FindTensorListBroadcasts(HloInstruction* while_op) {
       continue;
     }
     VLOG(10) << updated_data->name() << " is a tensor list broadcast";
-    result.emplace_back(candidate_gte->tuple_index(), updated_data);
+    result.emplace_back(candidate_gte->tuple_index(), updated_data,
+                        index->tuple_index());
   }
   return result;
 }
@@ -386,17 +391,12 @@ void FindNonTrivialUses(HloInstruction* inst, ArgsTemplate& args,
 
 struct FindUsesTemplate {
   absl::InlinedVector<HloInstruction*, 1> result;
-  absl::InlinedVector<HloInstruction*, 4> path;
   absl::flat_hash_set<HloComputation*> while_bodies;
 
-  void DefaultAction(HloInstruction* user) {
-    result.emplace_back(user);
-    path.emplace_back(user);
-  }
-  void GTEAction(HloInstruction* user) { path.emplace_back(user); }
-  void TupleAction(HloInstruction* user) { path.emplace_back(user); }
+  void DefaultAction(HloInstruction* user) { result.emplace_back(user); }
+  void GTEAction(HloInstruction* user) {}
+  void TupleAction(HloInstruction* user) {}
   void WhileAction(HloInstruction* user) {
-    path.emplace_back(user);
     while_bodies.emplace(user->while_body());
   }
 };
@@ -405,7 +405,7 @@ UsesAndIntermediates FindNonTrivialUses(HloInstruction* inst,
                                         std::stack<int64> starting_gte_stack) {
   FindUsesTemplate args;
   FindNonTrivialUses(inst, args, starting_gte_stack);
-  return {std::move(args.result), std::move(args.path)};
+  return {std::move(args.result)};
 }
 
 bool AllAreSlices(const absl::InlinedVector<HloInstruction*, 1>& vec) {
@@ -425,9 +425,10 @@ bool SliceDimensionsAreCorrect(
   });
 }
 
-bool BroadcastIndexIsTripCounter(HloInstruction* while_loop,
-                                 const SliceAndIndex& broadcast) {
-  auto* gte = broadcast.dynamic_update->mutable_operand(2);
+bool IsTripCounter(HloInstruction* while_loop, HloInstruction* gte) {
+  if (gte->opcode() != HloOpcode::kGetTupleElement) {
+    return false;
+  }
   auto* root = while_loop->while_body()->root_instruction();
   if (!Match(
           root->mutable_operand(gte->tuple_index()),
@@ -443,22 +444,164 @@ bool BroadcastIndexIsTripCounter(HloInstruction* while_loop,
   return *init == 0;
 }
 
+bool BroadcastIndexIsTripCounter(HloInstruction* while_loop,
+                                 const SliceAndIndex& broadcast) {
+  return IsTripCounter(while_loop,
+                       broadcast.dynamic_update->mutable_operand(2));
+}
+
+struct KnownScalarIntegers {
+  // Obeys intersection of negative and positive is nothing
+  // but an instruction can be in negative/positive and
+  // maybe zero
+  absl::flat_hash_set<HloInstruction*> negative_numbers;
+  absl::flat_hash_set<HloInstruction*> positive_numbers;
+  absl::flat_hash_set<HloComputation*> searched_computation;
+  // As we are checking for < (not <=) we store a bool to check
+  // we have hit one value that is defiantely less than
+  // Can't use the positive/negative set as those include
+  // potential zeros
+  bool hit_one_definately_less = false;
+  bool is_unknown(HloInstruction* inst) const {
+    return (!negative_numbers.contains(inst)) &&
+           (!positive_numbers.contains(inst));
+  }
+  bool is_negative(HloInstruction* inst) const {
+    return negative_numbers.contains(inst);
+  }
+  std::string ToString() const {
+    return absl::StrCat("{\n  negative {",
+                        absl::StrJoin(negative_numbers, ",", NameFormatter()),
+                        "}\n  positive {",
+                        absl::StrJoin(positive_numbers, ",", NameFormatter()),
+                        "}}");
+  }
+};
+
+bool InstructionIsTripCounter(const CallGraph& call_graph,
+                              HloInstruction* inst) {
+  if (inst->opcode() != HloOpcode::kGetTupleElement) {
+    return false;
+  }
+  const auto& callsites = call_graph.GetNode(inst->parent()).caller_callsites();
+  if (callsites.size() != 1) {
+    return false;
+  }
+  if (callsites[0].instruction()->opcode() != HloOpcode::kWhile) {
+    return false;
+  }
+  return IsTripCounter(callsites[0].instruction(), inst);
+}
+
+void InsertKnownNumbersFromThisComputation(KnownScalarIntegers& known_numbers,
+                                           HloComputation* comp,
+                                           const CallGraph& call_graph) {
+  for (auto* inst : comp->MakeInstructionPostOrder()) {
+    if (!ShapeUtil::IsScalar(inst->shape()) ||
+        inst->shape().element_type() != S32) {
+      // only interested in scalar integers
+      continue;
+    }
+    if (inst->opcode() == HloOpcode::kConstant) {
+      int value = *GetConstantValue<int>(inst);
+      // if value is zero just pretend it's unknown,
+      // zeors will nearly always get optimised away
+      // so not going to worry about them
+      if (value < 0) {
+        known_numbers.negative_numbers.insert(inst);
+      } else if (value > 0) {
+        known_numbers.positive_numbers.insert(inst);
+      }
+      continue;
+    }
+    if (InstructionIsTripCounter(call_graph, inst)) {
+      known_numbers.positive_numbers.insert(inst);
+      continue;
+    }
+    if (inst->opcode() == HloOpcode::kMultiply) {
+      auto* op_a = inst->mutable_operand(0);
+      auto* op_b = inst->mutable_operand(1);
+      if (known_numbers.is_unknown(op_a) || known_numbers.is_unknown(op_b)) {
+        continue;
+      }
+      bool a_is_negative = known_numbers.negative_numbers.contains(op_a);
+      bool b_is_negative = known_numbers.negative_numbers.contains(op_b);
+      if (a_is_negative ^ b_is_negative) {
+        known_numbers.negative_numbers.insert(inst);
+      } else {
+        known_numbers.positive_numbers.insert(inst);
+      }
+
+      continue;
+    }
+  }
+}
+
+bool CanWorkOutAndLessThan(HloInstruction* inst,
+                           const KnownScalarIntegers& known_numbers) {
+  switch (inst->opcode()) {
+    // for now only support add as all we need but
+    // easy to extend
+    case HloOpcode::kAdd: {
+      HloInstruction* op_a = inst->mutable_operand(0);
+      HloInstruction* op_b = inst->mutable_operand(1);
+      return known_numbers.is_negative(op_a) || known_numbers.is_negative(op_b);
+    }
+    default: { return false; }
+  }
+}
+
+bool OpIsAlwaysLess(HloInstruction* inst) {
+  HloInstruction* constant;
+  if (!Match(inst, m::AddAnyOrder(m::Op(), m::ConstantScalar(&constant)))) {
+    return false;
+  }
+  int value = *GetConstantValue<int>(constant);
+  return value < 0;
+}
+
+bool CanGuarenteeUnknownIndexIsLess(HloInstruction* while_loop,
+                                    const SliceAndIndex& broadcast,
+                                    HloInstruction* slice) {
+  auto call_graph = CallGraph::Build(slice->GetModule());
+  KnownScalarIntegers known_numbers;
+  std::stack<int64> starting_stack;
+  starting_stack.push(broadcast.index_index);
+  absl::InlinedVector<HloInstruction*, 1> to_visit =
+      std::move(FindNonTrivialUses(while_loop, starting_stack).uses);
+  // Iterate through all instructions less than or equal to this
+  // one until we hit the slice instruction
+  while (!to_visit.empty()) {
+    auto* inst = to_visit.back();
+    to_visit.pop_back();
+    if (inst == slice) {
+      return known_numbers.hit_one_definately_less;
+    }
+    auto insert_result =
+        known_numbers.searched_computation.emplace(inst->parent());
+    if (insert_result.second) {
+      InsertKnownNumbersFromThisComputation(known_numbers, inst->parent(),
+                                            *call_graph);
+    }
+    if (CanWorkOutAndLessThan(inst, known_numbers)) {
+      auto new_uses = FindNonTrivialUses(inst, std::stack<int64>());
+      to_visit.insert(to_visit.end(), new_uses.uses.begin(),
+                      new_uses.uses.end());
+      known_numbers.hit_one_definately_less |= OpIsAlwaysLess(inst);
+    }
+  }
+  return false;
+}
+
 bool SliceIndexAlreadyWrittenTo(HloInstruction* while_loop,
                                 const SliceAndIndex& broadcast,
-                                const HloInstruction* slice) {
+                                HloInstruction* slice) {
   auto slice_index = GetConstantValue<int>(slice->operand(1));
   auto trip_count = ComputeWhileLoopTripCount(while_loop, 0);
   if (slice_index && trip_count) {
-    if ((*slice_index) < (*trip_count)) {
-      return true;
-    }
-    return false;
+    return (*slice_index) < (*trip_count);
   }
-  // Handle case where non constant in other diff
-  VLOG(10) << "Can't optimise because don't know index of " << slice->name()
-           << " " << static_cast<bool>(slice_index) << " , "
-           << static_cast<bool>(trip_count);
-  return false;
+  return CanGuarenteeUnknownIndexIsLess(while_loop, broadcast, slice);
 }
 
 bool SliceIndexAlreadyWrittenTo(HloInstruction* while_loop,
@@ -670,6 +813,7 @@ StatusOr<bool> PoplarWhileLoopOptimiser::Run(HloModule* module) {
       changed = true;
     }
   }
+
   return changed;
 }
 

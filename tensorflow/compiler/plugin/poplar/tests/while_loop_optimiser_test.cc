@@ -326,6 +326,160 @@ ENTRY entry {
   ASSERT_EQ(count, 0);
 }
 
+TEST_F(WhileLoopOptimiserTest, IndexDecrementedInBwds) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[], s32[10, 1], s32[]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  one = s32[] constant(1)
+  zero = s32[] constant(0)
+  add = s32[] add(p_body.0, one)
+  two = s32[] constant(2)
+  slice-input = s32[1, 1] reshape(two)
+  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  count = s32[] get-tuple-element(p_body), index=2
+  ROOT root = (s32[],s32[]) tuple(add, dyn_update, count)
+}
+
+condition {
+  p_cond = (s32[],s32[10, 1], s32[]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] get-tuple-element(p_cond), index=2
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+bwd_body {
+  zilch = s32[] constant(0)
+  uno = s32[] constant(1)
+  b_body = (s32[], s32[1, 1], s32[10, 1], s32[]) parameter(0)
+  index = s32[] get-tuple-element(b_body), index=0
+  to_add = s32[1, 1] get-tuple-element(b_body), index=1
+  to_slice = s32[10, 1] get-tuple-element(b_body), index=2
+
+  old-trip-count = s32[] get-tuple-element(b_body), index=3
+  minus-one = s32[] constant(-1)
+  negative-index = s32[] multiply(index, minus-one)
+  slice-index-p1 = s32[] add(old-trip-count, negative-index)
+  slice-index = s32[] add(slice-index-p1, minus-one)
+
+  update = s32[1, 1] dynamic-slice(to_slice, slice-index, zilch), dynamic_slice_sizes={1, 1}
+  counter = s32[1, 1] add(update, to_add)
+  next_index = s32[] add(index, uno)
+  ROOT broot = (s32[], s32[1, 1], s32[10, 1], s32[]) tuple(next_index, counter, to_slice, old-trip-count)
+}
+
+bwd_condition {
+  b_cond = (s32[], s32[1, 1], s32[10, 1], s32[]) parameter(0)
+  b_cond.0 = s32[] get-tuple-element(b_cond), index=0
+  b_const = s32[] constant(10)
+  ROOT result = pred[] compare(b_cond.0, b_const), direction=LT
+}
+
+ENTRY entry {
+  loop_counter = s32[] parameter(0)
+  const_0 = s32[] constant(0)
+  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_2 = s32[] constant(1)
+  const_m1 = s32[] constant(-1)
+  repeat_init = (s32[],s32[10, 1], s32[]) tuple(const_0, const_1, loop_counter)
+  while = (s32[],s32[10, 1], s32[]) while(repeat_init), condition=condition, body=body
+  old_trip_count = s32[] get-tuple-element(while), index=0
+  broadcast = s32[10, 1] get-tuple-element(while), index=1
+  otc-m1 = s32[] add(old_trip_count, const_m1)
+  slice = s32[1, 1] dynamic-slice(broadcast, otc-m1, const_0), dynamic_slice_sizes={1, 1}
+  bwd_init = (s32[], s32[1, 1], s32[10, 1], s32[]) tuple(const_0, slice, broadcast, old_trip_count)
+  bwd_while = (s32[], s32[1, 1], s32[10, 1], s32[]) while(bwd_init), condition=bwd_condition, body=bwd_body
+  ROOT final = s32[1, 1] get-tuple-element(bwd_while), index=1
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  auto count = PoplarWhileLoopOptimiser().CountOptimisations(module.get());
+  ASSERT_EQ(count, 1);
+}
+
+TEST_F(WhileLoopOptimiserTest, OneBadRead) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[], s32[10, 1], s32[]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  one = s32[] constant(1)
+  zero = s32[] constant(0)
+  add = s32[] add(p_body.0, one)
+  two = s32[] constant(2)
+  slice-input = s32[1, 1] reshape(two)
+  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  count = s32[] get-tuple-element(p_body), index=2
+  ROOT root = (s32[],s32[]) tuple(add, dyn_update, count)
+}
+
+condition {
+  p_cond = (s32[],s32[10, 1], s32[]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] get-tuple-element(p_cond), index=2
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+bwd_body {
+  zilch = s32[] constant(0)
+  uno = s32[] constant(1)
+  b_body = (s32[], s32[1, 1], s32[10, 1], s32[]) parameter(0)
+  index = s32[] get-tuple-element(b_body), index=0
+  to_add = s32[1, 1] get-tuple-element(b_body), index=1
+  to_slice = s32[10, 1] get-tuple-element(b_body), index=2
+
+  old-trip-count = s32[] get-tuple-element(b_body), index=3
+  minus-one = s32[] constant(-1)
+  negative-index = s32[] multiply(index, minus-one)
+  slice-index-p1 = s32[] add(old-trip-count, negative-index)
+  slice-index = s32[] add(slice-index-p1, minus-one)
+
+  update = s32[1, 1] dynamic-slice(to_slice, slice-index-p1, zilch), dynamic_slice_sizes={1, 1}
+  counter = s32[1, 1] add(update, to_add)
+  next_index = s32[] add(index, uno)
+  ROOT broot = (s32[], s32[1, 1], s32[10, 1], s32[]) tuple(next_index, counter, to_slice, old-trip-count)
+}
+
+bwd_condition {
+  b_cond = (s32[], s32[1, 1], s32[10, 1], s32[]) parameter(0)
+  b_cond.0 = s32[] get-tuple-element(b_cond), index=0
+  b_const = s32[] constant(10)
+  ROOT result = pred[] compare(b_cond.0, b_const), direction=LT
+}
+
+ENTRY entry {
+  loop_counter = s32[] parameter(0)
+  const_0 = s32[] constant(0)
+  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_2 = s32[] constant(1)
+  const_m1 = s32[] constant(-1)
+  repeat_init = (s32[],s32[10, 1], s32[]) tuple(const_0, const_1, loop_counter)
+  while = (s32[],s32[10, 1], s32[]) while(repeat_init), condition=condition, body=body
+  old_trip_count = s32[] get-tuple-element(while), index=0
+  broadcast = s32[10, 1] get-tuple-element(while), index=1
+  otc-m1 = s32[] add(old_trip_count, const_m1)
+  slice = s32[1, 1] dynamic-slice(broadcast, otc-m1, const_0), dynamic_slice_sizes={1, 1}
+  bwd_init = (s32[], s32[1, 1], s32[10, 1], s32[]) tuple(const_0, slice, broadcast, old_trip_count)
+  bwd_while = (s32[], s32[1, 1], s32[10, 1], s32[]) while(bwd_init), condition=bwd_condition, body=bwd_body
+  ROOT final = s32[1, 1] get-tuple-element(bwd_while), index=1
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  auto count = PoplarWhileLoopOptimiser().CountOptimisations(module.get());
+  ASSERT_EQ(count, 0);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
