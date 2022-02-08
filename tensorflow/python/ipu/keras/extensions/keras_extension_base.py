@@ -432,7 +432,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
 
     @def_function.function(experimental_compile=True)
     def train_function(steps_per_execution, iterator, outfeed):
-      for _ in math_ops.range(np.int64(steps_per_execution)):
+      for _ in math_ops.range(steps_per_execution):
         outfeed.enqueue(train_step(next(iterator)))
 
     return train_function

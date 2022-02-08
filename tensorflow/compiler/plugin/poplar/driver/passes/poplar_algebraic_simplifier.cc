@@ -338,6 +338,12 @@ Status AlgebraicSimplifierVisitor::HandleAnd(HloInstruction* logical_and) {
     return Status::OK();
   }
 
+  // A && A => A
+  VLOG(10) << "trying transform [A && A => A]: " << logical_and->ToString();
+  if (lhs->Identical(*rhs) && ReplaceInstructionIfSameShape(logical_and, lhs)) {
+    return Status::OK();
+  }
+
   return Status::OK();
 }
 
@@ -1492,6 +1498,13 @@ Status AlgebraicSimplifierVisitor::HandleOr(HloInstruction* logical_or) {
     VLOG(10) << "trying transform [True || A => True]: "
              << logical_or->ToString();
     if (pp::algebraic_simplifier::util::IsAll(lhs, 1) &&
+        ReplaceInstructionIfSameShape(logical_or, lhs)) {
+      return Status::OK();
+    }
+
+    // A || A => A
+    VLOG(10) << "trying transform [A || A => A]: " << logical_or->ToString();
+    if (lhs->Identical(*rhs) &&
         ReplaceInstructionIfSameShape(logical_or, lhs)) {
       return Status::OK();
     }
