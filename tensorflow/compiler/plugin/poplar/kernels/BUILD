@@ -57,6 +57,7 @@ poplar_cc_library(
     srcs = [
         "application_runtime/application_compile.cc",
         "application_runtime/application_runtime.cc",
+        "application_runtime/resource_handle_pruner.cc",
         "datastream/dataset_benchmark.cc",
         "datastream/exporters.cc",
         "datastream/feeds.cc",
@@ -110,6 +111,7 @@ poplar_cc_library(
         "training_ops.cc",
     ],
     hdrs = [
+        "application_runtime/resource_handle_pruner.h",
         "functional/functional_util.h",
         "ipu_kernels_common.h",
     ],

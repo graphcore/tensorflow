@@ -23,6 +23,21 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import control_flow_util_v2 as util
 
 
+def _is_anonymous_eager_resource_handle(tensor):
+  """Predicate - determine if tensor represents placeholder created
+     by FuncGraph during capturing by value.
+
+  Args:
+    tensor (ops.Tensor): Potential resource EagerTensor placeholder
+
+  Returns:
+    bool: True if tensor is resource EagerTensor placeholder;
+          otherwise False.
+  """
+  return tensor.dtype == dtypes.resource and isinstance(
+      tensor, ops.EagerTensor) and tensor.shape == ()
+
+
 def experimental_application_compile_op(func,
                                         inputs=None,
                                         output_path=None,
@@ -95,10 +110,31 @@ def experimental_application_compile_op(func,
 
   resource_indices = []
   constant_indices = []
+
+  # Option should be set when resources are frozen and resource tensors
+  # are used in passed `func` parameter.
+  # Unfortunately despite setting `freeze_variables` and as a result setting
+  # `capture_by_value` during FuncGraph creation, resource handles are not fully
+  # removed. FuncGraph creates a resource in the function when it captures an
+  # eager resource. It can later freeze it by pulling its ReadVariableOp outside
+  # the function, but at that point the captured resource has already been
+  # created. Setting `prune_resource_tensors` causes recursively deletion all
+  # resource tensors inside FuncGraph inside application_compile kernel. There
+  # is assumption that the only resource tensors exists inside FuncGraph when
+  # `capture_by_value`is set, are placeholder resource tensors that left
+  # during its creation.
+  prune_resource_tensors = False
+
   for index, arg in enumerate(captured_args):
+
+    if freeze_variables and _is_anonymous_eager_resource_handle(arg):
+      prune_resource_tensors = True
+      continue
+
     if arg.dtype == dtypes.resource:
       resource_indices.append(index)
-    elif arg.op.type == "Const" or \
+    elif isinstance(arg, ops.EagerTensor) or \
+        arg.op.type == "Const" or \
         (arg.op.type == "ReadVariableOp" and freeze_variables):
       constant_indices.append(index)
 
@@ -109,4 +145,5 @@ def experimental_application_compile_op(func,
         constant_indices=constant_indices,
         function=util.create_new_tf_function(func_graph),
         executable_output_path=output_path,
+        prune_resource_tensors=prune_resource_tensors,
         name=name)

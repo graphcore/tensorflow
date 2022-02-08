@@ -24,6 +24,7 @@ REGISTER_OP("IPUApplicationCompile")
     .Attr("constant_indices: list(int) >= 0")
     .Attr("executable_output_path: string")
     .Output("output: string")
+    .Attr("prune_resource_tensors: bool")
     .Attr("function: func")
     // Compilation cache is stateful.
     .SetIsStateful();

@@ -17,7 +17,6 @@ Functional operators
 ~~~~~~~~~~~~~~~~~~~~~~
 """
 # Function captures are based on /tensorflow/python/ops/cond_v2.py
-
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
@@ -123,6 +122,26 @@ def _compile_function(func,
                       control_outputs,
                       allow_external_captures=None,
                       capture_by_value=None):
+  """
+  Create a FuncGraph from a Python callable "func".
+  A FuncGraph is an encapsulated TF Graph which "captures" tensors that it uses
+  from its external closure (parent Graph).
+  Capture of an external tensor involves creating a placeholder inside the
+  FuncGraph which needs to be fed by that external tensor at call-time.
+
+  Variables can be captured by reference or by value (capture_by_value).
+  A variable captured by value has its value read outside the FuncGraph, which
+  is then fed into it.
+  A variable captured by reference has its handle fed into the FuncGraph, which
+  then has its value read inside. If capture_by_value isn't specified, then the
+  FuncGraph tries to inherit its parent (outer) FuncGraph's value for it.
+
+  Returns:
+    - The FuncGraph.
+    - The external tensors that are captured by the FuncGraph and need to be fed
+      to it at call-time.
+    - Constant outputs.
+  """
   parent_graph = ops.get_default_graph()
   # Automatic control dependencies are added in defuns, but not in v1
   # graphs. Propagate that behavior here.
@@ -130,6 +149,9 @@ def _compile_function(func,
 
   if allow_external_captures is None:
     allow_external_captures = _is_capturing_by_value(parent_graph)
+
+  if capture_by_value is None:
+    capture_by_value = _is_capturing_by_value(parent_graph)
 
   # Functions inherit frontend attributes and the gradient override map from the
   # parent graph.

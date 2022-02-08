@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/jit/kernels/xla_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/application_runtime/resource_handle_pruner.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
 #include "tensorflow/compiler/tf2xla/xla_compiler.h"
 #include "tensorflow/compiler/xla/client/client_library.h"
@@ -110,6 +111,16 @@ xla::StatusOr<xla::LocalExecutable*> CompileExecutable(
   return executable;
 }
 
+std::vector<const Tensor*> FilterResourceTensors(
+    const std::vector<const Tensor*> src) {
+  std::vector<const Tensor*> result;
+  std::copy_if(
+      src.cbegin(), src.cend(), std::back_inserter(result),
+      [](const Tensor* tensor) { return tensor->dtype() != DT_RESOURCE; });
+
+  return result;
+}
+
 }  // namespace
 
 class IPUApplicationCompile : public OpKernel {
@@ -120,6 +131,8 @@ class IPUApplicationCompile : public OpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("constant_indices", &constant_indices_));
     OP_REQUIRES_OK(
         ctx, ctx->GetAttr("executable_output_path", &executable_output_path_));
+    OP_REQUIRES_OK(
+        ctx, ctx->GetAttr("prune_resource_tensors", &prune_resource_tensors_));
   }
 
   void Compute(OpKernelContext* ctx) {
@@ -130,6 +143,25 @@ class IPUApplicationCompile : public OpKernel {
 
     std::vector<const Tensor*> inputs = InputsFromContext(ctx);
     std::vector<VariableInfo> variable_infos;
+
+    // We indiscriminately recursively destroy all resource tensors.
+    // Option should be used when resources are frozen. Given that assumption,
+    // any remaining resources still inside the function shouldn't be there.
+    // FuncGraph creates a resource in the function when it captures an eager
+    // resource. It can later freeze it by pulling its ReadVariableOp outside
+    // the function, but at that point the captured resource has already been
+    // created. Resource placeholders left by FuncGraph should be removed.
+    if (prune_resource_tensors_) {
+      CHECK(resource_indices_.empty());
+      inputs = FilterResourceTensors(inputs);
+      constant_indices_ = std::vector<int>(inputs.size());
+      // Fix constant indicies, since resource inputs are skipped
+      // it will have some holes e.g. [0,1,3], indicies should be continous
+      std::iota(constant_indices_.begin(), constant_indices_.end(), 0);
+      ResourceHandlePruner pruner{ctx->function_library()};
+      OP_REQUIRES_OK(ctx, pruner.Run(function_));
+    }
+
     OP_REQUIRES_OK(ctx, GetVariableInfosFromInputs(
                             ctx->resource_manager(), ctx->device(), inputs,
                             resource_indices_, &variable_infos));
@@ -155,6 +187,7 @@ class IPUApplicationCompile : public OpKernel {
   std::string executable_output_path_;
   std::vector<int> constant_indices_;
   std::vector<int> resource_indices_;
+  bool prune_resource_tensors_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(IPUApplicationCompile);
 };

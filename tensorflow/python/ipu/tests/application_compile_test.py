@@ -21,11 +21,14 @@ from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.driver import poplar_executable_pb2
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.eager import def_function
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors_impl
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
+from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu.config import DeviceConnectionType
@@ -35,7 +38,9 @@ from tensorflow.python.ipu.ops.application_compile_op import experimental_applic
 from tensorflow.python.ipu.ops.embedded_runtime import _find_opaque_blob
 from tensorflow.python.framework import ops
 from tensorflow.python.keras import layers
+from tensorflow.python.module import module
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.ops.losses import losses
@@ -92,6 +97,278 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
       self.assertEqual(len(signature.streamed_inputs), 0)
       self.assertEqual(len(signature.outputs), 1)
       self.assertEqual(len(signature.streamed_outputs), 0)
+
+  @test_util.run_v2_only
+  def test_compile_op_with_defunc_constant(self):
+    @def_function.function
+    def defunc():
+      x = constant_op.constant([1.0, 1.0])
+      return x * x
+
+    compiled_path = application_compile_op(defunc,
+                                           inputs=[],
+                                           freeze_variables=True).numpy()
+    executable = parse_poplar_executable(compiled_path)
+    signature = executable.embedded_runtime_config.signature
+
+    self.assertEqual(len(signature.inputs), 0)  # constant embedded into graph
+    self.assertEqual(len(signature.streamed_inputs), 0)
+    self.assertEqual(len(signature.outputs), 1)  # return value
+    self.assertEqual(len(signature.streamed_outputs), 0)
+
+  @test_util.run_v2_only
+  def test_compile_op_with_defunc_closure_constant(self):
+    x = constant_op.constant([1.0, 1.0])
+
+    @def_function.function
+    def defunc():
+      return x * x
+
+    compiled_path = application_compile_op(defunc,
+                                           inputs=[],
+                                           freeze_variables=True).numpy()
+    executable = parse_poplar_executable(compiled_path)
+    signature = executable.embedded_runtime_config.signature
+
+    self.assertEqual(len(signature.inputs),
+                     0)  # captured constant embedded into graph
+    self.assertEqual(len(signature.streamed_inputs), 0)
+    self.assertEqual(len(signature.outputs), 1)  # return value
+    self.assertEqual(len(signature.streamed_outputs), 0)
+
+  @parameterized.named_parameters(("resources", False), ("constants", True))
+  @test_util.run_v2_only
+  def test_compile_op_with_defunc_module_resource(self, freeze_variables):
+    class MyModule(module.Module):
+      def __init__(self):
+        super().__init__()
+        self.v = variables.Variable([2.0, 2.0])
+
+      @def_function.function
+      def defunc(self):
+        return self.v * self.v
+
+    mod = MyModule()
+
+    compiled_path = application_compile_op(
+        mod.defunc, inputs=[], freeze_variables=freeze_variables).numpy()
+    executable = parse_poplar_executable(compiled_path)
+    signature = executable.embedded_runtime_config.signature
+
+    if freeze_variables:
+      # Module variable embedded into executable as constant.
+      self.assertEqual(len(signature.inputs), 0)
+    else:
+      # Module variable captured by reference as input to executable.
+      self.assertEqual(len(signature.inputs), 1)
+    self.assertEqual(len(signature.streamed_inputs), 0)
+    self.assertEqual(len(signature.outputs), 1)  # return value
+    self.assertEqual(len(signature.streamed_outputs), 0)
+
+  @parameterized.named_parameters(("resources", False), ("constants", True))
+  @test_util.run_v2_only
+  def test_compile_op_with_defunc_closure_resource(self, freeze_variables):
+
+    v = variables.Variable([2.0, 2.0])
+
+    @def_function.function(experimental_compile=True)
+    def defunc():
+      return v * v
+
+    compiled_path = application_compile_op(
+        defunc, freeze_variables=freeze_variables).numpy()
+    executable = parse_poplar_executable(compiled_path)
+    signature = executable.embedded_runtime_config.signature
+
+    if freeze_variables:
+      # Closure variable embedded into executable as constant.
+      self.assertEqual(len(signature.inputs), 0)
+    else:
+      # Closure variable captured by reference as input to executable.
+      self.assertEqual(len(signature.inputs), 1)
+    self.assertEqual(len(signature.streamed_inputs), 0)
+    self.assertEqual(len(signature.outputs), 1)  # return value
+    self.assertEqual(len(signature.streamed_outputs), 0)
+
+  @parameterized.named_parameters(("resources", False), ("constants", True))
+  @test_util.run_v2_only
+  def test_compile_op_with_defunc_closure_resource_cond(
+      self, freeze_variables):
+    ds = dataset_ops.Dataset.from_tensors((constant_op.constant(10.0,
+                                                                shape=(3,),
+                                                                name='x'),
+                                           constant_op.constant(10.0,
+                                                                shape=(),
+                                                                name='p')))
+    infeed = ipu_infeed_queue.IPUInfeedQueue(ds)
+    outfeed = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    v = variables.Variable(3.0)
+
+    @def_function.function(experimental_compile=True)
+    def defunc():
+      (x, p) = infeed._dequeue()  # pylint: disable=protected-access
+      y = x * v
+      if v < 0:
+        z = y**2 + p
+      elif v == 0:
+        z = y * 2 - p
+      else:
+        z = y - 2
+      res = z - x
+      outfeed.enqueue(res)
+
+    compiled_path = application_compile_op(
+        defunc, freeze_variables=freeze_variables).numpy()
+    executable = parse_poplar_executable(compiled_path)
+    signature = executable.embedded_runtime_config.signature
+
+    if freeze_variables:
+      # Closure variable embedded into executable as constant.
+      self.assertEqual(len(signature.inputs), 0)
+    else:
+      # Closure variable captured by reference as input to executable.
+      self.assertEqual(len(signature.inputs), 1)
+    self.assertEqual(len(signature.streamed_inputs), 2)  # infeed._dequeue
+    self.assertEqual(len(signature.outputs), 0)
+    self.assertEqual(len(signature.streamed_outputs), 1)  # outfeed.enqueue
+
+  @parameterized.named_parameters(("resources", False), ("constants", True))
+  @test_util.run_v2_only
+  def test_compile_op_with_defunc_closure_resource_while(
+      self, freeze_variables):
+    ds = dataset_ops.Dataset.from_tensors(
+        constant_op.constant(10.0, shape=(3,)))
+    infeed = ipu_infeed_queue.IPUInfeedQueue(ds)
+    outfeed = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    v = variables.Variable(3.0)
+
+    @def_function.function(experimental_compile=True)
+    def defunc(x):
+      res = x * v * 10
+      outfeed.enqueue(res)
+
+    def predict_step_loop():
+      r = loops.repeat(10, defunc, [], infeed)
+      return r
+
+    compiled_path = application_compile_op(
+        predict_step_loop, freeze_variables=freeze_variables).numpy()
+    executable = parse_poplar_executable(compiled_path)
+    signature = executable.embedded_runtime_config.signature
+
+    if freeze_variables:
+      # Closure variable embedded into executable as constant.
+      self.assertEqual(len(signature.inputs), 0)
+    else:
+      # Closure variable captured by reference as input to executable.
+      self.assertEqual(len(signature.inputs), 1)
+    self.assertEqual(len(signature.streamed_inputs), 1)  # infeed._dequeue
+    self.assertEqual(len(signature.outputs), 0)
+    self.assertEqual(len(signature.streamed_outputs), 1)  # outfeed.enqueue
+
+  @test_util.run_v2_only
+  def test_compile_op_with_defunc_inputs(self):
+    # The defunc's inputs must be supplied at compile-time.
+    @def_function.function
+    def defunc(x, y):
+      return x * y
+
+    with self.assertRaisesRegex(TypeError,
+                                "missing 2 required positional arguments"):
+      application_compile_op(defunc, inputs=[], freeze_variables=True)
+
+  @test_util.run_v2_only
+  def test_compile_op_with_defunc_infeed_outfeed(self):
+    dataset = dataset_ops.Dataset.from_tensor_slices(
+        np.ones(10, dtype=np.float32))
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    @def_function.function
+    def defunc():
+      outfeed_queue.enqueue(infeed_queue._dequeue() * 2.0)  # pylint: disable=protected-access
+
+    compiled_path = application_compile_op(defunc,
+                                           inputs=[],
+                                           freeze_variables=True).numpy()
+    executable = parse_poplar_executable(compiled_path)
+    signature = executable.embedded_runtime_config.signature
+
+    self.assertEqual(len(signature.inputs), 0)
+    self.assertEqual(len(signature.streamed_inputs), 1)  # infeed._dequeue
+    self.assertEqual(len(signature.outputs), 0)
+    self.assertEqual(len(signature.streamed_outputs), 1)  # outfeed.enqueue
+
+  @test_util.run_v2_only
+  def test_compile_op_with_defunc_infeed_iterator_outfeed(self):
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    with ipu_strategy.IPUStrategy().scope():
+      iterator = iter(
+          dataset_ops.Dataset.from_tensor_slices(np.ones(10,
+                                                         dtype=np.float32)))
+
+    @def_function.function
+    def defunc():
+      for _ in math_ops.range(10):
+        x = next(iterator)
+        outfeed_queue.enqueue(x * 2.0)
+
+    compiled_path = application_compile_op(defunc,
+                                           inputs=[],
+                                           freeze_variables=True).numpy()
+    executable = parse_poplar_executable(compiled_path)
+    signature = executable.embedded_runtime_config.signature
+
+    self.assertEqual(len(signature.inputs), 0)
+    self.assertEqual(len(signature.streamed_inputs), 1)  # iterator
+    self.assertEqual(len(signature.outputs), 0)
+    self.assertEqual(len(signature.streamed_outputs), 1)  # outfeed.enqueue
+
+  @parameterized.named_parameters(("resources", False), ("constants", True))
+  @test_util.run_v2_only
+  def test_compile_op_with_defunc_pipeline_closure_resource(
+      self, freeze_variables):
+    dataset = dataset_ops.Dataset.from_tensor_slices((np.ones(
+        (10, 5), dtype=np.float32),))
+    dataset = dataset.batch(1, drop_remainder=True)
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    v = variables.Variable([[2.0, 3.0, 4.0, 5.0, 6.0]], name='eagervar')
+
+    def stage1(c, x):
+      return c + x + v
+
+    def stage2(x):
+      return x + x
+
+    @def_function.function
+    def defunc():
+      pipelining_ops.pipeline(computational_stages=[stage1, stage2],
+                              gradient_accumulation_count=4,
+                              infeed_queue=infeed_queue,
+                              inputs=[42.0],
+                              outfeed_queue=outfeed_queue,
+                              device_mapping=[0, 0])
+
+    compiled_path = application_compile_op(
+        defunc, inputs=[], freeze_variables=freeze_variables).numpy()
+    executable = parse_poplar_executable(compiled_path)
+    signature = executable.embedded_runtime_config.signature
+
+    if freeze_variables:
+      self.assertEqual(len(signature.inputs),
+                       0)  # closure variable baked in as constant
+    else:
+      self.assertEqual(len(signature.inputs),
+                       1)  # closure variable becomes input
+
+    self.assertEqual(len(signature.streamed_inputs), 1)  # pipeline infeed x
+    self.assertEqual(len(signature.outputs), 0)
+    self.assertEqual(len(signature.streamed_outputs), 1)  # pipeline outfeed
 
   @test_util.deprecated_graph_mode_only
   def test_compile_nonexistent_directory(self):
