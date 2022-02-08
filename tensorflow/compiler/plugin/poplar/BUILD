@@ -3806,6 +3806,17 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "tensorboard_tf2_example",
+    size = "large",
+    srcs = ["docs/tensorboard_tf2_example.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -4011,6 +4022,7 @@ test_suite(
         "synthetic_data_test",
         "synthetic_data_with_outfeeds_test",
         "tensor_array_test",
+        "tensorboard_tf2_example",
         "topk_onehot_test",
         "topk_test",
         "triangular_solve_test",
