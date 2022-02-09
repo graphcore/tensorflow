@@ -826,7 +826,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        '/negate/Op/Negate',
         'ExpandDims/input/multi-update-add*/multiUpdateAdd',
         'vs/Gather*/multi-slice',
         'vs/add/add*/Add',

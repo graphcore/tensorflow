@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
+#include "tensorflow/compiler/xla/service/hlo_constant_folding.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
@@ -4991,6 +4992,40 @@ TEST_F(PoplarAlgebraicSimplifierTest, CompareSame) {
   ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Broadcast(m::ConstantScalar(true))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, CompareAdd) {
+  const char* kModuleStr = R"(
+  HloModule m
+  test {
+    param = s32[] parameter(0)
+    const_3 = s32[] constant(3)
+    const_4 = s32[] constant(4)
+    add = s32[] add(param, const_3)
+    ROOT compare = pred[] compare(add, const_4), direction=GE
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  ASSERT_TRUE(HloConstantFolding().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Compare(m::Parameter(0), m::ConstantScalar(1))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, CompareSub) {
+  const char* kModuleStr = R"(
+  HloModule m
+  test {
+    param_1 = s32[] parameter(0)
+    const_3 = s32[] constant(3)
+    const_4 = s32[] constant(4)
+    sub = s32[] subtract(param_1, const_3)
+    ROOT compare = pred[] compare(sub, const_4), direction=GE
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  ASSERT_TRUE(HloConstantFolding().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Compare(m::Parameter(0), m::ConstantScalar(7))));
 }
 
 TEST_F(PoplarAlgebraicSimplifierTest, RemainderOfIota) {

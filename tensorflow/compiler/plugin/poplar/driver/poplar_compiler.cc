@@ -1036,6 +1036,17 @@ void AddPipelineOptimizerPass(HloPassPipeline& pipeline,
   pass.AddPass<HloCSE>(true);
 }
 
+void AddAlgebraicOptimizerPass(HloPassPipeline& pipeline,
+                               xla::CompilationStats* compilation_stats,
+                               PoplarExecutor* poplar_executor) {
+  auto& algebraic_simplifier_pipeline =
+      pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+          "algebraic-optimiser-wrapper", compilation_stats);
+  algebraic_simplifier_pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+      poplar_executor->GetIpuOptions().algebraic_simplifier_config());
+  algebraic_simplifier_pipeline.AddPass<HloPassFix<HloConstantFolding>>();
+}
+
 /* RAII class used for locking the executable cache for a given file.
  * The idea is that when multiple processes are compiling the same executable
  * and have set the executable cache path to the same directory, they will
@@ -1382,8 +1393,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<MultiConvFixer>();
       pipeline.AddPass<HloCSE>(false);
 
-      pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
-          poplar_executor->GetIpuOptions().algebraic_simplifier_config());
+      AddAlgebraicOptimizerPass(pipeline, pipeline_compiler_stats.get(),
+                                poplar_executor);
       {
         auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
             "pipeline-gradient-accumulation-optimizer-wrapper",
@@ -1398,8 +1409,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<RootTokenReplacer>();
       pipeline.AddPass<ReshapeMover>();
       pipeline.AddPass<MapInliner>();
-      pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
-          poplar_executor->GetIpuOptions().algebraic_simplifier_config());
+      AddAlgebraicOptimizerPass(pipeline, pipeline_compiler_stats.get(),
+                                poplar_executor);
       pipeline.AddPass<ZeroSizedHloElimination>();
       pipeline.AddPass<FlattenCallGraph>();
       pipeline.AddPass<DistributedBatchNormDecomposer>(
@@ -1431,8 +1442,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         pass.AddPass<HloCSE>(true);
         pass.AddPass<HloDCE>();
         pass.AddPass<WhileLoopConstantSinking>();
-        pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
-            poplar_executor->GetIpuOptions().algebraic_simplifier_config());
+        AddAlgebraicOptimizerPass(pass, pipeline_compiler_stats.get(),
+                                  poplar_executor);
         pass.AddPass<ReshapeMover>();
         pass.AddPass<SortSimplifier>();
         pass.AddPass<FunctionOptimizer>();
@@ -1460,8 +1471,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
             "multi-update-optimizer", pipeline_compiler_stats.get());
         pass.AddPass<MultiUpdateScaleApply>(resources.annotations);
         pass.AddPass<MultiUpdateApply>(resources.annotations);
-        pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
-            poplar_executor->GetIpuOptions().algebraic_simplifier_config());
+        AddAlgebraicOptimizerPass(pass, pipeline_compiler_stats.get(),
+                                  poplar_executor);
         pass.AddPass<HloCSE>(true);
         pass.AddPass<HloDCE>();
       }
