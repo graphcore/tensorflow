@@ -164,7 +164,6 @@ def graph_builder(model_func, opts, x):
 class TestOptions:
   def __init__(self):
     self.batches_per_step = 12
-    self.iterations = 6
     self.dtype = np.float32
     self.batch_size = 2
     self.steps = 5
@@ -180,7 +179,7 @@ class TestOptions:
 class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
   def _run_test(self, opts, model_func, cycles, total_mem, max_mem):
     dataset = data.Dataset \
-        .range((opts.iterations + 2) * opts.batches_per_step) \
+        .range((opts.steps + 2) * opts.batches_per_step) \
         .map(lambda i: {
             #pylint: disable=line-too-long
             "inputs": array_ops.broadcast_to(math_ops.cast(i, opts.dtype), [opts.batch_size, opts.steps, opts.in_dim]),
@@ -218,7 +217,7 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     report = pva.openReport(report_helper.find_report())
     self.assert_number_of_executions(report, 1)
     if cycles is not None:
-      self.assert_execution_report_cycles(report, 0, cycles, tolerance=0.01)
+      self.assert_execution_report_cycles(report, cycles, tolerance=0.01)
     if total_mem is not None:
       self.assert_total_tile_memory(report, total_mem, tolerance=0.01)
     if max_mem is not None:

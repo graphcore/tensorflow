@@ -347,17 +347,13 @@ class TestCaseExtensions(object):
 
   def assert_execution_report_cycles(self,
                                      report,
-                                     idx,
                                      expected,
-                                     tolerance=0.01):
-    """Asserts the total cycles on each tile are close to expected for the
-    specified execution.
+                                     tolerance,
+                                     expected_executions=1):
+    """Asserts the total cycles are close to expected for profile
     """
-    steps = report.execution.runs[idx].steps
-    n_tiles = len(steps[0].cyclesByTile)
-    cycles = [
-        sum(step.cyclesByTile[t] for step in steps) for t in range(n_tiles)
-    ]
+    self.assert_number_of_executions(report, expected_executions)
+    cycles = report.execution.totalCycles.total
     self._assert_all_in_tolerance(cycles, expected, tolerance)
 
   def assert_number_of_executions(self, report, n):
