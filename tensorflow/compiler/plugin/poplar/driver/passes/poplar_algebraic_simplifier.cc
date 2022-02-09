@@ -1757,6 +1757,33 @@ Status AlgebraicSimplifierVisitor::HandleBroadcast(HloInstruction* broadcast) {
 Status AlgebraicSimplifierVisitor::HandleCompare(HloInstruction* compare) {
   HloInstruction* lhs;
   HloInstruction* rhs;
+  HloInstruction* lhs_delta;
+
+  // Canonicalizing: Replacing compare(X +/- C, Y) => compare(X, Y -/+ C)
+  // This allows constant folding on the right hand side later.
+  if (Match(compare,
+            m::Compare(m::Add(m::Op(&lhs), m::ConstantScalar(&lhs_delta)),
+                       m::Op(&rhs)))) {
+    const HloInstruction* add = compare->operand(0);
+    return ReplaceWithNewInstruction(
+        compare,
+        compare->CloneWithNewOperands(
+            compare->shape(),
+            {lhs, computation_->AddInstruction(HloInstruction::CreateBinary(
+                      add->shape(), HloOpcode::kSubtract, rhs, lhs_delta))}));
+  } else if (Match(compare,
+                   m::Compare(m::Add(m::Op(&lhs),
+                                     m::Negate(m::ConstantScalar(&lhs_delta))),
+                              m::Op(&rhs)))) {
+    const HloInstruction* add = compare->operand(0);
+    return ReplaceWithNewInstruction(
+        compare,
+        compare->CloneWithNewOperands(
+            compare->shape(),
+            {lhs, computation_->AddInstruction(HloInstruction::CreateBinary(
+                      add->shape(), HloOpcode::kAdd, rhs, lhs_delta))}));
+  }
+
   CHECK(Match(compare, m::Compare(m::Op(&lhs), m::Op(&rhs))));
 
   auto replace_with_pred_broadcast = [&](bool value) {
