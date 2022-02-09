@@ -13,7 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/reduction_util.h"
-#include <popops/CollectiveTypes.hpp>
 #include <popops/ExprOp.hpp>
 #include <popops/Operation.hpp>
 
@@ -248,27 +247,27 @@ StatusOr<const HloInstruction*> GetReduceInstruction(
       "Reduction instruction not found in Simple Reduction fusion");
 }
 
-StatusOr<popops::CollectiveOperator> ToPoplarCollectiveOperator(
+StatusOr<gcl::CollectiveOperator> ToPoplarCollectiveOperator(
     CollectiveOperator op) {
   switch (op) {
     case CollectiveOperator::COLLECTIVE_OP_ADD:
-      return popops::CollectiveOperator::ADD;
+      return gcl::CollectiveOperator::ADD;
     case CollectiveOperator::COLLECTIVE_OP_MUL:
-      return popops::CollectiveOperator::MUL;
+      return gcl::CollectiveOperator::MUL;
     case CollectiveOperator::COLLECTIVE_OP_MIN:
-      return popops::CollectiveOperator::MIN;
+      return gcl::CollectiveOperator::MIN;
     case CollectiveOperator::COLLECTIVE_OP_MAX:
-      return popops::CollectiveOperator::MAX;
+      return gcl::CollectiveOperator::MAX;
     case CollectiveOperator::COLLECTIVE_OP_LOGICAL_AND:
-      return popops::CollectiveOperator::LOGICAL_AND;
+      return gcl::CollectiveOperator::LOGICAL_AND;
     case CollectiveOperator::COLLECTIVE_OP_LOGICAL_OR:
-      return popops::CollectiveOperator::LOGICAL_OR;
+      return gcl::CollectiveOperator::LOGICAL_OR;
     case CollectiveOperator::COLLECTIVE_OP_SQUARE_ADD:
-      return popops::CollectiveOperator::SQUARE_ADD;
+      return gcl::CollectiveOperator::SQUARE_ADD;
     case CollectiveOperator::COLLECTIVE_OP_LOCAL:
-      return popops::CollectiveOperator::LOCAL;
+      return gcl::CollectiveOperator::LOCAL;
     case CollectiveOperator::COLLECTIVE_OP_MEAN:
-      return popops::CollectiveOperator::MEAN;
+      return gcl::CollectiveOperator::MEAN;
     default:
       return InternalError("Invalid collective operator type.");
   }

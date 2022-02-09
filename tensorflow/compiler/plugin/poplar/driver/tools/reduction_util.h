@@ -21,6 +21,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 
+#include <gcl/Collectives.hpp>
+
 namespace popops {
 namespace expr {
 enum class BinaryOpType;
@@ -70,7 +72,7 @@ Literal GetIdentityConstantLiteral(const HloInstruction* inst,
                                    const PrimitiveType& dtype);
 
 // Convert a xla::poplarplugin::CollectiveOperator to a popops one.
-StatusOr<popops::CollectiveOperator> ToPoplarCollectiveOperator(
+StatusOr<gcl::CollectiveOperator> ToPoplarCollectiveOperator(
     CollectiveOperator op);
 
 }  // namespace poplarplugin

@@ -176,12 +176,12 @@ Status BaseVisitor::HandleAllReduce(HloInstruction* inst) {
 
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
 
-  popops::CollectiveOperator op = popops::CollectiveOperator::LOCAL;
+  gcl::CollectiveOperator op = gcl::CollectiveOperator::LOCAL;
 
   if (IsAllReduceAdd(inst)) {
-    op = popops::CollectiveOperator::ADD;
+    op = gcl::CollectiveOperator::ADD;
   } else if (IsAllReduceMean(inst)) {
-    op = popops::CollectiveOperator::MEAN;
+    op = gcl::CollectiveOperator::MEAN;
   } else {
     return xla::FailedPrecondition(
         "Unsupported all-reduce reduction computation.");
