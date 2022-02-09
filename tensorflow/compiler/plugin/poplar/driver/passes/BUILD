@@ -300,6 +300,19 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "dynamic_slice_replacer",
+    srcs = [
+        "dynamic_slice_replacer.cc",
+    ],
+    hdrs = [
+        "dynamic_slice_replacer.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:slice_util",
+    ],
+)
+
+poplar_cc_library(
     name = "elementwise_broadcast_converter",
     srcs = [
         "elementwise_broadcast_converter.cc",
@@ -1663,6 +1676,7 @@ poplar_cc_library(
         ":dead_control_dependencies_elimination",
         ":dependency_replacer",
         ":distributed_batch_norm_decomposer",
+        ":dynamic_slice_replacer",
         ":elementwise_broadcast_converter",
         ":elementwise_simplifier",
         ":embeddings_gradient_optimizer",
