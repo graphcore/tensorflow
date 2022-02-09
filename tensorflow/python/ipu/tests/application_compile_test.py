@@ -33,6 +33,7 @@ from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.ops.application_compile_op import experimental_application_compile_op as application_compile_op
 from tensorflow.python.ipu.ops.embedded_runtime import _find_opaque_blob
+from tensorflow.python.framework import ops
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import variable_scope
@@ -43,7 +44,9 @@ from tensorflow.python.training import gradient_descent
 
 
 def parse_poplar_executable(executable_file):
-  opq_blob = _find_opaque_blob(executable_file)
+  executable_file_tensor = ops.convert_to_tensor(executable_file,
+                                                 dtype=dtypes.string)
+  opq_blob = _find_opaque_blob(executable_file_tensor)
 
   poplar_exec = poplar_executable_pb2.PoplarExecutableProto()
   poplar_exec.ParseFromString(opq_blob)

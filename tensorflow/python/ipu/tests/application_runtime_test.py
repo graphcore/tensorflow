@@ -370,7 +370,8 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
         with sl.Session() as session:
           run_app = gen_application_runtime.application_runtime(
               inputs=(),
-              filename=poplar_exec_filepath,
+              filename=ops.convert_to_tensor(poplar_exec_filepath,
+                                             dtype=dtypes.string),
               engine_name=engine_name)
 
           images_ph = array_ops.placeholder(dtypes.float32,
@@ -392,7 +393,8 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
             if multiple_engines:
               run_app = gen_application_runtime.application_runtime(
                   inputs=(),
-                  filename=poplar_exec_filepath,
+                  filename=ops.convert_to_tensor(poplar_exec_filepath,
+                                                 dtype=dtypes.string),
                   engine_name=engine_name)
 
               images_ph = array_ops.placeholder(dtypes.float32,
@@ -433,7 +435,8 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
       with sl.Session() as session:
         run_app = gen_application_runtime.application_runtime(
             inputs=(),
-            filename=poplar_exec_filepath,
+            filename=ops.convert_to_tensor(poplar_exec_filepath,
+                                           dtype=dtypes.string),
             engine_name=engine_name_prefix)
 
         images_ph = array_ops.placeholder(dtypes.float32,

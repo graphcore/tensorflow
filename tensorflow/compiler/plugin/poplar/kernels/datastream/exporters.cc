@@ -485,43 +485,4 @@ class VariablesImporter : public OpKernel {
 REGISTER_KERNEL_BUILDER(Name("VariablesImporter").Device(DEVICE_CPU),
                         VariablesImporter);
 
-class PopEFUnwrapper : public OpKernel {
- public:
-  explicit PopEFUnwrapper(OpKernelConstruction* ctx) : OpKernel(ctx) {
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("filename", &filename_));
-  }
-
-  void Compute(OpKernelContext* ctx) override {
-    // Extract the first opaque blob from a PopEF file and return it as
-    // a string. This will normally be the TF protobuf data, which will be
-    // unpacked in Python.
-    Tensor* output_tensor = nullptr;
-    OP_REQUIRES_OK(
-        ctx, ctx->allocate_output("out", TensorShape({1}), &output_tensor));
-    auto output_flat = output_tensor->flat<tstring>();
-
-    std::ostringstream blob;
-    bool success = false;
-    try {
-      popef::Reader reader;
-      reader.parseFile(filename_);
-      auto opq_blob = reader.opaqueBlobs().at(0);
-      auto& data = opq_blob.data;
-      blob << data.rdbuf();
-      output_flat(0) = blob.str();
-      success = true;
-    } catch (const std::exception& e) {
-      LOG(INFO) << e.what();
-    }
-    OP_REQUIRES(ctx, success,
-                tensorflow::errors::Internal(
-                    "[PopEF][Unwrapper]: Failed to read PopEF file"));
-  }
-
- private:
-  std::string filename_;
-};  // namespace tensorflow
-
-REGISTER_KERNEL_BUILDER(Name("PopefUnwrapper").Device(DEVICE_CPU),
-                        PopEFUnwrapper);
 }  // namespace tensorflow

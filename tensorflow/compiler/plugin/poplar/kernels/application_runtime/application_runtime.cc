@@ -990,7 +990,6 @@ class EngineManager {
 class ApplicationRuntime : public OpKernel {
  public:
   explicit ApplicationRuntime(OpKernelConstruction* ctx) : OpKernel(ctx) {
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("filename", &filename_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("engine_name", &engine_name_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("timeout_us", &timeout_us_));
   }
@@ -1001,7 +1000,14 @@ class ApplicationRuntime : public OpKernel {
     ctx->input_list("inputs", &input_list);
     auto& engine_mgr = EngineManager::Instance();
 
-    OP_REQUIRES_OK(ctx, engine_mgr.CreateEngine(engine_name_, filename_,
+    OpInputList filename_list;
+    ctx->input_list("filename", &filename_list);
+    CHECK_EQ(filename_list.size(), 1);
+    const tensorflow::Tensor& filepath_tensor = filename_list[0];
+    static constexpr int64 unlimited_entries = -1;
+    const auto filepath = filepath_tensor.SummarizeValue(unlimited_entries);
+
+    OP_REQUIRES_OK(ctx, engine_mgr.CreateEngine(engine_name_, filepath,
                                                 timeout_us_, input_list));
 
     tensorflow::Tensor* anchor = nullptr;
@@ -1010,7 +1016,6 @@ class ApplicationRuntime : public OpKernel {
   }
 
  private:
-  std::string filename_;
   std::string engine_name_;
   int64 timeout_us_;
 

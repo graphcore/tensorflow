@@ -20,9 +20,9 @@ namespace tensorflow {
 
 REGISTER_OP("ApplicationRuntime")
     .Input("inputs: input_types")
+    .Input("filename: string")
     .Output("anchor: int32")
     .Attr("input_types: list(type) >= 0")
-    .Attr("filename: string")
     .Attr("engine_name: string")
     .Attr("timeout_us: int = 5000");
 
