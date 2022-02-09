@@ -258,7 +258,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     // the correct value, we can replicatedReduceScatter sum to distribute the
     // results to the correct replica.
     host_sliceable.tensor = gcl::reduceScatterCrossReplica(
-        graph, host_sliceable.tensor.flatten(), popops::CollectiveOperator::ADD,
+        graph, host_sliceable.tensor.flatten(), gcl::CollectiveOperator::ADD,
         seq, {debug_name_and_id, "reduce_scatter"},
         GetReplicatedCollectiveOptions(res));
 

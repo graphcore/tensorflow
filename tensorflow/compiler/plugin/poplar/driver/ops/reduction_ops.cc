@@ -978,7 +978,7 @@ StatusOr<poplar::program::Sequence> CreateSimpleSelectAndScatter(
 StatusOr<poplar::program::Sequence> CreateReplicatedAllReduce(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
-    const popops::CollectiveOperator op,
+    const gcl::CollectiveOperator op,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
   poplar::Graph& graph = GetGraph(res, inst);

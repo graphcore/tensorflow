@@ -99,7 +99,7 @@ class StatefulGradientAccumulateOp : public PoplarOpDef {
         // All reduce the accumulator tensor into the output.
         gcl::allReduceToDestinationCrossReplica(
             GetMasterGraph(res), accumulator, output,
-            popops::CollectiveOperator::ADD, if_true, {debug_info},
+            gcl::CollectiveOperator::ADD, if_true, {debug_info},
             GetReplicatedCollectiveOptions(res));
       } else {
         // Copy accumulator into output.
@@ -253,7 +253,7 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
           // All reduce the accumulator tensor into the output.
           gcl::allReduceToDestinationCrossReplica(
               GetMasterGraph(res), accumulator, output,
-              popops::CollectiveOperator::ADD, if_true, {debug_info},
+              gcl::CollectiveOperator::ADD, if_true, {debug_info},
               GetReplicatedCollectiveOptions(res));
 
           // Normalize it - we normalize after the all reduce otherwise we risk

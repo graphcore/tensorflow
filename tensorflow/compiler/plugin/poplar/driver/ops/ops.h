@@ -289,7 +289,7 @@ StatusOr<poplar::program::Sequence> CreateConditionalOp(
 StatusOr<poplar::program::Sequence> CreateReplicatedAllReduce(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
-    const popops::CollectiveOperator op,
+    const gcl::CollectiveOperator op,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 StatusOr<poplar::program::Sequence> CreateReplicatedAllToAll(
