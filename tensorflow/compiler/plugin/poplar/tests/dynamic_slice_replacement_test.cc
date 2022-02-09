@@ -22,6 +22,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/slice_util.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/dynamic_slice_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/embedding_plans_preplanning.h"
 
@@ -43,9 +45,17 @@ using HloAndSliceOffsets = std::pair<std::string, std::vector<int>>;
 struct DynamicSliceHloTest : HloPoplarTestBase,
                              ::testing::WithParamInterface<HloAndSliceOffsets> {
   void SetUp() override {
-    TF_ASSERT_OK_AND_ASSIGN(device_, CreateIpuDevice(1));
+    TF_ASSERT_OK_AND_ASSIGN(auto ipu_count, GetMaxIpuCount());
+    if (ipu_count == 0) {
+      GTEST_SKIP() << "Skipping tests as we need 1 ipu but have none."
+                   << "Make sure TF_IPU_COUNT is set.";
+    }
+
+    TF_ASSERT_OK_AND_ASSIGN(device_, CreateIpuDevice(1, /*num_tiles*/ 1200));
     TF_ASSERT_OK_AND_ASSIGN(module_,
                             ParseAndReturnVerifiedModule(GetParam().first));
+
+    bytes_per_tile_ = device_.getTarget().getBytesPerTile();
 
     auto input = FindInstruction(module_.get(), "input_tensor");
     ASSERT_TRUE(input);
@@ -81,32 +91,38 @@ struct DynamicSliceHloTest : HloPoplarTestBase,
   }
 
   poplar::Device device_;
+  uint32_t bytes_per_tile_;
   std::unique_ptr<VerifiedHloModule> module_;
 
   std::vector<int> input_matrix_;
   std::vector<int> offsets_vector_;
+
+  std::string slice_being_replaced_ = "replace_dynamic_slice";
 };
 
 using DynamicSliceSupportedHloTest = DynamicSliceHloTest;
 
 TEST_P(DynamicSliceSupportedHloTest, CheckCanReplaceSlice) {
-  auto instr = FindInstruction(module_.get(), "replace_dynamic_slice");
+  auto instr = FindInstruction(module_.get(), slice_being_replaced_);
   ASSERT_TRUE(instr);
 
   auto dynamic_slice = Cast<HloDynamicSliceInstruction>(instr);
+  const auto expected_shape = dynamic_slice->shape();
+  const auto expected_parent = dynamic_slice->parent();
   TF_ASSERT_OK_AND_ASSIGN(auto multi_slice,
                           TryReplaceDynamicWithMultiSlice(dynamic_slice));
   ASSERT_TRUE(multi_slice);
-  // Even though it's been removed dynamic_slice is valid until
-  // HloComputation::Cleanup is called.
-  ASSERT_EQ(dynamic_slice->parent(), nullptr);
+
+  // Check that the slice has been removed.
+  ASSERT_FALSE(FindInstruction(module_.get(), slice_being_replaced_));
 
   ASSERT_TRUE(IsPoplarInstruction(PoplarOp::MultiSlice, multi_slice));
-  ASSERT_EQ(multi_slice->shape(), dynamic_slice->shape());
+  ASSERT_EQ(multi_slice->shape(), expected_shape);
+  ASSERT_EQ(multi_slice->parent(), expected_parent);
 }
 
 TEST_P(DynamicSliceSupportedHloTest, CompareReplacedSlice) {
-  auto instr = FindInstruction(module_.get(), "replace_dynamic_slice");
+  auto instr = FindInstruction(module_.get(), slice_being_replaced_);
   ASSERT_TRUE(instr);
 
   auto dynamic_slice = Cast<HloDynamicSliceInstruction>(instr);
@@ -123,25 +139,31 @@ TEST_P(DynamicSliceSupportedHloTest, CompareReplacedSlice) {
 
   TF_ASSERT_OK_AND_ASSIGN(poplar::Engine engine,
                           Compile(*resources, module_.get()));
+
+  // The hlo ouputs 2 equal dynamic slices. Check that the output of the one
+  // we replaced matches the remaining one.
+  auto ref_dynamic_slice = FindInstruction(module_.get(), "ref_dynamic_slice");
+  ASSERT_TRUE(ref_dynamic_slice);
   auto results =
-      RunEngine(engine, multi_slice->shape(), dynamic_slice->shape());
+      RunEngine(engine, multi_slice->shape(), ref_dynamic_slice->shape());
+
   auto multislice_out = results.first;
   auto dynamicslice_out = results.second;
-
   ASSERT_EQ(multislice_out, dynamicslice_out);
 }
 
 using DynamicSliceUnsupportedHloTest = DynamicSliceHloTest;
 
 TEST_P(DynamicSliceUnsupportedHloTest, CantReplace) {
-  auto instr = FindInstruction(module_.get(), "replace_dynamic_slice");
+  auto instr = FindInstruction(module_.get(), slice_being_replaced_);
   ASSERT_TRUE(instr);
 
   auto dynamic_slice = Cast<HloDynamicSliceInstruction>(instr);
   TF_ASSERT_OK_AND_ASSIGN(auto multi_slice,
                           TryReplaceDynamicWithMultiSlice(dynamic_slice));
   ASSERT_FALSE(multi_slice);
-  ASSERT_EQ(dynamic_slice->parent(), module_->entry_computation());
+  // Check that the original slice hasn't been removed.
+  ASSERT_TRUE(FindInstruction(module_.get(), slice_being_replaced_));
 }
 
 HloAndSliceOffsets Slice3DInputTestCase(const std::string& tensor_size,
@@ -266,6 +288,63 @@ std::vector<HloAndSliceOffsets> UnsupportedTestCases() {
 INSTANTIATE_TEST_SUITE_P(DynamicSliceReplacements,
                          DynamicSliceUnsupportedHloTest,
                          ::testing::ValuesIn(UnsupportedTestCases()));
+
+using DynamicSliceReplacedByPassTest = DynamicSliceHloTest;
+TEST_P(DynamicSliceReplacedByPassTest, ReplacesOOMDynamicSlices) {
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool replaced, DynamicSliceReplacer(bytes_per_tile_).Run(module_.get()));
+  ASSERT_TRUE(replaced);
+
+  auto resources = GetMockResources(device_, module_.get(), 1);
+  ASSERT_TRUE(
+      ModuleFlatten(resources->annotations).Run(module_.get()).ValueOrDie());
+  // Not asserting anything since EmbeddingPlansPreplanning always returns
+  // False.
+  EmbeddingPlansPreplanning(*resources).Run(module_.get());
+
+  // Throws if we go OOM.
+  ASSERT_NO_THROW(Compile(*resources, module_.get()));
+}
+
+using DynamicSliceSkippedByPassTest = DynamicSliceHloTest;
+TEST_P(DynamicSliceSkippedByPassTest, Skips) {
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool replaced, DynamicSliceReplacer(bytes_per_tile_).Run(module_.get()));
+  ASSERT_FALSE(replaced);
+
+  auto resources = GetMockResources(device_, module_.get(), 1);
+
+  // Setup the dynamicSlices so they get allocated with
+  // popops::createSliceTensor.
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool success, AllocationFinder(resources->annotations,
+                                     resources->always_rearrange_copies_on_host)
+                        .Run(module_.get()));
+  ASSERT_TRUE(success);
+
+  // Throws if we go OOM.
+  ASSERT_NO_THROW(Compile(*resources, module_.get()));
+}
+
+// We want these to be replaced as they might cause an OOM if allocated
+// with a dynamic slice
+INSTANTIATE_TEST_SUITE_P(
+    DynamicSliceReplacements, DynamicSliceReplacedByPassTest,
+    ::testing::Values(Slice2DInputTestCase("20000, 5", "1,5"),
+                      Slice3DInputTestCase("20000, 2, 5", "1,2,5")));
+
+// We want these to be skipped since they're all quite small tensors
+// and/or a non-1d slice.
+INSTANTIATE_TEST_SUITE_P(
+    DynamicSliceReplacements, DynamicSliceSkippedByPassTest,
+    ::testing::Values(Slice2DInputTestCase("100,2", "1,2"),
+                      Slice3DInputTestCase("5,2,16", "1,2,16"),
+                      Slice3DInputTestCase("5,0,16", "1,0,16"),
+                      Slice3DInputTestCase("5,2,16", "2,2,16"),
+                      Slice3DInputTestCase("20000,1,16", "1,0,16"),
+                      Slice3DInputTestCase("5,2,512", "1,2,512"),
+                      Slice3DInputTestCase("5,512,512", "1,512,512"),
+                      Slice1DInputTestCase("10")));
 
 }  // namespace
 }  // namespace poplarplugin

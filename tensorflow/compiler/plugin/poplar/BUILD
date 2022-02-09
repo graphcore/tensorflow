@@ -1414,6 +1414,7 @@ xla_test(
     srcs = ["tests/dynamic_slice_replacement_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         ":poplar_test_base",
         ":test_utils",
@@ -3833,6 +3834,7 @@ test_suite(
         "dummy_input_test",
         "dump_poplar_info",
         "dynamic_slice_layout_test",
+        "dynamic_slice_replacement_test",
         "dynamic_slice_test",
         "elementwise_broadcast_converter_test",
         "elementwise_simplifier_test",
