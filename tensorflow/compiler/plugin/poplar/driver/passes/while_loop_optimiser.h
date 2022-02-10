@@ -31,8 +31,6 @@ class PoplarWhileLoopOptimiser : public HloModulePass {
     return "poplar-while-loop-optimiser";
   }
   StatusOr<bool> Run(HloModule* module) override;
-  // for testing only
-  int64 CountOptimisations(HloModule* module) const;
 
   // Propagate a new shape through the module.
   // This method isn't general yet and should only be used
