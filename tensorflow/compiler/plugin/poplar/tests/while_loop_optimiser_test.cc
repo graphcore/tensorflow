@@ -24,6 +24,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_fix.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
+#include "tensorflow/compiler/xla/service/tuple_simplifier.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
@@ -73,8 +74,9 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().CountOptimisations(module.get());
-  ASSERT_EQ(count, 1);
+  TF_ASSERT_OK_AND_ASSIGN(bool changed,
+                          PoplarWhileLoopOptimiser().Run(module.get()));
+  ASSERT_TRUE(changed);
 }
 
 TEST_F(WhileLoopOptimiserTest, UsedByRoot) {
@@ -115,8 +117,8 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().CountOptimisations(module.get());
-  ASSERT_EQ(count, 0);
+  auto count = PoplarWhileLoopOptimiser().Run(module.get()).ValueOrDie();
+  ASSERT_FALSE(count);
 }
 
 TEST_F(WhileLoopOptimiserTest, TestReshaping) {
@@ -236,8 +238,8 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().CountOptimisations(module.get());
-  ASSERT_EQ(count, 1);
+  auto count = PoplarWhileLoopOptimiser().Run(module.get()).ValueOrDie();
+  ASSERT_TRUE(count);
 }
 
 TEST_F(WhileLoopOptimiserTest, IndexTooLarge) {
@@ -279,8 +281,8 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().CountOptimisations(module.get());
-  ASSERT_EQ(count, 0);
+  auto count = PoplarWhileLoopOptimiser().Run(module.get()).ValueOrDie();
+  ASSERT_FALSE(count);
 }
 
 TEST_F(WhileLoopOptimiserTest, IndexUnknown) {
@@ -322,8 +324,8 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().CountOptimisations(module.get());
-  ASSERT_EQ(count, 0);
+  auto count = PoplarWhileLoopOptimiser().Run(module.get()).ValueOrDie();
+  ASSERT_FALSE(count);
 }
 
 TEST_F(WhileLoopOptimiserTest, IndexDecrementedInBwds) {
@@ -399,8 +401,8 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().CountOptimisations(module.get());
-  ASSERT_EQ(count, 1);
+  auto count = PoplarWhileLoopOptimiser().Run(module.get()).ValueOrDie();
+  ASSERT_TRUE(count);
 }
 
 TEST_F(WhileLoopOptimiserTest, OneBadRead) {
@@ -476,8 +478,117 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().CountOptimisations(module.get());
-  ASSERT_EQ(count, 0);
+  auto count = PoplarWhileLoopOptimiser().Run(module.get()).ValueOrDie();
+  ASSERT_FALSE(count);
+}
+
+TEST_F(WhileLoopOptimiserTest, EliminateSingleBroadcast) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  one = s32[] constant(1)
+  zero = s32[] constant(0)
+  add = s32[] add(p_body.0, one)
+  two = s32[] constant(2)
+  slice-input = s32[1, 1] reshape(two)
+  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+}
+
+condition {
+  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_2 = s32[] constant(1)
+  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
+  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10, 1] get-tuple-element(while), index=1
+  ROOT slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  TF_ASSERT_OK_AND_ASSIGN(bool changed,
+                          PoplarWhileLoopOptimiser().Run(module.get()));
+  ASSERT_EQ(changed, true);
+  TF_ASSERT_OK_AND_ASSIGN(changed, TupleSimplifier().Run(module.get()));
+
+  auto* comp = module->GetComputationWithName("entry");
+  auto* slice = comp->root_instruction();
+  // Check this slice will be removed by later passes
+  ASSERT_EQ(slice->shape(), slice->operand(0)->shape());
+  ASSERT_TRUE(slice->operand(0)->opcode() != HloOpcode::kGetTupleElement);
+}
+
+TEST_F(WhileLoopOptimiserTest, EliminateMultipleBroadcast) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[], s32[10, 1], s32[1, 1], s32[10, 1]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  p_body.2 = s32[1, 1] get-tuple-element(p_body), index=2
+  p_body.3 = s32[10, 1] get-tuple-element(p_body), index=3
+  one = s32[] constant(1)
+  zero = s32[] constant(0)
+  add = s32[] add(p_body.0, one)
+  two = s32[] constant(2)
+  slice-input = s32[1, 1] reshape(two)
+  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  dyn_update.2 = s32[10, 1] dynamic-update-slice(p_body.3, p_body.2, p_body.0, zero)
+  ROOT root = (s32[], s32[10, 1], s32[1, 1], s32[10, 1]) tuple(add, dyn_update, p_body.2, dyn_update.2)
+}
+
+condition {
+  p_cond = (s32[], s32[10, 1], s32[1, 1], s32[10, 1]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_2 = s32[] constant(1)
+  reshape = s32[1, 1] reshape(const_0)
+  repeat_init = (s32[], s32[10, 1], s32[1, 1], s32[10, 1]) tuple(const_0, const_1, reshape, const_1)
+  while = (s32[], s32[10, 1], s32[1, 1], s32[10, 1]) while(repeat_init), condition=condition, body=body
+  broadcast.1 = s32[10, 1] get-tuple-element(while), index=1
+  ROOT slice = s32[1, 1] dynamic-slice(broadcast.1, const_0, const_0), dynamic_slice_sizes={1, 1}
+  broadcast.2 = s32[10, 1] get-tuple-element(while), index=3
+  slice.2 = s32[1, 1] dynamic-slice(broadcast.2, const_0, const_0), dynamic_slice_sizes={1, 1}
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  TF_ASSERT_OK_AND_ASSIGN(bool changed,
+                          PoplarWhileLoopOptimiser().Run(module.get()));
+  ASSERT_EQ(changed, true);
+  TF_ASSERT_OK_AND_ASSIGN(changed, TupleSimplifier().Run(module.get()));
+
+  auto* comp = module->GetComputationWithName("entry");
+  auto* slice1 = comp->root_instruction();
+  auto* slice2 = comp->GetInstructionWithName("slice.2");
+  for (auto* slice : {slice1, slice2}) {
+    // Check this slice will be removed by later passes
+    ASSERT_EQ(slice->shape(), slice->operand(0)->shape());
+    ASSERT_TRUE(slice->operand(0)->opcode() != HloOpcode::kGetTupleElement);
+  }
 }
 
 }  // namespace

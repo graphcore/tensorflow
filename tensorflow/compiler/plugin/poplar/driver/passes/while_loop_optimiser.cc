@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/shape_inference.h"
+#include "tensorflow/compiler/xla/service/while_loop_invariant_code_motion.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
 #include "absl/container/flat_hash_set.h"
@@ -44,14 +45,20 @@ namespace poplarplugin {
 namespace {
 
 void FindLoopConstants(HloComputation* comp,
-                       absl::flat_hash_set<HloInstruction*>& result) {
+                       absl::flat_hash_set<HloInstruction*>& result,
+                       const bool include_constants) {
   // we are not finding the dropout ones because this constant looking
   // is too restrictive. TODO fix this
   for (auto* inst : comp->MakeInstructionPostOrder()) {
     switch (inst->opcode()) {
       // Note this is meant to match NotWorthHoistingIndividually
       // inside WhileLoopInvariantCodeMotion
-      case HloOpcode::kConstant:
+      case HloOpcode::kConstant: {
+        if (include_constants) {
+          result.emplace(inst);
+        }
+        break;
+      }
       case HloOpcode::kBitcast:
       case HloOpcode::kBroadcast:
       case HloOpcode::kIota:
@@ -73,11 +80,12 @@ void FindLoopConstants(HloComputation* comp,
   }
 }
 
-absl::flat_hash_set<HloInstruction*> FindLoopConstants(HloComputation* comp) {
+absl::flat_hash_set<HloInstruction*> FindLoopConstants(
+    HloComputation* comp, const bool include_constants = true) {
   absl::flat_hash_set<HloInstruction*> result;
   auto gtes = WhileUtil::GetInvariantGTEsForWhileBody(*comp);
   result.insert(gtes.begin(), gtes.end());
-  FindLoopConstants(comp, result);
+  FindLoopConstants(comp, result, include_constants);
   return result;
 }
 
@@ -762,6 +770,149 @@ static Status ReplaceInstructionAndPushUsersToQueue(
   return Status::OK();
 }
 
+struct HoistedOutput {
+  absl::flat_hash_map<HloInstruction*, HloInstruction*> hoisted;
+  HloInstruction* new_while_op;
+  HoistedOutput(absl::flat_hash_map<HloInstruction*, HloInstruction*> hoisted,
+                HloInstruction* new_while_op)
+      : hoisted(std::move(hoisted)), new_while_op(new_while_op) {}
+};
+
+// Looking to take parameter out of while body with a transform like
+// Before:
+// init = Tuple(A, B, C)
+// (...) while(init), body=body
+//
+// body {
+//   P = parameter(0)
+//   invariant-gte = get-tuple-element(P), index=0
+//   non-hoisted-op = reshape(invariant-gte)
+//   use-specified-in-params = dynamic-update(buffer, non-hoisted-op)
+//   ... // rest of while body
+// }
+//
+// And we are going to transform it to
+// After:
+// new-A = reshape(A)
+// init = Tuple(new-A, B, C)
+// (...) while(init), body=body
+//
+// body {
+//   P = parameter(0)
+//   invariant-gte = get-tuple-element(P), index=0
+//   use-specified-in-params = dynamic-update(buffer, invariant-gte)
+//   ... // rest of while body
+// }
+// So that now the direct input to the dynamic-update is in the outer
+// computation and can be used by any users of the while
+StatusOr<HoistedOutput> HoistBroardcastInputs(
+    HloInstruction* while_op, std::vector<BroadcastAndSlice>& params) {
+  absl::flat_hash_map<HloInstruction*, HloInstruction*> hoisted;
+  // Don't need to be strict about unhoisted being loop invariant as it's
+  // not used for control flow in creating the copies. Need to not include
+  // constants as upstream doesn't as a compile time optimisation and
+  // checks there are none in the hash
+  absl::flat_hash_set<HloInstruction*> unhoisted =
+      FindLoopConstants(while_op->while_body(), false);
+
+  // instructions_to_replace[i] is hoisted into a loop invariant instruction
+  // replacement_instructions[i].
+  std::vector<HloInstruction*> instructions_to_replace;
+  std::vector<HloInstruction*> replacement_instructions;
+
+  for (auto& param : params) {
+    auto* to_hoist = param.broadcast.dynamic_update->mutable_operand(1);
+    // This erasing is because upstreams function checks that
+    // to hoist isn't in unhoisted, (though if it weren't for
+    // that check it would be fine as it doesn't use the
+    // unhoisted set)
+    unhoisted.erase(to_hoist);
+    WhileLoopInvariantCodeMotion::CreateLoopInvariantCopy(&hoisted, &unhoisted,
+                                                          while_op, to_hoist);
+    instructions_to_replace.push_back(to_hoist);
+    auto* new_inst = FindOrDie(hoisted, to_hoist);
+    replacement_instructions.push_back(new_inst);
+    // From now on when looking at the params this will point to the
+    // hoisted input
+    param.broadcast.dynamic_update = new_inst;
+  }
+  TF_ASSIGN_OR_RETURN(auto live_in, WhileUtil::MakeInstructionsLiveIn(
+                                        while_op, replacement_instructions));
+
+  for (int64 i = 0; i < instructions_to_replace.size(); i++) {
+    auto* old_inst = FindOrDie(live_in.while_body_instruction_map,
+                               instructions_to_replace[i]);
+    TF_RETURN_IF_ERROR(
+        live_in.new_while_instr->while_body()->ReplaceInstruction(
+            old_inst, live_in.while_body_live_in_values[i]));
+  }
+  return HoistedOutput(std::move(hoisted), live_in.new_while_instr);
+}
+
+Status ReplaceAllUsesWithDifferentShape(HloInstruction* old_inst,
+                                        absl::Span<HloInstruction* const> users,
+                                        HloInstruction* new_producer) {
+  for (HloInstruction* user : users) {
+    TF_RETURN_IF_ERROR(
+        old_inst->ReplaceUseWithDifferentShape(user, new_producer));
+  }
+
+  if (old_inst->parent() &&
+      old_inst->parent()->root_instruction() == old_inst) {
+    old_inst->parent()->set_root_instruction(new_producer,
+                                             /*accept_different_shape=*/true);
+  }
+  return Status::OK();
+}
+
+HloInstruction* CreateNewTupleOutput(
+    const HoistedOutput& while_op,
+    const std::vector<BroadcastAndSlice>& params) {
+  auto* while_inst = while_op.new_while_op;
+  const auto orig_users = while_inst->users();
+  absl::flat_hash_map<int64, HloInstruction*> to_replace_outputs;
+  for (const auto& param : params) {
+    // The dynamic slice in the broadcast was updated to the hoisted instruction
+    // in the hoisting phase
+    to_replace_outputs.emplace(param.broadcast.input_index,
+                               param.broadcast.dynamic_update);
+  }
+  auto* comp = while_inst->parent();
+  std::vector<HloInstruction*> tuple_operands(
+      ShapeUtil::TupleElementCount(while_inst->shape()), nullptr);
+  for (int64 i = 0; i < tuple_operands.size(); ++i) {
+    auto it = to_replace_outputs.find(i);
+    if (it == to_replace_outputs.end()) {
+      tuple_operands[i] =
+          comp->AddInstruction(HloInstruction::CreateGetTupleElement(
+              ShapeUtil::GetTupleElementShape(while_inst->shape(), i),
+              while_inst, i));
+    } else {
+      tuple_operands[i] = it->second;
+    }
+  }
+  auto* output =
+      comp->AddInstruction(HloInstruction::CreateTuple(tuple_operands));
+  ReplaceAllUsesWithDifferentShape(while_inst, orig_users, output);
+  return output;
+}
+
+Status RemoveTensorListBroadcasts(HloInstruction* inst,
+                                  std::vector<BroadcastAndSlice>& params) {
+  // Hoist the input and remove the broadcast
+  TF_ASSIGN_OR_RETURN(const auto output, HoistBroardcastInputs(inst, params));
+  // Create a new tuple with the similar shape as the old while that
+  // is then used by all subsequent instructions. The indices
+  // corresponding to broadcasts are replaced by the hoisted
+  // instruction
+  auto* tuple_output = CreateNewTupleOutput(output, params);
+  TF_RETURN_IF_ERROR(
+      PoplarWhileLoopOptimiser::PropagateNewShapes({tuple_output}));
+  // We are not replacing the dynamic slice but letting the algebraic
+  // simplifier do that for us
+  return Status::OK();
+}
+
 }  // namespace
 
 Status PoplarWhileLoopOptimiser::PropagateNewShapes(
@@ -809,32 +960,13 @@ StatusOr<bool> PoplarWhileLoopOptimiser::Run(HloModule* module) {
       if (slice_only_broadcast_params.empty()) {
         continue;
       }
-      RemoveTensorListBroadcasts(inst, slice_only_broadcast_params);
+      TF_RETURN_IF_ERROR(
+          RemoveTensorListBroadcasts(inst, slice_only_broadcast_params));
       changed = true;
     }
   }
 
   return changed;
-}
-
-int64 PoplarWhileLoopOptimiser::CountOptimisations(HloModule* module) const {
-  int64 result = 0;
-  for (auto* comp : module->MakeComputationPostOrder()) {
-    for (auto* inst : comp->MakeInstructionPostOrder()) {
-      if (inst->opcode() != HloOpcode::kWhile) {
-        continue;
-      }
-      auto broadcast_params = FindTensorListBroadcasts(inst);
-      auto slice_only_broadcast_params =
-          FindBroadcastsOnlyUsedBySlices(inst, std::move(broadcast_params));
-      VLOG(1) << "Can eliminate for " << inst->name() << ": {"
-              << absl::StrJoin(slice_only_broadcast_params, ", ",
-                               ToStringFormatter())
-              << "}";
-      result += slice_only_broadcast_params.size();
-    }
-  }
-  return result;
 }
 
 }  // namespace poplarplugin
