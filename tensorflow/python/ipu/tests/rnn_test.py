@@ -163,11 +163,11 @@ def graph_builder(model_func, opts, x):
 
 class TestOptions:
   def __init__(self):
-    self.batches_per_step = 12
+    self.batches_per_step = 100
     self.dtype = np.float32
     self.batch_size = 2
     self.steps = 5
-    self.dim = 256
+    self.dim = 128
     self.in_dim = 16
     self.out_dim = 16
     self.output_keep_prob = 0.75
@@ -177,7 +177,13 @@ class TestOptions:
 
 
 class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
-  def _run_test(self, opts, model_func, cycles, total_mem, max_mem):
+  def _run_test(self,
+                opts,
+                model_func,
+                cycles,
+                total_mem,
+                max_mem,
+                tolerance=0.01):
     dataset = data.Dataset \
         .range((opts.steps + 2) * opts.batches_per_step) \
         .map(lambda i: {
@@ -201,8 +207,8 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     cfg = ipu.config.IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg, output_execution_profile=True)
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.ipu_model.tiles_per_ipu = 4
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 1472
     ipu.utils.configure_ipu_system(cfg)
     ipu.utils.move_variable_initialization_to_cpu()
 
@@ -216,34 +222,55 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     report = pva.openReport(report_helper.find_report())
     self.assert_number_of_executions(report, 1)
-    if cycles is not None:
-      self.assert_execution_report_cycles(report, cycles, tolerance=0.01)
-    if total_mem is not None:
-      self.assert_total_tile_memory(report, total_mem, tolerance=0.01)
-    if max_mem is not None:
-      self.assert_max_tile_memory(report, max_mem, tolerance=0.01)
+    assertions = []
+    try:
+      if cycles is not None:
+        self.assert_execution_report_cycles(report,
+                                            cycles,
+                                            tolerance=tolerance)
+    except AssertionError as e:
+      assertions.append("assert_execution_report_cycles: %s" % e)
+
+    try:
+      if total_mem is not None:
+        self.assert_total_tile_memory(report, total_mem, tolerance=tolerance)
+    except AssertionError as e:
+      assertions.append("assert_total_tile_memory: %s" % e)
+
+    try:
+      if max_mem is not None:
+        self.assert_max_tile_memory(report, max_mem, tolerance=tolerance)
+    except AssertionError as e:
+      assertions.append("assert_max_tile_memory: %s" % e)
+
+    if assertions:
+      raise AssertionError("\n".join(assertions))
 
   @parameterized.named_parameters(
       {
           'testcase_name': 'tf_rnn1',
           'build': build_tf_rnn1,
-          'cycles': 110245333 if TF1 else 110651826,
-          'total_memory': 12378522 if TF1 else 12274053,
-          'max_memory': 3117577 if TF1 else 3123543
+          'cycles': 11391266 if TF1 else 14855062,
+          'total_memory': 32665178 if TF1 else 31937906,
+          'max_memory': 29053 if TF1 else 30193
       },
       {
           'testcase_name': 'tf_rnn2',
           'build': build_tf_rnn2,
-          'cycles': 82610641 if TF1 else 83020686,
-          'total_memory': 8761227 if TF1 else 8566111,
-          'max_memory': 2272901 if TF1 else 2160043
+          'cycles': 20870123 if TF1 else 22976937,
+          'total_memory': 37718509 if TF1 else 37896621,
+          'max_memory': 36893 if TF1 else 37641
       },
       {
           'testcase_name': 'tf_lstm1',
           'build': build_tf_lstm1,
-          'cycles': 1065802610 if TF1 else 1069656879,
-          'total_memory': 151061717,
-          'max_memory': 37776657,
+          'cycles': 25254169 if TF1 else 27211500,
+          'total_memory': 84836344,
+          'max_memory': 65399,
+          'options': {
+              'dims': 64,
+              'steps': 3
+          }
       },
       {
           # This is just included so that I have an easy comparison
@@ -263,30 +290,30 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       {
           'testcase_name': 'tf_gru1',
           'build': build_tf_gru1,
-          'cycles': 551307807 if TF1 else 551993103,
-          'total_memory': 56067348 if TF1 else 56077548,
-          'max_memory': 14047956 if TF1 else 14049800
+          'cycles': 51213564 if TF1 else 55012169,
+          'total_memory': 84621193 if TF1 else 84968361,
+          'max_memory': 72890 if TF1 else 73666
       },
       {
           'testcase_name': 'model_rnn1',
           'build': build_model_rnn1,
-          'cycles': 164885777 if TF1 else 110193955,
-          'total_memory': 12141874 if TF1 else 12359011,
-          'max_memory': 3044815 if TF1 else 3070915
+          'cycles': 16148604 if TF1 else 17910091,
+          'total_memory': 37109561 if TF1 else 36887285,
+          'max_memory': 35467 if TF1 else 35803
       },
       {
           'testcase_name': 'model_rnn2',
           'build': build_model_rnn2,
-          'cycles': 257035469 if TF1 else 188977915,
-          'total_memory': 18177930 if TF1 else 17409220,
-          'max_memory': 4550619 if TF1 else 4362290
+          'cycles': 33874539 if TF1 else 34376350,
+          'total_memory': 59999918 if TF1 else 59689211,
+          'max_memory': 54118 if TF1 else 54421
       },
       {
           'testcase_name': 'model_cnn1',
           'build': build_model_cnn1,
-          'cycles': 144497392,
-          'total_memory': 13088427 if TF1 else 17369471,
-          'max_memory': 3275543 if TF1 else 4345119,
+          'cycles': 10277400 if TF1 else 10517000,
+          'total_memory': 28276555 if TF1 else 28643523,
+          'max_memory': 29895 if TF1 else 29895,
           'options': {
               'batch_size': 1,
               'steps': 32
@@ -295,9 +322,9 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       {
           'testcase_name': 'trivial_multiply',
           'build': build_trivial_while,
-          'cycles': 25541778 if TF1 else 33571626,
-          'total_memory': 6445978 if TF1 else 8458874,
-          'max_memory': 1612208 if TF1 else 2115524,
+          'cycles': 59433498 if TF1 else 69455700,
+          'total_memory': 18138339 if TF1 else 20658385,
+          'max_memory': 16493 if TF1 else 18771,
           'options': {
               'batch_size': 4,
               'steps': 32,
