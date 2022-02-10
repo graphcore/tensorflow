@@ -352,7 +352,7 @@ class TestCaseExtensions(object):
     """Asserts the total cycles are close to expected for profile
     """
     self.assert_number_of_executions(report, expected_executions)
-    cycles = report.execution.totalCycles.total
+    cycles = [report.execution.totalCycles.total]
     self._assert_all_in_tolerance(cycles, expected, tolerance)
 
   def assert_number_of_executions(self, report, n):
