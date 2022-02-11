@@ -67,6 +67,7 @@ from tensorflow.python.ipu import ipu_session_run_hooks
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
+from tensorflow.python.ipu import serving
 from tensorflow.python.ipu import sharding
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import ipu_estimator
