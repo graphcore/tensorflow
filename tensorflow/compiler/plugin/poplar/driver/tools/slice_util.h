@@ -22,7 +22,6 @@ namespace xla {
 
 class HloInstruction;
 class HloDynamicIndexInstruction;
-class HloDynamicSliceInstruction;
 
 namespace poplarplugin {
 
@@ -30,7 +29,7 @@ namespace poplarplugin {
 // mulit-slice can be planned and dynamic-slice can't be. Returns multi-slice
 // instruction or nullptr if no replacement occured.
 StatusOr<HloInstruction*> TryReplaceDynamicWithMultiSlice(
-    HloDynamicSliceInstruction* dynamic_slice);
+    HloDynamicIndexInstruction* dynamic_slice);
 
 // Helper for Dynamic(Update)Slice where we recognize dynamic and constant slice
 // dimensions.

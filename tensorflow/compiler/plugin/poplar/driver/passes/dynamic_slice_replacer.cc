@@ -26,9 +26,16 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-int64 UnslicedElementCount(const HloDynamicSliceInstruction* dynamic_slice) {
+const Shape& GetSliceShape(const HloDynamicIndexInstruction* dynamic_slice) {
+  const auto& slice_shape = dynamic_slice->opcode() == HloOpcode::kDynamicSlice
+                                ? dynamic_slice->shape()
+                                : dynamic_slice->operand(1)->shape();
+  return slice_shape;
+}
+
+int64 UnslicedElementCount(const HloDynamicIndexInstruction* dynamic_slice) {
   const auto& input_shape = dynamic_slice->operand(0)->shape();
-  const auto& slice_shape = dynamic_slice->shape();
+  const auto& slice_shape = GetSliceShape(dynamic_slice);
 
   int unsliced_elements = 1;
   for (auto i = 0; i < input_shape.dimensions_size(); ++i) {
@@ -44,7 +51,7 @@ int64 UnslicedElementCount(const HloDynamicSliceInstruction* dynamic_slice) {
   return unsliced_elements;
 }
 
-bool DynamicSliceMightGoOOM(const HloDynamicSliceInstruction* dynamic_slice,
+bool DynamicSliceMightGoOOM(const HloDynamicIndexInstruction* dynamic_slice,
                             uint32_t bytes_per_tile) {
   // popops::dynamicSlice doesn't support planning, so the input tensor being
   // sliced will get allocated over the number of tiles used (via
@@ -71,9 +78,7 @@ StatusOr<bool> DynamicSliceReplacer::Run(HloModule* module) {
 
   for (auto* comp : module->MakeComputationPostOrder()) {
     for (auto* inst : comp->MakeInstructionPostOrder()) {
-      if (inst->opcode() == HloOpcode::kDynamicSlice) {
-        auto dynamic_slice = Cast<HloDynamicSliceInstruction>(inst);
-
+      if (auto dynamic_slice = DynCast<HloDynamicIndexInstruction>(inst)) {
         // We don't want to try and replace all dynamiceSlices, since multiSlice
         // is slower. Ideallly we only try and replace those which will cause
         // us to go OOM.

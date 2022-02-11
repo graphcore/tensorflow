@@ -31,17 +31,20 @@ namespace poplarplugin {
 namespace {
 
 std::unique_ptr<HloInstruction> CreateShuffledInput(HloInstruction* input,
-                                                    int64 dim) {
-  const auto ShuffleDimToFront = [&](absl::Span<int64> values) {
-    std::rotate(values.begin(), values.begin() + dim, values.begin() + dim + 1);
+                                                    int64 dim,
+                                                    bool reverse = false) {
+  const auto Shuffle = [&](absl::Span<int64> values) {
+    auto front_index = reverse ? 1 : dim;
+    std::rotate(values.begin(), values.begin() + front_index,
+                values.begin() + dim + 1);
   };
 
   auto shuffled_shape = input->shape();
-  ShuffleDimToFront(shuffled_shape.mutable_dimensions());
+  Shuffle(shuffled_shape.mutable_dimensions());
 
   std::vector<int64> shuffled_dim_order(shuffled_shape.dimensions_size(), 0);
   std::iota(shuffled_dim_order.begin(), shuffled_dim_order.end(), 0);
-  ShuffleDimToFront(absl::MakeSpan(shuffled_dim_order));
+  Shuffle(absl::MakeSpan(shuffled_dim_order));
 
   return HloInstruction::CreateTranspose(shuffled_shape, input,
                                          shuffled_dim_order);
@@ -56,15 +59,68 @@ std::unique_ptr<HloInstruction> CreateFlattened2DInput(HloInstruction* input) {
   return HloInstruction::CreateReshape(flattened_2d_shape, input);
 }
 
+StatusOr<HloInstruction*> Replace1DDynamicWithMultiSlice(
+    HloDynamicIndexInstruction* dynamic_slice, int64 slice_dim) {
+  auto comp = dynamic_slice->parent();
+  // Shuffle the dimension being sliced to the front, since
+  // HloMultiSliceInstruction is hard coded to slice dim 0.
+  auto input = dynamic_slice->mutable_operand(0);
+  auto shuffled_input =
+      comp->AddInstruction(CreateShuffledInput(input, slice_dim));
+  // Flatten since the HloMultiSliceInstruction planner
+  // (EmbeddingPlansPreplanning) expects a 2D input tensor.
+  auto flattened_2d_input =
+      comp->AddInstruction(CreateFlattened2DInput(shuffled_input));
+  // Reshape the offset since dynamic-slice offsets are scalar.
+  auto dim_offset = dynamic_slice->mutable_operand(
+      dynamic_slice->first_index_operand_number() + slice_dim);
+  auto offset = comp->AddInstruction(HloInstruction::CreateReshape(
+      ShapeUtil::MakeShape(S32, {1, 1}), dim_offset));
+
+  HloInstruction* multislice = nullptr;
+  if (dynamic_slice->opcode() == HloOpcode::kDynamicSlice) {
+    multislice = comp->AddInstruction(
+        CreateMultiSlice(dynamic_slice->shape(), flattened_2d_input, offset));
+    TF_RETURN_IF_ERROR(dynamic_slice->ReplaceAllUsesWith(multislice));
+  } else {
+    CHECK_EQ(dynamic_slice->opcode(), HloOpcode::kDynamicUpdateSlice);
+    auto slice = dynamic_slice->mutable_operand(1);
+    // For the slice to fit into the input it must be shuffled
+    // in the same way.
+    auto shuffled_slice =
+        comp->AddInstruction(CreateShuffledInput(slice, slice_dim));
+    // HloMultiUpdateInstruction expects the slice operand to be 2D, in our case
+    // the outer dimension will always be 1 though, since we're replacing a
+    // size 1 update.
+    auto flattened_slice =
+        comp->AddInstruction(CreateFlattened2DInput(shuffled_slice));
+    CHECK_EQ(flattened_slice->shape().dimensions(0), 1);
+
+    multislice = comp->AddInstruction(
+        CreateMultiUpdate(flattened_2d_input->shape(),
+                          {flattened_2d_input, offset, flattened_slice}));
+
+    // Restore the input to its original shape..
+    auto unflatten = comp->AddInstruction(
+        HloInstruction::CreateReshape(shuffled_input->shape(), multislice));
+    auto unshuffle = comp->AddInstruction(
+        CreateShuffledInput(unflatten, slice_dim, /*reverse*/ true));
+    TF_RETURN_IF_ERROR(dynamic_slice->ReplaceAllUsesWith(unshuffle));
+  }
+
+  TF_RETURN_IF_ERROR(comp->RemoveInstruction(dynamic_slice));
+  return multislice;
+}
+
 }  // namespace
 
 StatusOr<HloInstruction*> TryReplaceDynamicWithMultiSlice(
-    HloDynamicSliceInstruction* dynamic_slice) {
+    HloDynamicIndexInstruction* dynamic_slice) {
   const auto dynamic_slice_helper = DynamicSliceHelper(dynamic_slice);
   if (dynamic_slice_helper.has_dynamic_slice) {
-    const auto slice_info = dynamic_slice_helper.dynamic_slice_info;
-    const auto slice_dims = slice_info.sliced_dims;
-    const auto slice_sizes = slice_info.slice_sizes;
+    const auto& slice_info = dynamic_slice_helper.dynamic_slice_info;
+    const auto& slice_dims = slice_info.sliced_dims;
+    const auto& slice_sizes = slice_info.slice_sizes;
 
     // Limiting to size 1 slices, since HloMultiSliceInstruction is hard coded
     // to size 1 slices. If needed we can work around this by doing an N
@@ -72,28 +128,7 @@ StatusOr<HloInstruction*> TryReplaceDynamicWithMultiSlice(
     const auto can_replace = slice_dims.size() == 1 && slice_sizes.front() == 1;
     if (can_replace) {
       const auto slice_dim = slice_dims.front();
-
-      auto comp = dynamic_slice->parent();
-      // Shuffle the dimension being sliced to the front, since
-      // HloMultiSliceInstruction is hard coded to slice dim 0.
-      auto input = dynamic_slice->mutable_operand(0);
-      auto shuffled_input =
-          comp->AddInstruction(CreateShuffledInput(input, slice_dim));
-      // Flatten since the HloMultiSliceInstruction planner
-      // (EmbeddingPlansPreplanning) expects a 2D input tensor.
-      auto flattened_2d_input =
-          comp->AddInstruction(CreateFlattened2DInput(shuffled_input));
-      // Reshape the offset since dynamic-slice offsets are scalar.
-      auto dim_offset = dynamic_slice->mutable_operand(1 + slice_dim);
-      auto offset = comp->AddInstruction(HloInstruction::CreateReshape(
-          ShapeUtil::MakeShape(S32, {1}), dim_offset));
-
-      auto multislice = comp->AddInstruction(
-          CreateMultiSlice(dynamic_slice->shape(), flattened_2d_input, offset));
-      TF_RETURN_IF_ERROR(dynamic_slice->ReplaceAllUsesWith(multislice));
-      TF_RETURN_IF_ERROR(comp->RemoveInstruction(dynamic_slice));
-
-      return multislice;
+      return Replace1DDynamicWithMultiSlice(dynamic_slice, slice_dim);
     }
   }
 
