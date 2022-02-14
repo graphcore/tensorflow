@@ -488,6 +488,31 @@ class DefaultShapeInferenceBehaviorTest(keras_parameterized.TestCase):
     output = model(sample_input)
     self.assertEqual(output.shape, (1, 3))
 
+  def testKerasInputAsShape(self):
+    # pylint: disable=abstract-method
+    class Model(training_lib.Model):
+      def __init__(self):
+        super(Model, self).__init__()
+        self.conv1 = layers.Conv2D(8, 3)
+        self.pool = layers.GlobalAveragePooling2D()
+        self.fc = layers.Dense(3)
+
+      def call(self, x):  # pylint: disable=arguments-differ
+        x = self.conv1(x)
+        x = self.pool(x)
+        x = self.fc(x)
+        return x
+
+    model = Model()
+    model.build(input_layer_lib.Input(batch_shape=[None, None, None, 1]))
+    self.assertTrue(model.built, 'Model should be built')
+    self.assertTrue(
+        model.weights, 'Model should have its weights created as it '
+        'has been built')
+    sample_input = array_ops.ones((1, 10, 10, 1))
+    output = model(sample_input)
+    self.assertEqual(output.shape, (1, 3))
+
   def testNoneInShapeWithCompoundModel(self):
     # pylint: disable=abstract-method
     class BasicBlock(training_lib.Model):

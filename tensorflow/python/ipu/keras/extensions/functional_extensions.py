@@ -96,8 +96,8 @@ class PipelineStage(object):
 
 
 class FunctionalLayerPipelineStageAssignment:
-  """A class used to indicate in which pipeline stage an invocation of a layer
-  in a `Functional` model should be executed in.
+  """A class to indicate at which pipeline stage a layer in a `Functional` model
+  should be executed.
 
   Keras Layers can be called multiple times in order to share weights between
   layers. Each of these calls produces Tensor output which can be executed in
@@ -105,17 +105,19 @@ class FunctionalLayerPipelineStageAssignment:
   device).
   """
   def __init__(self, layer, node_index, pipeline_stage=None):
-    """Create a new SequentialLayerPipelineStageAssignment.
+    """Create a new `FunctionalLayerPipelineStageAssignment`.
 
     Args:
-      layer: The Keras layer for which this assignment is for.
-      node_index: The specific call to the `layer` that produced a Tensor.
+      layer (keras.layers.Layer): The Keras layer for which this assignment
+        applies.
+      node_index (int): The specific call to the `layer` that produced a Tensor.
         Layers can be called multiple times in order to share weights. A new
-        FunctionalLayerPipelineStageAssignment is required for every Layer call.
-        E.g. `node_index=0` will correspond to the first time the `layer` was
-        called.
-      pipeline_stage: If provided, indicates which pipeline stage this layer
-        should be assigned to. If not provided this layer will be unassigned.
+        `FunctionalLayerPipelineStageAssignment` is required for every Layer
+        call. E.g. `node_index=0` will correspond to the first time the `layer`
+        was called.
+      pipeline_stage (int): If provided, indicates which pipeline stage this
+        layer should be assigned to. If not provided this layer will be
+        unassigned.
     """
     self._layer = layer
     self._node_index = node_index
@@ -123,7 +125,7 @@ class FunctionalLayerPipelineStageAssignment:
 
   @property
   def layer(self):
-    """Returns the Keras layer for which this assignment is for."""
+    """Returns the Keras layer associated with this assignment."""
     return self._layer
 
   @property
@@ -147,7 +149,10 @@ class FunctionalLayerPipelineStageAssignment:
   @pipeline_stage.setter
   def pipeline_stage(self, value):
     """Setter of `pipeline_stage` property. See `pipeline_stage` property
-    doc."""
+    doc.
+
+    Args:
+      value (int): The pipeline stage to assign this layer to."""
     self._pipeline_stage = value
 
   def __str__(self):
@@ -195,7 +200,6 @@ class FunctionalExtension(keras_extension_base.KerasExtensionBase):  # pylint: d
 
   @trackable.no_automatic_dependency_tracking
   def _deserialize_from_config_delegate(self, config):
-    FunctionalExtension.__init__(self)
     self._from_base_config(config)
     # Extract pipelining options.
     self._pipeline_stage_assignment = [
@@ -498,7 +502,15 @@ class FunctionalExtension(keras_extension_base.KerasExtensionBase):  # pylint: d
 
     return post_order_per_stage, new_post_order_node_execution
 
-  def _get_pipeline_post_order(self, input_shapes, input_dtypes):
+  @trackable.no_automatic_dependency_tracking
+  def _build_with_dtypes(self, input_shape, input_dtype):
+    # Just call through to basic build. Functional models always have explicit
+    # dtypes anyway as they always have Input layers.
+    del input_dtype
+    if not self.built:
+      self.build(input_shape)
+
+  def _get_pipeline_post_order(self):
     post_order_per_stage, _ = self._get_pipelined_post_order(
         self._pipeline_stage_assignment)
     return post_order_per_stage
@@ -688,5 +700,11 @@ class FunctionalExtension(keras_extension_base.KerasExtensionBase):  # pylint: d
                                            assignment.pipeline_stage)
     return self._pipeline_maximum_stage
 
-  def _call_function_overridden(self):
-    return self.call.__func__ != functional.Functional.call
+  def _validate_call_function(self):
+    call_function_overridden = not (
+        hasattr(self.call, "__func__")
+        and self.call.__func__ == functional.Functional.call)
+    if call_function_overridden and self._is_pipelined():
+      raise RuntimeError(
+          f"The function `call` for the model {self.name} has been overridden. "
+          f"This is not supported for pipelined Keras Functional models.")

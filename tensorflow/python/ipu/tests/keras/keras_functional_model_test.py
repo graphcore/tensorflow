@@ -1054,7 +1054,8 @@ class IPUModelModelTest(test.TestCase):
                                          activation=keras.activations.softmax)
 
       # pylint: disable=arguments-differ
-      def call(self, in0, in1):
+      def call(self, inputs):
+        in0, in1 = inputs
         x = self.dense1(in0)
         return x, self.dense2(in1)
 
@@ -1079,7 +1080,7 @@ class IPUModelModelTest(test.TestCase):
       input_2 = keras.Input(32)
       input_3 = keras.Input(32)
 
-      dense_1, dense_2 = MyDenseModel(16)(input_1, input_2)
+      dense_1, dense_2 = MyDenseModel(16)([input_1, input_2])
       output = MyLayer()([dense_1, dense_2, input_3])
 
       return ((input_1, input_2, input_3), ((output[0][0], output[1])))

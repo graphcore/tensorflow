@@ -479,19 +479,14 @@ class KerasExtensionBase(base_layer.KerasExtension):
     @def_function.function(experimental_compile=True)
     def pipeline_function(_steps_per_execution, iterator, outfeed):
       # Get the shapes for all the inputs.
-      input_shapes = nest.map_structure(lambda spec: spec.shape,
-                                        iterator.element_spec)
       input_dtypes = nest.map_structure(lambda spec: spec.dtype,
                                         iterator.element_spec)
-      input_shapes = data_adapter.expand_1d(input_shapes)
 
-      x_shapes, _, _ = data_adapter.unpack_x_y_sample_weight(input_shapes)
       x_dtypes, target_dtypes, sample_weight_dtypes = \
         data_adapter.unpack_x_y_sample_weight(input_dtypes)
 
       # Get the post order schedule with node to pipeline stage assignment.
-      post_order_nodes_and_assignment = self._get_pipeline_post_order(
-          x_shapes, x_dtypes)
+      post_order_nodes_and_assignment = self._get_pipeline_post_order()
       last_stage_id = max(post_order_nodes_and_assignment)
       tensor_usage_count = self._tensor_usage_count
 
@@ -742,12 +737,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
                 "definition or set `enable_keras_extensions=False` when "
                 "creating the IPUStrategy.".format(self.name))
 
+          self._validate_call_function()
           if self._is_pipelined():
-            if self._call_function_overridden():
-              raise RuntimeError(
-                  "The function `call` for the model {} has been overridden. "
-                  "This is not supported for pipelined Keras models.".format(
-                      self.name))
             if self._train_step_overridden():
               raise RuntimeError(
                   "The function `train_step` for the model {} has been "
@@ -796,12 +787,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
                 "definition or set `enable_keras_extensions=False` when "
                 "creating the IPUStrategy.".format(self.name))
 
+          self._validate_call_function()
           if self._is_pipelined():
-            if self._call_function_overridden():
-              raise RuntimeError(
-                  "The function `call` for the model {} has been overridden. "
-                  "This is not supported for pipelined Keras models.".format(
-                      self.name))
             if self._test_step_overridden():
               raise RuntimeError(
                   "The function `test_step` for the model {} has been "
@@ -836,12 +823,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
                 "model definition or set `enable_keras_extensions=False` when "
                 "creating the IPUStrategy.".format(self.name))
 
+          self._validate_call_function()
           if self._is_pipelined():
-            if self._call_function_overridden():
-              raise RuntimeError(
-                  "The function `call` for the model {} has been overridden. "
-                  "This is not supported for pipelined Keras models.".format(
-                      self.name))
             if self._predict_step_overridden():
               raise RuntimeError(
                   "The function `predict_step` for the model {} has been "
@@ -1083,11 +1066,15 @@ class KerasExtensionBase(base_layer.KerasExtension):
     config_new = copy.deepcopy(config)
     base_config_keys = [
         "gradient_accumulation_steps_per_replica",
+        "gradient_accumulation_reduction_method",
         "experimental_gradient_accumulation_normalize_gradients",
         "pipelining_gradient_accumulation_steps_per_replica",
         "pipelining_accumulate_outfeed",
+        "pipelining_device_mapping",
         "experimental_pipelining_normalize_gradients",
-        "asynchronous_callbacks", "infeed_kwargs", "outfeed_kwargs"
+        "asynchronous_callbacks",
+        "infeed_kwargs",
+        "outfeed_kwargs",
     ]
 
     for key in base_config_keys:
@@ -1155,7 +1142,6 @@ class KerasExtensionBase(base_layer.KerasExtension):
     training_module._disallow_inside_tf_function('fit')  # pylint: disable=protected-access
 
     self._check_mode()
-    replication_factor = self._get_replication_factor()
 
     if verbose == 'auto':
       if self.distribute_strategy._should_use_with_coordinator:  # pylint: disable=protected-access
@@ -1192,8 +1178,19 @@ class KerasExtensionBase(base_layer.KerasExtension):
           workers=workers,
           use_multiprocessing=use_multiprocessing,
           model=self,
-          steps_per_execution=self._steps_per_execution,
-          replication_factor=replication_factor)
+          steps_per_execution=self._steps_per_execution)
+
+      # Build the model with specific dtypes. This is important for models
+      # without explicit input dtypes (model subclasses and some sequential
+      # models).
+      input_shape, input_dtype = self._get_x_shape_and_dtype(data_handler)
+      self._build_with_dtypes(input_shape, input_dtype)
+
+      # Set replication factor after building as we need to know if we are
+      # pipelining. Subclassed models don't know if they are pipelining until
+      # they have been built.
+      replication_factor = self._get_replication_factor()
+      data_handler.set_replication_factor(replication_factor)
 
       # Container that configures and calls `tf.keras.Callback`s.
       if not isinstance(callbacks, callbacks_module.CallbackList):
@@ -1383,7 +1380,6 @@ class KerasExtensionBase(base_layer.KerasExtension):
     training_module._disallow_inside_tf_function('evaluate')  # pylint: disable=protected-access
 
     self._check_mode()
-    replication_factor = self._get_replication_factor()
 
     with self.distribute_strategy.scope(), \
          libpvti.Tracepoint(_pvti_trace_channel, self.name + ".evaluate()"):
@@ -1406,8 +1402,19 @@ class KerasExtensionBase(base_layer.KerasExtension):
             workers=workers,
             use_multiprocessing=use_multiprocessing,
             model=self,
-            steps_per_execution=self._steps_per_execution,
-            replication_factor=replication_factor)
+            steps_per_execution=self._steps_per_execution)
+
+      # Build the model with specific dtypes. This is important for models
+      # without explicit input dtypes (model subclasses and some sequential
+      # models).
+      input_shape, input_dtype = self._get_x_shape_and_dtype(data_handler)
+      self._build_with_dtypes(input_shape, input_dtype)
+
+      # Set replication factor after building as we need to know if we are
+      # pipelining. Subclassed models don't know if they are pipelining until
+      # they have been built.
+      replication_factor = self._get_replication_factor()
+      data_handler.set_replication_factor(replication_factor)
 
       # Container that configures and calls `tf.keras.Callback`s.
       if not isinstance(callbacks, callbacks_module.CallbackList):
@@ -1537,7 +1544,6 @@ class KerasExtensionBase(base_layer.KerasExtension):
     training_module._disallow_inside_tf_function('predict')  # pylint: disable=protected-access
 
     self._check_mode()
-    replication_factor = self._get_replication_factor()
 
     outputs = None
     with self.distribute_strategy.scope(), \
@@ -1553,8 +1559,19 @@ class KerasExtensionBase(base_layer.KerasExtension):
           workers=workers,
           use_multiprocessing=use_multiprocessing,
           model=self,
-          steps_per_execution=self._steps_per_execution,
-          replication_factor=replication_factor)
+          steps_per_execution=self._steps_per_execution)
+
+      # Build the model with specific dtypes. This is important for models
+      # without explicit input dtypes (model subclasses and some sequential
+      # models).
+      input_shape, input_dtype = self._get_x_shape_and_dtype(data_handler)
+      self._build_with_dtypes(input_shape, input_dtype)
+
+      # Set replication factor after building as we need to know if we are
+      # pipelining. Subclassed models don't know if they are pipelining until
+      # they have been built.
+      replication_factor = self._get_replication_factor()
+      data_handler.set_replication_factor(replication_factor)
 
       # Container that configures and calls `tf.keras.Callback`s.
       if not isinstance(callbacks, callbacks_module.CallbackList):
@@ -1651,7 +1668,36 @@ class KerasExtensionBase(base_layer.KerasExtension):
                                            training_module.concat, outputs)
     return tf_utils.sync_to_numpy_or_python_type(all_outputs)
 
-  def _get_pipeline_post_order(self, input_shapes, input_dtypes):
+  @staticmethod
+  def _get_x_shape_and_dtype(data_handler):
+    # Extract input shape and dtype from an IPU data handler.
+    element_spec = data_handler.element_spec
+    x_spec, _, _ = data_adapter.unpack_x_y_sample_weight(element_spec)
+
+    def process_shape(shape):
+      # Convert from tensorshapes to tuples of dims.
+      shape = shape.as_list()
+      if len(shape) == 1:
+        # Expand 1d shapes to 2d. This is done automatically to inputs in keras.
+        shape.append(1)
+      return tuple(shape)
+
+    shapes = []
+    dtypes = []
+    for spec in nest.flatten(x_spec):
+      shapes.append(process_shape(spec.shape))
+      dtypes.append(spec.dtype)
+
+    if len(dtypes) == 1:
+      shapes = shapes[0]
+      dtypes = dtypes[0]
+    return shapes, dtypes
+
+  def _build_with_dtypes(self, input_shape, input_dtype):
+    # Like build, but with the ability to specify input dtypes.
+    raise NotImplementedError
+
+  def _get_pipeline_post_order(self):
     """Get a dict of pipeline stage to list of nodes to execute for all the
     nodes in the model. Input layers/nodes are assigned to stage 0."""
     raise NotImplementedError
@@ -1708,8 +1754,11 @@ class KerasExtensionBase(base_layer.KerasExtension):
     """Returns the maximum pipeline stage assignment"""
     raise NotImplementedError
 
-  def _call_function_overridden(self):
-    """Returns whether call() has been overridden"""
+  def _validate_call_function(self):
+    """
+    Raises an error if call function of the model is incompatible with IPU
+    Keras. The requirements vary depending on the type of model.
+    """
     raise NotImplementedError
 
   def _train_step_overridden(self):

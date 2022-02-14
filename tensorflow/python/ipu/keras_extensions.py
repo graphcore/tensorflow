@@ -67,18 +67,41 @@ class KerasExtensions:
     if not self._enable_keras_extensions:
       return
 
-    for class_type, extension in self._keras_extensions.items():
+    for class_type, extension_cls in self._keras_extensions.items():
       if isinstance(instance, class_type):
         if isinstance(instance, base_layer.KerasExtension):
-          if not isinstance(instance, extension):
+          if not isinstance(instance, extension_cls):
             raise RuntimeError(
                 "KerasExtension patching failed - already patched with a "
                 "different extension.")
           break
 
-        # Patch in the extension.
+        # Create a patched version of the instance class with the extension as
+        # a subclass.
         # Note that we keep the name as Keras sometimes does __name__ checks.
-        cls = instance.__class__
-        instance.__class__ = cls.__class__(cls.__name__, (cls, extension), {})
-        extension.__init__(instance)
+        instance_cls = type(instance)
+        patched_cls = type(instance_cls.__name__,
+                           (instance_cls, extension_cls), {})
+
+        # Generate a new constructor which also calls the extension constructor
+        # in case a new instance of the patched class gets constructed, for
+        # example if we call from_config on the instance.
+        # Generate this within another function to avoid capturing issues.
+        patched_cls.__init__ = self.create_patched_init(
+            instance_cls, extension_cls)
+
+        # Change the class of the instance to be the patched class.
+        instance.__class__ = patched_cls
+
+        # Call the extension constructor as it has not been called yet on this
+        # instance.
+        extension_cls.__init__(instance)
         break
+
+  @staticmethod
+  def create_patched_init(instance_cls, extension_cls):
+    def patched_init(self, *args, **kwargs):
+      instance_cls.__init__(self, *args, **kwargs)
+      extension_cls.__init__(self)
+
+    return patched_init

@@ -424,31 +424,25 @@ class KerasExtensionsTest(test.TestCase):
       model.compile(loss='mse')
       with self.assertRaisesRegex(RuntimeError,
                                   "The function `make_train_function`"):
-        model.fit([1.], [1.], batch_size=1)
+        model.fit([[1.]], [[1.]], batch_size=1)
       with self.assertRaisesRegex(RuntimeError,
                                   "The function `make_test_function`"):
-        model.evaluate([1.], [1.], batch_size=1)
+        model.evaluate([[1.]], [[1.]], batch_size=1)
       with self.assertRaisesRegex(RuntimeError,
                                   "The function `make_predict_function`"):
-        model.predict([1.], batch_size=1)
+        model.predict([[1.]], batch_size=1)
 
-      class CallOverrideModel(training_module.Model):  # pylint: disable=abstract-method
-        def call(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
-          return super().call(*args, **kwargs)
+      class CallNotImplementedModel(training_module.Model):  # pylint: disable=abstract-method
+        pass
 
-      model = CallOverrideModel([layers.Dense(1)])
+      model = CallNotImplementedModel()
       model.compile(loss='mse')
-      self.assertRaises(NotImplementedError,
-                        lambda: model.set_pipeline_stage_assignment([0]))
-      with self.assertRaisesRegex(RuntimeError,
-                                  "you should implement a `call` method"):
-        model.fit([1.], [1.], batch_size=1)
-      with self.assertRaisesRegex(RuntimeError,
-                                  "you should implement a `call` method"):
-        model.evaluate([1.], [1.], batch_size=1)
-      with self.assertRaisesRegex(RuntimeError,
-                                  "you should implement a `call` method"):
-        model.predict([1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `call`"):
+        model.fit([[1.]], [[1.]], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `call`"):
+        model.evaluate([[1.]], [[1.]], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `call`"):
+        model.predict([[1.]], batch_size=1)
 
   @test_util.run_v2_only
   def testInputValidation(self):

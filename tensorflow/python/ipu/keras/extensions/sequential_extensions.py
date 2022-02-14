@@ -13,7 +13,7 @@
 # limitations under the License.
 # =============================================================================
 """
-IPU specific Keras Sequentail extensions
+IPU specific Keras Sequential extensions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 import copy
@@ -32,19 +32,21 @@ class SequentialLayerPipelineStageAssignment:
   model should be executed in.
   """
   def __init__(self, layer, pipeline_stage=None):
-    """Create a new SequentialLayerPipelineStageAssignment.
+    """Create a new `SequentialLayerPipelineStageAssignment`.
 
     Args:
-      layer: The Keras layer for which this assignment is for.
-      pipeline_stage: If provided, indicates which pipeline stage this layer
-        should be assigned to. If not provided this layer will be unassigned.
+      layer (keras.layers.Layer): The Keras layer for which this assignment is
+        for.
+      pipeline_stage (int): If provided, indicates which pipeline stage this
+        layer should be assigned to. If not provided this layer will be
+        unassigned.
     """
     self._layer = layer
     self.pipeline_stage = pipeline_stage
 
   @property
   def layer(self):
-    """Returns the Keras layer for which this assignment is for."""
+    """Returns the Keras layer associated with this assignment."""
     return self._layer
 
   @property
@@ -56,7 +58,10 @@ class SequentialLayerPipelineStageAssignment:
   @pipeline_stage.setter
   def pipeline_stage(self, value):
     """Setter of `pipeline_stage` property. See `pipeline_stage` property
-    doc."""
+    doc.
+
+    Args:
+      value (int): The pipeline stage to assign this layer to."""
     self._pipeline_stage = value
 
   def __str__(self):
@@ -102,7 +107,6 @@ class SequentialExtension(keras_extension_base.KerasExtensionBase):  # pylint: d
 
   @trackable.no_automatic_dependency_tracking
   def _deserialize_from_config_delegate(self, config):
-    SequentialExtension.__init__(self)
     self._from_base_config(config)
     # Extract pipelining options.
     self._pipeline_stage_assignment_valid = config.get(
@@ -367,20 +371,23 @@ class SequentialExtension(keras_extension_base.KerasExtensionBase):  # pylint: d
     self._set_outfeed_queue_options_impl(**kwargs)
 
   @trackable.no_automatic_dependency_tracking
-  def _get_pipeline_post_order(self, input_shapes, input_dtypes):
+  def _build_with_dtypes(self, input_shape, input_dtype):
     if not self._has_explicit_input_shape:
       # If applicable, update the static input shape of the model.
-      if not isinstance(input_shapes, tensor_shape.TensorShape):
+      if not (isinstance(input_shape, tuple)
+              and all(d is None or isinstance(d, int) for d in input_shape)):
         # This is a Sequential with multiple inputs which cannot be pipelined.
         raise RuntimeError(
-            "Layers in a Sequential model should only have a single input "
-            "tensor, but we received a {} input: {}. Consider rewriting this "
-            "model with the Functional API.".format(type(input_shapes),
-                                                    input_shapes))
+            f"Layers in a Sequential model should only have a single input, "
+            f"but we received a {type(input_shape)}: {input_shape}. "
+            f"Consider rewriting this model with the Functional API.")
       else:
-        self._build_graph_network_for_inferred_shape(input_shapes,
-                                                     input_dtypes)
+        self._build_graph_network_for_inferred_shape(input_shape, input_dtype)
+    # Bypass the Sequential build method but still call into the base.
+    super(sequential.Sequential, self).build(input_shape)  # pylint: disable=bad-super-call
 
+  @trackable.no_automatic_dependency_tracking
+  def _get_pipeline_post_order(self):
     if not self._graph_initialized:
       raise RuntimeError(
           "The Sequential model {} cannot be represented as a graph network, "
@@ -571,5 +578,10 @@ class SequentialExtension(keras_extension_base.KerasExtensionBase):  # pylint: d
           -1].pipeline_stage
     return self._pipeline_maximum_stage
 
-  def _call_function_overridden(self):
-    return self.call.__func__ != sequential.Sequential.call
+  def _validate_call_function(self):
+    call_function_overridden = hasattr(self.call, "__func__") and \
+                               self.call.__func__ != sequential.Sequential.call
+    if call_function_overridden and self._is_pipelined():
+      raise RuntimeError(
+          f"The function `call` for the model {self.name} has been overridden. "
+          f"This is not supported for pipelined Keras Sequential models.")

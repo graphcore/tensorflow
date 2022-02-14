@@ -230,16 +230,13 @@ class KerasExtensionsSaveLoadTest(test.TestCase, parameterized.TestCase):
         config["test_option"] = self.test_option
         return config
 
-      @classmethod
-      def _from_config_supported(cls, config, custom_objects=None):
+      def _deserialize_from_config_supported(self, config):
         del config
         return True
 
-      @classmethod
-      def _from_config_delegate(cls, config, custom_objects=None):
-        self = cls()
+      def _deserialize_from_config_delegate(self, config):
+        super(TestExtension, self)._deserialize_from_config_delegate(config)
         self.test_option = config.get("test_option", self.test_option)
-        return self
 
     with strategy.scope():
       # Replace the extension with the test version.
@@ -259,7 +256,7 @@ class KerasExtensionsSaveLoadTest(test.TestCase, parameterized.TestCase):
       model_config = model.get_config()
       self.assertTrue(model_config["test_option"])
       loaded_model = model_cls.from_config(model_config)
-      self.assertTrue(model.test_option)
+      self.assertTrue(loaded_model.test_option)
 
       # Test save/load (including SavedModel).
       with tempfile.TemporaryDirectory() as temp_dir:
@@ -296,6 +293,38 @@ class KerasExtensionsSaveLoadTest(test.TestCase, parameterized.TestCase):
                               "ModelWithIncorrectGetConfigOverride":
                               ModelWithIncorrectGetConfigOverride
                           })
+
+  @test_util.run_v2_only
+  def testModelDoesNotOverrideFromConfig(self):
+    class ModelWithNonTrivialConstructor(training_module.Model):  # pylint: disable=abstract-method
+      def __init__(self, depth):
+        super(ModelWithNonTrivialConstructor, self).__init__(self)
+        self.dense_layers = [layers.Dense(4) for _ in range(depth)]
+
+      def call(self, inputs):  # pylint: disable=arguments-differ
+        x = inputs
+        for dense_layer in self.dense_layers:
+          x = dense_layer(x)
+        return x
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      # Attempt to save and load a model which has a non-trivial constructor but
+      # doesn't override from_config.
+      model = ModelWithNonTrivialConstructor(5)
+      model.build((2, 2))
+      with tempfile.TemporaryDirectory() as temp_dir:
+        model.save(temp_dir)
+        # Should raise an error explaining the issue.
+        with self.assertRaisesRegex(
+            NotImplementedError,
+            "Subclassed models which require parameters in their "
+            "constructors must override the `from_config` function"):
+          models.load_model(temp_dir,
+                            custom_objects={
+                                "ModelWithNonTrivialConstructor":
+                                ModelWithNonTrivialConstructor
+                            })
 
 
 if __name__ == '__main__':

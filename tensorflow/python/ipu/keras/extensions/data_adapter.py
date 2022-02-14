@@ -125,6 +125,7 @@ class IPUDataHandler(data_adapter.DataHandler):
 
     self._replication_factor = replication_factor
     self._inferred_steps = self._infer_steps(steps_per_epoch, dataset)
+    self._steps_per_epoch = steps_per_epoch
 
     self._validate_dataset(dataset)
 
@@ -224,6 +225,17 @@ class IPUDataHandler(data_adapter.DataHandler):
   @property
   def steps_per_execution_value(self):
     return self._steps_per_execution_value
+
+  @property
+  def element_spec(self):
+    return self._dataset.element_spec
+
+  def set_replication_factor(self, value):
+    self._replication_factor = value
+    self._inferred_steps = self._infer_steps(self._steps_per_epoch,
+                                             self._dataset)
+    self._validate_dataset(self._dataset)
+    self._validate_data_handler()
 
   def enumerate_epochs_with_reuse(self, manager, mode, infeed_kwargs):
     """Yields `(epoch, InfeedQueue)`."""

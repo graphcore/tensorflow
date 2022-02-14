@@ -342,6 +342,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
 
     super(Model, self).__setattr__(name, value)
 
+  @base_layer.extension_delegate
   @generic_utils.default
   def build(self, input_shape):
     """Builds the model based on input shapes received.
@@ -2346,13 +2347,33 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
     raise NotImplementedError
 
   @classmethod
-  @base_layer.extension_delegate
   def from_config(cls, config, custom_objects=None):
     # `from_config` assumes `cls` is either `Functional` or a child class of
     # `Functional`. In the case that `cls` is meant to behave like a child class
     # of `Functional` but only inherits from the `Model` class, we have to call
     # `cls(...)` instead of `Functional.from_config`.
     from tensorflow.python.keras.engine import functional  # pylint: disable=g-import-not-at-top
+
+    # Begin IPU specific changes.
+    if not (cls is Model or issubclass(cls, functional.Functional)):
+      # If this is a subclassed model (which hasn't overridden from_config).
+      try:
+        instance = cls()
+      except TypeError:
+        # If the constructor for the model requires parameters we do not know
+        # how to construct it.
+        raise NotImplementedError(
+            f"Failed to construct subclassed model of type {cls.__name__} from "
+            f"config. Subclassed models which require parameters in their "
+            f"constructors must override the `from_config` function to be "
+            f"compatible with saving/loading.")
+
+      base_layer.extension_delegate_if_exists(
+        "deserialize_from_config", instance, config)
+
+      return instance
+    # End IPU specific changes.
+
     with generic_utils.SharedObjectLoadingScope():
       input_tensors, output_tensors, created_layers = (
           functional.reconstruct_from_config(config, custom_objects))
