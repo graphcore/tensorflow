@@ -34,6 +34,7 @@ from tensorflow.python.ipu import embedded_runtime
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
+from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.saved_model import builder
@@ -289,4 +290,110 @@ def export_single_step(predict_step,
     return r
 
   return _export_saved_model(predict_loop, export_dir, variable_initializer,
+                             input_signature)
+
+
+def export_pipeline(computational_stages,
+                    export_dir,
+                    gradient_accumulation_count,
+                    iterations,
+                    inputs=None,
+                    device_mapping=None,
+                    pipeline_schedule=None,
+                    poplar_options=None,
+                    name=None,
+                    input_signature=None,
+                    input_dataset=None,
+                    variable_initializer=None):
+  """Create a pipelined SavedModel at `export_dir` for TF Serving.
+
+  Create a pipeline op using provided `computational_stages`, add an infeed for
+  the inputs and an outfeed for the outputs, freeze any variables into constants
+  and write a SavedModel containing an IPU runtime function and Poplar
+  executable.
+
+  Args:
+    computational_stages (list): A list of python functions, where each function
+      represents a computational pipeline stage. The function takes the
+      outputs of the previous pipeline state as its inputs.
+    export_dir (str): Path to SavedModel directory.
+    gradient_accumulation_count (int): The number of times each pipeline stage
+      will be executed.
+    iterations (int): The number of times the pipeline will be executed.
+    inputs (list, optional): Arguments passed to the first pipeline stage.
+    device_mapping (list, optional): If provided, a list of length equal to the
+      number of computational stages. An element at index `i` in the list
+      represents which IPU the computational stage `computational_stages[i]`
+      should reside on. This can be used to make sure computational stages which
+      share `tf.Variable` are resident on the same IPU.
+    pipeline_schedule (PipelineSchedule, optional): Which scheduling algorithm
+      to use for pipeline lowering. Defaults to `PipelineSchedule.Grouped`.
+    poplar_options (list, optional): If provided, a list of length equal to the
+      number of computational stages. Each element is a PipelineStageOptions
+      object which allows for fine grain control of the Poplar options for a
+      given forward propagation computational stage.
+    name (str, optional): Name of this pipeline.
+    input_signature (list or tuple, optional): A sequence of tf.TensorSpec
+      objects that describe the input arguments of first computational stage.
+      If input_dataset is provided, this argument should be None.
+      If input_dataset is not provided, first computational stage is a
+      tf.function and input_signature was specified during tf.function creation,
+      this argument can be None and signature will be captured directly from the
+      first computational stage.
+    input_dataset (tf.Dataset, optional): Dataset from which input_signature
+      will be inferred. If input_signature is provided, this argument should
+      be None.
+    variable_initializer (Callable, optional): A function that initializes
+      variables. Takes a tf.Session as the only argument.
+      For example, this function allows restoring model's variables from a
+      checkpoint:
+
+      .. code-block:: python
+
+        def variable_initializer(session):
+          saver = tf.train.Saver()
+          ipu.utils.move_variable_initialization_to_cpu()
+          init = tf.global_variables_initializer()
+          session.run(init)
+          saver.restore(session, 'path/to/checkpoint')
+
+  Returns:
+    function: A reference to the same predict function that was exported
+      using the SavedModel format. This function uses embedded runtime op to run
+      executable that was included in the SavedModel's `asset` subfolder.
+
+  Raises:
+    ValueError: If both input_signature and input_dataset are provided.
+    TypeError: If input_dataset was provided and is not an instance of
+      tf.Dataset.
+  """
+  if input_signature is not None and input_dataset is not None:
+    raise ValueError('Both input_signature and input_dataset cannot be '
+                     'provided to export_pipeline. Please pass only '
+                     'one of them.')
+
+  if input_dataset is not None and not isinstance(input_dataset,
+                                                  dataset_ops.Dataset):
+    raise TypeError('If input_dataset is provided, it should be an instance '
+                    'of tf.Dataset.')
+
+  first_stage = computational_stages[0]
+  input_signature = _validate_signature(first_stage, input_signature,
+                                        input_dataset, inputs)
+  infeed, outfeed = _create_feeds(input_signature, input_dataset)
+
+  def defunc():
+    return pipelining_ops.pipeline(
+        computational_stages=computational_stages,
+        gradient_accumulation_count=gradient_accumulation_count,
+        repeat_count=iterations,
+        inputs=inputs,
+        infeed_queue=infeed,
+        outfeed_queue=outfeed,
+        device_mapping=device_mapping,
+        pipeline_schedule=pipeline_schedule,
+        forward_propagation_stages_poplar_options=poplar_options,
+        name=name)
+
+  return _export_saved_model(defunc, export_dir, variable_initializer,
                              input_signature)
