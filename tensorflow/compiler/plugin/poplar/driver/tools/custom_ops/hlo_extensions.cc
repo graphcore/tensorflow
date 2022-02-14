@@ -478,7 +478,7 @@ REGISTER_HLO_INST_EXTENSIONS(kGetTupleElement, [](HloOpcode opcode) {
       opcode, [](const HloInstruction* inst) {
         return HloPoplarInplaceDescription(
             HloInstructionType::kInplaceGetTupleElement,
-            /*inplace_operands=*/{0}, /*allow_non_inplace=*/true);
+            /*inplace_operands=*/{0}, /*allow_non_inplace=*/false);
       });
 });
 
