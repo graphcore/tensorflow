@@ -27,6 +27,7 @@ limitations under the License.
 
 #include <popops/ElementWise.hpp>
 #include "absl/container/flat_hash_map.h"
+#include "absl/strings/str_cat.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -48,7 +49,10 @@ class AssertOp : public PoplarOpDef {
         FindInstructionInput(tensor_map, res, inst, 0, seq, false));
     auto not_input = popops::map(graph, popops::expr::UnaryOpType::LOGICAL_NOT,
                                  input, seq, {debug_info, "logical_not"}, {});
-    seq.add(poplar::program::AbortOnCondition(not_input));
+    const std::string message =
+        absl::StrCat("Assertion op with metadata={",
+                     xla::OpMetadataToString(inst->metadata()), "} failed.");
+    seq.add(poplar::program::AbortOnCondition(not_input, message));
 
     return seq;
   }
