@@ -346,7 +346,7 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
       clusters.emplace_back(inst);
     }
   }
-  VLOG(1) << clusters.size() << " initial clusters found during traversal.";
+  VLOG(3) << clusters.size() << " initial clusters found during traversal.";
 
   bool clusters_merged;
   uint32 num_merged = 0;
@@ -379,7 +379,7 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
       }
     }
   } while (clusters_merged);
-  VLOG(1) << clusters.size() << " clusters after merging (" << num_merged
+  VLOG(3) << clusters.size() << " clusters after merging (" << num_merged
           << " merged).";
 
   absl::flat_hash_set<HloInstruction*> seen_insts;
@@ -412,7 +412,7 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
       num_invalid++;
     }
   }
-  VLOG(1) << clusters.size() << " valid clusters found (" << num_invalid
+  VLOG(3) << clusters.size() << " valid clusters found (" << num_invalid
           << " merged clusters were rejected).";
   return clusters;
 }
@@ -464,7 +464,7 @@ bool ElementwiseCluster::HasCycles(const HloReachabilityMap& reachability_map) {
       for (auto& user : outputs_to_users_.at(output)) {
         auto reachable = reachability_map.IsReachable(user.instruction, input);
         if (reachable) {
-          VLOG(1) << "Found graph cycle, output user: "
+          VLOG(3) << "Found graph cycle, output user: "
                   << user.instruction->name() << " is reachable from "
                   << input->name();
           return true;

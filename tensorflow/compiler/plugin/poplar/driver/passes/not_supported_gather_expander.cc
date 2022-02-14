@@ -65,7 +65,7 @@ StatusOr<bool> NotSupportedGatherExpander::Run(HloModule* module) {
   }
 
   for (HloInstruction* gather_inst : not_supported_gather_insts) {
-    VLOG(1) << "Expanding gather " << gather_inst->name();
+    VLOG(3) << "Expanding gather " << gather_inst->name();
     HloComputation* computation = gather_inst->parent();
 
     TF_ASSIGN_OR_RETURN(HloInstruction * expanded_root,

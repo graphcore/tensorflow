@@ -211,7 +211,7 @@ Status BaseVisitor::HandleConstant(HloInstruction* inst) {
   // instead so the original constant value is always preserved.
   bool is_inplace_read_write = IsOutputModifiedInplace(inst);
   if (is_inplace_read_write && t.numElements() != 0) {
-    VLOG(1) << "Constant tensor is read/write inplace, adding copy";
+    VLOG(3) << "Constant tensor is read/write inplace, adding copy";
     poplar::program::Sequence prog({}, debug_info);
     poplar::Tensor clone = poputil::duplicate(
         graph, t, prog, {debug_info, "clone"},

@@ -99,7 +99,7 @@ StatusOr<bool> ApplyRecomputeSuggestion::Run(HloModule* module) {
             std::unordered_set<const HloInstruction*> unique_users(
                 custom_call->users().begin(), custom_call->users().end());
 
-            VLOG(1) << "Recomputing " << operand->name();
+            VLOG(3) << "Recomputing " << operand->name();
 
             // Deterministicly ordered set of unique users.
             auto inst_post_order = comp->MakeInstructionPostOrder();

@@ -53,7 +53,7 @@ StatusOr<bool> HandleFeeds(HloModule* module, PredFn predicate,
     if (insts.size() == 1) {
       continue;
     }
-    VLOG(1) << "Found feed id " << feed_id << " being used multiple times.";
+    VLOG(3) << "Found feed id " << feed_id << " being used multiple times.";
     // Check all the sharding information matches.
     HloInstruction* first_inst = insts[0];
     const bool all_sharding_same =

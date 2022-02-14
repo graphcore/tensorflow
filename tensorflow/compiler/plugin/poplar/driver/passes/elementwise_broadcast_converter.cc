@@ -64,7 +64,7 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
     return false;
   }
 
-  VLOG(1) << "Instruction " << inst->ToString()
+  VLOG(3) << "Instruction " << inst->ToString()
           << " has broadcasting operands on indices "
           << absl::StrJoin(non_broadcast_operands, ", ");
 
@@ -175,7 +175,7 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
   }
 
   TF_RETURN_IF_ERROR(fusion->set_backend_config(backend_config));
-  VLOG(1) << "Replacing " << inst->ToString() << " with " << fusion->ToString()
+  VLOG(3) << "Replacing " << inst->ToString() << " with " << fusion->ToString()
           << " and fusion " << fusion_computation->ToString();
   TF_RETURN_IF_ERROR(comp->ReplaceInstruction(inst, fusion));
   return true;

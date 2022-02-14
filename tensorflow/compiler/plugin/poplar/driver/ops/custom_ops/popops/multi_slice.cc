@@ -150,7 +150,7 @@ class MultiSliceOp : public PoplarOpDef {
     // If it was not then we need to allocate a new input tensor.
     TF_ASSIGN_OR_RETURN(bool plan_used, SlicePlanHasAllocation(res, inst));
     if (!plan_used) {
-      VLOG(1) << "Creating a new tensor for input 0 of " << inst->name()
+      VLOG(3) << "Creating a new tensor for input 0 of " << inst->name()
               << " because it was not allocated using the slice plan.";
       // Create a copy of the input and allocate it using the plan.
       poplar::Tensor original_input = input;
@@ -296,7 +296,7 @@ class MultiUpdateOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(bool plan_used, SlicePlanHasAllocation(res, inst));
     poplar::Tensor operand_reallocated;
     if (!plan_used) {
-      VLOG(1) << "Creating a new tensor for input 0 of " << inst->name()
+      VLOG(3) << "Creating a new tensor for input 0 of " << inst->name()
               << " because it was not allocated using the slice plan.";
       // Create a copy of the input and allocate it using the plan.
       TF_ASSIGN_OR_RETURN(
@@ -386,7 +386,7 @@ class MultiUpdateAddOp : public MultiUpdateOp {
     TF_ASSIGN_OR_RETURN(bool plan_used, SlicePlanHasAllocation(res, inst));
     poplar::Tensor operand_reallocated;
     if (!plan_used) {
-      VLOG(1) << "Creating a new tensor for input 0 of " << inst->name()
+      VLOG(3) << "Creating a new tensor for input 0 of " << inst->name()
               << " because it was not allocated using the slice plan.";
       // Create a copy of the input and allocate it using the plan.
       TF_ASSIGN_OR_RETURN(

@@ -311,9 +311,9 @@ StatusOr<bool> EmbeddingPlansPreplanning::Run(HloModule* module) {
             resources_.annotations.flattened_inst_map_fwd.at(inst);
         ++non_flattened_slice_ops;
         // Check precise mappings if VLOG is enabled.
-        if (VLOG_IS_ON(1)) {
+        if (VLOG_IS_ON(2)) {
           if (absl::c_find(slice_ops, flattened_slice_op) == slice_ops.end()) {
-            VLOG(1) << "Slice operation " << inst->ToString()
+            VLOG(2) << "Slice operation " << inst->ToString()
                     << " does not exist in the flattened graph";
           }
         }

@@ -404,7 +404,7 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::RewriteCall(
                       GetClustersIn(call, elementwise_comps));
 
   if (clusters.empty()) {
-    VLOG(1) << "No clusters found.";
+    VLOG(3) << "No clusters found.";
     return false;
   }
 

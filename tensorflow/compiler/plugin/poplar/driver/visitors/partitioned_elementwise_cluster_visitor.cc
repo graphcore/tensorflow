@@ -77,7 +77,7 @@ Status PartitionedElementwiseClusterVisitor::Preprocess(HloInstruction* inst) {
     auto entry_param = GetRemoteBufferEntryParameterNumber(*dfa_, inst);
     if (entry_param.ok()) {
       int64 entry_param_idx = entry_param.ValueOrDie();
-      VLOG(1) << "Parameter mapped to entry parameter " << entry_param_idx;
+      VLOG(3) << "Parameter mapped to entry parameter " << entry_param_idx;
       TF_ASSIGN_OR_RETURN(bool updated,
                           UpdateRemoteBufferInformation(entry_param_idx, inst));
       if (!updated) {
@@ -323,7 +323,7 @@ PartitionedElementwiseClusterVisitor::UpdateRemoteBufferInformation(
 Status PartitionedElementwiseClusterVisitor::UpdateRemoteBuffersInformation() {
   for (auto it = entry_params_.begin(); it != entry_params_.end();) {
     int64 entry_param_idx = it->first;
-    VLOG(1) << "Adding rearrangement info for entry parameter "
+    VLOG(3) << "Adding rearrangement info for entry parameter "
             << entry_param_idx;
 
     const HloInstruction* entry_param = it->second;

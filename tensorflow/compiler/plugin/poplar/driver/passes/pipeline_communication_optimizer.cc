@@ -62,7 +62,7 @@ StatusOr<bool> PipelineCommunicationOptimizer::OptimizePipeline(
     const auto& visited_stages = path.GetVisitedStages();
     HloInstruction* stage = path.GetNewConsumerStage();
 
-    VLOG(1) << "Inserting a connection between " << visited_stages[0] << " and "
+    VLOG(3) << "Inserting a connection between " << visited_stages[0] << " and "
             << visited_stages.back();
 
     // Get the output which will be used for the FIFO - this is the input to the

@@ -492,7 +492,7 @@ StatusOr<bool> WhileLoopToRepeatSimplify::Run(HloModule* module) {
         }
 
         if (simplified) {
-          VLOG(1) << "Simplifying while loop " << while_inst->name()
+          VLOG(3) << "Simplifying while loop " << while_inst->name()
                   << " with a repeat of count " << count;
           TF_RETURN_IF_ERROR(ConvertToRepeat(while_inst, count));
           PruneComputations(module);

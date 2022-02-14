@@ -202,7 +202,7 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
   HloComputation* comp = root->parent();
 
   if (ShapeUtil::IsEmptyTuple(root->shape())) {
-    VLOG(1) << "Root instruction shape is an empty tuple";
+    VLOG(3) << "Root instruction shape is an empty tuple";
     return Status::OK();
   }
   poplar::Graph& graph = GetGraph(resources_, root);

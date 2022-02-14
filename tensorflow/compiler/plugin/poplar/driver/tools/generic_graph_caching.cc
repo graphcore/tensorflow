@@ -155,7 +155,7 @@ Status GenericGraphCache::ExecuteCached(
 
       auto name = absl::StrCat("Realloc/", arg_idx);
       if (needs_reallocating) {
-        VLOG(1) << "Reallocating argument " << arg_idx
+        VLOG(3) << "Reallocating argument " << arg_idx
                 << " for cached Poplar Function generated for "
                 << inst->ToString();
         poplar::Tensor new_arg;

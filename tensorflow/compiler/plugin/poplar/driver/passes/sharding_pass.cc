@@ -687,7 +687,7 @@ Status ConvertComputationToUniqueSharding(HloInstruction* caller,
                             })
             ->first;
 
-    VLOG(1) << "Reassigning computation " << comp->name() << " to device "
+    VLOG(3) << "Reassigning computation " << comp->name() << " to device "
             << sharding_device;
     for (HloComputation* comp : called_comps) {
       for (HloInstruction* inst : comp->instructions()) {

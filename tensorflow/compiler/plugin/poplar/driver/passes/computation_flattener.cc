@@ -84,7 +84,7 @@ Status ComputationFlattener::FlattenNode(const CallGraphNode& node) {
         if (!recomputable_computations_.contains(computation) &&
             all_function_comps_.count(computation) == 1) {
           // Inline functions if they are called from a single site.
-          VLOG(1) << "Inlining function " << computation->name()
+          VLOG(3) << "Inlining function " << computation->name()
                   << " because it is only called from one call site.";
           inline_computation = true;
 

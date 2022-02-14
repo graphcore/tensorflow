@@ -973,7 +973,7 @@ StatusOr<bool> HloMatcher::FindMatch(HloComputation* computation,
       TF_ASSIGN_OR_RETURN(bool pattern_matches,
                           MatchPattern(inst, pattern_idx));
       if (pattern_matches) {
-        VLOG(1) << "Matched pattern type " << pattern.GetType() << ".";
+        VLOG(3) << "Matched pattern type " << pattern.GetType() << ".";
         found_match = true;
         if (restart_search_after_match_) {
           break;

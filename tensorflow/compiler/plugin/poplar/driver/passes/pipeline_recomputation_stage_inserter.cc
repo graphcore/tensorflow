@@ -461,7 +461,7 @@ StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
     // Make sure that the fwd pass is executed before the recomputation.
     TF_RETURN_IF_ERROR(fwd_stage->AddControlDependencyTo(recomp_stage));
 
-    VLOG(1) << "Added recomputation for pipeline stage " << stage_id;
+    VLOG(3) << "Added recomputation for pipeline stage " << stage_id;
     changed = true;
   }
   return changed;
