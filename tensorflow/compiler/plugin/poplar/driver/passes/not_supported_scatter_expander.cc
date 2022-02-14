@@ -60,7 +60,7 @@ StatusOr<bool> NotSupportedScatterExpander::Run(HloModule* module) {
   }
 
   for (HloInstruction* scatter_inst : not_supported_scatter_insts) {
-    VLOG(1) << "Expanding scatter " << scatter_inst->name();
+    VLOG(3) << "Expanding scatter " << scatter_inst->name();
     HloComputation* computation = scatter_inst->parent();
     const HloInstruction* operand_inst = scatter_inst->operand(0);
     const HloInstruction* updates_inst = scatter_inst->operand(2);

@@ -194,12 +194,12 @@ static bool IsSwapCostEffective(HloInstruction* multi_update,
   const Shape& all_reduce_shape = all_reduce->shape();
   const int64 all_reduce_size = ShapeUtil::ByteSizeOf(all_reduce_shape);
 
-  VLOG(1) << "Seeing if cost of performing all reduce of "
+  VLOG(3) << "Seeing if cost of performing all reduce of "
           << all_reduce->ToString()
           << " is less than the cost of performing an all gather of the "
              "updates and indices of "
           << multi_update->ToString();
-  VLOG(1) << "All reduce cost estimate: " << all_reduce_size
+  VLOG(3) << "All reduce cost estimate: " << all_reduce_size
           << " optimization cost estimate: " << size_sent_by_opt;
 
   // If the allreduce is bigger than the other two, perform the optimization.

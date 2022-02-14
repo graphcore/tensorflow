@@ -891,7 +891,7 @@ HloPoplarDataflowAnalysis::Run(const HloComputation* entry,
                                const CallGraph& call_graph,
                                const CompilerAnnotations* annotations) {
   const HloModule* module = entry->parent();
-  VLOG(1) << "HloPoplarDataflowAnalysis::Run on module " << module->name();
+  VLOG(3) << "HloPoplarDataflowAnalysis::Run on module " << module->name();
   XLA_VLOG_LINES(3, module->ToString());
 
   if (!call_graph.IsFlattened()) {

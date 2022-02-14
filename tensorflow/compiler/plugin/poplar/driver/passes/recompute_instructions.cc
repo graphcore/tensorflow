@@ -414,7 +414,7 @@ struct ConvNormNLMatcher : public Matcher {
       return nullptr;
     }
 
-    VLOG(1) << "Found pattern of Conv->Norm->NonLinearity, cloning forward "
+    VLOG(3) << "Found pattern of Conv->Norm->NonLinearity, cloning forward "
                "Conv/Norm/NonLinearity in backward operations to save memory";
     return std::move(replacer);
   }
@@ -465,7 +465,7 @@ struct ConvNormMatcher : public Matcher {
       return nullptr;
     }
 
-    VLOG(1) << "Found pattern of Conv->Norm, cloning forward Conv/Norm in "
+    VLOG(3) << "Found pattern of Conv->Norm, cloning forward Conv/Norm in "
                "backward operations to save memory";
     return std::move(replacer);
   }

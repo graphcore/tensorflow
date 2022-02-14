@@ -804,7 +804,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
         if (optional_tensor) {
           const std::string name =
               absl::StrCat("clone/", op_idx, "/", flat_idx);
-          VLOG(1) << "Adding a clone for input (" << op_idx << ", " << flat_idx
+          VLOG(3) << "Adding a clone for input (" << op_idx << ", " << flat_idx
                   << ").";
           visitor_inputs[op_idx][flat_idx] = graph.clone(
               *optional_tensor, {debug_name_and_id, name},

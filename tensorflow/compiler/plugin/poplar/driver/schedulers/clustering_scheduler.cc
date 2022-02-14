@@ -689,7 +689,7 @@ StatusOr<HloInstructionSequence> ClusteringScheduler(
     const absl::flat_hash_map<const HloComputation*, int64>&
         memory_by_computation,
     const CompilerInformation& information) {
-  VLOG(1) << "ClusteringScheduler";
+  VLOG(3) << "ClusteringScheduler";
   return ClusteringScheduler::Run(computation, points_to_analysis,
                                   size_function, memory_by_computation,
                                   information);

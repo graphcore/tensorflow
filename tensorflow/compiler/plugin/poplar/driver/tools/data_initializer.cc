@@ -187,7 +187,7 @@ RandomDataInitializer::RandomDataInitializer(const std::string& type_string,
     : DataInitializer(type_string),
       random_type_(random_type),
       generator_(random_device_()) {
-  VLOG(1) << "Created RandomDataInitializer given \"type_string\"="
+  VLOG(3) << "Created RandomDataInitializer given \"type_string\"="
           << type_string << ".";
 };
 
@@ -201,7 +201,7 @@ void RandomDataInitializer::GetValue(char*& buffer, const PrimitiveType& type) {
 
 ConstantDataInitializer::ConstantDataInitializer(const std::string& type_string)
     : DataInitializer(type_string), value_(std::stoi(type_string)) {
-  VLOG(1) << "Created ConstantDataInitializer with value " << value_
+  VLOG(3) << "Created ConstantDataInitializer with value " << value_
           << " given \"type_string\"=" << type_string << ".";
 };
 

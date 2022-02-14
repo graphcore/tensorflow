@@ -621,7 +621,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
     offload_infos.push_back(offload_info);
   }
 
-  VLOG(1) << "Minimum remote tensor size: " << minimum_remote_tensor_size_
+  VLOG(3) << "Minimum remote tensor size: " << minimum_remote_tensor_size_
           << ", replication factor: " << partition_replication_factor_;
   // For each parameter in offload_info, insert any required load and store
   // operations.
@@ -654,7 +654,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
           return FailedPrecondition("%s", message.c_str());
         }
         case THREESTATE_UNDEFINED: {
-          VLOG(1) << message;
+          VLOG(3) << message;
           break;
         }
         default: { return FailedPrecondition("Unknown case"); }
@@ -669,7 +669,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
         ShapeUtil::ByteSizeOf(offload_info.input_to_call->shape());
     if (minimum_remote_tensor_size_ * partition_replication_factor >
         byte_size) {
-      VLOG(1) << "Variable " << offload_info.entry_param_number << ": "
+      VLOG(3) << "Variable " << offload_info.entry_param_number << ": "
               << offload_info.input_to_call->ToString()
               << " is smaller than the minimum remote tensor size ("
               << minimum_remote_tensor_size_
@@ -677,7 +677,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
       continue;
     }
 
-    VLOG(1) << "Offloading variable " << offload_info.entry_param_number << ": "
+    VLOG(3) << "Offloading variable " << offload_info.entry_param_number << ": "
             << offload_info.input_to_call->ToString()
             << ", byte size: " << byte_size;
 

@@ -34,7 +34,7 @@ StatusOr<bool> AddCopyIfParameterModifiedInplace(HloInstruction* call,
   HloComputation* comp = call->to_apply();
   HloInstruction* parameter = comp->parameter_instruction(parameter_number);
   if (IsOutputModifiedInplace(parameter)) {
-    VLOG(1) << "Inserting a copy for stage " << call->ToString()
+    VLOG(3) << "Inserting a copy for stage " << call->ToString()
             << " parameter number " << parameter_number;
     // Insert a copy from the the parameter.
     HloInstruction* copy = comp->AddInstruction(HloInstruction::CreateUnary(

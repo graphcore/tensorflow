@@ -89,7 +89,7 @@ Status DeferredAllocations::AddDeferredAllocation(
   }
 
   // Otherwise defer the allocation.
-  VLOG(1) << "Deferring allocation of " << location.instruction->name()
+  VLOG(3) << "Deferring allocation of " << location.instruction->name()
           << " sub tensor " << location.flattened_output_tuple_index << ".";
 
   // Create a new set for this location.
@@ -168,7 +168,7 @@ Status DeferredAllocations::AllocateIfExists(const HloInstruction* inst,
   // Find any deferred allocations in the range, and allocate them.
   auto itr = location_lookup_table_.lower_bound(start_location);
   while (itr != location_lookup_table_.upper_bound(end_location)) {
-    VLOG(1) << "Forced allocation for input location ("
+    VLOG(3) << "Forced allocation for input location ("
             << itr->second.instruction->name() << ","
             << itr->second.flattened_output_tuple_index << ") from location ("
             << itr->first.instruction->name() << ","
@@ -192,7 +192,7 @@ DeferredAllocations::GetNotAllocatedLocations() const {
 
 Status DeferredAllocations::MakeAllocation(TensorLocation input_location,
                                            TensorLocation allocation_location) {
-  VLOG(1) << "Allocating for input location ("
+  VLOG(3) << "Allocating for input location ("
           << input_location.instruction->name() << ","
           << input_location.flattened_output_tuple_index
           << ") from allocation location ("
@@ -222,7 +222,7 @@ Status DeferredAllocations::PostProcessAllocation(
                                              locations.end());
   absl::c_sort(flat_locations);
   for (const TensorLocation& location : flat_locations) {
-    VLOG(1) << "Setting the allocation at (" << location.instruction->name()
+    VLOG(3) << "Setting the allocation at (" << location.instruction->name()
             << "," << location.flattened_output_tuple_index << ").";
     TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map_, location.instruction,
                                        location.flattened_output_tuple_index,
@@ -623,7 +623,7 @@ Status DeferredVisitor::HandleGetTupleElement(HloInstruction* inst) {
       // it. Note that getting a tensor means that it will be allocated.
       const bool can_defer = input_location_is_deferred;
       if (can_defer) {
-        VLOG(1) << "Deferring use of " << inst->name() << " sub tensor " << i
+        VLOG(3) << "Deferring use of " << inst->name() << " sub tensor " << i
                 << ".";
         TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocationUser(
             input_location, output_location));
@@ -752,7 +752,7 @@ Status DeferredVisitor::HandleDeferredAllocationTuple(HloInstruction* inst) {
                                      *inputs[operand_idx][i]));
       } else {
         // No tensor, therefore defer allocation.
-        VLOG(1) << "Deferring use of " << inst->name() << " operand "
+        VLOG(3) << "Deferring use of " << inst->name() << " operand "
                 << input_inst->name() << " sub tensor " << i << ".";
         TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocationUser(
             input_location, output_location));
@@ -1548,7 +1548,7 @@ Status DeferredVisitor::FinishScopedVisit(HloInstruction* inst) {
 
     // Force the allocation.
     if (allocate_all_input_tensors_ || is_required_parameter) {
-      VLOG(1) << "Allocating input " << inst->ToString() << " index "
+      VLOG(3) << "Allocating input " << inst->ToString() << " index "
               << input_location.flattened_output_tuple_index;
       TF_RETURN_IF_ERROR(deferred_allocation->MakeDeferredAllocation(
           input_location, input_location));
@@ -1599,7 +1599,7 @@ Status DeferredVisitor::PropagateDeferredAllocationsOperand(
   auto shapes = FlattenedXlaShape(input_inst->shape());
   for (size_t i = 0; i < shapes.size(); i++) {
     if (!callsite_input[i]) {
-      VLOG(1) << "Propagating allocated tensor at callsite "
+      VLOG(3) << "Propagating allocated tensor at callsite "
               << callsite_inst->name() << " for input (" << input_inst->name()
               << ", " << i << ").";
       poplar::Tensor t = computation_inputs_[parameter_idx][i];
@@ -1870,7 +1870,7 @@ StatusOr<poplar::program::Sequence> InplaceDeferredVisitor::GetPreambleCopies(
         if (!reallocate_inputs_info_[i][j]) {
           return FailedPrecondition("Input should have not been reallocated.");
         }
-        VLOG(1) << "Adding a copy for input (" << i << ", " << j << ").";
+        VLOG(3) << "Adding a copy for input (" << i << ", " << j << ").";
         if (callsite_inputs_[i][j]->IsTensor()) {
           seq.add(poplar::program::Copy(callsite_inputs_[i][j]->AsTensor(),
                                         computation_inputs_[i][j].AsTensor(),
@@ -2051,7 +2051,7 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
               "Found disallowed remote buffer aliasing at input %d of loop %s",
               i, computation->name());
         }
-        VLOG(1) << "Adding a partial copy in "
+        VLOG(3) << "Adding a partial copy in "
                 << debug_name_and_id.getPathName() << " for tuple index " << i;
         unaliased_loop_outputs[i] = graph.clone(
             loop_outputs[i], {debug_name_and_id, std::string("bodyout_temp_") +
@@ -2080,7 +2080,7 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
               "Found disallowed remote buffer aliasing at input %d of loop %s",
               i, computation->name());
         }
-        VLOG(1) << "Adding a output to input copy in "
+        VLOG(3) << "Adding a output to input copy in "
                 << debug_name_and_id.getPathName() << " for tuple index " << i;
         if (loop_inputs[i].IsOpaque()) {
           // Opaque inputs are just forwarded because they never really alias

@@ -188,7 +188,7 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
           return last_error;
         }
 
-        VLOG(1) << "Chosen scheduler for " << computation->name() << ": "
+        VLOG(3) << "Chosen scheduler for " << computation->name() << ": "
                 << minimum_memory_schedule->algorithm_name;
 
         return minimum_memory_schedule->schedule;

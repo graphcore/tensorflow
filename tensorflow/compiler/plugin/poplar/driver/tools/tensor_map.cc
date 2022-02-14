@@ -48,7 +48,7 @@ Status RemoteBufferHolder::SetNumElements(std::size_t num_elements) {
 
 poplar::RemoteBuffer RemoteBufferHolder::Get() {
   if (!remote_buffer_) {
-    VLOG(1) << "Creating remote buffer (" << handle_ << ", " << num_elements_
+    VLOG(3) << "Creating remote buffer (" << handle_ << ", " << num_elements_
             << ", " << repeats_ << ")";
     remote_buffer_ =
         graph_->addRemoteBuffer(handle_, element_type_, num_elements_, repeats_,
@@ -102,7 +102,7 @@ Status TensorMap::AddOutputOpaque(const HloInstruction* inst,
 
 Status TensorMap::AddOutput(const HloInstruction* inst, int64 output_index,
                             TensorOrRemoteBuffer torb) {
-  VLOG(1) << "Adding output for instruction " << inst->name()
+  VLOG(3) << "Adding output for instruction " << inst->name()
           << " at output index " << output_index;
 
   TensorLocation location(inst, output_index);

@@ -71,7 +71,7 @@ class ParallelMapTester : public DfsHloVisitorWithDefault {
     } else if (inst->opcode() == HloOpcode::kMap) {
       return Status::OK();
     } else {
-      VLOG(1) << "Map didn't have a parallel computation " << inst->name();
+      VLOG(3) << "Map didn't have a parallel computation " << inst->name();
       _is_ok = false;
       return Status::OK();
     }

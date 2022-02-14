@@ -124,18 +124,18 @@ StatusOr<bool> MatmulCombiner::HandleMatch(
   const DotDimensionNumbers dot_dims2 = matmul2->dot_dimension_numbers();
 
   if (dot_dims1.SerializeAsString() != dot_dims2.SerializeAsString()) {
-    VLOG(1) << "Can't fuse two matmuls with different dot_dimension_numbers";
+    VLOG(3) << "Can't fuse two matmuls with different dot_dimension_numbers";
     return false;
   }
   if (matmul1->precision_config().SerializeAsString() !=
       matmul2->precision_config().SerializeAsString()) {
-    VLOG(1) << "Can't fuse two matmuls with different precision_config";
+    VLOG(3) << "Can't fuse two matmuls with different precision_config";
     return false;
   }
 
   if (matmul1->frontend_attributes().SerializeAsString() !=
       matmul2->frontend_attributes().SerializeAsString()) {
-    VLOG(1) << "Can't fuse two matmuls with different frontend_attributes";
+    VLOG(3) << "Can't fuse two matmuls with different frontend_attributes";
     return false;
   }
 
