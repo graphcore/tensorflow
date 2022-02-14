@@ -1913,8 +1913,7 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     option_flags_.set("debug.allowOutOfMemory", "true");
   }
 
-  if (!PoplarXlaFlags::Get().save_vertex_graph.empty() ||
-      !PoplarXlaFlags::Get().save_interval_report.empty()) {
+  if (!PoplarXlaFlags::Get().save_vertex_graph.empty()) {
     option_flags_.set("debug.retainDebugInformation", "true");
   }
 
@@ -3796,16 +3795,6 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
     }
 
     try {
-      if (!PoplarXlaFlags::Get().save_interval_report.empty() &&
-          executable.ExecutionCount() == 0) {
-        auto filename =
-            tensorflow::io::JoinPath(PoplarXlaFlags::Get().save_interval_report,
-                                     executable.module().name() + ".csv");
-        VLOG(1) << "Dumping interval report " << filename;
-        std::ofstream stream(filename);
-        current_engine_->reportIntervals(stream);
-      }
-
       if (current_config_.profiling().enable_ipu_trace_events()) {
         AddExecuteEventRecord(executable.module().name());
       }

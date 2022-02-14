@@ -22,7 +22,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 from tensorflow.python.ops import array_ops
 
 
-def all_reduce(input_shards, op):
+def all_reduce(input_shards, op):  #pylint: disable=missing-type-doc,missing-return-type-doc
   """
   Perform a `reduce_scatter` using the given op, followed by an `all_gather`
   on the results, so each shard contains all the reduced results. Inputs
@@ -61,7 +61,7 @@ def all_reduce(input_shards, op):
       _pad_to_equal_size(input_shards), op)
 
 
-def reduce_scatter(input_shards, op):
+def reduce_scatter(input_shards, op):  #pylint: disable=missing-type-doc,missing-return-type-doc
   """
   Reduce the given sharded tensors with the results scattered across the
   shards. If the tensors contain fewer/more elements than shards then the
@@ -100,7 +100,7 @@ def reduce_scatter(input_shards, op):
       _pad_to_equal_size(input_shards), collective_op=op)
 
 
-def all_gather(input_shards, axis=0):
+def all_gather(input_shards, axis=0):  #pylint: disable=missing-type-doc,missing-param-doc,missing-return-type-doc
   """
   Perform an all gather for a list of sharded tensors within a replica.
 
@@ -129,7 +129,7 @@ def all_gather(input_shards, axis=0):
   return gathered
 
 
-def _validate_inputs(input_shards):
+def _validate_inputs(input_shards):  #pylint: disable=missing-type-doc,missing-param-doc
   """
   Raises an exception if the given input tensors are not valid for a
   within_replica op.The tensors must be unique, and of the same type and rank.
@@ -149,7 +149,7 @@ def _validate_inputs(input_shards):
     raise ValueError("Expected tensors to all be of the same rank.")
 
 
-def _reshape_scalars(tensors):
+def _reshape_scalars(tensors):  #pylint: disable=missing-type-doc,missing-param-doc,missing-return-type-doc
   """
   Reshape any scalar tensors to be rank 1.
   """
@@ -159,7 +159,7 @@ def _reshape_scalars(tensors):
   return tensors
 
 
-def _pad_to_equal_size(flat_tensors):
+def _pad_to_equal_size(flat_tensors):  #pylint: disable=missing-type-doc,missing-param-doc
   """
   Zero pad the given tensors so they have same size as the largest
   tensor in flat_tensors.
@@ -181,7 +181,7 @@ def _pad_to_equal_size(flat_tensors):
   return equal_size_tensors
 
 
-def _concatenate_shapes(tensors, axis):
+def _concatenate_shapes(tensors, axis):  #pylint: disable=missing-type-doc,missing-param-doc
   """ Utility for generating a concatenated tensor shape, where elements are
     joined across the given axis. Expects tensor dimensions to be the same
     outside of this axis. """
@@ -204,7 +204,7 @@ def _concatenate_shapes(tensors, axis):
   return concatenated_shape
 
 
-def _flatten_tensors(tensors):
+def _flatten_tensors(tensors):  #pylint: disable=missing-type-doc,missing-param-doc
   """ Flatten the tensors in the given list so they are of rank 1. """
   flattened_inputs = []
   for tensor in tensors:

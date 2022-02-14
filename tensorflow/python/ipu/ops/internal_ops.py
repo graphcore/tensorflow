@@ -158,7 +158,7 @@ def print_tensor(input, name=""):
   return gen_poputil_ops.ipu_print_tensor(input, tensor_name=name)
 
 
-def get_current_iteration_counter(name=None, **kwargs):
+def get_current_iteration_counter(name=None, **kwargs):  #pylint: disable=missing-type-doc,missing-param-doc,missing-return-type-doc
   """Returns which gradient accumulation iteration the pipeline is in.
 
   Returns:

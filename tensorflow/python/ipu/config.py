@@ -1099,12 +1099,12 @@ class SelectionOrder(Enum):
     IPUs would be selected in the following order:
     `0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15`.
   * `SNAKE`: select IPUs such that each consecutive shard is directly
-    connected via IPU-Links to the shard before and after. In the above example,
-    the IPUs would be selected in the following order:
+    connected via IPU-Links to the shard before and after. In the above
+    example, the IPUs would be selected in the following order:
     `0, 1, 3, 2, 4, 5, 7, 6, 8, 9, 11, 10, 12, 13, 15, 14`.
   * `HOOF`: select IPUs such that each consecutive shard is directly
-    connected via IPU-Links to the shard before and after, and the last and first
-    shard are on adjacent IPUs. In the above example, the IPUs would be
+    connected via IPU-Links to the shard before and after, and the last and
+    first shard are on adjacent IPUs. In the above example, the IPUs would be
     selected in the following order:
     `0, 2, 4, 6, 8, 10, 12, 14, 15, 13, 11, 9, 7, 5, 3, 1`.
 
@@ -1306,10 +1306,8 @@ class _FloatingPointBehaviourConfig(_ConfigBase):
     If `StochasticRoundingBehaviour.OFF` (default) then stochastic rounding
     will be disabled. Otherwise it's enabled with the semantics of the
     particular option.
-    DEPRECATED: Enabling/disabling with bools.
     """
-    self.esr: typing.Union[StochasticRoundingBehaviour,
-                           bool] = StochasticRoundingBehaviour.OFF
+    self.esr = StochasticRoundingBehaviour.OFF
     """
     If True, Not-a-Number (NaN) on overflow mode will be enabled.
     """
@@ -1333,14 +1331,7 @@ class _FloatingPointBehaviourConfig(_ConfigBase):
     if self.set_all:
       pb.floating_point_behaviour.esr = StochasticRoundingBehaviour.ON.value
     else:
-      if isinstance(self.esr, bool):
-        logging.warn(
-            "Deprecated use of setting floating_point_behaviour.esr with bool. "
-            "Please replace bool with appropriate StochasticRoundingBehaviour "
-            "value.")
-        esr = StochasticRoundingBehaviour.from_bool(self.esr)
-      else:
-        esr = self.esr
+      esr = self.esr
       pb.floating_point_behaviour.esr = esr.value
 
 

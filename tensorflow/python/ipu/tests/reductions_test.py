@@ -38,7 +38,8 @@ class TestReductions(test_util.TensorFlowTestCase):
     config.floating_point_behaviour.inv = True
     config.floating_point_behaviour.div0 = True
     config.floating_point_behaviour.oflo = True
-    config.floating_point_behaviour.esr = True
+    config.floating_point_behaviour.esr = \
+      ipu.config.StochasticRoundingBehaviour.ON
     config.floating_point_behaviour.nanoo = True
     tu.add_hw_ci_connection_options(config)
     config.configure_ipu_system()

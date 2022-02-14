@@ -64,7 +64,8 @@ class TestSeedControl(test_util.TensorFlowTestCase):
     config.floating_point_behaviour.inv = True
     config.floating_point_behaviour.div0 = True
     config.floating_point_behaviour.oflo = True
-    config.floating_point_behaviour.esr = True
+    config.floating_point_behaviour.esr = \
+      ipu.config.StochasticRoundingBehaviour.ON
     config.floating_point_behaviour.nanoo = True
     config.compilation_poplar_options = {'target.deterministicWorkers': 'true'}
     config.configure_ipu_system()
@@ -139,7 +140,8 @@ class TestSeedControl(test_util.TensorFlowTestCase):
     config.floating_point_behaviour.inv = True
     config.floating_point_behaviour.div0 = True
     config.floating_point_behaviour.oflo = True
-    config.floating_point_behaviour.esr = True
+    config.floating_point_behaviour.esr = \
+      ipu.config.StochasticRoundingBehaviour.ON
     config.floating_point_behaviour.nanoo = True
     # Portable determinism is required as the replicas use different IPUs.
     config.compilation_poplar_options = {
@@ -192,7 +194,8 @@ class TestSeedControl(test_util.TensorFlowTestCase):
     config.experimental.enable_prng_stability = True
     tu.add_hw_ci_connection_options(config)
     # Enable stochastic rounding
-    config.floating_point_behaviour.esr = True
+    config.floating_point_behaviour.esr = \
+      ipu.config.StochasticRoundingBehaviour.ON
     config.configure_ipu_system()
 
     in_data = np.array([0.1] * 10)
@@ -210,7 +213,8 @@ class TestSeedControl(test_util.TensorFlowTestCase):
     config.experimental.enable_prng_stability = True
     tu.add_hw_ci_connection_options(config)
     # Enable stochastic rounding
-    config.floating_point_behaviour.esr = True
+    config.floating_point_behaviour.esr = \
+      ipu.config.StochasticRoundingBehaviour.ON
     config.configure_ipu_system()
 
     random_seed.set_seed(1234)

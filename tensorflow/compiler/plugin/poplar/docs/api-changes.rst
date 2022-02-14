@@ -46,6 +46,43 @@ The ``available_memory_proportion_fwd`` and ``available_memory_proportion_bwd`` 
 
 These values are now set using the ``'availableMemoryProportion'`` key of the ``options`` and ``options_bwd`` arguments correspondingly.
 
+Breaking changes
+________________
+
+.. warning::
+
+  These will require changes to any code that uses them.
+
+Removal of deprecated APIs
+''''''''''''''''''''''''''''
+  - `IpuConfig.floating_point_behaviour.esr` may no longer be assigned a boolean
+  value (deprecated in Poplar SDK version 2.4). Doing so will now raise a
+  `ValueError`. From Poplar SDK version 2.5 onwards,
+  :py:class:`~tensorflow.python.ipu.config.StochasticRoundingBehaviour`
+  must be used. Note that serialized IpuConfig instances from an earlier
+  Poplar SDK version will not be deserializable from Poplar SDK version 2.5
+  onwards.
+
+  - `extract_all_events`, `extract_all_strings_from_event_trace` and
+  `extract_all_types_from_event_trace` have been removed from
+  `tensorflow.python.ipu.utils`. These items were deprecated in Poplar SDK
+  version 2.4.
+
+  - `IPUMultiReplicaStrategy` (deprecated in Poplar SDK version 2.4) has been
+  removed. From Poplar SDK version 2.5 onwards use
+  :py:class:`~tensorflow.python.ipu.horovod.popdist_strategy.PopDistStrategy`.
+
+  - The `save_interval_report` flag provided to `TF_POPLAR_FLAGS` has been
+  removed following deprecation in Poplar SDK version 2.4. From Poplar SDK
+  version 2.5, LIBPVA should be used.
+
+  - `tensorflow.python.ipu.ops.summary_ops` has been removed as both
+  `ipu_compile_summary` and `get_ipu_reports` were deprecated in Poplar
+  SDK version 2.4. From Poplar SDK 2.5 onwards, the 
+  [PopVision](https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/profiler.html)
+  suite of tools should be used instead. Additionally, the `compile_summary`
+  parameter of `IPURunConfig` has been removed.
+
 Release 2.4
 ~~~~~~~~~~~
 

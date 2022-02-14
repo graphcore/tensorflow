@@ -102,9 +102,6 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
       {"save_vertex_graph",
        "Path to a directory where the Poplar vertex graphs should be saved to. "
        "(path)"},
-      {"save_interval_report",
-       "Path to a directory where the Poplar interval reports should be saved "
-       "to. (path)"},
       {"executable_cache_path", "Path to the executable cache. (path)"},
       {"dump_schedule_as_dot", "Dumps the scheduler graph as a dot file."},
       {"tensor_map_file_path", "Directory for tensor map dump files."},
@@ -163,7 +160,6 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(max_compilation_threads)
     ADD_FLAG(max_infeed_threads)
     ADD_FLAG(save_vertex_graph)
-    ADD_FLAG(save_interval_report)
     ADD_FLAG(executable_cache_path)
     ADD_FLAG(dump_schedule_as_dot)
     ADD_FLAG(tensor_map_file_path)
@@ -215,11 +211,6 @@ PoplarXlaFlags::PoplarXlaFlags() {
     LOG(FATAL) << "The flag \"synthetic_data_initializer\" can only be used "
                   "in combination with \"use_synthetic_data\" or "
                   "\"synthetic_data_categories\".";
-  }
-
-  if (!save_interval_report.empty()) {
-    LOG(INFO) << "The flag \"save_interval_report\" is deprecated. Please use "
-                 "LIBPVA instead.";
   }
 
   // Hash all the flags which affect the graph generation and compilation only.

@@ -87,7 +87,7 @@ def create_sharded_values(values, dtype, zero_scalar):  #pylint: disable=missing
   return sharded_constants
 
 
-def ndarrays_to_lists(ndarrays):
+def ndarrays_to_lists(ndarrays):  #pylint: disable=missing-type-doc,missing-param-doc
   """ Utility for using converting ndarrays to list so the values
   can be passed into assertCountEqual, which would otherwise error with...
 
@@ -593,7 +593,7 @@ class ReduceScatterWithinReplicaTest(CommonReduction.Tests):
     super().setUp()
     self._reduce_op = within_replica_ops.reduce_scatter
 
-  def reduce(self, op, *shard_vals):
+  def reduce(self, op, *shard_vals):  #pylint: disable=missing-type-doc,missing-param-doc
     """ Reduce shard_vals as a reduce_scatter would.
     """
     shard_count = len(shard_vals)
@@ -655,7 +655,7 @@ class AllReduceWithinReplicaTest(CommonReduction.Tests):
     super().setUp()
     self._reduce_op = within_replica_ops.all_reduce
 
-  def reduce(self, op, *shard_vals):
+  def reduce(self, op, *shard_vals):  #pylint: disable=missing-type-doc,missing-param-doc
     """ Reduce shard_vals as a all_reduce would.
     """
     shard_count = len(shard_vals)

@@ -78,9 +78,6 @@ class PoplarXlaFlags {
   // Path to a directory where the Poplar vertex graph should be saved to.
   std::string save_vertex_graph = "";
 
-  // Path to a directory where the Poplar interval report should be saved to.
-  std::string save_interval_report = "";
-
   // Path to the executable cache.
   std::string executable_cache_path = "";
 

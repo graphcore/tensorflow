@@ -802,13 +802,6 @@ def _augment_model_fn(model_fn, wrapper_class, ipu_device):
     with ipu_scope(ipu_device):
       compiled_loop = ipu_compiler.compile(loop)
 
-    if config.ipu_run_config.compile_summary:
-      raise NotImplementedError(
-          "Generating compilation summaries for the IPUEstimator through"
-          " IPURunConfig.compile_summary is deprecated, is non-functional and"
-          " will be removed in a future release. Use the PopVision suite of"
-          " analysis tools to profile IPU programs.")
-
     ipu_utils.move_variable_initialization_to_cpu()
 
     hooks.extend(wrapped_model_fn.captured_hooks)

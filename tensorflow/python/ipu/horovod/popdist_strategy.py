@@ -125,14 +125,3 @@ class PopDistExtendedV1(IPUMultiWorkerExtended):
           "Can only broadcast on CPU, but got device {}".format(device))
 
     return hvd_broadcast(initial_value, root_rank=0)
-
-
-# Export the alias for backwards compability.
-IPUMultiReplicaStrategy = deprecation.deprecated_alias(
-    deprecated_name="IPUMultiReplicaStrategy",
-    name="PopDistStrategy",
-    func_or_class=PopDistStrategy)
-IPUMultiReplicaStrategyV1 = deprecation.deprecated_alias(
-    deprecated_name="IPUMultiReplicaStrategyV1",
-    name="PopDistStrategy",
-    func_or_class=PopDistStrategy)
