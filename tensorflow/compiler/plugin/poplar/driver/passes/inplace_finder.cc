@@ -217,12 +217,13 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
       explicit OperandToCopy(HloInstruction* inst) : inst(inst) {}
     };
     std::vector<OperandToCopy> operands_to_copy;
+    std::vector<HloInstruction*> instructions_to_copy;
 
     for (auto* inst : inplace_candidates) {
       if (HloPoplarInplaceDescription::ConvertToInplace(
               inst, reachability_map.get(), worklist)) {
         changed = true;
-        VLOG(1) << "Inplaced " << inst->ToString();
+        VLOG(3) << "Inplaced " << inst->ToString();
         continue;
       }
       // Do not insert copies for root tuple in entry computation.
@@ -250,10 +251,31 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
       CHECK(!IsPoplarInstruction(PoplarOp::RemoteParameterStore, inst) &&
             !IsPoplarInstruction(PoplarOp::BufferStoreSlice, inst));
 
-      operands_to_copy.emplace_back(inst);
-      for (auto op_index : inplace_description.GetInplaceOperandIndices()) {
-        operands_to_copy.back().operands.push_back(op_index);
+      if (inplace_description.GetType() ==
+          HloInstructionType::kInplaceGetTupleElement) {
+        // Instead of copying inputs, copy output.
+        instructions_to_copy.push_back(inst);
+      } else {
+        operands_to_copy.emplace_back(inst);
+        for (auto op_index : inplace_description.GetInplaceOperandIndices()) {
+          operands_to_copy.back().operands.push_back(op_index);
+        }
       }
+    }
+
+    for (HloInstruction* inst : instructions_to_copy) {
+      auto users = inst->users();
+      HloInstruction* copy = comp->AddInstruction(
+          HloInstruction::CreateUnary(inst->shape(), HloOpcode::kCopy, inst));
+      VLOG(3) << "Adding a copy for " << inst->name();
+      for (auto succ : inst->control_successors()) {
+        TF_RETURN_IF_ERROR(copy->AddControlDependencyTo(succ));
+      }
+      inst->SetupDerivedInstruction(copy);
+      for (HloInstruction* user : users) {
+        TF_RETURN_IF_ERROR(inst->ReplaceUseWith(user, copy));
+      }
+      changed = true;
     }
 
     for (auto& operand_to_copy : operands_to_copy) {
@@ -261,11 +283,17 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
       auto inplace_description = GetInplaceDescription(inst);
       for (int64 op_index : operand_to_copy.operands) {
         HloInstruction* op = inst->mutable_operand(op_index);
-        VLOG(1) << "Adding a copy of operand " << op_index << " (" << op->name()
-                << ") "
-                << " for " << inst->name();
-        HloInstruction* copy = comp->AddInstruction(
-            HloInstruction::CreateUnary(op->shape(), HloOpcode::kCopy, op));
+        HloInstruction* copy;
+        if (op->opcode() == HloOpcode::kCopy && op->user_count() == 1) {
+          // Reuse copy used only for this input.
+          copy = op;
+        } else {
+          VLOG(3) << "Adding a copy of operand " << op_index << " ("
+                  << op->name() << ") "
+                  << " for " << inst->name();
+          copy = comp->AddInstruction(
+              HloInstruction::CreateUnary(op->shape(), HloOpcode::kCopy, op));
+        }
         if (inplace_description.GetType() ==
                 HloInstructionType::kInplaceReadWrite &&
             inst->opcode() != HloOpcode::kTuple) {

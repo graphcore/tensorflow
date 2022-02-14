@@ -619,12 +619,9 @@ Status DeferredVisitor::HandleGetTupleElement(HloInstruction* inst) {
       TF_RETURN_IF_ERROR(deferred_allocation->MakeDeferredAllocation(
           output_location, input_location));
     } else {
-      const bool is_lowered_inplace =
-          IsLoweredInplace(output_location.instruction);
-
       // Try to defer the allocation, otherwise get the input tensor and forward
       // it. Note that getting a tensor means that it will be allocated.
-      const bool can_defer = is_lowered_inplace && input_location_is_deferred;
+      const bool can_defer = input_location_is_deferred;
       if (can_defer) {
         VLOG(1) << "Deferring use of " << inst->name() << " sub tensor " << i
                 << ".";
@@ -639,27 +636,9 @@ Status DeferredVisitor::HandleGetTupleElement(HloInstruction* inst) {
         TensorOrRemoteBufferVector outputs = FindInstructionInputsInRange(
             tensor_map, resources_, inst, 0,
             {flat_tuple_index, flat_tuple_index + 1}, seq, debug_name_and_id,
-            false);
+            /*expand_aliasing=*/false);
         CHECK_EQ(outputs.size(), 1);
-        if (outputs[0].IsTensor()) {
-          poplar::Tensor output = outputs[0].AsTensor();
-          // Duplicate the tensor if this is not an inplace lowering.
-          if (!is_lowered_inplace) {
-            output = poputil::duplicate(
-                graph, output, seq, {debug_name_and_id, std::to_string(i)},
-                poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-          }
-          TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, i, output));
-        } else {
-          if (!is_lowered_inplace) {
-            return xla::FailedPrecondition(
-                "Unable to add copy on inplace output remote buffer at "
-                "instruction %s input %d.",
-                inst->name(), i);
-          }
-          TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, i, outputs[0]));
-        }
-
+        TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, i, outputs[0]));
         TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
       }
     }
