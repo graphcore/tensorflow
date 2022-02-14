@@ -157,7 +157,7 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 
       num_compiles = 0
 
-      evts = ipu.utils.extract_all_events(events)
+      evts = tu.extract_all_events(events)
       for evt in evts:
         if evt.type == IpuTraceEvent.COMPILE_END:
           num_compiles = num_compiles + 1
@@ -232,7 +232,7 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 
       num_compiles = 0
 
-      evts = ipu.utils.extract_all_events(events)
+      evts = tu.extract_all_events(events)
       for evt in evts:
         if evt.type == IpuTraceEvent.COMPILE_END:
           num_compiles = num_compiles + 1

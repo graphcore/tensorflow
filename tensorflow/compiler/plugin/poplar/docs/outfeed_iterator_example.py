@@ -32,7 +32,7 @@ def create_model():
 
 
 @tf.function(experimental_compile=True)
-def training_loop(iterator, steps_per_execution, outfeed, model, optimizer):
+def training_loop(iterator, steps_per_execution, outfeed, model, optimizer):  # pylint: disable=redefined-outer-name
   for _ in tf.range(steps_per_execution):
     # Get the next input.
     features, labels = next(iterator)

@@ -22,7 +22,7 @@ We support distributed training for two different types of systems:
 We provide distribution strategies that are designed for these two types of
 systems, and with different implementations of the host communication:
 
-* :class:`~tensorflow.python.ipu.horovod.IPUMultiReplicaStrategy`
+* :class:`~tensorflow.python.ipu.horovod.popdist_strategy.PopDistStrategy`
 * :class:`~tensorflow.python.ipu.horovod.IPUHorovodStrategy`
 * :class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy`
 
@@ -31,7 +31,7 @@ Their main differences can be summarized like this:
 +-----------------------------+------------+--------------------+
 | Distribution strategy       | System     | Host communication |
 +=============================+============+====================+
-| ``IPUMultiReplicaStrategy`` | Pod        | Horovod (OpenMPI)  |
+| ``PopDistStrategy``         | Pod        | Horovod (OpenMPI)  |
 +-----------------------------+------------+--------------------+
 | ``IPUHorovodStrategy``      | IPU-Server | Horovod (OpenMPI)  |
 +-----------------------------+------------+--------------------+
@@ -49,12 +49,12 @@ There are some things they have in common:
 
 And these are the main differences:
 
-* With the ``IPUMultiReplicaStrategy`` designed for Pod systems, a
+* With the ``PopDistStrategy`` designed for Pod systems, a
   collective operation (performed either explicitly by calling a member function
   like ``reduce()`` or implicitly by using an optimizer under the strategy
   scope) will be performed directly on the IPU by using compiled communications
   with the GCL library over the IPU-Links and GW-Links. The
-  ``IPUMultiReplicaStrategy`` is designed for use with PopDist and PopRun.
+  ``PopDistStrategy`` is designed for use with PopDist and PopRun.
   Refer to the `PopDist and PopRun User Guide
   <https://docs.graphcore.ai/projects/poprun-user-guide/>`_ for more details.
 

@@ -35,6 +35,6 @@ class PipelineModel:
         "PipelineModel has been deleted. Use tf.keras.Model within a "
         "`tensorflow.python.ipu.ipu_strategy.IPUStrategy` and either use "
         "`tensorflow.python.ipu.keras.PipelineStage` scopes or the "
-        "`get_pipeline_stage_assignment()` and `set_pipeline_stage_assignment()` "
-        "functions instead. See the documentation for full details and examples."
-    )
+        "`get_pipeline_stage_assignment()` and "
+        "`set_pipeline_stage_assignment()` functions instead. See the "
+        "documentation for full details and examples.")

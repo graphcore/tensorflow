@@ -349,7 +349,8 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
   def testStochasticRoundingNestedVisits(self):
     cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
-    cfg.floating_point_behaviour.esr = True
+    cfg.floating_point_behaviour.esr = \
+      ipu.config.StochasticRoundingBehaviour.ON
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 

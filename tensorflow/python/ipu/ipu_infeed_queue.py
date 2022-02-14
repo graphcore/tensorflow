@@ -103,12 +103,11 @@ class IPUInfeedQueue:
       result = sess.run(res)
 
   """
-  def __init__(
-      self,
-      dataset,
-      device_ordinal=None,
-      prefetch_depth=None,
-      **kwargs):
+  def __init__(self,
+               dataset,
+               device_ordinal=None,
+               prefetch_depth=None,
+               **kwargs):  #pylint: disable=missing-type-doc,missing-param-doc
     """Creates an IPUInfeedQueue object.
 
     Args:

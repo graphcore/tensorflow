@@ -76,7 +76,7 @@ class IPUOutfeedQueue(collections_abc.Iterable):
   operation will in this case return a single element.
 
   """
-  def __init__(self, outfeed_mode=None, device_ordinal=None, buffer_depth=1):
+  def __init__(self, outfeed_mode=None, device_ordinal=None, buffer_depth=1):  #pylint: disable=missing-type-doc
     """Creates an IPUOutfeedQueue object.
 
     Args:

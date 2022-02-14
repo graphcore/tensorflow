@@ -25,7 +25,7 @@ from tensorflow.python import ipu
 from tensorflow.python.framework.errors_impl import InternalError
 
 
-def attach(poplar_device, wait_for_signal=True):
+def attach(poplar_device, wait_for_signal=True):  #pylint: disable=missing-type-doc,missing-param-doc
   """Attaches to IPUs and optionally waits for a signal"""
   cfg = ipu.config.IPUConfig()
   cfg.select_ipus = [poplar_device]

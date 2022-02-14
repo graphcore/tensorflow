@@ -959,8 +959,7 @@ def extract_all_strings_from_event_trace(events):
   """Extract a concatenation of all data strings from an IPU event trace.
 
   Args:
-    events: An array of IPU events as returned from the ``ipu_compile_summary``
-      operation.
+    events: An array of IPU events.
 
   Returns:
     A string containing the concatenation of all of the data fields of the

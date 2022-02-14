@@ -32,7 +32,7 @@ from tensorflow.python.ops import variables
 _counter_per_token = {}
 
 
-def _call_counter(token):
+def _call_counter(token):  #pylint: disable=missing-type-doc,missing-return-type-doc
   """Wrapper for _counter_per_token.
 
   Args:

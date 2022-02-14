@@ -21,7 +21,6 @@ import enum
 import math
 import sys
 import six
-import numpy as np
 import libpvti
 import popdist
 
