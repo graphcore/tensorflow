@@ -287,8 +287,6 @@ some help for each option. The available options are described below:
     - Cause any infeed queues to copy garbage data to the IPU rather than real
       data. This option can be used to determine whether the dataset provided to
       the infeed queue is the bottleneck during execution.
-  * - :samp:`--save_vertex_graph={path}`
-    - Dumps the Poplar vertex graph (as a DOT file) to the given directory.
   * - :samp:`--tensor_map_file_path={path}`
     - Cause a JSON file containing the tile mapping of all tensors to be written
       to this directory.

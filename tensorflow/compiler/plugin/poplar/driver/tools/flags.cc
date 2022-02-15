@@ -159,7 +159,6 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(while_loop_brute_force_max_trip_count)
     ADD_FLAG(max_compilation_threads)
     ADD_FLAG(max_infeed_threads)
-    ADD_FLAG(save_vertex_graph)
     ADD_FLAG(executable_cache_path)
     ADD_FLAG(dump_schedule_as_dot)
     ADD_FLAG(tensor_map_file_path)
@@ -173,7 +172,6 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(sync_replica_start)
     ADD_FLAG(enable_hlo_verifier)
     ADD_FLAG(disable_poplar_version_check)
-
 // clang-format on
 #undef ADD_FLAG
 #undef ADD_DEPRECATED_FLAG
@@ -211,6 +209,12 @@ PoplarXlaFlags::PoplarXlaFlags() {
     LOG(FATAL) << "The flag \"synthetic_data_initializer\" can only be used "
                   "in combination with \"use_synthetic_data\" or "
                   "\"synthetic_data_categories\".";
+  }
+
+  if (!save_vertex_graph.empty()) {
+    LOG(INFO) << "The flag \"save_vertex_graph\" is now non-functional. Please "
+                 "use the `target.saveOutputVertexGraph` Poplar engine option "
+                 "instead.";
   }
 
   // Hash all the flags which affect the graph generation and compilation only.

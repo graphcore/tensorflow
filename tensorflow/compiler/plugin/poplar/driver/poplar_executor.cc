@@ -1896,10 +1896,6 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     option_flags_.set("debug.allowOutOfMemory", "true");
   }
 
-  if (!PoplarXlaFlags::Get().save_vertex_graph.empty()) {
-    option_flags_.set("debug.retainDebugInformation", "true");
-  }
-
   for (const auto& opt : option_flags_) {
     VLOG(1) << "Engine option: " << opt.first << " = " << opt.second;
   }
