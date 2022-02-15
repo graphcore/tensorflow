@@ -1757,34 +1757,84 @@ Status AlgebraicSimplifierVisitor::HandleBroadcast(HloInstruction* broadcast) {
 Status AlgebraicSimplifierVisitor::HandleCompare(HloInstruction* compare) {
   HloInstruction* lhs;
   HloInstruction* rhs;
-  HloInstruction* lhs_delta;
-
-  // Canonicalizing: Replacing compare(X +/- C, Y) => compare(X, Y -/+ C)
-  // This allows constant folding on the right hand side later.
-  if (Match(compare,
-            m::Compare(m::Add(m::Op(&lhs), m::ConstantScalar(&lhs_delta)),
-                       m::Op(&rhs)))) {
-    const HloInstruction* add = compare->operand(0);
-    return ReplaceWithNewInstruction(
-        compare,
-        compare->CloneWithNewOperands(
-            compare->shape(),
-            {lhs, computation_->AddInstruction(HloInstruction::CreateBinary(
-                      add->shape(), HloOpcode::kSubtract, rhs, lhs_delta))}));
-  } else if (Match(compare,
-                   m::Compare(m::Add(m::Op(&lhs),
-                                     m::Negate(m::ConstantScalar(&lhs_delta))),
-                              m::Op(&rhs)))) {
-    const HloInstruction* add = compare->operand(0);
-    return ReplaceWithNewInstruction(
-        compare,
-        compare->CloneWithNewOperands(
-            compare->shape(),
-            {lhs, computation_->AddInstruction(HloInstruction::CreateBinary(
-                      add->shape(), HloOpcode::kAdd, rhs, lhs_delta))}));
+  CHECK(Match(compare, m::Compare(m::Op(&lhs), m::Op(&rhs))));
+  {
+    // compare(broadcast(a) + x, broadcast(b)) ==>
+    //   compare(x, broadcast(b-a)), only enabled for integral types.
+    HloInstruction *x, *a, *b;
+    if (Match(compare,
+              m::Compare(
+                  m::AddAnyOrder(m::Op(&x), m::Broadcast(m::Op(&a).WithShape(
+                                                m::Shape().IsScalar()))),
+                  m::Broadcast(m::Op(&b).WithShape(m::Shape().IsScalar()))))) {
+      if (ShapeUtil::ElementIsSigned(x->shape()) &&
+          ShapeUtil::ElementIsIntegral(x->shape())) {
+        HloInstruction* sub =
+            computation_->AddInstruction(HloInstruction::CreateBinary(
+                b->shape(), HloOpcode::kSubtract, b, a));
+        HloInstruction* broadcast = computation_->AddInstruction(
+            HloInstruction::CreateBroadcast(x->shape(), sub, {}));
+        HloInstruction* new_compare = PreserveFrontendAttributesIfNeeded(
+            computation_->AddInstruction(
+                HloInstruction::CreateCompare(compare->shape(), x, broadcast,
+                                              compare->comparison_direction())),
+            compare);
+        return ReplaceInstruction(compare, new_compare);
+      }
+    }
   }
 
-  CHECK(Match(compare, m::Compare(m::Op(&lhs), m::Op(&rhs))));
+  {
+    HloInstruction* lhs_delta;
+    // Canonicalizing: Replacing compare(X +/- C, Y) => compare(X, Y -/+ C)
+    // This allows constant folding on the right hand side later.
+    if (Match(compare,
+              m::Compare(m::Add(m::Op(&lhs), m::ConstantScalar(&lhs_delta)),
+                         m::Op(&rhs)))) {
+      const HloInstruction* add = compare->operand(0);
+      return ReplaceWithNewInstruction(
+          compare,
+          compare->CloneWithNewOperands(
+              compare->shape(),
+              {lhs, computation_->AddInstruction(HloInstruction::CreateBinary(
+                        add->shape(), HloOpcode::kSubtract, rhs, lhs_delta))}));
+    } else if (Match(compare,
+                     m::Compare(m::Add(m::Op(&lhs), m::Negate(m::ConstantScalar(
+                                                        &lhs_delta))),
+                                m::Op(&rhs)))) {
+      const HloInstruction* add = compare->operand(0);
+      return ReplaceWithNewInstruction(
+          compare,
+          compare->CloneWithNewOperands(
+              compare->shape(),
+              {lhs, computation_->AddInstruction(HloInstruction::CreateBinary(
+                        add->shape(), HloOpcode::kAdd, rhs, lhs_delta))}));
+    }
+  }
+
+  if (Cast<HloCompareInstruction>(compare)->type() ==
+      Comparison::Type::kUnsigned) {
+    // X u<  0 -> false
+    if (compare->comparison_direction() == ComparisonDirection::kLt &&
+        pp::algebraic_simplifier::util::IsAll(rhs, 0)) {
+      return ReplaceInstruction(compare, MakeScalarLike(compare, false));
+    }
+    // X u>= 0 -> true
+    if (compare->comparison_direction() == ComparisonDirection::kGe &&
+        pp::algebraic_simplifier::util::IsAll(rhs, 0)) {
+      return ReplaceInstruction(compare, MakeScalarLike(compare, true));
+    }
+    // 0 u>  X -> false
+    if (compare->comparison_direction() == ComparisonDirection::kGt &&
+        pp::algebraic_simplifier::util::IsAll(lhs, 0)) {
+      return ReplaceInstruction(compare, MakeScalarLike(compare, false));
+    }
+    // 0 u<= X -> true
+    if (compare->comparison_direction() == ComparisonDirection::kLe &&
+        pp::algebraic_simplifier::util::IsAll(lhs, 0)) {
+      return ReplaceInstruction(compare, MakeScalarLike(compare, true));
+    }
+  }
 
   auto replace_with_pred_broadcast = [&](bool value) {
     return ReplaceWithNewInstruction(
@@ -2514,16 +2564,52 @@ Status AlgebraicSimplifierVisitor::HandleReshape(HloInstruction* reshape) {
     }
   }
 
-  // reshape(iota) -> iota.
+  // reshape(iota) -> iota or a mixed radix calculation like
+  // s32[2,3,4] reshape(s32[24] iota()) to
+  // add(
+  //    add(s32[2,3,4] iota() iota_dimension=2,
+  //        4 * s32[2,3,4] iota() iota_dimension=1),
+  //    12 * s32[2,3,4] iota() iota_dimension=0).
   if (operand->opcode() == HloOpcode::kIota) {
     auto* iota = Cast<HloIotaInstruction>(operand);
     auto opt_dims =
         ReshapeLeavesDimensionsUnmodified(reshape, {iota->iota_dimension()});
-    if (opt_dims.has_value()) {
-      CHECK_EQ(opt_dims->size(), 1);
-      return ReplaceWithNewInstruction(
-          reshape,
-          HloInstruction::CreateIota(reshape->shape(), opt_dims->front()));
+    auto common_factors =
+        CommonFactors(reshape->operand(0)->shape().dimensions(),
+                      reshape->shape().dimensions());
+    auto iota_dim = absl::c_find_if(
+        common_factors, [&](const std::pair<int64, int64>& dim_pair) {
+          return dim_pair.first == iota->iota_dimension() &&
+                 reshape->shape().dimensions(dim_pair.second) > 1;
+        });
+    auto next_dim = absl::c_find_if(
+        common_factors, [&](const std::pair<int64, int64>& dim_pair) {
+          return dim_pair.first == iota->iota_dimension() + 1;
+        });
+    if (iota_dim != common_factors.end() && next_dim != common_factors.end()) {
+      int64 multiplier = 1;
+      HloInstruction* new_reshape = nullptr;
+
+      for (int64 dim = (iota_dim + 1)->second - 1; dim >= iota_dim->second;
+           --dim) {
+        HloInstruction* new_iota = computation_->AddInstruction(
+            HloInstruction::CreateIota(reshape->shape(), dim));
+        iota->SetupDerivedInstruction(new_iota);
+        if (new_reshape) {
+          new_reshape =
+              computation_->AddInstruction(HloInstruction::CreateBinary(
+                  reshape->shape(), HloOpcode::kAdd, new_reshape,
+                  computation_->AddInstruction(HloInstruction::CreateBinary(
+                      reshape->shape(), HloOpcode::kMultiply, new_iota,
+                      MakeScalarLike(reshape, multiplier)))));
+          reshape->SetupDerivedInstruction(new_reshape);
+        } else {
+          new_reshape = new_iota;
+        }
+        multiplier *= reshape->shape().dimensions(dim);
+      }
+      reshape->SetupDerivedInstruction(new_reshape);
+      return ReplaceInstruction(reshape, new_reshape);
     }
   }
 
@@ -2825,19 +2911,24 @@ Status AlgebraicSimplifierVisitor::HandleDynamicUpdateSlice(
           compatible = false;
           break;
         }
-        VLOG(2) << "slice :" << slice_dim_start->ToString();
+        VLOG(2) << "slice: " << slice_dim_start->ToString();
         absl::optional<int64> beg =
             slice_dim_start->literal().GetFirstInteger();
         if (!beg) {
           compatible = false;
           break;
         }
-        VLOG(2) << "beg value:" << *beg;
+        VLOG(2) << "beg value: " << *beg;
         auto update_width = ShapeUtil::GetDimension(update_shape, dim);
         auto bcast_width = ShapeUtil::GetDimension(updated_shape, dim);
+        // Clamp beg so that it is non-negative.
+        *beg = std::max<int64>(0, *beg);
+        // Clamp beg so that it is in-bounds.
+        *beg = std::min<int64>(bcast_width - update_width, *beg);
+        VLOG(2) << "adjusted beg value: " << *beg;
         padding_config_dim->set_edge_padding_low(*beg);
-        padding_config_dim->set_edge_padding_high(
-            std::max(bcast_width - (*beg + update_width), int64{0}));
+        padding_config_dim->set_edge_padding_high(bcast_width -
+                                                  (*beg + update_width));
         // dynamic_update_slice does not specify a stride
         padding_config_dim->set_interior_padding(0);
       }
@@ -3217,6 +3308,11 @@ Status AlgebraicSimplifierVisitor::HandleReduce(HloInstruction* hlo) {
 
 Status AlgebraicSimplifierVisitor::HandleReduceWindow(
     HloInstruction* reduce_window) {
+  // TODO(b/73062247) Variadic reduce window is not yet supported in simplifier.
+  if (reduce_window->shape().IsTuple()) {
+    return Status::OK();
+  }
+
   if (ShapeUtil::IsZeroElementArray(reduce_window->operand(0)->shape())) {
     return ReplaceWithNewInstruction(
         reduce_window,

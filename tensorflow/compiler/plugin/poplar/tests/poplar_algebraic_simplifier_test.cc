@@ -2406,6 +2406,56 @@ TEST_F(PoplarAlgebraicSimplifierTest, IotaAndReshapeMerged) {
       ShapeUtil::Equal(computation->root_instruction()->shape(), result_shape));
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, IotaAndReshapeToMixedRadix) {
+  auto m = CreateNewVerifiedModule();
+  HloComputation::Builder builder(TestName());
+  auto iota = builder.AddInstruction(
+      HloInstruction::CreateIota(ShapeUtil::MakeShape(F32, {21}), 0));
+  Shape result_shape = ShapeUtil::MakeShape(F32, {7, 3});
+  builder.AddInstruction(HloInstruction::CreateReshape(result_shape, iota));
+
+  auto computation = m->AddEntryComputation(builder.Build());
+
+  EXPECT_THAT(computation->root_instruction(),
+              GmockMatch(m::Reshape(m::Iota())));
+
+  PoplarAlgebraicSimplifier simplifier;
+  ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+
+  EXPECT_THAT(computation->root_instruction(),
+              GmockMatch(m::Add(
+                  m::Iota(),
+                  m::Multiply(m::Iota(), m::Broadcast(m::ConstantScalar())))));
+  EXPECT_TRUE(
+      ShapeUtil::Equal(computation->root_instruction()->shape(), result_shape));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, IotaAndReshapeToMixedRadixExtraDims) {
+  auto m = CreateNewVerifiedModule();
+  HloComputation::Builder builder(TestName());
+  auto iota = builder.AddInstruction(
+      HloInstruction::CreateIota(ShapeUtil::MakeShape(F32, {42, 24, 15}), 1));
+  Shape result_shape = ShapeUtil::MakeShape(F32, {3, 14, 4, 3, 2, 5, 3});
+  builder.AddInstruction(HloInstruction::CreateReshape(result_shape, iota));
+
+  auto computation = m->AddEntryComputation(builder.Build());
+
+  EXPECT_THAT(computation->root_instruction(),
+              GmockMatch(m::Reshape(m::Iota())));
+
+  PoplarAlgebraicSimplifier simplifier;
+  ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+
+  EXPECT_THAT(
+      computation->root_instruction(),
+      GmockMatch(m::Add(
+          m::Add(m::Iota(),
+                 m::Multiply(m::Iota(), m::Broadcast(m::ConstantScalar()))),
+          m::Multiply(m::Iota(), m::Broadcast(m::ConstantScalar())))));
+  EXPECT_TRUE(
+      ShapeUtil::Equal(computation->root_instruction()->shape(), result_shape));
+}
+
 TEST_F(PoplarAlgebraicSimplifierTest, IotaEffectiveScalar) {
   auto m = CreateNewVerifiedModule();
   HloComputation::Builder builder(TestName());
@@ -5051,6 +5101,121 @@ TEST_F(PoplarAlgebraicSimplifierTest, CompareIota) {
               GmockMatch(m::Broadcast(m::ConstantScalar(false))));
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, CompareLtZero) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      zero = u32[] constant(0)
+      param = u32[] parameter(0)
+      ROOT compare = pred[] compare(param, zero), direction=LT
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::ConstantScalar(false)));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, CompareLeZero) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      zero = u32[] constant(0)
+      param = u32[] parameter(0)
+      ROOT compare = pred[] compare(param, zero), direction=LE
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_FALSE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Le(m::Parameter(0), m::ConstantEffectiveScalar(0))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, CompareGeZero) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      zero = u32[] constant(0)
+      param = u32[] parameter(0)
+      ROOT compare = pred[] compare(param, zero), direction=GE
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::ConstantScalar(true)));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, CompareGtZero) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      zero = u32[] constant(0)
+      param = u32[] parameter(0)
+      ROOT compare = pred[] compare(param, zero), direction=GT
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Gt(m::Parameter(0), m::ConstantEffectiveScalar(0))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, CompareZeroGt) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      zero = u32[] constant(0)
+      param = u32[] parameter(0)
+      ROOT compare = pred[] compare(zero, param), direction=GT
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::ConstantScalar(false)));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, CompareZeroGe) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      zero = u32[] constant(0)
+      param = u32[] parameter(0)
+      ROOT compare = pred[] compare(zero, param), direction=GE
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_FALSE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Ge(m::ConstantEffectiveScalar(0), m::Parameter(0))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, CompareZeroLe) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      zero = u32[] constant(0)
+      param = u32[] parameter(0)
+      ROOT compare = pred[] compare(zero, param), direction=LE
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::ConstantScalar(true)));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, CompareZeroLt) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      zero = u32[] constant(0)
+      param = u32[] parameter(0)
+      ROOT compare = pred[] compare(zero, param), direction=LT
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_FALSE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Lt(m::ConstantEffectiveScalar(0), m::Parameter(0))));
+}
+
 TEST_F(PoplarAlgebraicSimplifierTest, CompareSame) {
   const char* kModuleStr = R"(
   HloModule m
@@ -5908,6 +6073,36 @@ TEST_F(PoplarAlgebraicSimplifierTest, MultipleDotStrengthReductions) {
   ASSERT_TRUE(PoplarAlgebraicSimplifier(config).Run(m.get()).ValueOrDie());
   EXPECT_EQ(3, m->computation_count());
 }
+
+// Test that dynamic-update-slice with a scalar broadcast becomes a pad when the
+// start_indices are too big.
+TEST_F(PoplarAlgebraicSimplifierTest, DynamicUpdateSliceOfBroadcastToPadOob) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  constant.546 = f32[] constant(0)
+  broadcast.467 = f32[2]{0} broadcast(constant.546), dimensions={}
+  parameter.1 = f32[1]{0} parameter(0)
+  constant.551 = s32[] constant(2)
+  ROOT dynamic-update-slice.44 = f32[2]{0} dynamic-update-slice(broadcast.467, parameter.1, constant.551)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  VLOG(2) << "Before rewrite dus->pad\n" << module->ToString();
+  PoplarAlgebraicSimplifier simplifier;
+  ASSERT_TRUE(simplifier.Run(module.get()).ValueOrDie());
+  VLOG(2) << "After rewrite dus->pad\n" << module->ToString();
+  auto* pad = module->entry_computation()->root_instruction();
+  EXPECT_THAT(pad,
+              GmockMatch(m::Pad(m::Parameter(0), m::ConstantScalar(0.0f))));
+  EXPECT_FALSE(HasInteriorPadding(pad->padding_config()));
+  ASSERT_EQ(pad->padding_config().dimensions_size(), 1);
+  EXPECT_EQ(pad->padding_config().dimensions(0).edge_padding_low(), 1);
+  EXPECT_EQ(pad->padding_config().dimensions(0).edge_padding_high(), 0);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
