@@ -54,7 +54,7 @@ ________________
   These will require changes to any code that uses them.
 
 Removal of deprecated APIs
-''''''''''''''''''''''''''''
+''''''''''''''''''''''''''
   - `IpuConfig.floating_point_behaviour.esr` may no longer be assigned a boolean
   value (deprecated in Poplar SDK version 2.4). Doing so will now raise a
   `ValueError`. From Poplar SDK version 2.5 onwards,
@@ -82,6 +82,12 @@ Removal of deprecated APIs
   [PopVision](https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/profiler.html)
   suite of tools should be used instead. Additionally, the `compile_summary`
   parameter of `IPURunConfig` has been removed.
+
+Other
+'''''
+
+  - The flag ``save_vertex_graph`` from ``TF_POPLAR_FLAGS`` is now non-functional.
+  Please use the ``target.saveOutputVertexGraph`` Poplar engine option instead.
 
 Release 2.4
 ~~~~~~~~~~~

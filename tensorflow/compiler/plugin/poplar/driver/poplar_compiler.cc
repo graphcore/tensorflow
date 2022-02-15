@@ -1857,15 +1857,6 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     progs.push_back(main_program);
     progs.push_back(visitor.GetDeviceToHost());
 
-    if (!PoplarXlaFlags::Get().save_vertex_graph.empty()) {
-      auto filename =
-          tensorflow::io::JoinPath(PoplarXlaFlags::Get().save_vertex_graph,
-                                   module->name() + ".vertex_graph");
-      VLOG(1) << "Dumping vertex graph " << filename;
-      std::ofstream stream(filename);
-      main_graph.outputVertexGraph(stream, progs);
-    }
-
     std::string map_json = "";
     if (enable_trace_events) {
       // Only generate the mapping json when explicitly requested as it is an

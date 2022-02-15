@@ -2901,16 +2901,6 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
-    name = "dump_poplar_info",
-    size = "large",
-    srcs = ["tests/dump_poplar_info.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        ":test_utils_py",
-    ],
-)
-
-tf_xla_py_test(
     name = "candidate_sampler_test",
     size = "large",
     srcs = ["tests/candidate_sampler_test.py"],
@@ -3549,7 +3539,6 @@ test_suite(
         "distributed_batch_norm_decomposer_test",
         "distributed_batch_norm_test",
         "dummy_input_test",
-        "dump_poplar_info",
         "dynamic_slice_layout_test",
         "dynamic_slice_replacement_test",
         "dynamic_slice_test",
