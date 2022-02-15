@@ -16,6 +16,8 @@
 Embedded application runtime
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
+
+import popef
 from tensorflow.compiler.plugin.poplar.ops import gen_application_runtime
 from tensorflow.compiler.plugin.poplar.ops import gen_dataset_exporters
 from tensorflow.python.client import session as session_lib
@@ -89,19 +91,21 @@ class RuntimeContext:
             self.signature().streamed_outputs))
 
 
-def _find_opaque_blob(filename):
+def _find_opaque_blob(filename_tensor):
   opq_blobs = None
 
   # Get the serialized output.
   if executing_eagerly():
-    opq_blobs = gen_dataset_exporters.popef_unwrapper(filename).numpy()
+    path = filename_tensor.numpy()
   else:
-    g = ops.Graph()
-    with g.as_default():
-      with ops.device("CPU"):
-        with session_lib.Session(graph=g) as s:
-          opq_blobs = s.run(gen_dataset_exporters.popef_unwrapper(filename))
-  return opq_blobs[0]
+    with ops.device("CPU"):
+      with session_lib.Session().as_default():
+        path = filename_tensor.eval()
+
+  r = popef.Reader()
+  r.parseFile(path)
+  opq_blobs = r.opaqueBlobs()[0].data()
+  return opq_blobs
 
 
 def embedded_runtime_start(executable_file, inputs, name, timeout=None):
@@ -109,7 +113,7 @@ def embedded_runtime_start(executable_file, inputs, name, timeout=None):
   Create and start an application runtime from a TF poplar executable.
 
   Args:
-    executable_file: The path to the executable file.
+    executable_file: The path to the executable file (given as string or Tensor)
     inputs: The initial input tensors.
     name: The name of the application runtime instance.
     timeout: An integer indicating how long (measured in microseconds)
@@ -123,10 +127,15 @@ def embedded_runtime_start(executable_file, inputs, name, timeout=None):
     An embedded application runtime context instance.
   """
 
+  # Check if the path to executable is constant (passed as string scalar)
+  # or should be deduced in runtime from string Tensor passed in
+  executable_file_tensor = ops.convert_to_tensor(executable_file,
+                                                 dtype=dtypes.string)
+
   timeout = timeout or 5000
 
   # Open the executable file.
-  opq_blob = _find_opaque_blob(executable_file)
+  opq_blob = _find_opaque_blob(executable_file_tensor)
 
   # Assert that the expected protobuf size is less than 128MB.
   # That is probably overkill, but it stops us trying to load HUGE files because we have nonsense data.
@@ -192,12 +201,12 @@ def embedded_runtime_start(executable_file, inputs, name, timeout=None):
 
   # Create the context object that contains all the information required to
   # call the embedded runtime.
-  return RuntimeContext(
-      name, executable_file, poplar_exec,
-      gen_application_runtime.application_runtime(inputs=reordered_inputs,
-                                                  filename=executable_file,
-                                                  engine_name=name,
-                                                  timeout_us=timeout))
+  app_runtime = gen_application_runtime.application_runtime(
+      inputs=reordered_inputs,
+      filename=executable_file_tensor,
+      engine_name=name,
+      timeout_us=timeout)
+  return RuntimeContext(name, executable_file, poplar_exec, app_runtime)
 
 
 def embedded_runtime_call(inputs, context):
