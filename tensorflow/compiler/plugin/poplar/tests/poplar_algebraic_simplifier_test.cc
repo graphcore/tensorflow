@@ -5925,6 +5925,43 @@ TEST_F(PoplarAlgebraicSimplifierTest, MultipleDotStrengthReductions) {
   ASSERT_TRUE(PoplarAlgebraicSimplifier(config).Run(m.get()).ValueOrDie());
   EXPECT_EQ(3, m->computation_count());
 }
+
+TEST_F(PoplarAlgebraicSimplifierTest, AndIdentical) {
+  constexpr char kModuleStr[] = R"(
+    HloModule test
+    ENTRY test {
+      input = s32[] parameter(0)
+      constant.107 = s32[] constant(1)
+      compare.13 = pred[] compare(input, constant.107), direction=LT
+      ROOT and.4 = pred[] and(compare.13, compare.13)
+    }
+
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  IpuOptions_IpuAlgebraicSimplifierConfig config;
+  ASSERT_TRUE(PoplarAlgebraicSimplifier(config).Run(m.get()).ValueOrDie());
+  EXPECT_EQ(m->entry_computation()->root_instruction()->opcode(),
+            HloOpcode::kCompare);
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, OrIdentical) {
+  constexpr char kModuleStr[] = R"(
+    HloModule test
+    ENTRY test {
+      input = s32[] parameter(0)
+      constant.107 = s32[] constant(1)
+      compare.13 = pred[] compare(input, constant.107), direction=LT
+      ROOT or.4 = pred[] or(compare.13, compare.13)
+    }
+
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  IpuOptions_IpuAlgebraicSimplifierConfig config;
+  ASSERT_TRUE(PoplarAlgebraicSimplifier(config).Run(m.get()).ValueOrDie());
+  EXPECT_EQ(m->entry_computation()->root_instruction()->opcode(),
+            HloOpcode::kCompare);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
