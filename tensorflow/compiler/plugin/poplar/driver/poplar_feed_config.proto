@@ -31,4 +31,7 @@ message PoplarFeedConfig {
 	// Whether the feed sequence is reusable because this feed id has multiple
 	// uses.
 	bool reusable = 6;
+
+	// Whether to focus on latency over throughput
+	bool optimise_latency = 7;
 };

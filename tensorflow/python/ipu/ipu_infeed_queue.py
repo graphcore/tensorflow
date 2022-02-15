@@ -96,7 +96,11 @@ class IPUInfeedQueue:
       result = sess.run(res)
 
   """
-  def __init__(self, dataset, device_ordinal=0, prefetch_depth=None):
+  def __init__(self,
+               dataset,
+               device_ordinal=0,
+               prefetch_depth=None,
+               optimise_latency=False):
     """Creates an IPUInfeedQueue object.
 
     Args:
@@ -113,6 +117,10 @@ class IPUInfeedQueue:
         increasing the probability there will be a valid entry in the buffer for
         the device to read before falling back to synchronously fetching the
         next entry. This value has to be greater than zero.
+      optimise_latency: Prioritise packet reduction to try to speed up the
+        the host transfer. This has the downside that it will introduce an
+        extra copy and so should only be used on small exchanges that will
+        produce lots of packets.
 
     Raises:
       ValueError: if all dimensions of shapes of dataset.output_shapes are not
@@ -144,6 +152,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       self._flat_structure = dataset._flat_structure
       self._device_ordinal = device_ordinal
       self._prefetch_depth = prefetch_depth
+      self._optimise_latency = optimise_latency
 
       # Apply the dataset options - do this before replica handling to make sure
       # all the optimizations can be applied.
@@ -187,6 +196,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
     flat_ret = gen_pop_datastream_ops.pop_datastream_infeed_dequeue(
         feed_id=self._id,
         prefetch_depth=self._prefetch_depth,
+        optimise_latency=self._optimise_latency,
         **self._flat_structure)
     self._dequeued = True
     return structure.from_tensor_list(self._structure, flat_ret)

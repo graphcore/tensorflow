@@ -33,6 +33,35 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+StatusOr<poplar::program::Sequence*>
+RepeatLoopOverlapIOVisitor::GetSequenceForInstruction(
+    const HloInstruction* inst) {
+  switch (inst->opcode()) {
+    case HloOpcode::kOutfeed: {
+      return &outfeed_sequence_;
+    }
+    case HloOpcode::kInfeed: {
+      return &infeed_sequence_;
+    }
+    default: { return FailedPrecondition("Unsupported instruction type"); }
+  }
+}
+
+Status RepeatLoopOverlapIOVisitor::AppendSequenceGroupedByInstruction(
+    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+  TF_ASSIGN_OR_RETURN(auto to_update, GetSequenceForInstruction(inst));
+  to_update->add(seq);
+  return Status::OK();
+}
+
+Status RepeatLoopOverlapIOVisitor::PrependSequenceGroupedByInstruction(
+    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+  TF_ASSIGN_OR_RETURN(auto to_update, GetSequenceForInstruction(inst));
+  *to_update =
+      poplar::program::Sequence({seq, *to_update}, GetDebugNameAndId(inst));
+  return Status::OK();
+}
+
 Status RepeatLoopOverlapIOVisitor::AddSequenceForInstruction(
     const HloInstruction* inst, const poplar::program::Sequence& seq) {
   switch (inst->opcode()) {

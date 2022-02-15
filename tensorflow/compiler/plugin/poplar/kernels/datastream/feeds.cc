@@ -79,11 +79,15 @@ void GetFeedConfig(OpKernelConstruction* ctx,
   std::string feed_id;
   int64 prefetch_depth;
   std::vector<tensorflow::DataType> types;
+  bool optimise_latency;
   OP_REQUIRES_OK(ctx, ctx->GetAttr("output_types", &types));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("feed_id", &feed_id));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("prefetch_depth", &prefetch_depth));
+  OP_REQUIRES_OK(ctx, ctx->GetAttr("optimise_latency", &optimise_latency));
+
   config.set_feed_id(feed_id);
   config.set_prefetch_depth(prefetch_depth);
+  config.set_optimise_latency(optimise_latency);
 
   OP_REQUIRES(
       ctx, 0 < prefetch_depth,

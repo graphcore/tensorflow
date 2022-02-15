@@ -339,9 +339,7 @@ Status DeferredVisitor::ExitVariableScope() {
 
 Status DeferredVisitor::AddSequenceForInstruction(
     const HloInstruction* inst, const poplar::program::Sequence& seq) {
-  if (inst->opcode() == HloOpcode::kInfeed &&
-      resources_.merge_infeed_io_copies) {
-    // Group all the copies for the infeed together in one sequence.
+  if (inst->opcode() == HloOpcode::kInfeed) {
     return BaseVisitor::AppendSequenceGroupedByInstruction(inst, seq);
   } else {
     return FullVisitor::AddSequenceForInstruction(inst, seq);
@@ -1727,11 +1725,20 @@ StatusOr<poplar::Tensor> DeferredVisitor::PostProcessInfeedAllocation(
     TensorLocation location, const Shape& shape,
     poplar::program::Sequence& sequence, poplar::Tensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  TF_ASSIGN_OR_RETURN(auto prog,
+  TF_ASSIGN_OR_RETURN(auto progs,
                       CreateInfeed(resources_, location.instruction,
                                    location.flattened_output_tuple_index, shape,
                                    tensor, debug_name_and_id));
-  sequence.add(prog);
+
+  if (resources_.merge_infeed_io_copies) {
+    TF_RETURN_IF_ERROR(PrependSequenceGroupedByInstruction(
+        location.instruction, progs.external_transfer));
+  } else {
+    TF_RETURN_IF_ERROR(AppendSequenceGroupedByInstruction(
+        location.instruction, progs.external_transfer));
+  }
+  TF_RETURN_IF_ERROR(AppendSequenceGroupedByInstruction(location.instruction,
+                                                        progs.local_transfer));
   return tensor;
 }
 
