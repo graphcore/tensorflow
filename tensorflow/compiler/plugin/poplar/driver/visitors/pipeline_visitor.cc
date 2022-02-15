@@ -622,9 +622,15 @@ static StatusOr<poplar::program::Sequence> VerifyPipelineArgumentsRuntime(
   auto cond = popops::map(
       counter_graph, std::move(condition_1) || std::move(condition_2),
       {std::move(accumulation_count_tensor)}, prog, debug_context);
-  // TODO(samuelh) when poplar provides the option to add an error message,
-  // add error messages from Fixed version
-  prog.add(poplar::program::AbortOnCondition(cond, debug_context));
+
+  std::string message = absl::StrCat(
+      "Pipeline depth is invalid. Check that pipeline depth "
+      "is divisible by the overlap length (",
+      overlap_length, ") and pipeline depth is >= ", overlap_length,
+      ".\nThis number might be called `gradient_accumulation_count`, "
+      "`gradient_accumulation_steps_per_replica` or `steps_per_execution` "
+      "depending on the API used.");
+  prog.add(poplar::program::AbortOnCondition(cond, message, debug_context));
   return prog;
 }
 
