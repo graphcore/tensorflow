@@ -89,7 +89,15 @@ static StatusOr<poplar::program::Sequence> VerifyPipelineArgumentsRuntime(
   auto cond =
       popops::map(graph, popops::expr::_1 < (overlap_length + 2),
                   {std::move(accumulation_count_tensor)}, prog, debug_context);
-  prog.add(poplar::program::AbortOnCondition(cond, debug_context));
+  std::string message = absl::StrCat(
+      "Grouped overlap pipeline depth is invalid. Check that pipeline depth"
+      " is >= the overlap length (",
+      (overlap_length + 2),
+      ").\n"
+      "This number might be called `gradient_accumulation_count`, "
+      "`gradient_accumulation_steps_per_replica` or `steps_per_execution` "
+      "depending on the API used.");
+  prog.add(poplar::program::AbortOnCondition(cond, message, debug_context));
   return prog;
 }
 
