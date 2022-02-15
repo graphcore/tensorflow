@@ -1428,12 +1428,19 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       // pass.AddPass<ConditionalSimplifier>();
       pipeline.AddPass<F16ConstantFolding>();
       pipeline.AddPass<HloConstantFolding>();
-      pipeline.AddPass<HloCSE>(true);
-      pipeline.AddPass<HloDCE>();
-      pipeline.AddPass<HloPassFix<WhileLoopInvariantCodeMotion>>(
-          /*hoist_constants=*/false, /*hoist_size_inflating_ops=*/false);
-      pipeline.AddPass<TupleSimplifier>(true);
-      pipeline.AddPass<HloPassFix<WhileLoopSimplifier>>();
+      {
+        auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+            "while-loop-optimisations", pipeline_compiler_stats.get());
+        pass.AddPass<HloDCE>();
+        pass.AddPass<HloCSE>(true);
+        pass.AddPass<PoplarAlgebraicSimplifier>(
+            poplar_executor->GetIpuOptions().algebraic_simplifier_config());
+        pass.AddPass<HloConstantFolding>();
+        pass.AddPass<HloPassFix<WhileLoopSimplifier>>();
+        pass.AddPass<HloPassFix<WhileLoopInvariantCodeMotion>>(
+            /*hoist_constants=*/false, /*hoist_size_inflating_ops=*/false);
+        pass.AddPass<TupleSimplifier>(true);
+      }
       pipeline.AddPass<WideConstFinder>();
       pipeline.AddPass<CommutativeInstructionReorderOperands>();
       {
