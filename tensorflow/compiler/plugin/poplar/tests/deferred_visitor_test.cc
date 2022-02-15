@@ -1159,6 +1159,28 @@ ENTRY cluster {
   CHECK_EQ(copy4_input, copy4_output);
 }
 
+namespace {
+class TestEntryVisitor : public EntryVisitor {
+ public:
+  using Callback =
+      std::function<void(const DeferredAllocations&, const HloInstruction*)>;
+
+  TestEntryVisitor(CompilerResources& resources, const HloComputation* comp,
+                   Callback&& callback)
+      : EntryVisitor(resources, comp), callback_(std::move(callback)) {}
+
+  Status Postprocess(HloInstruction* inst) override {
+    TF_ASSIGN_OR_RETURN(auto deferred_allocations, GetDeferredAllocations());
+    CHECK_NOTNULL(deferred_allocations);
+    callback_(*deferred_allocations, inst);
+    return EntryVisitor::Postprocess(inst);
+  }
+
+ private:
+  Callback callback_;
+};
+}  // namespace
+
 TEST_F(DeferredVisitorTest, TestCopyDeduce) {
   const string& hlo_string = R"(
 
@@ -1191,8 +1213,10 @@ ENTRY entry {
   p0 = f32[10] parameter(0)
   p1 = f32[10] parameter(1)
   p2 = f32[10] parameter(2)
-  p0.copy = f32[10] copy(p0), backend_config="{\"copy_config\":{\"clone_method\": [\"CloneMethod_DeduceNewOrderOrExpandAliases\"]}}"
-  p1.copy = f32[10] copy(p1), backend_config="{\"copy_config\":{\"clone_method\": [\"CloneMethod_DeduceNewOrderOrPreserveAliases\"]}}"
+  n0 = f32[10] negate(p0)
+  n1 = f32[10] negate(p1)
+  p0.copy = f32[10] copy(n0), backend_config="{\"copy_config\":{\"clone_method\": [\"CloneMethod_DeduceNewOrderOrExpandAliases\"]}}"
+  p1.copy = f32[10] copy(n1), backend_config="{\"copy_config\":{\"clone_method\": [\"CloneMethod_DeduceNewOrderOrPreserveAliases\"]}}"
   p2.copy = f32[10] copy(p2), backend_config="{\"copy_config\":{\"clone_method\": [\"CloneMethod_Bypass\"]}}"
   while_init = (s32[],s32[],f32[10],f32[10],f32[10]) tuple(const_0, const_1, p0.copy, p1.copy, p2.copy)
   while = (s32[],s32[],f32[10],f32[10],f32[10]) while(while_init), condition=condition, body=body
@@ -1210,16 +1234,28 @@ ENTRY entry {
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
   auto entry_computation = module->entry_computation();
-  EntryVisitor visitor(*resources.get(), entry_computation);
-  TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   HloInstruction* p0_copy = FindInstruction(module.get(), "p0.copy");
   CHECK_NOTNULL(p0_copy);
   HloInstruction* p1_copy = FindInstruction(module.get(), "p1.copy");
   CHECK_NOTNULL(p1_copy);
+  HloInstruction* p2_copy = FindInstruction(module.get(), "p2.copy");
+  CHECK_NOTNULL(p2_copy);
   // Bypass should preserve original parameter tensor
   HloInstruction* p2 = FindInstruction(module.get(), "p2");
   CHECK_NOTNULL(p2);
+
+  TestEntryVisitor visitor(
+      *resources.get(), entry_computation,
+      [&](const DeferredAllocations& deferred_allocations,
+          const HloInstruction* inst) {
+        if (inst == p0_copy || inst == p1_copy || inst == p2_copy) {
+          VLOG(1) << "Validate " << inst->name();
+          EXPECT_TRUE(deferred_allocations.IsDeferredAllocationLocation(
+              *resources, TensorLocation{inst, 0}));
+        }
+      });
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   auto tensor_map = resources->tensor_maps.GetTensorMapForComputation(
       entry_computation->name());

@@ -800,10 +800,11 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
       return Status::OK();
     }
 
-    // Defer copy if there's no allocation target and no tensor allocated.
-    // Also defer only bypass/deduce copies for now to avoid regressions.
+    // Defer copy if there's no allocation target. Currently deferring is
+    // limited to DeduceNewOrderOrPreserveAliases and
+    // DeduceNewOrderOrExpandAliases. All other copies don't defer.
     // TODO(T54942): Try deduce layout for all copies.
-    if (!allocate_now && !input && !input_subshape.IsOpaque() &&
+    if (!allocate_now && !input_subshape.IsOpaque() &&
         !input_subshape.IsToken() &&
         (clone_method == CloneMethod_DeduceNewOrderOrPreserveAliases ||
          clone_method == CloneMethod_DeduceNewOrderOrExpandAliases)) {
