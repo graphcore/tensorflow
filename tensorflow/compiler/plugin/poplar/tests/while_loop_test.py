@@ -28,6 +28,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.framework import random_seed
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.keras import layers
+from tensorflow.python.keras import losses
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import init_ops
@@ -432,6 +433,49 @@ class WhileLoopTest(xla_test.XLATestCase):
       result = sess.run(res)
       print(result)
       self.assertAllClose(result[0], [0.25, 0.25])
+
+  def testShardsInWhileLoops(self):
+    # This tests that defining multiple shards inside a while loop within a training context compiles and runs
+    with self.session() as sess:
+      dataset = tu.create_dual_increasing_dataset(3,
+                                                  data_shape=[1, 8],
+                                                  label_shape=[1, 8])
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+
+      def body(lr, inputs, labels):
+        def _step(time, inputs):
+          with ipu.scopes.ipu_shard(0):
+            inputs = layers.Dense(8)(inputs)
+          with ipu.scopes.ipu_shard(1):
+            inputs = layers.Dense(8)(inputs)
+          return (time + 1, inputs)
+
+        time_steps_t = constant_op.constant(32, dtype='int32', name='time')
+        time = constant_op.constant(0, dtype='int32', name='time')
+        (time, output) = control_flow_ops.while_loop(
+            body=_step,
+            loop_vars=(time, inputs),
+            cond=lambda time, *_: time < time_steps_t,
+            maximum_iterations=4)
+
+        loss = losses.mean_squared_error(labels, output)
+        optimizer = gradient_descent.GradientDescentOptimizer(lr)
+        train_op = optimizer.minimize(loss)
+        return lr, train_op
+
+      def my_net(lr):
+        return ipu.loops.repeat(10, body, lr, infeed_queue)
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        out = ipu.ipu_compiler.compile(my_net, [0.1])
+      cfg = ipu.config.IPUConfig()
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
+
+      sess.run(infeed_queue.initializer)
+      sess.run(variables.global_variables_initializer())
+
+      sess.run(out)
 
 
 if __name__ == "__main__":
