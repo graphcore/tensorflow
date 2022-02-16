@@ -182,7 +182,7 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
           return f(input_shape)
         return [f(shape) for shape in input_shape]
       if isinstance(input_shape, dict):
-        return {k: f(input_shape[k]) for k, shape in input_shape}
+        return {k: f(shape) for k, shape in input_shape.items()}
       return f(input_shape)
 
     def get_shape(x):

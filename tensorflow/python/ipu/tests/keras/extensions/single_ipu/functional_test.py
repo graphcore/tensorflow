@@ -513,6 +513,28 @@ class DefaultShapeInferenceBehaviorTest(keras_parameterized.TestCase):
     output = model(sample_input)
     self.assertEqual(output.shape, (1, 3))
 
+  def testModelWithDictInputs(self):
+    # pylint: disable=abstract-method
+    class Model(training_lib.Model):
+      def __init__(self):
+        super(Model, self).__init__()
+        self.dense_1 = layers.Dense(4)
+        self.dense_2 = layers.Dense(8)
+
+      def call(self, inputs):  # pylint: disable=arguments-differ
+        x1 = self.dense_1(inputs["input_1"])
+        x2 = self.dense_2(inputs["input_2"])
+        return x1, x2
+
+    model = Model()
+    sample_input = {
+        "input_1": array_ops.ones([1, 16]),
+        "input_2": array_ops.ones([1, 16]),
+    }
+    output = model(sample_input)
+    self.assertEqual(output[0].shape, (1, 4))
+    self.assertEqual(output[1].shape, (1, 8))
+
   def testNoneInShapeWithCompoundModel(self):
     # pylint: disable=abstract-method
     class BasicBlock(training_lib.Model):
