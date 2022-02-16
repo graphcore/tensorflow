@@ -3295,6 +3295,16 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "tensor_path_transform_test",
+    size = "small",
+    srcs = ["tests/tensor_path_transform_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+    ],
+)
+
 py_test(
     name = "distributed_training_example",
     size = "large",
@@ -4011,6 +4021,7 @@ test_suite(
         "synthetic_data_test",
         "synthetic_data_with_outfeeds_test",
         "tensor_array_test",
+        "tensor_path_transform_test",
         "tensorboard_tf2_example",
         "topk_onehot_test",
         "topk_test",

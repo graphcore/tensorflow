@@ -36,9 +36,26 @@ void RegisterSharedExtensions(HloOpcode opcode) {
 REGISTER_HLO_INST_EXTENSIONS(kConstant, RegisterSharedExtensions);
 REGISTER_HLO_INST_EXTENSIONS(kInfeed, RegisterSharedExtensions);
 REGISTER_HLO_INST_EXTENSIONS(kParameter, RegisterSharedExtensions);
-REGISTER_HLO_INST_EXTENSIONS(kReduce, RegisterSharedExtensions);
 REGISTER_HLO_INST_EXTENSIONS(kReduceWindow, RegisterSharedExtensions);
 REGISTER_HLO_INST_EXTENSIONS(kRng, RegisterSharedExtensions);
+
+void RegisterReduceExtensions(HloOpcode opcode) {
+  auto allocating_output = [](const HloInstruction*) { return true; };
+  RegisterHloInstructionExtension<AllocatingOutputExtension>(opcode,
+                                                             allocating_output);
+  auto do_find_consumers =
+      [](const HloInstruction* user,
+         FindConsumersExtensionParams params) -> FindConsumersExtensionResults {
+    if (params.op_index != 0) {
+      // It only makes sense to allocate through input 0.
+      return FindConsumersExtensionResults::DoNotFindConsumers();
+    }
+    return FindConsumersExtensionResults{};  // Default behaviour.
+  };
+  RegisterHloInstructionExtension<FindConsumersExtension>(opcode,
+                                                          do_find_consumers);
+}
+REGISTER_HLO_INST_EXTENSIONS(kReduce, RegisterReduceExtensions);
 
 void RegisterFuseExtensions(HloOpcode opcode) {
   auto allocating_output = [](const HloInstruction* inst) {
