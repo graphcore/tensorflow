@@ -514,6 +514,22 @@ static StatusOr<poplar::Tensor> PathTransform(
             {debug_name_and_id});
         break;
       }
+      case HloOpcode::kReduce: {
+        std::vector<size_t> slice_dims(inst->dimensions().begin(),
+                                       inst->dimensions().end());
+        std::vector<size_t> slice_dim_sizes;
+        slice_dim_sizes.reserve(slice_dims.size());
+        for (size_t slice_dim : slice_dims) {
+          slice_dim_sizes.push_back(
+              inst->operand(0)->shape().dimensions(slice_dim));
+        }
+
+        // Essentially expend the tensor in the reduce dimensions and broadcast
+        // the layout and tile mapping.
+        in = popops::createSliceableTensorFromSlice(
+            graph, in, slice_dims, slice_dim_sizes, {debug_name_and_id});
+        break;
+      }
       default: {
         // All other instructions in the path do not modify the shape
         break;
