@@ -2043,6 +2043,243 @@ main {
   EXPECT_EQ(t->sharding().tuple_elements()[1].GetUniqueDevice(), 0);
 }
 
+TEST_F(ShardingPassTest, TestRepeatCallTupleInferredFromGTEorOperands) {
+  // Tests a case where sharding for a repeat sub call (subcomp1) retrieves
+  // its tuple sharding correctly from its GTE users or operands as fallback.
+  std::string hlo_string = R"(
+HloModule top
+
+subcomp0 {
+  s00 = f16[4] parameter(0)
+  s01 = f16[4] parameter(1)
+  s02 = f16[4] add(s00, s00), sharding={maximal device=0}
+  s03 = f16[4] add(s01, s01), sharding={maximal device=1}
+  ROOT s04 = (f16[4], f16[4]) tuple(s02, s03)
+}
+
+subcomp1 {
+  s10 = f16[4] parameter(0)
+  s11 = f16[4] parameter(1)
+  s12 = f16[4] add(s10, s10)
+  s13 = f16[4] add(s11, s11)
+  ROOT s15 = (f16[4], f16[4]) tuple(s12, s13)
+}
+
+main {
+  a0 = f16[4] parameter(0)
+  a1 = f16[4] parameter(1)
+  call0 = (f16[4], f16[4]) call(a0,a1), to_apply=subcomp0, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+  gte0 = f16[4] get-tuple-element(call0), index=0
+  gte1 = f16[4] get-tuple-element(call0), index=1
+  call1 = (f16[4], f16[4]) call(gte0,gte1), to_apply=subcomp1, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+  gte3 = f16[4] get-tuple-element(call1), index=0
+  o = f16[4] add(gte0, gte3)
+  ROOT out = (f16[4]) tuple(o)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  // Subcompute 0 is first inferred
+  HloInstruction* s00 = FindInstruction(module, "s00");
+  EXPECT_EQ(s00->sharding().GetUniqueDevice(), 0);
+  HloInstruction* s01 = FindInstruction(module, "s01");
+  EXPECT_EQ(s01->sharding().GetUniqueDevice(), 1);
+  HloInstruction* a0 = FindInstruction(module, "a0");
+  EXPECT_EQ(a0->sharding().GetUniqueDevice(), 0);
+  HloInstruction* a1 = FindInstruction(module, "a1");
+
+  // Then the outer, main graph is inferred
+  EXPECT_EQ(a1->sharding().GetUniqueDevice(), 1);
+  HloInstruction* gte0 = FindInstruction(module, "gte0");
+  EXPECT_EQ(gte0->sharding().GetUniqueDevice(), 0);
+  HloInstruction* gte1 = FindInstruction(module, "gte1");
+  EXPECT_EQ(gte1->sharding().GetUniqueDevice(), 1);
+
+  // Finally, subcompute 1 is inferred from the gte users or operands if there
+  // are no users. The key sharding is s13, which should inherit IPU1 from the
+  // s11 operand rather than using the default IPU0.
+  HloInstruction* s10 = FindInstruction(module, "s10");
+  EXPECT_EQ(s10->sharding().GetUniqueDevice(), 0);
+  HloInstruction* s11 = FindInstruction(module, "s11");
+  EXPECT_EQ(s11->sharding().GetUniqueDevice(), 1);
+  HloInstruction* s12 = FindInstruction(module, "s12");
+  EXPECT_EQ(s12->sharding().GetUniqueDevice(), 0);
+  HloInstruction* s13 = FindInstruction(module, "s13");
+  EXPECT_EQ(s13->sharding().GetUniqueDevice(), 1);
+}
+
+TEST_F(ShardingPassTest, TestCallTupleInferredFromOperands) {
+  // Tests a case where sharding for a sub call (subcomp1) retrieves its tuple
+  // sharding correctly from its GTE users or operands as fallback.
+  std::string hlo_string = R"(
+HloModule top
+
+subcomp0 {
+  s00 = f16[4] parameter(0)
+  s01 = f16[4] parameter(1)
+  s02 = f16[4] add(s00, s00), sharding={maximal device=0}
+  s03 = f16[4] add(s01, s01), sharding={maximal device=1}
+  ROOT s04 = (f16[4], f16[4]) tuple(s02, s03)
+}
+
+subcomp1 {
+  s10 = f16[4] parameter(0)
+  s11 = f16[4] parameter(1)
+  s12 = f16[4] add(s10, s10)
+  s13 = f16[4] add(s11, s11)
+  ROOT s15 = (f16[4], f16[4]) tuple(s12, s13)
+}
+
+main {
+  a0 = f16[4] parameter(0)
+  a1 = f16[4] parameter(1)
+  call0 = (f16[4], f16[4]) call(a0,a1), to_apply=subcomp0
+  gte0 = f16[4] get-tuple-element(call0), index=0
+  gte1 = f16[4] get-tuple-element(call0), index=1
+  call1 = (f16[4], f16[4]) call(gte0,gte1), to_apply=subcomp1
+  gte3 = f16[4] get-tuple-element(call1), index=0
+  o = f16[4] add(gte0, gte3)
+  ROOT out = (f16[4]) tuple(o)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  // Subcompute 0 is first inferred
+  HloInstruction* s00 = FindInstruction(module, "s00");
+  EXPECT_EQ(s00->sharding().GetUniqueDevice(), 0);
+  HloInstruction* s01 = FindInstruction(module, "s01");
+  EXPECT_EQ(s01->sharding().GetUniqueDevice(), 1);
+  HloInstruction* a0 = FindInstruction(module, "a0");
+  EXPECT_EQ(a0->sharding().GetUniqueDevice(), 0);
+  HloInstruction* a1 = FindInstruction(module, "a1");
+
+  // Then the outer, main graph is inferred
+  EXPECT_EQ(a1->sharding().GetUniqueDevice(), 1);
+  HloInstruction* gte0 = FindInstruction(module, "gte0");
+  EXPECT_EQ(gte0->sharding().GetUniqueDevice(), 0);
+  HloInstruction* gte1 = FindInstruction(module, "gte1");
+  EXPECT_EQ(gte1->sharding().GetUniqueDevice(), 1);
+
+  // Finally, subcompute 1 is inferred from the gte users or operands if there
+  // are no users. The key sharding is s13, which should inherit IPU1 from the
+  // s11 operand rather than using the default IPU0.
+  HloInstruction* s10 = FindInstruction(module, "s10");
+  EXPECT_EQ(s10->sharding().GetUniqueDevice(), 0);
+  HloInstruction* s11 = FindInstruction(module, "s11");
+  EXPECT_EQ(s11->sharding().GetUniqueDevice(), 1);
+  HloInstruction* s12 = FindInstruction(module, "s12");
+  EXPECT_EQ(s12->sharding().GetUniqueDevice(), 0);
+  HloInstruction* s13 = FindInstruction(module, "s13");
+  EXPECT_EQ(s13->sharding().GetUniqueDevice(), 1);
+}
+
+TEST_F(ShardingPassTest, TestWhileCallTupleInferredFromGTEorOperands) {
+  // Tests a case where sharding for a while sub call (subcomp1) retrieves its
+  // tuple sharding correctly from its GTE users or operands as fallback.
+  std::string hlo_string = R"(
+HloModule top
+
+subcomp0 {
+  s00 = f16[4] parameter(0)
+  s01 = f16[4] parameter(1)
+  s02 = f16[4] add(s00, s00), sharding={maximal device=0}
+  s03 = f16[4] add(s01, s01), sharding={maximal device=1}
+  ROOT s04 = (f16[4], f16[4]) tuple(s02, s03)
+}
+
+subcomp1 {
+  intup = (s32[], f16[4], f16[4]) parameter(0)
+  indx = s32[] get-tuple-element(intup), index=0
+  s10 = f16[4] get-tuple-element(intup), index=1
+  s11 = f16[4] get-tuple-element(intup), index=2
+  s12 = f16[4] add(s10, s10)
+  s13 = f16[4] add(s11, s11)
+  c = s32[] constant(1)
+  add = s32[] add(indx, c)
+  ROOT s15 = (s32[], f16[4], f16[4]) tuple(add, s12, s13)
+}
+
+cond {
+  cp = (s32[], f16[4], f16[4]) parameter(0)
+  gte = s32[] get-tuple-element(cp), index=0
+  cc = s32[] constant(10)
+  ROOT lt = pred[] compare(gte, cc), direction=LT
+}
+
+main {
+  a0 = f16[4] parameter(0)
+  a1 = f16[4] parameter(1)
+  call0 = (f16[4], f16[4]) call(a0,a1), to_apply=subcomp0
+  gte0 = f16[4] get-tuple-element(call0), index=0
+  gte1 = f16[4] get-tuple-element(call0), index=1
+  c0 = s32[] constant(0), sharding={maximal device=0}
+  t = (s32[], f16[4], f16[4]) tuple(c0, gte0, gte1)
+  call1 = (s32[], f16[4], f16[4]) while(t), condition=cond, body=subcomp1
+  gte3 = f16[4] get-tuple-element(call1), index=1
+  o = f16[4] add(gte0, gte3)
+  ROOT out = (f16[4]) tuple(o)
+}
+  )";
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  // Subcompute 0 is first inferred
+  HloInstruction* s00 = FindInstruction(module, "s00");
+  EXPECT_EQ(s00->sharding().GetUniqueDevice(), 0);
+  HloInstruction* s01 = FindInstruction(module, "s01");
+  EXPECT_EQ(s01->sharding().GetUniqueDevice(), 1);
+  HloInstruction* a0 = FindInstruction(module, "a0");
+  EXPECT_EQ(a0->sharding().GetUniqueDevice(), 0);
+  HloInstruction* a1 = FindInstruction(module, "a1");
+
+  // Then the outer, main graph is inferred
+  EXPECT_EQ(a1->sharding().GetUniqueDevice(), 1);
+  HloInstruction* gte0 = FindInstruction(module, "gte0");
+  EXPECT_EQ(gte0->sharding().GetUniqueDevice(), 0);
+  HloInstruction* gte1 = FindInstruction(module, "gte1");
+  EXPECT_EQ(gte1->sharding().GetUniqueDevice(), 1);
+
+  // Finally, subcompute 1 is inferred from the gte users or operands if there
+  // are no users. The key sharding is s13, which should inherit IPU1 from the
+  // s11 operand rather than using the default IPU0.
+  HloInstruction* s10 = FindInstruction(module, "s10");
+  EXPECT_EQ(s10->sharding().GetUniqueDevice(), 0);
+  HloInstruction* s11 = FindInstruction(module, "s11");
+  EXPECT_EQ(s11->sharding().GetUniqueDevice(), 1);
+  HloInstruction* s12 = FindInstruction(module, "s12");
+  EXPECT_EQ(s12->sharding().GetUniqueDevice(), 0);
+  HloInstruction* s13 = FindInstruction(module, "s13");
+  EXPECT_EQ(s13->sharding().GetUniqueDevice(), 1);
+}
+
 struct WithinReplicaOpSharingPassTest : ParameterizedHloTestFixture<> {
   // Empty override as the default tries to setup the hlo module, which we cant
   // since the hlo string is just a template and needs to be filled in.
@@ -2062,49 +2299,6 @@ struct WithinReplicaOpSharingPassTest : ParameterizedHloTestFixture<> {
 
   int shard_count_ = 4;
 };
-
-TEST_P(WithinReplicaOpSharingPassTest, ShardingInfoOfUsers) {
-  // Setup HLO with simple constant inputs
-  const std::string sharded_input = R"(
-  shard0 = f32[2] constant(0), sharding={maximal device=0}
-  shard1 = f32[2] constant(1), sharding={maximal device=1}
-  shard2 = f32[2] constant(2), sharding={maximal device=2}
-  shard3 = f32[2] constant(3), sharding={maximal device=3}
-  )";
-  const auto full_hlo_string =
-      absl::StrReplaceAll(GetParam().hlo, {{"$SHARDED_INPUT", sharded_input}});
-  ASSERT_TRUE(SetUpHloModule(full_hlo_string));
-
-  TF_ASSERT_OK_AND_ASSIGN(bool success, CustomOpReplacer().Run(hlo_module_));
-  ASSERT_TRUE(success);
-
-  TF_ASSERT_OK_AND_ASSIGN(success, ShardingPass().Run(hlo_module_));
-  ASSERT_TRUE(success);
-
-  const HloInstruction* within_replica_op =
-      FindWithinReplicaOpInstruction(hlo_module_->entry_computation());
-  ASSERT_TRUE(within_replica_op);
-
-  // Check that sharding info comes from the tuple and propogate to the users,
-  // so tuple[i] uses shard i as does user[i].
-  const auto within_replica_op_sharding = within_replica_op->sharding();
-  ASSERT_TRUE(within_replica_op_sharding.IsTuple());
-
-  const auto tuple_sharding = within_replica_op_sharding.tuple_elements();
-  ASSERT_EQ(tuple_sharding.size(), shard_count_);
-
-  const auto users = within_replica_op->users();
-  ASSERT_EQ(users.size(), shard_count_);
-
-  for (auto i = 0; i < shard_count_; ++i) {
-    ASSERT_TRUE(tuple_sharding[i].HasUniqueDevice());
-    ASSERT_EQ(tuple_sharding[i].GetUniqueDevice(), i)
-        << "Expected output i to be on shard/ipu i";
-
-    const auto* user = users[i];
-    ASSERT_EQ(tuple_sharding[i], user->sharding());
-  }
-}
 
 TEST_P(WithinReplicaOpSharingPassTest, ShardingInfoOfOperands) {
   const std::string sharded_input = R"(

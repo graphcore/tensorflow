@@ -87,7 +87,7 @@ bool HasShardingForOperand(const HloInstruction* inst, int operand) {
     case HloOpcode::kGetTupleElement: {
       // A GTE must be processed in collection with other GTEs, so claim that
       // there is no sharding information available on its input. See the fn
-      // CopyShardingFromUsers.
+      // CopyShardingFromTupleUsersOrOperands.
       return false;
     }
     default: {
@@ -177,11 +177,11 @@ bool CopyShardingFromUsers(HloInstruction* inst) {
     }
   }
 
-  if (!inst->shape().IsTuple()) {
-    return false;
-  }
+  return false;
+}
 
-  // Otherwise we need to find the consumer of each element that makes
+bool CopyShardingFromTupleUsersOrOperands(HloInstruction* inst) {
+  // We need to find the consumer of each element that makes
   // up the tuple. A tuple may have some of its elements unused.
   const int tuple_size = ShapeUtil::TupleElementCount(inst->shape());
   std::vector<HloInstruction*> tuple_users(tuple_size);
@@ -201,19 +201,41 @@ bool CopyShardingFromUsers(HloInstruction* inst) {
 
   std::vector<HloSharding> tuple_sharding;
   for (int tuple_index = 0; tuple_index < tuple_size; ++tuple_index) {
+    // Use default sharding if niether users nor operands sharding can be used
+    auto sharding = GetDefaultSharding(
+        ShapeUtil::GetTupleElementShape(inst->shape(), tuple_index));
     auto* user = tuple_users[tuple_index];
     if (user == nullptr) {
-      // Unused tuple outputs are just assigned a default sharding
-      auto s = GetDefaultSharding(
-          ShapeUtil::GetTupleElementShape(inst->shape(), tuple_index));
-      tuple_sharding.push_back(s);
+      // No GTE user so try to get sharding from the corresponding operand
+      // instead (only valid if inst is repeat loop)
+      if ((IsRepeatLoop(inst) || inst->opcode() == HloOpcode::kWhile)) {
+        auto op = inst->operand(tuple_index);
+        if (op->has_sharding()) {
+          sharding = GetShardingOfOutputTensor(op);
+          if (inst->operand_count() == 1) {
+            // there is one tuple operand to use for the whole input tuple
+            SetSharding(inst, sharding);
+            return true;
+          }
+        } else {
+          // Fail if repeat call tuple element has no users and the operand has
+          // no sharding
+          return false;
+        }
+      } else if (inst->opcode() == HloOpcode::kCall) {
+        // early out for kCall ops if any element has no users
+        // we cannot use operand sharding here as inputs do not match outputs
+        return false;
+      }
     } else {
       if (user->has_sharding()) {
-        tuple_sharding.push_back(GetShardingForOperand(user, 0));
+        sharding = GetShardingForOperand(user, 0);
       } else {
+        // Fail if any GTE user has no sharding set
         return false;
       }
     }
+    tuple_sharding.push_back(sharding);
   }
 
   // See HloSharding::RequiredLeaves, empty Tuples need one sharding entry
@@ -223,7 +245,6 @@ bool CopyShardingFromUsers(HloInstruction* inst) {
     auto s = GetDefaultSharding(inst->shape());
     tuple_sharding.push_back(s);
   }
-
   SetTupleShardingFromVector(inst, tuple_sharding);
   return true;
 }
@@ -354,11 +375,13 @@ bool CopyShardingToCalledComputations(const CallSite& site,
 }
 
 StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
+  VLOG(2) << "Sharding pass processing computation " << comp->name();
   bool done = false;
   while (!done) {
     done = true;
     bool made_progress = false;
     for (auto* inst : comp->MakeInstructionPostOrder()) {
+      VLOG(3) << "Sharding pass visting instruction " << inst->name();
       bool added_sharding = false;
 
       // If an instruction has no operands, and no users but the root Tuple,
@@ -380,6 +403,11 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
       // Try to take sharding from users
       if (!inst->has_sharding()) {
         added_sharding = CopyShardingFromUsers(inst);
+      }
+
+      // Try to take sharding from GTE users with fallback using operands
+      if (!inst->has_sharding() && inst->shape().IsTuple()) {
+        added_sharding = CopyShardingFromTupleUsersOrOperands(inst);
       }
 
       // gcl::allGatherWithinReplica etc have output i on the ith ipu.
@@ -420,6 +448,10 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
 
       if (!inst->has_sharding()) {
         done = false;
+      }
+      if (added_sharding) {
+        VLOG(3) << "Sharding pass inferred sharding for instruction "
+                << inst->name() << " sharding: " << inst->sharding();
       }
     }
     if (!done && !made_progress) {
