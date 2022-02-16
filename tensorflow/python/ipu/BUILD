@@ -1580,6 +1580,20 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "assume_equal_test",
+    size = "large",
+    srcs = ["tests/assume_equal_test.py"],
+    tags = ["hw_poplar_test_4_ipus"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
     name = "replicated_graph_test",
     size = "large",
     srcs = ["tests/replicated_graph_test.py"],
@@ -2033,6 +2047,7 @@ test_suite(
         "application_compile_and_run_test",
         "application_compile_test",
         "application_runtime_test",
+        "assume_equal_test",
         "automatic_loss_scaling_optimizer_test",
         "candidate_sampler_test",
         "config_test",
