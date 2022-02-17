@@ -1403,6 +1403,21 @@ Status AlgebraicSimplifierVisitor::HandleMultiply(HloInstruction* multiply) {
     return Status::OK();
   }
 
+  // A*-1 => -A
+  VLOG(10) << "trying transform [A*-1 => A]: " << multiply->ToString();
+  if (pp::algebraic_simplifier::util::IsAll(rhs, -1)) {
+    return ReplaceWithNewInstruction(
+        multiply, HloInstruction::CreateUnary(multiply->shape(),
+                                              HloOpcode::kNegate, lhs));
+  }
+  // -1*A => -A
+  VLOG(10) << "trying transform [-1*A => A]: " << multiply->ToString();
+  if (pp::algebraic_simplifier::util::IsAll(lhs, -1)) {
+    return ReplaceWithNewInstruction(
+        multiply, HloInstruction::CreateUnary(multiply->shape(),
+                                              HloOpcode::kNegate, rhs));
+  }
+
   // 0*A => 0. Only applies for integral types for correct NaN-handling, unless
   // fast math is enabled.
   if (pp::algebraic_simplifier::util::IsAll(lhs, 0) &&
