@@ -312,4 +312,7 @@ message IpuOptions {
 
   // The maximum number of bytes to wait before scheduling an all-gather
   int64 max_all_gather_buffer_size = 47;
+
+  // Option for controlling whether the DynamicSliceReplacer pass is run.
+  bool enable_dynamic_slice_replacement = 48;
 };

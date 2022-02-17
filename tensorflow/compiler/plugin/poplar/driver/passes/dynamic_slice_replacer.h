@@ -19,21 +19,17 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
+
+class HloDynamicIndexInstruction;
+
 namespace poplarplugin {
 
-// Replace dynamicSlice with multiSlice when it would stop us from
-// from going OOM.
+// Replace dynamicSlice with multiSlice.
 class DynamicSliceReplacer : public HloModulePass {
  public:
   absl::string_view name() const override { return "dynamic-slice-replacer"; }
 
-  explicit DynamicSliceReplacer(int bytes_per_tile)
-      : bytes_per_tile_(bytes_per_tile) {}
-
   StatusOr<bool> Run(HloModule* module) override;
-
- private:
-  uint32_t bytes_per_tile_;
 };
 
 }  // namespace poplarplugin
