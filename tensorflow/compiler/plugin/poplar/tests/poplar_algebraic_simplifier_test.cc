@@ -410,6 +410,36 @@ TEST_F(PoplarAlgebraicSimplifierTest, MulZeroFloatArrayLHS) {
   }
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, MulMinus1LHS) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p = s32[] parameter(0)
+      c = s32[] constant(-1)
+      ROOT r = s32[] multiply(c, p)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Negate(m::Parameter(0))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, MulMinus1RHS) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p = s32[] parameter(0)
+      c = s32[] constant(-1)
+      ROOT r = s32[] multiply(p, c)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Negate(m::Parameter(0))));
+}
+
 TEST_F(PoplarAlgebraicSimplifierTest, MultiplyReassociateMergeConstants) {
   const char* kModuleStr = R"(
     HloModule m
