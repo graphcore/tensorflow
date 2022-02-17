@@ -1279,6 +1279,17 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
     self.assertEqual(pb.algebraic_simplifier_config.enable_fast_math, False)
     self.assertEqual(pb.enable_fast_math, False)
 
+  def testOptimizationsEnableDynamicSliceReplacement(self):
+    cfg = ipu.config.IPUConfig()
+
+    cfg.optimizations.enable_dynamic_slice_replacement = False
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.enable_dynamic_slice_replacement, False)
+
+    cfg.optimizations.enable_dynamic_slice_replacement = True
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.enable_dynamic_slice_replacement, True)
+
   def testPoolingPoplarOptions(self):
     cfg = ipu.config.IPUConfig()
     pb = cfg._create_protobuf()

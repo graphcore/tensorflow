@@ -1787,6 +1787,12 @@ class _OptimizationConfig(_ConfigBase):
     guarantees of these specifications.
     """
     self.enable_fast_math = False
+    """
+    Control whether or not we replace dynamicSlice/Update with
+    multiSlice/Update. This can increase parallelism and provide better
+    memory usage since multiSlice/Update can be planned.
+    """
+    self.enable_dynamic_slice_replacement = True
 
   def _to_protobuf(self, pb):
     super()._to_protobuf(pb)  # pylint: disable=protected-access
@@ -1812,6 +1818,8 @@ class _OptimizationConfig(_ConfigBase):
         self.triangular_solve_expander_block_size
     pb.cholesky_block_size = self.cholesky_block_size
     pb.enable_fast_math = self.enable_fast_math
+    pb.enable_dynamic_slice_replacement = \
+      self.enable_dynamic_slice_replacement
 
 
 class _SchedulingConfig(_ConfigBase):

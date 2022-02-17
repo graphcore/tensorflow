@@ -60,8 +60,6 @@ struct DynamicSliceHloTest : HloPoplarTestBase,
     TF_ASSERT_OK_AND_ASSIGN(module_,
                             ParseAndReturnVerifiedModule(GetParam().first));
 
-    bytes_per_tile_ = device_.getTarget().getBytesPerTile();
-
     auto input = FindInstruction(module_.get(), "input_tensor");
     ASSERT_TRUE(input);
     input_matrix_ = std::vector<int>(ShapeUtil::ElementsIn(input->shape()), 0);
@@ -99,7 +97,6 @@ struct DynamicSliceHloTest : HloPoplarTestBase,
   }
 
   poplar::Device device_;
-  uint32_t bytes_per_tile_;
   std::unique_ptr<VerifiedHloModule> module_;
 
   std::vector<int> input_matrix_;
@@ -414,9 +411,9 @@ INSTANTIATE_TEST_SUITE_P(DynamicSliceReplacements,
                          ::testing::ValuesIn(UnsupportedTestCases()));
 
 using DynamicSliceReplacedByPassTest = DynamicSliceHloTest;
-TEST_P(DynamicSliceReplacedByPassTest, ReplacesOOMDynamicSlices) {
-  TF_ASSERT_OK_AND_ASSIGN(
-      bool replaced, DynamicSliceReplacer(bytes_per_tile_).Run(module_.get()));
+TEST_P(DynamicSliceReplacedByPassTest, Replaces) {
+  TF_ASSERT_OK_AND_ASSIGN(bool replaced,
+                          DynamicSliceReplacer().Run(module_.get()));
   ASSERT_TRUE(replaced);
 
   auto resources = GetMockResources(device_, module_.get(), 1);
@@ -432,8 +429,8 @@ TEST_P(DynamicSliceReplacedByPassTest, ReplacesOOMDynamicSlices) {
 
 using DynamicSliceSkippedByPassTest = DynamicSliceHloTest;
 TEST_P(DynamicSliceSkippedByPassTest, Skips) {
-  TF_ASSERT_OK_AND_ASSIGN(
-      bool replaced, DynamicSliceReplacer(bytes_per_tile_).Run(module_.get()));
+  TF_ASSERT_OK_AND_ASSIGN(bool replaced,
+                          DynamicSliceReplacer().Run(module_.get()));
   ASSERT_FALSE(replaced);
 
   auto resources = GetMockResources(device_, module_.get(), 1);
@@ -450,31 +447,27 @@ TEST_P(DynamicSliceSkippedByPassTest, Skips) {
   ASSERT_NO_THROW(Compile(*resources, module_.get()));
 }
 
-// We want these to be replaced as they might cause an OOM if allocated
-// with a dynamic slice
 INSTANTIATE_TEST_SUITE_P(
     DynamicSliceReplacements, DynamicSliceReplacedByPassTest,
     ::testing::Values(Slice2DInputTestCase("20000, 5", "1,5"),
                       Slice3DInputTestCase("20000, 2, 5", "1,2,5"),
                       UpdateSlice2DInputTestCase("20000, 10", "1,10"),
-                      UpdateSlice3DInputTestCase("20000, 2, 5", "1,2,5")));
-
-// We want these to be skipped since they're all quite small tensors
-// and/or a non-1d slice.
-INSTANTIATE_TEST_SUITE_P(
-    DynamicSliceReplacements, DynamicSliceSkippedByPassTest,
-    ::testing::Values(Slice2DInputTestCase("100,2", "1,2"),
+                      UpdateSlice3DInputTestCase("20000, 2, 5", "1,2,5"),
+                      Slice2DInputTestCase("100,2", "1,2"),
                       Slice3DInputTestCase("5,2,16", "1,2,16"),
-                      Slice3DInputTestCase("5,0,16", "1,0,16"),
-                      Slice3DInputTestCase("5,2,16", "2,2,16"),
-                      Slice3DInputTestCase("20000,1,16", "1,0,16"),
                       Slice3DInputTestCase("5,2,512", "1,2,512"),
                       Slice3DInputTestCase("5,512,512", "1,512,512"),
                       Slice1DInputTestCase("10"),
                       UpdateSlice3DInputTestCase("5,2,512", "1,2,512"),
                       UpdateSlice3DInputTestCase("5,512,512", "1,512,512"),
-                      UpdateSlice2DInputTestCase("100,5", "1,2"),
                       UpdateSlice1DInputTestCase("10")));
+
+// We want these to be skipped since they're not a 1d slice.
+INSTANTIATE_TEST_SUITE_P(
+    DynamicSliceReplacements, DynamicSliceSkippedByPassTest,
+    ::testing::Values(Slice3DInputTestCase("5,2,16", "2,2,16"),
+                      Slice3DInputTestCase("20000,1,16", "1,0,16"),
+                      UpdateSlice2DInputTestCase("100,5", "1,2")));
 
 }  // namespace
 }  // namespace poplarplugin
