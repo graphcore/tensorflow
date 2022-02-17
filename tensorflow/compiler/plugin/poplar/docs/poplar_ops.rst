@@ -4,6 +4,33 @@ IPU-optimised operations
 Several custom versions of operators are provided to target functions
 available in PopLibs. See the :ref:`api-section` for more details.
 
+Image operations
+~~~~~~~~~~~~~~~~
+
+Our architecture is well-suited to efficiently handle convolutions over four-channel tensors, however it is common 
+for images to be represented with three channels. 
+In order to obtain better IPU performance, both from a latency and memory standpoint, we advise that when 
+dealing with three-channel inputs, you pad the fourth channel dimension. 
+
+See :py:func:`tensorflow.python.ipu.image_ops.normalise_image` 
+for the op that can perform this padding, in addition to normalising and casting if needed. Note that this padding will be 
+performed on-device, after the data has been transferred to the IPU. 
+
+An example of its use can be found in the ``fused_normalise_image()`` function in the `CNN training application
+example <https://github.com/graphcore/examples/blob/master/applications/tensorflow/cnns/training/Datasets/imagenet_preprocessing.py>`_ 
+in Graphcore's examples repository on GitHub. 
+
+Matmul serialisation
+~~~~~~~~~~~~~~~~~~~~
+
+You have the option to serialise matrix multiplications along a particular dimension, in order to reduce 
+the code size of the multiplication and the temporary memory requirements of the matmul, at the expense of extra computation.
+
+See :py:func:`tensorflow.python.ipu.math_ops.serialized_matmul` for details of the op. 
+
+An example of its use can be found in the ``mlm_head()`` function in the `BERT application example <https://github.com/graphcore/examples/blob/master/applications/tensorflow/bert/modeling.py>`_ 
+in Graphcore's examples repository on GitHub.
+
 LSTM and GRU
 ~~~~~~~~~~~~
 
