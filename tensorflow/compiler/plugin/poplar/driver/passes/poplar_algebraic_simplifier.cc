@@ -1698,37 +1698,96 @@ Status AlgebraicSimplifierVisitor::HandleBroadcast(HloInstruction* broadcast) {
   return Status::OK();
 }
 
+namespace {
+StatusOr<ComparisonDirection> inverse_comparison_direction(
+    ComparisonDirection direction) {
+  switch (direction) {
+    case ComparisonDirection::kEq:
+      return ComparisonDirection::kEq;
+    case ComparisonDirection::kGt:
+      return ComparisonDirection::kLt;
+    case ComparisonDirection::kGe:
+      return ComparisonDirection::kLe;
+    case ComparisonDirection::kLt:
+      return ComparisonDirection::kGt;
+    case ComparisonDirection::kLe:
+      return ComparisonDirection::kGe;
+    case ComparisonDirection::kNe:
+      return ComparisonDirection::kNe;
+    default:
+      return FailedPrecondition("Invalid direction %s",
+                                ComparisonDirectionToString(direction));
+  }
+}
+}  // namespace
+
 Status AlgebraicSimplifierVisitor::HandleCompare(HloInstruction* compare) {
   HloInstruction* lhs;
   HloInstruction* rhs;
-  HloInstruction* lhs_delta;
-
-  // Canonicalizing: Replacing compare(X +/- C, Y) => compare(X, Y -/+ C)
-  // This allows constant folding on the right hand side later.
-  if (Match(compare,
-            m::Compare(m::Add(m::Op(&lhs), m::ConstantScalar(&lhs_delta)),
-                       m::Op(&rhs)))) {
-    const HloInstruction* add = compare->operand(0);
-    return ReplaceWithNewInstruction(
-        compare,
-        compare->CloneWithNewOperands(
-            compare->shape(),
-            {lhs, computation_->AddInstruction(HloInstruction::CreateBinary(
-                      add->shape(), HloOpcode::kSubtract, rhs, lhs_delta))}));
-  } else if (Match(compare,
-                   m::Compare(m::Add(m::Op(&lhs),
-                                     m::Negate(m::ConstantScalar(&lhs_delta))),
-                              m::Op(&rhs)))) {
-    const HloInstruction* add = compare->operand(0);
-    return ReplaceWithNewInstruction(
-        compare,
-        compare->CloneWithNewOperands(
-            compare->shape(),
-            {lhs, computation_->AddInstruction(HloInstruction::CreateBinary(
-                      add->shape(), HloOpcode::kAdd, rhs, lhs_delta))}));
+  CHECK(Match(compare, m::Compare(m::Op(&lhs), m::Op(&rhs))));
+  {
+    // compare(broadcast(a) + x, broadcast(b)) ==>
+    //   compare(x, broadcast(b-a)), only enabled for integral types.
+    HloInstruction *x, *a, *b;
+    if (Match(compare,
+              m::Compare(
+                  m::AddAnyOrder(m::Op(&x), m::Broadcast(m::Op(&a).WithShape(
+                                                m::Shape().IsScalar()))),
+                  m::Broadcast(m::Op(&b).WithShape(m::Shape().IsScalar()))))) {
+      if (ShapeUtil::ElementIsSigned(x->shape()) &&
+          ShapeUtil::ElementIsIntegral(x->shape())) {
+        HloInstruction* sub =
+            computation_->AddInstruction(HloInstruction::CreateBinary(
+                b->shape(), HloOpcode::kSubtract, b, a));
+        HloInstruction* broadcast = computation_->AddInstruction(
+            HloInstruction::CreateBroadcast(x->shape(), sub, {}));
+        HloInstruction* new_compare = PreserveFrontendAttributesIfNeeded(
+            computation_->AddInstruction(
+                HloInstruction::CreateCompare(compare->shape(), x, broadcast,
+                                              compare->comparison_direction())),
+            compare);
+        return ReplaceInstruction(compare, new_compare);
+      }
+    }
   }
 
-  CHECK(Match(compare, m::Compare(m::Op(&lhs), m::Op(&rhs))));
+  {
+    HloInstruction* lhs_delta;
+    // Canonicalizing: Replacing compare(X +/- C, Y) => compare(X, Y -/+ C)
+    // This allows constant folding on the right hand side later.
+    if (Match(compare,
+              m::Compare(m::Add(m::Op(&lhs), m::ConstantScalar(&lhs_delta)),
+                         m::Op(&rhs)))) {
+      const HloInstruction* add = compare->operand(0);
+      return ReplaceWithNewInstruction(
+          compare,
+          compare->CloneWithNewOperands(
+              compare->shape(),
+              {lhs, computation_->AddInstruction(HloInstruction::CreateBinary(
+                        add->shape(), HloOpcode::kSubtract, rhs, lhs_delta))}));
+    } else if (Match(compare,
+                     m::Compare(m::Add(m::Op(&lhs), m::Negate(m::ConstantScalar(
+                                                        &lhs_delta))),
+                                m::Op(&rhs)))) {
+      const HloInstruction* add = compare->operand(0);
+      return ReplaceWithNewInstruction(
+          compare,
+          compare->CloneWithNewOperands(
+              compare->shape(),
+              {lhs, computation_->AddInstruction(HloInstruction::CreateBinary(
+                        add->shape(), HloOpcode::kAdd, rhs, lhs_delta))}));
+    } else if (Match(compare,
+                     m::Compare(m::Negate(m::Op(&lhs)), m::Constant(&rhs)))) {
+      HloInstruction* new_rhs = computation_->AddInstruction(
+          HloInstruction::CreateUnary(rhs->shape(), HloOpcode::kNegate, rhs));
+      TF_ASSIGN_OR_RETURN(
+          auto new_direction,
+          inverse_comparison_direction(compare->comparison_direction()));
+      return ReplaceWithNewInstruction(
+          compare, compare->CreateCompare(compare->shape(), lhs, new_rhs,
+                                          new_direction));
+    }
+  }
 
   auto replace_with_pred_broadcast = [&](bool value) {
     return ReplaceWithNewInstruction(
