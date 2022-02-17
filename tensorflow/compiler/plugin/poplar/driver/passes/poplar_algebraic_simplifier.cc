@@ -1769,6 +1769,29 @@ Status AlgebraicSimplifierVisitor::HandleBroadcast(HloInstruction* broadcast) {
   return Status::OK();
 }
 
+namespace {
+StatusOr<ComparisonDirection> inverse_comparison_direction(
+    ComparisonDirection direction) {
+  switch (direction) {
+    case ComparisonDirection::kEq:
+      return ComparisonDirection::kEq;
+    case ComparisonDirection::kGt:
+      return ComparisonDirection::kLt;
+    case ComparisonDirection::kGe:
+      return ComparisonDirection::kLe;
+    case ComparisonDirection::kLt:
+      return ComparisonDirection::kGt;
+    case ComparisonDirection::kLe:
+      return ComparisonDirection::kGe;
+    case ComparisonDirection::kNe:
+      return ComparisonDirection::kNe;
+    default:
+      return FailedPrecondition("Invalid direction %s",
+                                ComparisonDirectionToString(direction));
+  }
+}
+}  // namespace
+
 Status AlgebraicSimplifierVisitor::HandleCompare(HloInstruction* compare) {
   HloInstruction* lhs;
   HloInstruction* rhs;
@@ -1824,6 +1847,16 @@ Status AlgebraicSimplifierVisitor::HandleCompare(HloInstruction* compare) {
               compare->shape(),
               {lhs, computation_->AddInstruction(HloInstruction::CreateBinary(
                         add->shape(), HloOpcode::kAdd, rhs, lhs_delta))}));
+    } else if (Match(compare,
+                     m::Compare(m::Negate(m::Op(&lhs)), m::Constant(&rhs)))) {
+      HloInstruction* new_rhs = computation_->AddInstruction(
+          HloInstruction::CreateUnary(rhs->shape(), HloOpcode::kNegate, rhs));
+      TF_ASSIGN_OR_RETURN(
+          auto new_direction,
+          inverse_comparison_direction(compare->comparison_direction()));
+      return ReplaceWithNewInstruction(
+          compare, compare->CreateCompare(compare->shape(), lhs, new_rhs,
+                                          new_direction));
     }
   }
 

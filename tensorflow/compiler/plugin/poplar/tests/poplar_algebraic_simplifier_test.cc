@@ -5276,6 +5276,70 @@ TEST_F(PoplarAlgebraicSimplifierTest, CompareAdd) {
               GmockMatch(m::Compare(m::Parameter(0), m::ConstantScalar(1))));
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, CompareNegate) {
+  const char* kModuleStr = R"(
+  HloModule m
+  test {
+    p = s32[4] parameter(0)
+    c1 = s32[4] constant({3, 2, 1, 0})
+    c2 = s32[4] constant({3, 2, 1, 0})
+    c3 = s32[4] constant({3, 2, 1, 0})
+    c4 = s32[4] constant({3, 2, 1, 0})
+    c5 = s32[4] constant({3, 2, 1, 0})
+    c6 = s32[4] constant({3, 2, 1, 0})
+    n = s32[4] negate(p)
+    cmp1 = pred[4] compare(n, c1), direction=LT
+    cmp2 = pred[4] compare(n, c2), direction=LE
+    cmp3 = pred[4] compare(n, c3), direction=GT
+    cmp4 = pred[4] compare(n, c4), direction=GE
+    cmp5 = pred[4] compare(n, c5), direction=EQ
+    cmp6 = pred[4] compare(n, c6), direction=NE
+
+    ROOT tuple = (pred[4], pred[4], pred[4], pred[4], pred[4], pred[4]) tuple(cmp1, cmp2, cmp3, cmp4, cmp5, cmp6)
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(
+      HloPassFix<PoplarAlgebraicSimplifier>().Run(m.get()).ValueOrDie());
+  ASSERT_TRUE(HloPassFix<HloConstantFolding>().Run(m.get()).ValueOrDie());
+
+  auto* cmp1 = FindInstruction(m.get(), "compare");
+  CHECK_NOTNULL(cmp1);
+  EXPECT_EQ(cmp1->comparison_direction(), ComparisonDirection::kGt);
+  auto* cmp2 = FindInstruction(m.get(), "compare.1");
+  CHECK_NOTNULL(cmp2);
+  EXPECT_EQ(cmp2->comparison_direction(), ComparisonDirection::kGe);
+  auto* cmp3 = FindInstruction(m.get(), "compare.2");
+  CHECK_NOTNULL(cmp3);
+  EXPECT_EQ(cmp3->comparison_direction(), ComparisonDirection::kLt);
+  auto* cmp4 = FindInstruction(m.get(), "compare.3");
+  CHECK_NOTNULL(cmp4);
+  EXPECT_EQ(cmp4->comparison_direction(), ComparisonDirection::kLe);
+  auto* cmp5 = FindInstruction(m.get(), "compare.4");
+  CHECK_NOTNULL(cmp5);
+  EXPECT_EQ(cmp5->comparison_direction(), ComparisonDirection::kEq);
+  auto* cmp6 = FindInstruction(m.get(), "compare.5");
+  CHECK_NOTNULL(cmp6);
+  EXPECT_EQ(cmp6->comparison_direction(), ComparisonDirection::kNe);
+
+  VLOG(1) << "MODULE " << m->ToString();
+  const HloInstruction* c[6];
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Tuple(m::Compare(m::Parameter(0), m::Constant(&c[0])),
+                          m::Compare(m::Parameter(0), m::Constant(&c[1])),
+                          m::Compare(m::Parameter(0), m::Constant(&c[2])),
+                          m::Compare(m::Parameter(0), m::Constant(&c[3])),
+                          m::Compare(m::Parameter(0), m::Constant(&c[4])),
+                          m::Compare(m::Parameter(0), m::Constant(&c[5])))));
+  for (size_t i = 0; i < 6; ++i) {
+    const Literal& l = c[i]->literal();
+    EXPECT_EQ(l.GetIntegralAsS64({0}), -3);
+    EXPECT_EQ(l.GetIntegralAsS64({1}), -2);
+    EXPECT_EQ(l.GetIntegralAsS64({2}), -1);
+    EXPECT_EQ(l.GetIntegralAsS64({3}), 0);
+  }
+}
+
 TEST_F(PoplarAlgebraicSimplifierTest, CompareSub) {
   const char* kModuleStr = R"(
   HloModule m
