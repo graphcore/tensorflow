@@ -28,6 +28,7 @@ from tensorflow.python.ipu import application_compile_op
 from tensorflow.python.ipu import embedded_runtime
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
+from tensorflow.python.ipu import keras as ipu_keras
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.module import module
@@ -171,6 +172,22 @@ def _export_saved_model(defunc, export_dir, input_signature):
   return model_to_export.predict
 
 
+def _wrap_in_loop(predict_step, input_signature, input_dataset, iterations):
+  infeed, outfeed = _create_feeds(input_signature, input_dataset)
+
+  # Add outfeed queue
+  def predict_step_with_outfeed(*args):
+    output_enqueue = outfeed.enqueue(predict_step(*args))
+    return output_enqueue
+
+  # Wrap in a loop
+  def predict_loop():
+    r = loops.repeat(iterations, predict_step_with_outfeed, [], infeed)
+    return r
+
+  return predict_loop
+
+
 def export_single_step(predict_step,
                        export_dir,
                        iterations,
@@ -220,18 +237,8 @@ def export_single_step(predict_step,
 
   input_signature = _validate_signature(predict_step, input_signature,
                                         input_dataset)
-  infeed, outfeed = _create_feeds(input_signature, input_dataset)
-
-  # Add outfeed queue
-  def predict_step_with_outfeed(*args):
-    output_enqueue = outfeed.enqueue(predict_step(*args))
-    return output_enqueue
-
-  # Wrap in a loop
-  def predict_loop():
-    r = loops.repeat(iterations, predict_step_with_outfeed, [], infeed)
-    return r
-
+  predict_loop = _wrap_in_loop(predict_step, input_signature, input_dataset,
+                               iterations)
   return _export_saved_model(predict_loop, export_dir, input_signature)
 
 
@@ -336,3 +343,34 @@ def export_pipeline(computational_stages,
         name=name)
 
   return _export_saved_model(defunc, export_dir, input_signature)
+
+
+def export_keras(model, export_dir):
+  """Export Keras model using the SavedModel format for TensorFlow serving.
+
+  Wrap model's ``call`` function inside a ``while`` loop, add an infeed for the
+  inputs and an outfeed for the outputs, convert any variables into constants
+  and write a SavedModel containing an IPU runtime function and Poplar
+  executable.
+
+  Args:
+    model (tf.keras.Model): The Keras model to export.
+    export_dir (str): The path to the directory where the SavedModel will be
+      written.
+
+  Returns:
+    tf.function: A reference to the same predict function that was exported
+    using the SavedModel format. This function uses the embedded runtime op to
+    run the executable that was included in the SavedModel's ``assets``
+    subfolder.
+
+  Raises:
+    ValueError: If model was not created inside IPU strategy.
+  """
+  if not isinstance(
+      model, ipu_keras.extensions.keras_extension_base.KerasExtensionBase):
+    raise ValueError(
+        "Provided model was not created inside an IPU strategy, so it "
+        "does not contain IPU-specific functions. Please wrap its "
+        "creation inside an IPU strategy.")
+  return model.export_for_ipu_serving(export_dir)

@@ -19,9 +19,11 @@ import numpy as np
 
 from absl.testing import parameterized
 from tensorflow.python.ipu import test_utils as tu
+from tensorflow.python import keras
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.ipu import ipu_strategy
@@ -34,12 +36,15 @@ from tensorflow.python.saved_model import load
 from tensorflow.python.saved_model import signature_constants
 
 
-class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
+class TestServingExportBase(test_util.TensorFlowTestCase,
+                            parameterized.TestCase):
   def setUp(self):
     super().setUp()
+    self.use_ipus(1)
 
+  def use_ipus(self, num):
     cfg = IPUConfig()
-    cfg.auto_select_ipus = 1
+    cfg.auto_select_ipus = num
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
@@ -59,6 +64,8 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     return result[output_name]
 
+
+class TestServingExport(TestServingExportBase):
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.run_v2_only
   def test_export_simple_model_no_var(self):
@@ -267,6 +274,138 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       result = self._load_and_run(tmp_folder, {'x2': x2_data, 'x3': x3_data})
       ref_result = 42.0 * x2_data + x3_data + 2
       self.assertEqual(list(result), list(ref_result))
+
+
+class KerasExportForServingTest(TestServingExportBase):
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.run_v2_only
+  def test_export_keras_sequential_one_input(self):
+    input_shape = (1, 3, 1)
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      model = keras.models.Sequential()
+      model.add(
+          keras.layers.Conv1D(
+              filters=2,
+              kernel_size=2,
+              kernel_initializer=keras.initializers.Constant(value=3)))
+      model.add(keras.layers.Activation('relu'))
+
+      model.build(input_shape)
+      model.compile(steps_per_execution=16)
+
+    input_data = np.array([[[-1.0], [2.0], [-3.0]]], dtype=np.float32)
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      runtime_func = serving.export_keras(model, tmp_folder)
+      # Test runtime function
+      with strategy.scope():
+        runtime_result = strategy.run(runtime_func,
+                                      args=(constant_op.constant(input_data),))
+        runtime_result = np.array(runtime_result[0])
+      ref_result = np.array([[[3.0, 3.0], [0.0, 0.0]]], dtype=np.float32)
+      self.assertTrue(np.array_equal(runtime_result, ref_result))
+
+      # Test loaded model
+      loaded_result = self._load_and_run(tmp_folder, input_data)
+      loaded_result = np.array(loaded_result)
+      self.assertTrue(np.array_equal(loaded_result, ref_result))
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.run_v2_only
+  def test_export_keras_functional_two_inputs(self):
+    bs = constant_op.constant(1, dtype=dtypes.int32)
+    input1_shape = (bs, 3, 1)
+    input2_shape = (bs, 1)
+
+    strategy = ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input1 = keras.layers.Input(shape=input1_shape[1:],
+                                  name='x1',
+                                  batch_size=bs)
+      input2 = keras.layers.Input(shape=input2_shape[1:],
+                                  name='x2',
+                                  batch_size=bs)
+      x = keras.layers.Conv1D(
+          filters=2,
+          kernel_size=2,
+          kernel_initializer=keras.initializers.Constant(value=3))(input1)
+      x = keras.layers.Add()([x, input2])
+      x = keras.layers.Activation('relu')(x)
+      model = keras.Model(inputs=[input1, input2], outputs=x)
+
+      model.build([input1_shape, input2_shape])
+      model.compile(steps_per_execution=16)
+
+    input1 = np.array([[[-1.0], [2.0], [-3.0]]], dtype=np.float32)
+    input2 = np.array([[2.0]], dtype=np.float32)
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      serving.export_keras(model, tmp_folder)
+      result = self._load_and_run(tmp_folder, {'x1': input1, 'x2': input2})
+      result = np.array(result)
+      ref_result = np.array([[[5.0, 5.0], [0.0, 0.0]]], dtype=np.float32)
+      self.assertTrue(np.array_equal(result, ref_result))
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.run_v2_only
+  def test_export_keras_subclass_model_two_inputs(self):
+    bs = constant_op.constant(2, dtype=dtypes.int32)
+    input1_shape = (bs, 3, 1)
+    input2_shape = (bs, 1)
+
+    strategy = ipu_strategy.IPUStrategy()
+    with strategy.scope():
+
+      class SimpleModel(keras.Model):  # pylint: disable=abstract-method
+        def __init__(self):
+          super(SimpleModel, self).__init__()
+          self.conv = keras.layers.Conv1D(
+              filters=2,
+              kernel_size=2,
+              kernel_initializer=keras.initializers.Constant(value=3))
+          self.relu = keras.layers.Activation('relu')
+          self.add = keras.layers.Add()
+
+        def call(self, inputs):  # pylint: disable=arguments-differ
+          input1, input2 = inputs[0], inputs[1]
+          x = self.conv(input1)
+          x = self.add([x, input2])
+          x = self.relu(x)
+          return x
+
+      model = SimpleModel()
+      model.build([input1_shape, input2_shape])
+      model.compile(steps_per_execution=16)
+
+      input1 = np.array([[[-1.0], [2.0], [-3.0]], [[-0.5], [0.0], [-2.0]]],
+                        dtype=np.float32)
+      input2 = np.array([[2.0], [4.0]], dtype=np.float32)
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      serving.export_keras(model, tmp_folder)
+      result = self._load_and_run(tmp_folder, {
+          'input_1': input1,
+          'input_2': input2
+      })
+      result = np.array(result)
+      ref_result = np.array(
+          [[[5.0, 5.0], [0.0, 0.0]], [[2.5, 2.5], [0.0, 0.0]]],
+          dtype=np.float32)
+      self.assertTrue(np.array_equal(result, ref_result))
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.run_v2_only
+  def test_export_keras_without_ipu_strategy(self):
+    input_shape = (1,)
+    model = keras.models.Sequential()
+    model.add(keras.layers.Activation('relu'))
+    model.build(input_shape)
+    model.compile(steps_per_execution=16)
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      with self.assertRaisesRegex(ValueError, "IPU strategy"):
+        serving.export_keras(model, tmp_folder)
 
 
 if __name__ == "__main__":
