@@ -543,7 +543,6 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
     # This is important to keep the node indices in the pipline stage assignment
     # consistant. Otherwise they will be invalidated by subsequent calls, even
     # if the graph structure was identical.
-    # if hasattr(self, 'layers'):
     for layer in self.layers:
       layer._inbound_nodes.clear()  # pylint: disable=protected-access
       layer._outbound_nodes.clear()  # pylint: disable=protected-access

@@ -1673,23 +1673,20 @@ class KerasExtensionBase(base_layer.KerasExtension):
     element_spec = data_handler.element_spec
     x_spec, _, _ = data_adapter.unpack_x_y_sample_weight(element_spec)
 
-    def process_shape(shape):
+    def get_shape(spec):
       # Convert from tensorshapes to tuples of dims.
-      shape = shape.as_list()
+      shape = spec.shape.as_list()
       if len(shape) == 1:
         # Expand 1d shapes to 2d. This is done automatically to inputs in keras.
         shape.append(1)
       return tuple(shape)
 
-    shapes = []
-    dtypes = []
-    for spec in nest.flatten(x_spec):
-      shapes.append(process_shape(spec.shape))
-      dtypes.append(spec.dtype)
+    def get_dtype(spec):
+      return spec.dtype
 
-    if len(dtypes) == 1:
-      shapes = shapes[0]
-      dtypes = dtypes[0]
+    shapes = nest.map_structure(get_shape, x_spec)
+    dtypes = nest.map_structure(get_dtype, x_spec)
+
     return shapes, dtypes
 
   def _build_with_dtypes(self, input_shape, input_dtype):

@@ -17,13 +17,15 @@ import tempfile
 import os
 import numpy as np
 
-from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.python.ipu import ipu_strategy
-from tensorflow.python.ipu.keras import extensions
-from tensorflow.python.keras.engine import training as training_module
-from tensorflow.python.keras import layers
-from tensorflow.python.keras import models
 from tensorflow.python.framework import test_util
+from tensorflow.python.ipu import ipu_strategy
+from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu.keras import extensions
+from tensorflow.python.keras import layers
+from tensorflow.python.keras import losses
+from tensorflow.python.keras import models
+from tensorflow.python.keras.optimizer_v2 import rmsprop
+from tensorflow.python.keras.engine import training as training_module
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
 
@@ -86,12 +88,13 @@ class ModelWithPipelineStageAssignments(training_module.Model):  # pylint: disab
 
     # Already has stage 2 assigned to the layer.
     x1 = self.dense_layer_1(x1)
-    with extensions.functional_extensions.PipelineStage(4):
-      x1 = self.dense_layer_2(x1)
 
     # Overrides layer assignment (stage 2).
     with extensions.functional_extensions.PipelineStage(3):
       x2 = self.dense_layer_1(x2)
+
+    with extensions.functional_extensions.PipelineStage(4):
+      x1 = self.dense_layer_2(x1)
 
     with extensions.functional_extensions.PipelineStage(5):
       x2 = self.dense_layer_2(x2)
@@ -113,6 +116,15 @@ class ModelWithMissingPipelineStage(training_module.Model):  # pylint: disable=a
 
     # Create dense layer node outside of PipelineStage scope.
     return self.dense_layer(x)
+
+
+# A model which expects a dict in its call method.
+# Based off a model which already has pipeline stage assignments.
+class ModelWithDictInputs(ModelWithPipelineStageAssignments):  # pylint: disable=abstract-method
+  def call(self, inputs):
+    x1 = inputs["x1"]
+    x2 = inputs["x2"]
+    return super(ModelWithDictInputs, self).call([x1, x2])
 
 
 def check_assignments(instance, assignments):
@@ -507,6 +519,33 @@ class ModelPipelineApiTest(test.TestCase):
         # Check we can succesfully update the graph network and predict again.
         m.build([(1, 32), (1, 32)])
         m.predict(inputs, batch_size=1)
+
+  @test_util.run_v2_only
+  def testModelWithDictInputs(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.tiles_per_ipu = 8
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      m = ModelWithDictInputs()
+      m.set_pipelining_options(device_mapping=[0] * 6,
+                               gradient_accumulation_steps_per_replica=12)
+      m.compile(loss=losses.SparseCategoricalCrossentropy(),
+                optimizer=rmsprop.RMSprop(),
+                metrics=["accuracy"],
+                steps_per_execution=12)
+
+      inputs = {
+          "x1": np.ones(shape=(12, 32), dtype=np.int32),
+          "x2": np.ones(shape=(12, 32), dtype=np.int32),
+      }
+      labels = [
+          np.ones(shape=(12), dtype=np.int32),
+          np.ones(shape=(12), dtype=np.int32),
+      ]
+      m.fit(inputs, labels, batch_size=1)
 
   @test_util.run_v2_only
   def testSetPipeliningOptionsWithNegativeSteps(self):
