@@ -16,6 +16,7 @@
 import tempfile
 import os
 import numpy as np
+from absl.testing import parameterized
 
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_strategy
@@ -119,12 +120,16 @@ class ModelWithMissingPipelineStage(training_module.Model):  # pylint: disable=a
 
 
 # A model which expects a dict in its call method.
+# They keys expected in the input dict are specified in the constructor.
 # Based off a model which already has pipeline stage assignments.
 class ModelWithDictInputs(ModelWithPipelineStageAssignments):  # pylint: disable=abstract-method
+  def __init__(self, keys):
+    super(ModelWithDictInputs, self).__init__()
+    self._keys = keys
+
   def call(self, inputs):
-    x1 = inputs["x1"]
-    x2 = inputs["x2"]
-    return super(ModelWithDictInputs, self).call([x1, x2])
+    inputs_list = [inputs[key] for key in self._keys]
+    return super(ModelWithDictInputs, self).call(inputs_list)
 
 
 def check_assignments(instance, assignments):
@@ -136,7 +141,7 @@ def check_assignments(instance, assignments):
           for assignment in assignments))
 
 
-class ModelPipelineApiTest(test.TestCase):
+class ModelPipelineApiTest(test.TestCase, parameterized.TestCase):
   @test_util.run_v2_only
   def testGetPipelistStageAssignmentOnUninitializedModel(self):
     cfg = IPUConfig()
@@ -520,8 +525,9 @@ class ModelPipelineApiTest(test.TestCase):
         m.build([(1, 32), (1, 32)])
         m.predict(inputs, batch_size=1)
 
+  @parameterized.parameters(([True, False],), (["key1", "key2"],))
   @test_util.run_v2_only
-  def testModelWithDictInputs(self):
+  def testModelWithDictInputs(self, keys):
     cfg = IPUConfig()
     cfg.ipu_model.tiles_per_ipu = 8
     cfg.auto_select_ipus = 1
@@ -529,7 +535,7 @@ class ModelPipelineApiTest(test.TestCase):
 
     strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      m = ModelWithDictInputs()
+      m = ModelWithDictInputs(keys)
       m.set_pipelining_options(device_mapping=[0] * 6,
                                gradient_accumulation_steps_per_replica=12)
       m.compile(loss=losses.SparseCategoricalCrossentropy(),
@@ -537,14 +543,8 @@ class ModelPipelineApiTest(test.TestCase):
                 metrics=["accuracy"],
                 steps_per_execution=12)
 
-      inputs = {
-          "x1": np.ones(shape=(12, 32), dtype=np.int32),
-          "x2": np.ones(shape=(12, 32), dtype=np.int32),
-      }
-      labels = [
-          np.ones(shape=(12), dtype=np.int32),
-          np.ones(shape=(12), dtype=np.int32),
-      ]
+      inputs = {key: np.ones(shape=(12, 32), dtype=np.int32) for key in keys}
+      labels = [np.ones(shape=(12), dtype=np.int32) for key in keys]
       m.predict(inputs, batch_size=1)
       m.fit(inputs, labels, batch_size=1)
       m.evaluate(inputs, labels, batch_size=1)
@@ -688,15 +688,11 @@ class ModelPipelineApiTest(test.TestCase):
           'Layer (type) (node index)         Input Layers                      Pipeline Stage   '
       )
       self.assertEqual(strings[3], '=' * 85)
-      self.assertRegex(
-          strings[4],
-          r'flatten \(Flatten\) \(0\)             input_[0-9]+                           None             '
-      )
+      self.assertRegex(strings[4],
+                       r'flatten \(Flatten\) \(0\) +input_\d+ +None *')
       self.assertEqual(strings[5], '_' * 85)
-      self.assertRegex(
-          strings[6],
-          r'flatten \(Flatten\) \(1\)             input_[0-9]+                           None             '
-      )
+      self.assertRegex(strings[6],
+                       r'flatten \(Flatten\) \(1\) +input_\d+ +None *')
       self.assertEqual(strings[7], '_' * 85)
       self.assertEqual(
           strings[8],

@@ -1243,7 +1243,9 @@ def _pipeline_stage(func,
       args = functional_ops._convert_to_list(args)  # pylint: disable=protected-access
       dequeue_ops = functional_ops._convert_to_list(infeed_queue._dequeue())  # pylint: disable=protected-access
       # Deal with the dequeue depending on whether it's a list or dict.
-      if len(dequeue_ops) == 1 and isinstance(dequeue_ops[0], dict):
+      if (len(dequeue_ops) == 1 and isinstance(dequeue_ops[0], dict)
+          and all(isinstance(key, str) for key in dequeue_ops[0])):
+        # Only dicts where all keys are strings can be used as kwargs.
         kwargs = dequeue_ops[0]
         return func(*(args), **kwargs)
       return func(*(args + dequeue_ops))

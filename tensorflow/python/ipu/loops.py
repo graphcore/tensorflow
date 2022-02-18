@@ -235,8 +235,10 @@ def _convert_to_list(xs):
 def _body_arguments(inputs):
   """Returns the positional and named arguments for the loop body."""
   inputs = _convert_to_list(inputs)
-  if len(inputs) == 1 and isinstance(inputs[0], dict):
-    # A single dict is unpacked
+  if (len(inputs) == 1 and isinstance(inputs[0], dict)
+      and all(isinstance(key, str) for key in inputs[0])):
+    # A single dict is unpacked.
+    # Only dicts where all keys are strings can be used as kwargs.
     args = []
     kwargs = inputs[0]
   else:
