@@ -545,7 +545,9 @@ class ModelPipelineApiTest(test.TestCase):
           np.ones(shape=(12), dtype=np.int32),
           np.ones(shape=(12), dtype=np.int32),
       ]
+      m.predict(inputs, batch_size=1)
       m.fit(inputs, labels, batch_size=1)
+      m.evaluate(inputs, labels, batch_size=1)
 
   @test_util.run_v2_only
   def testSetPipeliningOptionsWithNegativeSteps(self):

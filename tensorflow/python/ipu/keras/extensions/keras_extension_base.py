@@ -514,7 +514,12 @@ class KerasExtensionBase(base_layer.KerasExtension):
             next_idx += 1
         return nest.pack_sequence_as(structure, flat_x_with_nones)
 
-      def stage(stage_id, *args):
+      def stage(stage_id, *args, **kwargs):
+        if kwargs and not args:
+          # When the input from the infeed is a single dict it is treated as
+          # kwargs by the pipeline infeed wrapper.
+          args = kwargs
+
         # The index of the first layer to execute - used to skip input layers
         # in stage 0.
         layer_start_idx = 0
