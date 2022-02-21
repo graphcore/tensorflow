@@ -818,7 +818,7 @@ StatusOr<poplar::Tensor> AddTensorForTarget(
   auto tshape = target->operand(input_index)->shape();
   const auto optional_layout = tensor_target.layout;
   const auto optional_layout_output_idx = tensor_target.layout_output_idx;
-  VLOG(1) << "Allocation target " << target->ToString() << " index "
+  VLOG(3) << "Allocation target " << target->ToString() << " index "
           << input_index;
 
   poplar::Tensor out;
@@ -929,7 +929,7 @@ StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
 
   auto itr = resources.annotations.tensor_allocation_map.find(src);
   if (itr != resources.annotations.tensor_allocation_map.end()) {
-    VLOG(1) << "Adding a tensor with layout for ("
+    VLOG(3) << "Adding a tensor with layout for ("
             << src.instruction->ToString() << ", "
             << src.flattened_output_tuple_index << ").";
     TF_ASSIGN_OR_RETURN(

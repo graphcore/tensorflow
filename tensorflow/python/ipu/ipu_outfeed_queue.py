@@ -76,7 +76,12 @@ class IPUOutfeedQueue(collections_abc.Iterable):
   operation will in this case return a single element.
 
   """
-  def __init__(self, outfeed_mode=None, device_ordinal=None, buffer_depth=1):  #pylint: disable=missing-type-doc
+  def __init__(  #pylint: disable=missing-type-doc
+      self,
+      outfeed_mode=None,
+      device_ordinal=None,
+      buffer_depth=1,
+      optimise_latency=False):
     """Creates an IPUOutfeedQueue object.
 
     Args:
@@ -88,6 +93,10 @@ class IPUOutfeedQueue(collections_abc.Iterable):
         current strategy and if that fails will default to "/device:IPU:0".
       buffer_depth: The maximum number of elements Poplar can buffer in
         external memory before blocking the device.
+      optimise_latency: Prioritise packet reduction to try to speed up the
+          the host transfer. This has the downside that it will introduce an
+          extra copy and so should only be used on small exchanges that will
+          produce lots of packets.
 
     Raises:
       ValueError: if the types or values are incorrect
@@ -125,6 +134,7 @@ class IPUOutfeedQueue(collections_abc.Iterable):
     self._structure = None
     self._device_str = '/device:IPU:{}'.format(str(device_ordinal))
     self._buffer_depth = buffer_depth
+    self._optimise_latency = optimise_latency
 
     # Helper to handle async dequeue
     self._enqueuing_thread = None
@@ -223,6 +233,7 @@ class IPUOutfeedQueue(collections_abc.Iterable):
           output_shapes=self._flat_shapes,
           outfeed_mode=self._outfeed_mode.value,
           prefetch_depth=self._buffer_depth,
+          optimise_latency=self._optimise_latency,
           feed_id=self._feed_name)
 
     self._operations.append(outfeed_op)
@@ -441,7 +452,8 @@ class IPUOutfeedQueue(collections_abc.Iterable):
               outfeed_mode=self._outfeed_mode.value,
               feed_id=self._feed_name,
               device_ordinal=self._device_ordinal,
-              warn_when_unconnected=error_or_warn_when_unconnected)
+              warn_when_unconnected=error_or_warn_when_unconnected,
+              optimise_latency=self._optimise_latency)
     return nest.pack_sequence_as(self._structure, outfeed_dequeue)
 
   @property

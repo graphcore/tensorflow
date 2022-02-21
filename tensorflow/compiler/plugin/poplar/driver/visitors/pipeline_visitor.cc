@@ -754,17 +754,51 @@ Status PipelineVisitor::AddSequenceForInstruction(
 }
 
 Status PipelineVisitor::AppendSequenceGroupedByInstruction(
-    const HloInstruction* inst, const poplar::program::Sequence&) {
-  return UnimplementedStrCat(
-      "Sequence grouping not implemented in the PipelineVisitor: ",
-      inst->ToString());
+    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, inst));
+  poplar::program::Sequence* to_update;
+  switch (inst->opcode()) {
+    case HloOpcode::kOutfeed: {
+      to_update = &outfeed_sequences_[stage];
+      break;
+    }
+    case HloOpcode::kInfeed: {
+      to_update = &infeed_sequences_[stage];
+      break;
+    }
+    default: {
+      return UnimplementedStrCat(
+          "Sequence grouping not implemented in the PipelineVisitor: ",
+          inst->ToString());
+    }
+  }
+  to_update->add(seq);
+  return Status::OK();
 }
 
 Status PipelineVisitor::PrependSequenceGroupedByInstruction(
-    const HloInstruction* inst, const poplar::program::Sequence&) {
-  return UnimplementedStrCat(
-      "Sequence grouping not implemented in the PipelineVisitor: ",
-      inst->ToString());
+    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, inst));
+  poplar::program::Sequence* to_update;
+  switch (inst->opcode()) {
+    case HloOpcode::kOutfeed: {
+      to_update = &outfeed_sequences_[stage];
+      break;
+    }
+    case HloOpcode::kInfeed: {
+      to_update = &infeed_sequences_[stage];
+      break;
+    }
+    default: {
+      return UnimplementedStrCat(
+          "Sequence grouping not implemented in the PipelineVisitor: ",
+          inst->ToString());
+    }
+  }
+  poplar::program::Sequence new_sequence({seq, *to_update},
+                                         GetDebugNameAndId(inst));
+  *to_update = std::move(new_sequence);
+  return Status::OK();
 }
 
 Status PipelineVisitor::HandleNotImplemented(HloInstruction* hlo) {
@@ -1164,11 +1198,13 @@ Status PipelineVisitor::HandleOutfeed(HloInstruction* hlo) {
   VLOG(1) << "Processing " << hlo->ToString();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(hlo);
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Sequence prog,
-      CreateOutfeed(resources_, hlo, tensor_map, debug_name_and_id));
+  TF_ASSIGN_OR_RETURN(auto progs, CreateOutfeed(resources_, hlo, tensor_map,
+                                                debug_name_and_id));
 
-  outfeed_sequences_[stage].add(prog);
+  TF_RETURN_IF_ERROR(
+      PrependSequenceGroupedByInstruction(hlo, progs.local_transfer));
+  TF_RETURN_IF_ERROR(
+      AppendSequenceGroupedByInstruction(hlo, progs.external_transfer));
   return Status::OK();
 }
 

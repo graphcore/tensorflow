@@ -107,6 +107,7 @@ class IPUInfeedQueue:
                dataset,
                device_ordinal=None,
                prefetch_depth=None,
+               optimise_latency=False,
                **kwargs):  #pylint: disable=missing-type-doc,missing-param-doc
     """Creates an IPUInfeedQueue object.
 
@@ -125,6 +126,10 @@ class IPUInfeedQueue:
         increasing the probability there will be a valid entry in the buffer for
         the device to read before falling back to synchronously fetching the
         next entry. This value has to be greater than zero.
+      optimise_latency: Prioritise packet reduction to try to speed up the
+        the host transfer. This has the downside that it will introduce an
+        extra copy and so should only be used on small exchanges that will
+        produce lots of packets.
 
     Raises:
       ValueError: if all dimensions of shapes of dataset.output_shapes are not
@@ -169,6 +174,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       self._flat_structure = dataset._flat_structure
       self._device_ordinal = device_ordinal
       self._prefetch_depth = prefetch_depth
+      self._optimise_latency = optimise_latency
 
       # Apply the dataset options - do this before replica handling to make sure
       # all the optimizations can be applied.
@@ -216,6 +222,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
     flat_ret = gen_pop_datastream_ops.pop_datastream_infeed_dequeue(
         feed_id=self._id,
         prefetch_depth=self._prefetch_depth,
+        optimise_latency=self._optimise_latency,
         **self._flat_structure)
     self._dequeued = True
     return structure.from_tensor_list(self._structure, flat_ret)
@@ -301,7 +308,8 @@ now automatically dequeued by the loop.""")
           "queues.")
 
     return _IPUInfeedQueueSpec(self._id, self._structure, self._flat_structure,
-                               self._device_ordinal, self._prefetch_depth)
+                               self._device_ordinal, self._prefetch_depth,
+                               self._optimise_latency)
 
   @classmethod
   def _from_type_spec(cls, spec):
@@ -317,6 +325,7 @@ now automatically dequeued by the loop.""")
     obj._flat_structure = spec._flat_structure
     obj._device_ordinal = spec._device_ordinal
     obj._prefetch_depth = spec._prefetch_depth
+    obj._optimise_latency = spec._optimise_latency
     obj._initialized = True
     obj._dequeued = True
     obj._from_spec = True
@@ -334,17 +343,23 @@ class _IPUInfeedQueueSpec(type_spec.TypeSpec):
   """
 
   __slots__ = [
-      "_id", "_structure", "_flat_structure", "_device_ordinal",
-      "_prefetch_depth"
+      "_id",
+      "_structure",
+      "_flat_structure",
+      "_device_ordinal",
+      "_prefetch_depth",
+      "_optimise_latency",
   ]
 
   def __init__(self, feed_id, feed_structure, feed_flat_structure,
-               feed_device_ordinal, feed_prefetch_depth):
+               feed_device_ordinal, feed_prefetch_depth,
+               feed_optimise_latency):
     self._id = feed_id
     self._structure = feed_structure
     self._flat_structure = feed_flat_structure
     self._device_ordinal = feed_device_ordinal
     self._prefetch_depth = feed_prefetch_depth
+    self._optimise_latency = feed_optimise_latency
 
   @property
   def value_type(self):
@@ -352,7 +367,7 @@ class _IPUInfeedQueueSpec(type_spec.TypeSpec):
 
   def _serialize(self):
     return (self._id, self._structure, self._flat_structure,
-            self._device_ordinal, self._prefetch_depth)
+            self._device_ordinal, self._prefetch_depth, self._optimise_latency)
 
   @property
   def _component_specs(self):
@@ -369,7 +384,8 @@ class _IPUInfeedQueueSpec(type_spec.TypeSpec):
   @staticmethod
   def from_value(value):
     return _IPUInfeedQueueSpec(value.id, value.structure, value.flat_structure,
-                               value.device_ordinal, value.prefetch_depth)
+                               value.device_ordinal, value.prefetch_depth,
+                               value.optimise_latency)
 
 
 class IPUIterator(iterator_ops.OwnedIterator):

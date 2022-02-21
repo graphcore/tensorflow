@@ -35,7 +35,18 @@ class RepeatLoopOverlapIOVisitor : public RepeatLoopVisitor {
       const HloInstruction* inst,
       const poplar::program::Sequence& seq) override;
 
+  Status AppendSequenceGroupedByInstruction(
+      const HloInstruction* inst,
+      const poplar::program::Sequence& seq) override;
+
+  Status PrependSequenceGroupedByInstruction(
+      const HloInstruction* inst,
+      const poplar::program::Sequence& seq) override;
+
  private:
+  StatusOr<poplar::program::Sequence*> GetSequenceForInstruction(
+      const HloInstruction* inst);
+
   poplar::program::Sequence infeed_sequence_;
   poplar::program::Sequence outfeed_sequence_;
   poplar::program::Sequence io_tile_copy_in_sequence_;

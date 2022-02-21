@@ -304,9 +304,11 @@ Status FullVisitor::HandleIota(HloInstruction* inst) {
 Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  TF_ASSIGN_OR_RETURN(auto prog, CreateOutfeed(resources_, inst, tensor_map,
-                                               debug_name_and_id));
-  return AddSequenceForInstruction(inst, prog);
+  TF_ASSIGN_OR_RETURN(auto progs, CreateOutfeed(resources_, inst, tensor_map,
+                                                debug_name_and_id));
+  TF_RETURN_IF_ERROR(
+      PrependSequenceGroupedByInstruction(inst, progs.local_transfer));
+  return AppendSequenceGroupedByInstruction(inst, progs.external_transfer);
 }
 
 Status FullVisitor::ValidateShape(HloInstruction* inst, std::size_t tuple_index,

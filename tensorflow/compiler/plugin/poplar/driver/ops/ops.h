@@ -315,11 +315,21 @@ StatusOr<poplar::program::Sequence> CreateTuple(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateOutfeed(
+struct ExternalAndLocalTransferSequence {
+  // For infeeds/outfeeds, we want to place the local copies together in
+  // a single sequence, and the host transfers together in a single
+  // sequence. This is because we can then merge them together. To
+  // do this, instead of returning the sequence return both so that
+  // the calling layer can decide how to interleave these copies
+  poplar::program::Sequence external_transfer;
+  poplar::program::Sequence local_transfer;
+};
+
+StatusOr<ExternalAndLocalTransferSequence> CreateOutfeed(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateInfeed(
+StatusOr<ExternalAndLocalTransferSequence> CreateInfeed(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const xla::Shape& output_shape, poplar::Tensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id);

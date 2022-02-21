@@ -45,16 +45,18 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 
 
-class InfeedOutfeedTest(test_util.TensorFlowTestCase):
+class InfeedOutfeedTest(test_util.TensorFlowTestCase, parameterized.TestCase):
+  @parameterized.parameters([True, False])
   @test_util.deprecated_graph_mode_only
-  def testSingleInfeedRepeatNonTuple(self):
+  def testSingleInfeedRepeatNonTuple(self, latency):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
-
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    assert isinstance(latency, bool)
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+        dataset, optimise_latency=latency)
 
     def body(v, x):
       v = v + x
@@ -491,13 +493,15 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       final_loss = sess.run(r, {iters: 1000})
       self.assertTrue(initial_loss > final_loss)
 
+  @parameterized.parameters([True, False])
   @test_util.deprecated_graph_mode_only
-  def testMultipleOutfeedEnqueue(self):
+  def testMultipleOutfeedEnqueue(self, latency):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        optimise_latency=latency)
 
     def body(v):
       outfeed = outfeed_queue.enqueue(v)
