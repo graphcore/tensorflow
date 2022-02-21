@@ -1612,6 +1612,7 @@ poplar_cc_library(
         "while_loop_optimiser.h",
     ],
     deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:print_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:slice_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:while_loop_util",

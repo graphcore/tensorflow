@@ -990,6 +990,14 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "print_util",
+    hdrs = [
+        "print_util.h",
+    ],
+    deps = [],
+)
+
+poplar_cc_library(
     name = "isomorphic_functions_map",
     hdrs = [
         "isomorphic_functions_map.h",
