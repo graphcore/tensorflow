@@ -21,9 +21,6 @@ Functional operators
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
-from tensorflow.python.distribute import distribution_strategy_context
-from tensorflow.python.eager import def_function
-from tensorflow.python.eager import context as eager_context
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import func_graph as func_graph_module
@@ -103,12 +100,6 @@ def outlined_function(func=None,
 
         return _pack_sequence_as(func_graph.structured_outputs, outputs)
 
-    # If we are executing under a distribution strategy or eagerly.
-    if distribution_strategy_context.has_strategy() or\
-      eager_context.executing_eagerly():
-      return def_function.function(func_wrapper)
-
-    # If we are executing with a session.
     return func_wrapper
 
   if func is not None:
