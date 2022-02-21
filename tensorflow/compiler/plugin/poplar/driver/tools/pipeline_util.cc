@@ -520,23 +520,13 @@ StatusOr<HloInstruction*> CreatePipelineStage(
   return empty_call;
 }
 
-namespace {
-Status SetTupleUniqueDeviceSharding(const HloInstruction* source,
-                                    HloInstruction* dest) {
-  auto optional_sharding = source->sharding().ExtractSingleSharding();
-  if (!optional_sharding) {
-    return FailedPrecondition("Could not extract single sharding.");
-  }
-  dest->set_sharding(
-      HloSharding::SingleTuple(dest->shape(), *optional_sharding));
-  return Status::OK();
-}
-}  // namespace
-
 StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     HloInstruction* stage, const std::vector<HloInstruction*>& ordered_lowering,
     std::map<int64, HloInstruction*> replace_parameter_with_lowered_instruction,
-    HloInstructionSet forced_parameters, bool replace_resource_update_uses) {
+    HloInstructionSet forced_parameters, bool replace_resource_update_uses,
+    HloCloneContext* context,
+    const std::function<void(const HloCloneContext*)>&
+        instructions_cloned_callback) {
   CHECK(IsAnyPipelineStageOpOrResourceUpdate(stage));
 
   HloComputation* pipeline_computation = stage->parent();
@@ -575,8 +565,9 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
                         return old_to_new_computation.at(old_operand);
                       });
     // Clone new instruction.
-    HloInstruction* new_inst = builder.AddInstruction(
-        old_inst->CloneWithNewOperands(old_inst->shape(), new_operands));
+    HloInstruction* new_inst =
+        builder.AddInstruction(old_inst->CloneWithNewOperands(
+            old_inst->shape(), new_operands, context));
     if (new_inst->opcode() == HloOpcode::kParameter) {
       // Make sure to mark inputs to the computation.
       HloInstruction* input_inst =
@@ -659,7 +650,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     }
     // Clone the instruction inside the new computation with new operands.
     HloInstruction* lowered = builder.AddInstruction(
-        inst->CloneWithNewOperands(inst->shape(), new_operands));
+        inst->CloneWithNewOperands(inst->shape(), new_operands, context));
     inst->SetupDerivedInstruction(lowered);
     lowered_insts[inst] = lowered;
   }
@@ -752,9 +743,10 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   const int64 old_num_outputs = ShapeUtil::TupleElementCount(stage->shape());
   // Build the new computation and the new pipeline stage with new operands.
   std::unique_ptr<HloComputation> new_computation = builder.Build(builder_root);
-  TF_ASSIGN_OR_RETURN(HloInstruction * new_stage,
-                      ReplaceCallWith(stage, std::move(new_computation),
-                                      new_stage_operands, false));
+  TF_ASSIGN_OR_RETURN(
+      HloInstruction * new_stage,
+      ReplaceCallWith(stage, std::move(new_computation), new_stage_operands,
+                      false, context, instructions_cloned_callback));
 
   // Add GTEs for any new outputs.
   {

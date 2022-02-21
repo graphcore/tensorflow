@@ -150,13 +150,20 @@ StatusOr<HloInstruction*> CreatePipelineStage(
 // This function also keeps track  of any uses of the instructions which are
 // being lowered and replaces those uses with GTEs to the new output of this
 // stage.
+// instructions_cloned_callback is an optional callback function which is
+// invoked after the cloned (replacement) stage been created, but before the
+// original stage has deleted. It is passed the HloCloneContext which will have
+// all of the cloned instructions recorded.
 StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     HloInstruction* stage,
     const std::vector<HloInstruction*>& ordered_lowering = {},
     std::map<int64, HloInstruction*>
         replace_parameter_with_lowered_instruction = {},
     HloInstructionSet forced_parameters = {},
-    bool replace_resource_update_uses = true);
+    bool replace_resource_update_uses = true,
+    HloCloneContext* context = nullptr,
+    const std::function<void(const HloCloneContext*)>&
+        instructions_cloned_callback = {});
 
 // Inlines the provided computation and replaces the output at caller site with
 // the inlined root instruction.

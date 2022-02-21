@@ -53,60 +53,6 @@ std::vector<HloInstruction*> OrderInnerPipelineFunctions(
   return ordered_stages;
 }
 
-Status ReplaceOutputUses(
-    HloInstruction* stage,
-    const std::map<int64, std::set<int64>>& duplicate_outputs) {
-  // Get all the GTEs by tuple index.
-  absl::flat_hash_map<int64, HloInstructionSet> gte_users;
-  for (HloInstruction* user : stage->users()) {
-    CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
-    gte_users[user->tuple_index()].insert(user);
-  }
-
-  // Replace all duplicate uses with a single GTE.
-  for (auto& pair : duplicate_outputs) {
-    int64 output_idx = pair.first;
-    const std::set<int64>& duplicate_indices = pair.second;
-    VLOG(3) << "Replacing duplicate output indices "
-            << absl::StrJoin(duplicate_indices, ", ") << " with output index "
-            << output_idx;
-    TF_ASSIGN_OR_RETURN(HloInstruction * output_gte,
-                        MakeGetTupleElementHlo(stage, output_idx));
-
-    for (int64 duplicate_idx : duplicate_indices) {
-      for (HloInstruction* duplicate_inst : gte_users[duplicate_idx]) {
-        TF_RETURN_IF_ERROR(duplicate_inst->ReplaceAllUsesWith(output_gte));
-      }
-    }
-    // Also replace all the GTEs for output_idx (if any) with the new gte.
-    for (HloInstruction* old_gte : gte_users[output_idx]) {
-      TF_RETURN_IF_ERROR(old_gte->ReplaceAllUsesWith(output_gte));
-    }
-  }
-  return Status::OK();
-}
-
-Status ReplaceDuplicateInputs(
-    HloInstruction* stage,
-    const std::map<int64, std::set<int64>>& duplicate_inputs) {
-  HloComputation* stage_comp = stage->to_apply();
-  // Replace any duplicate inputs which will make parameters unused.
-  for (auto pair : duplicate_inputs) {
-    int64 param_number = pair.first;
-    std::set<int64>& duplicate_indices = pair.second;
-    VLOG(3) << "Replacing duplicate parameter numbers "
-            << absl::StrJoin(duplicate_indices, ", ")
-            << " with parameter number " << param_number;
-    HloInstruction* parameter = stage_comp->parameter_instruction(param_number);
-    for (int64 duplicate_idx : duplicate_indices) {
-      HloInstruction* parameter_to_replace =
-          stage_comp->parameter_instruction(duplicate_idx);
-      TF_RETURN_IF_ERROR(parameter_to_replace->ReplaceAllUsesWith(parameter));
-    }
-  }
-  return Status::OK();
-}
-
 absl::flat_hash_map<int64, std::vector<HloInstruction*>> GetAllGtes(
     HloInstruction* const stage) {
   absl::flat_hash_map<int64, std::vector<HloInstruction*>> gte_users;
@@ -267,7 +213,7 @@ StatusOr<HloInstruction*> CallOptimizer::OptimizeCallInstruction(
   TF_ASSIGN_OR_RETURN(auto duplicate_outputs, GetDuplicateCallOutputs(inst));
   if (duplicate_outputs.size()) {
     VLOG(3) << "Replacing duplicate outputs.";
-    TF_RETURN_IF_ERROR(ReplaceOutputUses(inst, duplicate_outputs));
+    TF_RETURN_IF_ERROR(ReplaceDuplicateCallOutputs(inst, duplicate_outputs));
   }
 
   // Find any unused outputs.
@@ -287,7 +233,7 @@ StatusOr<HloInstruction*> CallOptimizer::OptimizeCallInstruction(
   TF_ASSIGN_OR_RETURN(auto duplicate_inputs, GetDuplicateCallInputs(inst));
   if (duplicate_inputs.size()) {
     VLOG(3) << "Replacing duplicate inputs.";
-    TF_RETURN_IF_ERROR(ReplaceDuplicateInputs(inst, duplicate_inputs));
+    TF_RETURN_IF_ERROR(ReplaceDuplicateCallInputs(inst, duplicate_inputs));
   }
 
   // Find any unused inputs and remove them.
