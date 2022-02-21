@@ -1309,6 +1309,100 @@ ENTRY e {
                                  comp0, comp1, comp2, stage_1_fwd));
 }
 
+TEST_F(PipelineUtilTest,
+       AddInstructionsToPipelineStageInstructionsClonedCallbackTest) {
+  // Test that we can lower inputs into a stage.
+  std::string hlo = R"(
+HloModule top
+
+stage_0_fwd {
+  stage_0_fwd_weights0 = f32[1,4,4,2] parameter(0)
+  ROOT stage_0_fwd_tuple = (f32[1,4,4,2]) tuple(stage_0_fwd_weights0)
+}
+
+stage_1_fwd {
+  stage_1_bcast1 = f32[1,4,4,2] parameter(0)
+  stage_1_fwd_weights0 = f32[1,4,4,2] parameter(1)
+  stage_1_add = f32[1,4,4,2] add(stage_1_bcast1, stage_1_fwd_weights0)
+  ROOT stage_1_fwd_tuple = (f32[1,4,4,2]) tuple(stage_1_add)
+}
+
+pipeline {
+  pipeline_weights0 = f32[1,4,4,2] parameter(0)
+  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  pipeline_stage_0_w0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
+  pipeline_const1 = f32[] constant(0.01)
+  pipeline_bcast1 = f32[1,4,4,2] broadcast(pipeline_const1), dimensions={}
+  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_bcast1, pipeline_stage_0_w0), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
+  pipeline_stage_1_add = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
+  ROOT pipeline_tuple = (f32[1,4,4,2]) tuple(pipeline_stage_1_add)
+}
+
+ENTRY e {
+  e.weights0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  ROOT e.call = (f32[1,4,4,2]) call(e.weights0), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+}
+)";
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  bool callback_called = false;
+  std::function<void(const HloCloneContext*)> callback =
+      [&](const HloCloneContext* context) -> void {
+    // Iterate over all cloned calls in the HloCloneContext.
+    auto& cloned_instructions = context->cloned_instructions();
+    // Cloned call + 4 instructions from computation + 2 instructions being
+    // added to computation.
+    EXPECT_EQ(cloned_instructions.size(), 7);
+
+    // Find the entry for the pipeline stage 1 call.
+    auto it = absl::c_find_if(
+        cloned_instructions,
+        [](const std::pair<const HloInstruction*, const HloInstruction*>&
+               pair) { return pair.first->name() == "pipeline_stage_1"; });
+    EXPECT_NE(it, cloned_instructions.end());
+    auto pair = *it;
+    EXPECT_EQ(pair.second->opcode(), HloOpcode::kCall);
+
+    // Check that all instructions still exist (haven't been deleted yet).
+    const HloInstruction* old_call = pair.first;
+    const HloInstruction* new_call = pair.second;
+    EXPECT_EQ(old_call->to_apply()->instruction_count(), 4);
+    // 4 original instructions + 2 new instructions + 1 extra.
+    // The extra is because AddInstructionsToPipelineStage generates a new root
+    // tuple (but still retains all original instructions).
+    EXPECT_EQ(new_call->to_apply()->instruction_count(), 7);
+    EXPECT_TRUE(Match(old_call->to_apply()->root_instruction(),
+                      m::Tuple(m::Add(m::Parameter(0), m::Parameter(1)))));
+    EXPECT_TRUE(
+        Match(new_call->to_apply()->root_instruction(),
+              m::Tuple(m::Add(m::Broadcast(m::Constant()), m::Parameter(1)))));
+    callback_called = true;
+  };
+
+  // Get instructions.
+  HloInstruction* pipeline_const1 = FindInstruction(module0, "pipeline_const1");
+  HloInstruction* pipeline_bcast1 = FindInstruction(module0, "pipeline_bcast1");
+  EXPECT_THAT(pipeline_bcast1->operands(),
+              ::testing::ElementsAre(pipeline_const1));
+  HloInstruction* pipeline_stage_1 =
+      FindInstruction(module0, "pipeline_stage_1");
+
+  // Create clone context.
+  HloCloneContext context(module0);
+
+  // Lower pipeline_const1 and pipeline_bcast1 into pipeline_stage_1 and replace
+  // any uses of parameter 0 with lowered version of pipeline_bcast1.
+  TF_ASSERT_OK_AND_ASSIGN(
+      pipeline_stage_1,
+      AddInstructionsToPipelineStage(
+          pipeline_stage_1, {pipeline_const1, pipeline_bcast1},
+          {{0, pipeline_bcast1}}, {}, true, &context, callback));
+  EXPECT_TRUE(callback_called);
+}
+
 using pipeline_config = PoplarBackendConfig::CallConfig::PipelineConfig;
 std::string GetHlo(pipeline_config::Schedule schedule,
                    pipeline_config::RecomputationMode recomputation_mode) {

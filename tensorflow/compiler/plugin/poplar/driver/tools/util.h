@@ -20,9 +20,7 @@ limitations under the License.
  * optimizers target within the BUILD file.
  */
 
-#include <map>
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -31,6 +29,7 @@ limitations under the License.
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/shape_tree.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -345,26 +344,41 @@ StatusOr<HloInstruction*> CloneComputationSubtree(
 // Get tuple indices for call outputs which are used in multiple places.
 // Returns a map from the tuple index of first occurrence to a set of all other
 // occurrences.
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallOutputs(
-    const HloInstruction* call);
+StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
+GetDuplicateCallOutputs(const HloInstruction* call);
 
 // Get tuple indices for call operands which are used in multiple places.
 // Returns a map from the tuple index of first occurrence to a set of all other
 // occurrences.
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallInputs(
-    const HloInstruction* call);
+StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
+GetDuplicateCallInputs(const HloInstruction* call);
 
 // Get output tuple indices for unused call outputs.
-StatusOr<std::set<int64>> GetUnusedCallOutputIndices(
-    const HloInstruction* call);
+StatusOr<absl::flat_hash_set<int64>> GetUnusedCallOutputIndices(
+    const HloInstructionSet& calls);
+StatusOr<absl::flat_hash_set<int64>> GetUnusedCallOutputIndices(
+    HloInstruction* call);
 
 // Get parameter numbers for parameter instructions in the call which have no
 // users.
-StatusOr<std::set<int64>> GetUnusedParametersInCall(const HloInstruction* call);
+StatusOr<absl::flat_hash_set<int64>> GetUnusedParametersInCall(
+    const HloInstruction* call);
+
+// Replace duplicate call outputs identified by GetDuplicateCallOutputs.
+Status ReplaceDuplicateCallOutputs(
+    HloInstruction* call,
+    const absl::flat_hash_map<int64, absl::flat_hash_set<int64>>&
+        duplicate_outputs);
+
+// Replace duplicate call inputs identified by GetDuplicateCallInputs.
+Status ReplaceDuplicateCallInputs(
+    HloInstruction* call,
+    const absl::flat_hash_map<int64, absl::flat_hash_set<int64>>&
+        duplicate_inputs);
 
 // Removes outputs from the call, and GTEs which are not used by anything.
-Status RemoveOutputsFromCall(HloInstruction* call,
-                             const std::set<int64>& outputs_to_remove);
+Status RemoveOutputsFromCall(
+    HloInstruction* call, const absl::flat_hash_set<int64>& outputs_to_remove);
 
 // Set sharding of destination output tuple based on source output tuple.
 Status SetTupleUniqueDeviceSharding(const HloInstruction* source,
@@ -373,20 +387,40 @@ Status SetTupleUniqueDeviceSharding(const HloInstruction* source,
 // Replaces a call with a new one, including a new computation.
 // Propagates all the information to the new call and removes the old call and
 // its computation.
+// instructions_cloned_callback is an optional callback function which is
+// invoked after the new call and computation have been created, but before the
+// original call and computation have been deleted. It is passed the
+// HloCloneContext which will have all of the cloned instructions recorded.
 StatusOr<HloInstruction*> ReplaceCallWith(
     HloInstruction* call, std::unique_ptr<HloComputation> new_computation,
     const std::vector<HloInstruction*> new_operands,
-    bool remove_unused_operands);
+    bool remove_unused_operands, HloCloneContext* context = nullptr,
+    const std::function<void(const HloCloneContext*)>&
+        instructions_cloned_callback = {});
 
 // Removes parameters from the call, and any operands which now have no users.
+// instructions_cloned_callback is an optional callback function which is
+// invoked after the new call and computation have been created, but before the
+// original call and computation have been deleted. It is passed the
+// HloCloneContext which will have all of the cloned instructions recorded.
 StatusOr<HloInstruction*> RemoveParametersFromCall(
-    HloInstruction* call, const std::set<int64>& parameters_to_remove);
+    HloInstruction* call,
+    const absl::flat_hash_set<int64>& parameters_to_remove,
+    HloCloneContext* context = nullptr,
+    const std::function<void(const HloCloneContext*)>&
+        instructions_cloned_callback = {});
 
 // Adds the given operands to the call and adds a parameter to the called
-// computation corresponding to each operand.
+// computation.
+// instructions_cloned_callback is an optional callback function which is
+// invoked after the new call and computation have been created, but before the
+// original call and computation have been deleted. It is passed the
+// HloCloneContext which will have all of the cloned instructions recorded.
 StatusOr<HloInstruction*> AddParametersToCall(
-    HloInstruction* call,
-    const std::vector<HloInstruction*>& parameters_to_add);
+    HloInstruction* call, const std::vector<HloInstruction*>& parameters_to_add,
+    HloCloneContext* context = nullptr,
+    const std::function<void(const HloCloneContext*)>&
+        instructions_cloned_callback = {});
 
 StatusOr<ShapeTree<CloneMethod>> GetCopyCloneMethod(const HloInstruction* inst);
 Status SetCopyCloneMethod(HloInstruction* inst,

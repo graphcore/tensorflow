@@ -21,6 +21,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 
 namespace xla {
+namespace m = match;
 namespace poplarplugin {
 namespace {
 
@@ -133,7 +134,7 @@ ENTRY e {
     EXPECT_TRUE(unused_or.ok());
     auto unused = unused_or.ValueOrDie();
     EXPECT_THAT(unused.size(), 1);
-    EXPECT_TRUE(ContainsKey(unused, 1));
+    EXPECT_TRUE(unused.contains(1));
   }
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");
@@ -194,10 +195,10 @@ ENTRY e {
     auto duplicate = duplicate_or.ValueOrDie();
     EXPECT_THAT(duplicate.size(), 2);
     EXPECT_THAT(duplicate[0].size(), 2);
-    EXPECT_TRUE(ContainsKey(duplicate[0], 4));
-    EXPECT_TRUE(ContainsKey(duplicate[0], 5));
+    EXPECT_TRUE(duplicate[0].contains(4));
+    EXPECT_TRUE(duplicate[0].contains(5));
     EXPECT_THAT(duplicate[1].size(), 1);
-    EXPECT_TRUE(ContainsKey(duplicate[1], 3));
+    EXPECT_TRUE(duplicate[1].contains(3));
   }
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");
@@ -258,7 +259,7 @@ ENTRY e {
     auto duplicate = duplicate_or.ValueOrDie();
     EXPECT_THAT(duplicate.size(), 1);
     EXPECT_THAT(duplicate[0].size(), 1);
-    EXPECT_TRUE(ContainsKey(duplicate[0], 2));
+    EXPECT_TRUE(duplicate[0].contains(2));
   }
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");
@@ -345,6 +346,130 @@ ENTRY e {
   auto new_stage_1 = new_stage_1_or.ValueOrDie();
   EXPECT_THAT(new_stage_1->operands(),
               ::testing::ElementsAre(pipeline_weights1));
+}
+
+TEST_F(UtilTest, TestRemoveParametersFromCallInstructionsClonedCallback) {
+  std::string hlo = R"(
+HloModule top
+
+comp {
+  param2 = f32[4,4] parameter(0)
+  param3 = f32[4,4] parameter(1)
+  param4 = f32[4,4] parameter(2)
+  ROOT dot = f32[4,4] dot(param2, param3), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+}
+
+ENTRY e {
+  param0 = f32[4,4] parameter(0), parameter_replication={false}
+  param1 = f32[4,4] parameter(1), parameter_replication={false}
+  ROOT call = f32[4,4] call(param0, param1, param1), to_apply=comp
+}
+)";
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  bool callback_called = false;
+  std::function<void(const HloCloneContext*)> callback =
+      [&](const HloCloneContext* context) -> void {
+    // Iterate over all cloned calls in the HloCloneContext.
+    auto& cloned_instructions = context->cloned_instructions();
+    // Cloned call + 3 out of the 4 instructions in the original computation.
+    EXPECT_EQ(cloned_instructions.size(), 4);
+
+    // Find the entry for the call instruction.
+    auto it = absl::c_find_if(
+        cloned_instructions,
+        [](const std::pair<const HloInstruction*, const HloInstruction*>&
+               pair) { return pair.first->opcode() == HloOpcode::kCall; });
+    EXPECT_NE(it, cloned_instructions.end());
+    auto pair = *it;
+    EXPECT_EQ(pair.second->opcode(), HloOpcode::kCall);
+
+    // Check that all instructions still exist (haven't been deleted yet).
+    const HloInstruction* old_call = pair.first;
+    const HloInstruction* new_call = pair.second;
+    EXPECT_EQ(old_call->operand_count(), 3);
+    EXPECT_EQ(new_call->operand_count(), 2);
+    EXPECT_EQ(old_call->to_apply()->instruction_count(), 4);
+    EXPECT_EQ(new_call->to_apply()->instruction_count(), 3);
+    EXPECT_TRUE(Match(old_call->to_apply()->root_instruction(),
+                      m::Dot(m::Parameter(0), m::Parameter(1))));
+    EXPECT_TRUE(
+        Match(old_call->to_apply()->parameter_instruction(2), m::Parameter(2)));
+    EXPECT_TRUE(Match(new_call->to_apply()->root_instruction(),
+                      m::Dot(m::Parameter(0), m::Parameter(1))));
+    callback_called = true;
+  };
+
+  HloCloneContext context(module0);
+  HloInstruction* call = FindInstruction(module0, "call");
+  auto new_call_or = RemoveParametersFromCall(call, {2}, &context, callback);
+  EXPECT_TRUE(new_call_or.ok());
+  EXPECT_TRUE(callback_called);
+}
+
+TEST_F(UtilTest, TestAddParametersToCallInstructionsClonedCallback) {
+  std::string hlo = R"(
+HloModule top
+
+comp {
+  param2 = f32[4,4] parameter(0)
+  param3 = f32[4,4] parameter(1)
+  ROOT dot = f32[4,4] dot(param2, param3), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+}
+
+ENTRY e {
+  param0 = f32[4,4] parameter(0), parameter_replication={false}
+  param1 = f32[4,4] parameter(1), parameter_replication={false}
+  ROOT call = f32[4,4] call(param0, param1), to_apply=comp
+}
+)";
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  bool callback_called = false;
+  std::function<void(const HloCloneContext*)> callback =
+      [&](const HloCloneContext* context) -> void {
+    // Iterate over all cloned calls in the HloCloneContext.
+    auto& cloned_instructions = context->cloned_instructions();
+    // Cloned call + the 3 instructions in the original computation.
+    EXPECT_EQ(cloned_instructions.size(), 4);
+
+    // Find the entry for the call instruction.
+    auto it = absl::c_find_if(
+        cloned_instructions,
+        [](const std::pair<const HloInstruction*, const HloInstruction*>&
+               pair) { return pair.first->opcode() == HloOpcode::kCall; });
+    EXPECT_NE(it, cloned_instructions.end());
+    auto pair = *it;
+    EXPECT_EQ(pair.second->opcode(), HloOpcode::kCall);
+
+    // Check that all instructions still exist (haven't been deleted yet).
+    const HloInstruction* old_call = pair.first;
+    const HloInstruction* new_call = pair.second;
+    EXPECT_EQ(old_call->operand_count(), 2);
+    EXPECT_EQ(new_call->operand_count(), 3);
+    EXPECT_EQ(old_call->to_apply()->instruction_count(), 3);
+    EXPECT_EQ(new_call->to_apply()->instruction_count(), 4);
+    EXPECT_TRUE(Match(old_call->to_apply()->root_instruction(),
+                      m::Dot(m::Parameter(0), m::Parameter(1))));
+    EXPECT_TRUE(Match(new_call->to_apply()->root_instruction(),
+                      m::Dot(m::Parameter(0), m::Parameter(1))));
+    EXPECT_TRUE(
+        Match(new_call->to_apply()->parameter_instruction(2), m::Parameter(2)));
+    callback_called = true;
+  };
+
+  HloCloneContext context(module0);
+  HloInstruction* call = FindInstruction(module0, "call");
+  HloInstruction* param1 = FindInstruction(module0, "param1");
+  auto new_call_or = AddParametersToCall(call, {param1}, &context, callback);
+  EXPECT_TRUE(new_call_or.ok());
+  EXPECT_TRUE(callback_called);
 }
 
 TEST_F(UtilTest, TestRemoveOutputsFromCall) {

@@ -14,12 +14,12 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
-#include <map>
 #include <memory>
 #include <queue>
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
@@ -1053,10 +1053,10 @@ StatusOr<HloInstruction*> CloneComputationSubtree(HloInstruction* root,
 }
 
 namespace {
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicateOperands(
-    const HloInstruction* inst) {
+StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
+GetDuplicateOperands(const HloInstruction* inst) {
   absl::flat_hash_map<const HloInstruction*, int64> first_occurrence;
-  std::map<int64, std::set<int64>> duplicate_operands;
+  absl::flat_hash_map<int64, absl::flat_hash_set<int64>> duplicate_operands;
   // Go through all the operands in order. First time we see it, add to
   // first_occurrence when we first saw it, next time we see it add it to the
   // duplicate operands.
@@ -1073,48 +1073,118 @@ StatusOr<std::map<int64, std::set<int64>>> GetDuplicateOperands(
 }
 }  // anonymous namespace
 
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallOutputs(
-    const HloInstruction* call) {
+StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
+GetDuplicateCallOutputs(const HloInstruction* call) {
   return GetDuplicateOperands(call->to_apply()->root_instruction());
 }
 
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallInputs(
-    const HloInstruction* call) {
+StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
+GetDuplicateCallInputs(const HloInstruction* call) {
   return GetDuplicateOperands(call);
 }
 
-StatusOr<std::set<int64>> GetUnusedCallOutputIndices(
-    const HloInstruction* call) {
-  std::set<int64> unused_outputs;
-  if (call->parent()->root_instruction() != call) {
-    for (int64 i = 0; i != ShapeUtil::TupleElementCount(call->shape()); ++i) {
+StatusOr<absl::flat_hash_set<int64>> GetUnusedCallOutputIndices(
+    const HloInstructionSet& calls) {
+  absl::flat_hash_set<int64> unused_outputs;
+  if (!calls.empty()) {
+    // An arbitrary call.
+    const HloInstruction* inst = *calls.begin();
+    for (int64 i = 0; i != ShapeUtil::TupleElementCount(inst->shape()); ++i) {
       unused_outputs.insert(i);
     }
-    for (HloInstruction* user : call->users()) {
-      CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
-      unused_outputs.erase(user->tuple_index());
+  }
+
+  // Search through all users to check which outputs they use.
+  for (const HloInstruction* call : calls) {
+    if (call->parent()->root_instruction() == call) {
+      // If one of the calls is the root of a computation, any of its outputs
+      // might be used in calling computations.
+      unused_outputs.clear();
+      break;
+    } else {
+      for (HloInstruction* user : call->users()) {
+        CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+        unused_outputs.erase(user->tuple_index());
+      }
     }
   }
   return unused_outputs;
 }
 
-StatusOr<std::set<int64>> GetUnusedParametersInCall(
-    const HloInstruction* stage) {
-  const HloComputation* stage_computation = stage->to_apply();
-  std::set<int64> unused_params;
+StatusOr<absl::flat_hash_set<int64>> GetUnusedCallOutputIndices(
+    HloInstruction* call) {
+  HloInstructionSet call_set{call};
+  return GetUnusedCallOutputIndices(call_set);
+}
+
+StatusOr<absl::flat_hash_set<int64>> GetUnusedParametersInCall(
+    const HloInstruction* call) {
+  const HloComputation* called_computation = call->to_apply();
+  absl::flat_hash_set<int64> unused_params;
   for (int64 param_number = 0;
-       param_number != stage_computation->num_parameters(); ++param_number) {
+       param_number != called_computation->num_parameters(); ++param_number) {
     const HloInstruction* parameter =
-        stage_computation->parameter_instruction(param_number);
-    if (parameter->user_count() == 0) {
+        called_computation->parameter_instruction(param_number);
+    if (parameter->user_count() == 0 &&
+        parameter != called_computation->root_instruction()) {
       unused_params.insert(param_number);
     }
   }
   return unused_params;
 }
 
-Status RemoveOutputsFromCall(HloInstruction* call,
-                             const std::set<int64>& outputs_to_remove) {
+Status ReplaceDuplicateCallOutputs(
+    HloInstruction* call,
+    const absl::flat_hash_map<int64, absl::flat_hash_set<int64>>&
+        duplicate_outputs) {
+  // Get all the GTEs by tuple index.
+  absl::flat_hash_map<int64, HloInstructionSet> gte_users;
+  for (HloInstruction* user : call->users()) {
+    CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+    gte_users[user->tuple_index()].insert(user);
+  }
+
+  // Change tuple indices all to the same value for gtes targeting duplicates.
+  for (auto pair : duplicate_outputs) {
+    int64 output_idx = pair.first;
+    const absl::flat_hash_set<int64>& duplicate_indices = pair.second;
+    VLOG(3) << "Replacing duplicate output indices "
+            << absl::StrJoin(duplicate_indices, ", ") << " with output index "
+            << output_idx;
+    for (int64 duplicate_idx : duplicate_indices) {
+      for (HloInstruction* gte : gte_users[duplicate_idx]) {
+        gte->set_tuple_index(output_idx);
+      }
+    }
+  }
+  return Status::OK();
+}
+
+Status ReplaceDuplicateCallInputs(
+    HloInstruction* call,
+    const absl::flat_hash_map<int64, absl::flat_hash_set<int64>>&
+        duplicate_inputs) {
+  HloComputation* called_comp = call->to_apply();
+  // Replace any duplicate inputs which will make parameters unused.
+  for (auto pair : duplicate_inputs) {
+    int64 param_number = pair.first;
+    const absl::flat_hash_set<int64>& duplicate_indices = pair.second;
+    VLOG(3) << "Replacing duplicate parameter numbers "
+            << absl::StrJoin(duplicate_indices, ", ")
+            << " with parameter number " << param_number;
+    HloInstruction* parameter =
+        called_comp->parameter_instruction(param_number);
+    for (int64 duplicate_idx : duplicate_indices) {
+      HloInstruction* parameter_to_replace =
+          called_comp->parameter_instruction(duplicate_idx);
+      TF_RETURN_IF_ERROR(parameter_to_replace->ReplaceAllUsesWith(parameter));
+    }
+  }
+  return Status::OK();
+}
+
+Status RemoveOutputsFromCall(
+    HloInstruction* call, const absl::flat_hash_set<int64>& outputs_to_remove) {
   // Nothing to remove.
   if (outputs_to_remove.empty()) {
     return Status::OK();
@@ -1127,7 +1197,8 @@ Status RemoveOutputsFromCall(HloInstruction* call,
           << " from " << call->ToString();
 
   // Get all the GTEs.
-  absl::flat_hash_map<int64, HloInstructionSet> tuple_index_to_gte;
+  absl::flat_hash_map<int64, absl::flat_hash_set<HloInstruction*>>
+      tuple_index_to_gte;
   for (HloInstruction* user : call->users()) {
     CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
     tuple_index_to_gte[user->tuple_index()].insert(user);
@@ -1137,7 +1208,7 @@ Status RemoveOutputsFromCall(HloInstruction* call,
   std::vector<HloInstruction*> new_outputs;
   new_outputs.reserve(num_outputs_old - outputs_to_remove.size());
   for (int64 output_idx = 0; output_idx != num_outputs_old; ++output_idx) {
-    if (ContainsKey(outputs_to_remove, output_idx)) {
+    if (outputs_to_remove.contains(output_idx)) {
       // Sanity check that this output has no users.
       CHECK(tuple_index_to_gte[output_idx].empty());
     } else {
@@ -1201,7 +1272,9 @@ Status SetTupleUniqueDeviceSharding(const HloInstruction* source,
 StatusOr<HloInstruction*> ReplaceCallWith(
     HloInstruction* call, std::unique_ptr<HloComputation> new_computation,
     const std::vector<HloInstruction*> new_operands,
-    bool remove_unused_operands) {
+    bool remove_unused_operands, HloCloneContext* context,
+    const std::function<void(const HloCloneContext*)>&
+        instructions_cloned_callback) {
   HloComputation* parent_computation = call->parent();
   HloComputation* call_computation = call->to_apply();
   HloModule* module = call->GetModule();
@@ -1219,6 +1292,15 @@ StatusOr<HloInstruction*> ReplaceCallWith(
     TF_RETURN_IF_ERROR(SetTupleUniqueDeviceSharding(call, new_call));
   }
 
+  // Record the mapping of old->new in the clone context.
+  if (context) {
+    context->MapInstruction(call, new_call);
+  }
+  // Invoke instructions_cloned_callback if one has been specified.
+  if (instructions_cloned_callback) {
+    instructions_cloned_callback(context);
+  }
+
   VLOG(3) << "Replacing " << call->ToString() << " and computation:";
   XLA_VLOG_LINES(3, call_computation->ToString());
   VLOG(3) << "With " << new_call->ToString() << " and computation:";
@@ -1228,6 +1310,13 @@ StatusOr<HloInstruction*> ReplaceCallWith(
   if (remove_unused_operands) {
     TF_RETURN_IF_ERROR(
         parent_computation->RemoveInstructionAndUnusedOperands(call));
+    // Manually remove CreateBuffer custom-calls which were unused operands
+    // but were not deleted because they are marked as having side effects.
+    for (auto* inst : FindUnreachableRoots(parent_computation)) {
+      if (IsPoplarInstruction(PoplarOp::CreateBuffer)(inst)) {
+        TF_RETURN_IF_ERROR(parent_computation->ForceRemoveInstruction(inst));
+      }
+    }
   } else {
     TF_RETURN_IF_ERROR(parent_computation->RemoveInstruction(call));
   }
@@ -1237,7 +1326,11 @@ StatusOr<HloInstruction*> ReplaceCallWith(
 }
 
 StatusOr<HloInstruction*> RemoveParametersFromCall(
-    HloInstruction* call, const std::set<int64>& parameters_to_remove) {
+    HloInstruction* call,
+    const absl::flat_hash_set<int64>& parameters_to_remove,
+    HloCloneContext* context,
+    const std::function<void(const HloCloneContext*)>&
+        instructions_cloned_callback) {
   // Nothing to remove.
   if (parameters_to_remove.empty()) {
     return call;
@@ -1264,7 +1357,7 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
        ++param_number) {
     HloInstruction* old_parameter =
         call_computation->parameter_instruction(param_number);
-    if (ContainsKey(parameters_to_remove, param_number)) {
+    if (parameters_to_remove.contains(param_number)) {
       // Sanity check that the parameter we are removing has no users.
       CHECK_EQ(old_parameter->user_count(), 0);
     } else {
@@ -1273,6 +1366,10 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
           builder.AddInstruction(HloInstruction::CreateParameter(
               new_call_operands.size(), old_parameter->shape(),
               old_parameter->name()));
+      // Record the mapping of old->new in the clone context.
+      if (context) {
+        context->MapInstruction(old_parameter, new_parameter);
+      }
       old_parameter->SetupDerivedInstruction(new_parameter);
       old_to_new_computation[old_parameter] = new_parameter;
       new_call_operands.push_back(call->mutable_operand(param_number));
@@ -1293,25 +1390,31 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
                         return old_to_new_computation.at(old_operand);
                       });
     // Clone new instruction.
-    HloInstruction* new_inst = builder.AddInstruction(
-        old_inst->CloneWithNewOperands(old_inst->shape(), new_operands));
+    HloInstruction* new_inst =
+        builder.AddInstruction(old_inst->CloneWithNewOperands(
+            old_inst->shape(), new_operands, context));
     old_inst->SetupDerivedInstruction(new_inst);
     old_to_new_computation[old_inst] = new_inst;
   }
+
   // Build the new computation and the new call with new operands.
   HloInstruction* new_root =
       old_to_new_computation.at(call_computation->root_instruction());
   std::unique_ptr<HloComputation> new_computation = builder.Build(new_root);
-  TF_ASSIGN_OR_RETURN(HloInstruction * new_call,
-                      ReplaceCallWith(call, std::move(new_computation),
-                                      new_call_operands, true));
+  TF_ASSIGN_OR_RETURN(
+      HloInstruction * new_call,
+      ReplaceCallWith(call, std::move(new_computation), new_call_operands,
+                      /*remove_unused_operands=*/true, context,
+                      instructions_cloned_callback));
   return new_call;
 }
 
 StatusOr<HloInstruction*> AddParametersToCall(
-    HloInstruction* call,
-    const std::vector<HloInstruction*>& parameters_to_add) {
-  // Nothing to remove.
+    HloInstruction* call, const std::vector<HloInstruction*>& parameters_to_add,
+    HloCloneContext* context,
+    const std::function<void(const HloCloneContext*)>&
+        instructions_cloned_callback) {
+  // Nothing to add.
   if (parameters_to_add.empty()) {
     return call;
   }
@@ -1324,20 +1427,39 @@ StatusOr<HloInstruction*> AddParametersToCall(
     VLOG(3) << "\t* " << param_number++ << " " << parameter->ToString();
   }
 
+  std::vector<std::unique_ptr<HloInstruction>> new_parameters;
+  std::vector<const HloInstruction*> new_parameter_ptrs;
+  new_parameters.reserve(parameters_to_add.size());
+  new_parameter_ptrs.reserve(new_parameters.size());
+
+  // Create the new parameter instructions to be added to the computation.
+  // These get cloned along with the original computation to create the new
+  // computation.
   for (const HloInstruction* parameter : parameters_to_add) {
-    const int64 index = call->operand_count();
-    string name = tensorflow::strings::StrCat("param_", index);
-    call_computation->AddParameter(
-        HloInstruction::CreateParameter(index, parameter->shape(), name));
+    string name = tensorflow::strings::StrCat("param_", param_number);
+    new_parameters.emplace_back(HloInstruction::CreateParameter(
+        call->operand_count() + new_parameters.size(), parameter->shape(),
+        name));
+    new_parameter_ptrs.push_back(new_parameters.back().get());
   }
 
+  // Clone the original computation, adding in the new parameter instructions.
+  std::unique_ptr<HloComputation> new_computation =
+      call_computation->CloneWithReplacements({}, new_parameter_ptrs, context);
+
+  // Create an updated operand list for the call (old operands + new operands).
   std::vector<HloInstruction*> new_call_operands(call->operands().begin(),
                                                  call->operands().end());
   new_call_operands.insert(new_call_operands.end(), parameters_to_add.begin(),
                            parameters_to_add.end());
-  HloInstruction* new_call = call->parent()->AddInstruction(
-      call->CloneWithNewOperands(call->shape(), new_call_operands));
-  TF_RETURN_IF_ERROR(call->ReplaceAllUsesWith(new_call));
+  // Create a new call with the updated operand list, targeting the new
+  // computation (which has parameters corresponding to the new operands).
+  // This also deletes the original call, replacing usages with the new call.
+  TF_ASSIGN_OR_RETURN(
+      HloInstruction * new_call,
+      ReplaceCallWith(call, std::move(new_computation), new_call_operands,
+                      /*remove_unused_operands=*/true, context,
+                      instructions_cloned_callback));
   return new_call;
 }
 
