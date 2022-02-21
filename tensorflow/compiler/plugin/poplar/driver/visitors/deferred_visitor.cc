@@ -775,7 +775,7 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
     auto& input = inputs[0][tuple_idx];
 
     const bool allocate_now =
-        HasTensorAllocationTarget(input_location, resources_);
+        HasTensorAllocationTarget(output_location, resources_);
 
     // Deferred allocation without copy.
     if (!input && clone_method == CloneMethod_Bypass) {
