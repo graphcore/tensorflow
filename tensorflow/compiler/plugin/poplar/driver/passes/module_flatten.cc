@@ -84,14 +84,16 @@ StatusOr<bool> ModuleFlatten::Run(HloModule* module) {
               RemoveMapEntry(caller);
             } else if (caller->opcode() == HloOpcode::kWhile) {
               RemoveMapEntry(caller);
-              auto while_comps =
-                  caller->while_condition()->MakeEmbeddedComputationsList();
-              while_comps.push_back(caller->while_condition());
-              for (auto* while_cond : while_comps) {
-                for (auto* cond_inst : while_cond->instructions()) {
-                  RemoveMapEntry(cond_inst);
-                }
-              }
+
+              auto* condition = caller->while_condition();
+              auto condition_shape = condition->root_instruction()->shape();
+              // Add an unused call for the condition to make sure that it
+              // get flattened.
+              auto* condition_op =
+                  caller->parent()->AddInstruction(HloInstruction::CreateCall(
+                      condition_shape, caller->operands(), condition));
+              annotations_.flattened_inst_map_bwd[condition_op] = nullptr;
+
               auto* call_op =
                   caller->parent()->AddInstruction(HloInstruction::CreateCall(
                       caller->shape(), caller->operands(),
@@ -101,10 +103,7 @@ StatusOr<bool> ModuleFlatten::Run(HloModule* module) {
                   ReplacePreservingControlDependencies(caller, call_op));
             } else if (caller->opcode() == HloOpcode::kConditional) {
               RemoveMapEntry(caller);
-              auto* predicate_op = caller->parent()->AddInstruction(
-                  HloInstruction::CreateConstant(
-                      LiteralUtil::CreateR0<bool>(true)));
-              annotations_.flattened_inst_map_bwd[predicate_op] = nullptr;
+              auto* predicate_op = caller->mutable_operand(0);
               auto* chain_op =
                   caller->parent()->AddInstruction(HloInstruction::CreateCall(
                       caller->shape(), {caller->mutable_operand(1)},
