@@ -653,9 +653,7 @@ cluster_1  {
   EXPECT_EQ(annotations.flattened_inst_map_bwd.size(),
             annotations.flattened_module->instruction_count());
 }
-
-TEST_F(ModuleFlattenTest, TestWhileWithCallInCond) {
-  std::string hlo_string = R"(
+const char* while_with_call_in_cond_hlo = R"(
 HloModule top
 
 inner_cond {
@@ -687,10 +685,12 @@ cluster_1  {
 }
   )";
 
+TEST_F(ModuleFlattenTest, TestWhileWithCallInCond) {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status =
+      ParseAndReturnVerifiedModule(while_with_call_in_cond_hlo, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -705,6 +705,37 @@ cluster_1  {
             module->instruction_count());
   EXPECT_EQ(annotations.flattened_inst_map_bwd.size(),
             annotations.flattened_module->instruction_count());
+}
+
+TEST_F(ModuleFlattenTest, TestWhileConditionFlattened) {
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status =
+      ParseAndReturnVerifiedModule(while_with_call_in_cond_hlo, config);
+  ASSERT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ASSERT_TRUE(flatten.Run(module).ValueOrDie());
+
+  // Check that the condition and it's subcalls have been flattened.
+  auto* inner_cond = module->GetComputationWithName("inner_cond");
+  ASSERT_TRUE(inner_cond);
+  for (auto* inst : inner_cond->instructions()) {
+    ASSERT_TRUE(annotations.flattened_inst_map_fwd[inst])
+        << inst->name() << " not flattened";
+  }
+
+  auto* c_a0 = FindInstruction(module, "c_a0");
+  ASSERT_TRUE(c_a0);
+  ASSERT_TRUE(annotations.flattened_inst_map_fwd[c_a0]);
+
+  auto* c_t = FindInstruction(module, "c_t");
+  ASSERT_TRUE(c_t);
+  ASSERT_TRUE(annotations.flattened_inst_map_fwd[c_t]);
 }
 
 TEST_F(ModuleFlattenTest, TestCallUnusedOperands) {
@@ -742,6 +773,57 @@ cluster_1  {
   EXPECT_EQ(
       annotations.flattened_module->entry_computation()->instruction_count(),
       5);
+}
+
+TEST_F(ModuleFlattenTest, TestConditionalPredFlattened) {
+  std::string hlo_string = R"(
+HloModule test
+
+body1 {
+  ROOT in = (f16[], f16[]) parameter(0)
+}
+
+body2 {
+  ROOT in = (f16[], f16[]) parameter(0)
+}
+
+cluster_1  {
+  arg0 = f16[] parameter(0)
+  arg1 = f16[] parameter(1)
+  arg2 = s32[5] parameter(2)
+
+  offset = s32[] constant(0)
+  slice = s32[1] dynamic-slice(arg2, offset), dynamic_slice_sizes={1}
+  pred0 = s32[] reshape(slice)
+
+  body_args = (f16[], f16[]) tuple(arg0, arg1)
+
+  c1 = (f16[], f16[]) conditional(pred0, body_args, body_args),
+      branch_computations={body1, body2}
+  res = f16[] get-tuple-element(c1), index=0
+
+  ROOT %tuple = (f16[]) tuple(res)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  ASSERT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ASSERT_TRUE(flatten.Run(module).ValueOrDie());
+
+  auto* pred = FindInstruction(module, "pred0");
+  ASSERT_TRUE(pred);
+
+  auto* flat_pred = annotations.flattened_inst_map_fwd[pred];
+  ASSERT_TRUE(flat_pred);
+  ASSERT_EQ(flat_pred->GetModule(), annotations.flattened_module.get());
 }
 
 }  // namespace
