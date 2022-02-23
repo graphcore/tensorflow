@@ -18,9 +18,8 @@ Embedded application runtime
 """
 
 import popef
+
 from tensorflow.compiler.plugin.poplar.ops import gen_application_runtime
-from tensorflow.compiler.plugin.poplar.ops import gen_dataset_exporters
-from tensorflow.python.client import session as session_lib
 from tensorflow.python.eager.context import executing_eagerly
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -91,19 +90,20 @@ class RuntimeContext:
             self.signature().streamed_outputs))
 
 
-def _find_opaque_blob(filename_tensor):
+def _find_opaque_blob(filename):
   opq_blobs = None
 
   # Get the serialized output.
-  if executing_eagerly():
-    path = filename_tensor.numpy()
-  else:
-    with ops.device("CPU"):
-      with session_lib.Session().as_default():
-        path = filename_tensor.eval()
+  if not isinstance(filename, (str, bytes)):
+    if executing_eagerly():
+      filename = filename.numpy()
+    else:
+      with ops.device("CPU"):
+        with ops.get_default_session().as_default():
+          filename = filename.eval()
 
   r = popef.Reader()
-  r.parseFile(path)
+  r.parseFile(filename)
   opq_blobs = r.opaqueBlobs()[0].data()
   return opq_blobs
 
@@ -127,15 +127,10 @@ def embedded_runtime_start(executable_file, inputs, name, timeout=None):
     An embedded application runtime context instance.
   """
 
-  # Check if the path to executable is constant (passed as string scalar)
-  # or should be deduced in runtime from string Tensor passed in
-  executable_file_tensor = ops.convert_to_tensor(executable_file,
-                                                 dtype=dtypes.string)
-
   timeout = timeout or 5000
 
   # Open the executable file.
-  opq_blob = _find_opaque_blob(executable_file_tensor)
+  opq_blob = _find_opaque_blob(executable_file)
 
   # Assert that the expected protobuf size is less than 128MB.
   # That is probably overkill, but it stops us trying to load HUGE files because we have nonsense data.
@@ -198,6 +193,11 @@ def embedded_runtime_start(executable_file, inputs, name, timeout=None):
   input_tensors = poplar_exec.embedded_runtime_config.signature.inputs
   arg2idx_map = {t.argument: i for i, t in enumerate(input_tensors)}
   reordered_inputs = [inputs[arg2idx_map[i]] for i in range(len(inputs))]
+
+  # Check if the path to executable is constant (passed as string scalar)
+  # or should be deduced in runtime from string Tensor passed in
+  executable_file_tensor = ops.convert_to_tensor(executable_file,
+                                                 dtype=dtypes.string)
 
   # Create the context object that contains all the information required to
   # call the embedded runtime.
