@@ -145,7 +145,7 @@ class IpuIpuModelTest(xla_test.XLATestCase):
 
       fd = {pa: np.zeros([480]), pb: np.zeros([480])}
       with self.assertRaisesRegex(errors.InternalError,
-                                  "invalid_option: Unrecognised"):
+                                  "Unrecognised option 'some_option'"):
         sess.run(output, fd)
 
   def testNamedOperations(self):
