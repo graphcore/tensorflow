@@ -94,6 +94,12 @@ For example, this will not work:
   :members: PopDistStrategy
   :special-members: __init__
 
+.. Serving utilities
+
+.. automodule:: tensorflow.python.ipu.serving
+  :members:
+  :imported-members:
+
 .. _datasets-api:
 
 Datasets

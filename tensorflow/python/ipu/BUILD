@@ -159,6 +159,7 @@ py_library(
         "optimizers/map_gradient_optimizer.py",
         "optimizers/sharded_optimizer.py",
         "scopes.py",
+        "serving.py",
         "sharding.py",
         "sharding_utils.py",
         "utils.py",
@@ -1701,6 +1702,21 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "serving_export_test",
+    size = "large",
+    srcs = ["tests/serving_export_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//third_party/py/numpy",
+    ],
+    tags = ["hw_poplar_test_1_ipus"],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -1784,6 +1800,7 @@ test_suite(
         "replication_normalise_test",
         "seed_control_test",
         "sequence_slice_test",
+        "serving_export_test",
         "sharded_and_replicated_test",
         "user_ops_test",
         "utils_get_config_test",
