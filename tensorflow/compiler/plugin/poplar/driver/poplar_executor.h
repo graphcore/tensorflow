@@ -580,6 +580,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.selection_order();
   }
 
+  bool EnableDynamicSliceReplacement() const {
+    return current_config_.enable_dynamic_slice_replacement();
+  }
+
   int64 GetPoplarDeviceHash() const { return poplar_device_hash_; }
 
   void AddCompileBeginEventRecord(const std::string& module_name);

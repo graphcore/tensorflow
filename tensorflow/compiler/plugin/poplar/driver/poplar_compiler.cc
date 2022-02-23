@@ -73,6 +73,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dead_control_dependencies_elimination.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dependency_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/distributed_batch_norm_decomposer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/dynamic_slice_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/embeddings_gradient_optimizer.h"
@@ -1474,6 +1475,11 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<CommutativeInstructionReorderOperands>();
       pipeline.AddPass<AllToAllFinder>(resources.annotations,
                                        resources.replication_factor);
+
+      if (poplar_executor->EnableDynamicSliceReplacement()) {
+        pipeline.AddPass<DynamicSliceReplacer>();
+      }
+
       {
         auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
             "multi-update-optimizer", pipeline_compiler_stats.get());
