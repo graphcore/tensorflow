@@ -21,6 +21,9 @@ from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python import keras
+from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.eager import backprop
+from tensorflow.python.eager import def_function
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import dtypes
@@ -33,6 +36,7 @@ from tensorflow.python.ops import gradients_impl
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
@@ -730,6 +734,68 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
 
       expected_value = model.predict(input_data, batch_size=1)
       self.assertAllClose(expected_value, actual_value, atol=1e-05)
+
+  def testOutlinedFunctionInFunction(self):
+    @ipu.outlined_function
+    def identity(x):
+      return x
+
+    @def_function.function(experimental_compile=True)
+    def f(x):
+      with backprop.GradientTape() as tape:
+        tape.watch(x)
+        z = identity(x)
+      return tape.gradient(z, x)
+
+    config = ipu.config.IPUConfig()
+    config.configure_ipu_system()
+    strategy = ipu.ipu_strategy.IPUStrategy()
+
+    with strategy.scope():
+      x = random_ops.random_normal((1, 10))
+      dfdx = strategy.run(f, [x])
+      self.assertAllEqual(dfdx, np.ones((1, 10)))
+
+  def testKerasCustomLayerWithOutlinedFunction(self):
+    class CustomLayer(keras.layers.Layer):
+      def __init__(self, **kwargs):
+        self.dense = keras.layers.Dense(units=4)
+        super().__init__(**kwargs)
+
+      def build(self, input_shape):
+        self.dense.build(input_shape)
+        super().build(input_shape)
+
+      def call(self, inputs):  # pylint: disable=arguments-differ
+        @ipu.outlined_function
+        def inner_call():
+          y = self.dense(inputs)
+          return y
+
+        return inner_call()
+
+    # Configure the IPU device.
+    config = ipu.config.IPUConfig()
+    config.auto_select_ipus = 1
+    config.configure_ipu_system()
+
+    micro_batch_size = 4
+    ds = dataset_ops.Dataset.from_tensor_slices(
+        ([1.] * micro_batch_size * 4, [2.] * micro_batch_size * 4))
+    ds = ds.batch(micro_batch_size, drop_remainder=True)
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+
+    with strategy.scope():
+      # Functional model
+      input_layer = keras.Input(shape=1, batch_size=micro_batch_size)
+      x = CustomLayer()(input_layer)
+      model = keras.Model(input_layer, x)
+
+      model.compile(optimizer="sgd",
+                    loss=keras.losses.SparseCategoricalCrossentropy())
+
+      model.fit(ds, batch_size=micro_batch_size)
 
 
 if __name__ == "__main__":
