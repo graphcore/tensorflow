@@ -168,6 +168,106 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       ref_result = (x1_data + x2_data) * var_value
       self.assertEqual(list(result), list(ref_result))
 
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.run_v2_only
+  def test_export_pipeline(self):
+
+    element_count = 4
+    input_shape = (element_count,)
+    input_signature = (tensor_spec.TensorSpec(shape=input_shape,
+                                              dtype=np.float32),
+                       tensor_spec.TensorSpec(shape=input_shape,
+                                              dtype=np.float32))
+
+    var_value = np.float32(4.)
+    w = variables.Variable(var_value)
+
+    def stage1(x1, x2):
+      return x1 * x2 + w
+
+    def stage2(x):
+      return x - 2 * w + 2
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      iterations = 16
+      serving.export_pipeline([stage1, stage2],
+                              tmp_folder,
+                              2,
+                              iterations,
+                              device_mapping=[0, 0],
+                              input_signature=input_signature)
+
+      x1_data = np.arange(element_count, dtype=np.float32)
+      x2_data = x1_data * 2
+
+      result = self._load_and_run(tmp_folder, {'x1': x1_data, 'x2': x2_data})
+      ref_result = x1_data * x2_data - var_value + 2
+      self.assertEqual(list(result), list(ref_result))
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.run_v2_only
+  def test_export_pipeline_tffunction_signature(self):
+
+    element_count = 4
+    input_shape = (element_count,)
+    input_signature = (tensor_spec.TensorSpec(shape=(), dtype=np.float16),
+                       tensor_spec.TensorSpec(shape=input_shape,
+                                              dtype=np.float16))
+
+    @def_function.function(input_signature=input_signature)
+    def stage1(x1, x2):
+      return x1 * x2
+
+    def stage2(x):
+      return x + 2
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      iterations = 16
+      serving.export_pipeline([stage1, stage2],
+                              tmp_folder,
+                              2,
+                              iterations,
+                              inputs=[np.float16(42.0)],
+                              device_mapping=[0, 0])
+
+      x2_data = np.arange(element_count, dtype=np.float16)
+      result = self._load_and_run(tmp_folder, x2_data)
+      ref_result = 42.0 * x2_data + 2
+      self.assertEqual(list(result), list(ref_result))
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.run_v2_only
+  def test_export_pipeline_dataset_signature(self):
+
+    element_count = 4
+    input_shape = (element_count,)
+
+    inputs = (array_ops.zeros(shape=input_shape, dtype=np.float32),
+              array_ops.zeros(shape=(), dtype=np.float32))
+    dataset = dataset_ops.Dataset.from_tensors(inputs)
+
+    def stage1(x1, x2, x3):
+      return x1 * x2 + x3
+
+    def stage2(x):
+      return x + 2
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      iterations = 16
+      serving.export_pipeline([stage1, stage2],
+                              tmp_folder,
+                              2,
+                              iterations,
+                              inputs=[42.0],
+                              device_mapping=[0, 0],
+                              input_dataset=dataset)
+
+      x2_data = np.arange(element_count, dtype=np.float32)
+      x3_data = np.float32(5.0)
+      result = self._load_and_run(tmp_folder, {'x2': x2_data, 'x3': x3_data})
+      ref_result = 42.0 * x2_data + x3_data + 2
+      self.assertEqual(list(result), list(ref_result))
+
 
 if __name__ == "__main__":
   test.main()
