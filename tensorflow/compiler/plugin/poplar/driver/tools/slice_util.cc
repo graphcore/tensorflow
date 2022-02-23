@@ -108,6 +108,7 @@ StatusOr<HloInstruction*> Replace1DDynamicWithMultiSlice(
     TF_RETURN_IF_ERROR(dynamic_slice->ReplaceAllUsesWith(unshuffle));
   }
 
+  dynamic_slice->SetupDerivedInstruction(multislice);
   TF_RETURN_IF_ERROR(comp->RemoveInstruction(dynamic_slice));
   return multislice;
 }

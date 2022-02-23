@@ -29,10 +29,13 @@ StatusOr<bool> DynamicSliceReplacer::Run(HloModule* module) {
   for (auto* comp : module->MakeComputationPostOrder()) {
     for (auto* inst : comp->MakeInstructionPostOrder()) {
       if (auto dynamic_slice = DynCast<HloDynamicIndexInstruction>(inst)) {
+        const auto old_instr_str = dynamic_slice->ToString();
         TF_ASSIGN_OR_RETURN(auto replaced,
                             TryReplaceDynamicWithMultiSlice(dynamic_slice));
         if (replaced) {
           changed = true;
+          VLOG(3) << "Replaced " << old_instr_str << " with "
+                  << replaced->ToString();
         }
       }
     }
