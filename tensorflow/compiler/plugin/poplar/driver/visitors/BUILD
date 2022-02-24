@@ -79,6 +79,7 @@ poplar_cc_library(
         "//third_party/ipus/tools:poplar_executable_data",
         "@local_config_poplar//poplar:poplar_libs",
     ],
+    alwayslink = True,
 )
 
 poplar_cc_library(
@@ -114,6 +115,7 @@ poplar_cc_library(
     deps = [
         ":pipeline_stage_visitor",
         "//tensorflow/compiler/plugin/poplar/driver/tools:make_visitor",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:pipeline_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:inter_tileset_copy",
     ],
 )

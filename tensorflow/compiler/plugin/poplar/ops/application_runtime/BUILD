@@ -29,6 +29,7 @@ poplar_cc_library(
 poplar_cc_library(
     name = "ops",
     srcs = [],
+    visibility = ["//visibility:public"],
     deps = [
         ":application_compile",
         ":application_runtime",

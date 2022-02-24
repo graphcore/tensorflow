@@ -53,11 +53,29 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
-    name = "kernels",
+    name = "embedded_runtime_kernels",
     srcs = [
         "application_runtime/application_compile.cc",
         "application_runtime/application_runtime.cc",
         "application_runtime/resource_handle_pruner.cc",
+    ],
+    hdrs = [
+        "application_runtime/resource_handle_pruner.h",
+        "functional/functional_util.h",
+        "ipu_kernels_common.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tensorflow/compiler/jit/kernels:xla_ops",
+        "//tensorflow/compiler/plugin/poplar/driver:ipu_devices",
+        "//tensorflow/compiler/plugin/poplar/driver:poplar_platform",
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
+)
+
+poplar_cc_library(
+    name = "kernels",
+    srcs = [
         "datastream/dataset_benchmark.cc",
         "datastream/exporters.cc",
         "datastream/feeds.cc",
@@ -117,6 +135,7 @@ poplar_cc_library(
     ],
     deps = [
         ":custom_kernels_util",
+        ":embedded_runtime_kernels",
         "//tensorflow/compiler/jit:xla_device",
         "//tensorflow/compiler/jit/kernels:xla_ops",
         "//tensorflow/compiler/plugin/poplar/driver",
