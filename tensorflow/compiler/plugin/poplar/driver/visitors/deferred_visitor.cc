@@ -793,10 +793,12 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
     // limited to DeduceNewOrderOrPreserveAliases and
     // DeduceNewOrderOrExpandAliases. All other copies don't defer.
     // TODO(T54942): Try deduce layout for all copies.
-    if (!allocate_now && !input_subshape.IsOpaque() &&
-        !input_subshape.IsToken() &&
-        (clone_method == CloneMethod_DeduceNewOrderOrPreserveAliases ||
-         clone_method == CloneMethod_DeduceNewOrderOrExpandAliases)) {
+    const bool can_defer =
+        clone_method == CloneMethod_DeduceNewOrderOrPreserveAliases ||
+        clone_method == CloneMethod_DeduceNewOrderOrExpandAliases ||
+        clone_method == CloneMethod_DeduceNewOrderOrBypass;
+    if (can_defer && !allocate_now && !input_subshape.IsOpaque() &&
+        !input_subshape.IsToken()) {
       VLOG(3) << "Deferring a copy at " << inst->name();
       auto op_dnai = GetDebugNameAndId(op);
       // Allocation function for copy instruction:
@@ -827,7 +829,8 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
                 graph, resources_, input,
                 {dnai, absl::StrCat(std::to_string(tuple_idx), "/",
                                     op_dnai.getPathName())});
-
+          case CloneMethod_DeduceNewOrderOrBypass:
+            return input;
           default:
             return FailedPrecondition("Unexpected clone method: %s",
                                       CloneMethod_Name(clone_method));
@@ -850,9 +853,11 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
         CHECK_EQ(inputs.size(), 1);
         CHECK(inputs[0].IsTensor());
         poplar::Tensor input = inputs[0].AsTensor();
-        seq.add(poplar::program::Copy(
-            input, tensor, false,
-            {absl::StrCat(std::to_string(tuple_idx), op_dnai.getPathName())}));
+        if (input != tensor) {
+          seq.add(poplar::program::Copy(input, tensor, false,
+                                        {absl::StrCat(std::to_string(tuple_idx),
+                                                      op_dnai.getPathName())}));
+        }
         TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
         return tensor;
       };
@@ -889,6 +894,7 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
           seq.add(poplar::program::Copy(tensor_input, out, false, {dnai}));
           break;
         }
+        case CloneMethod_DeduceNewOrderOrBypass:
         case CloneMethod_Bypass: {
           out = tensor_input;
           break;

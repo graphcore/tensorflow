@@ -688,7 +688,8 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
     auto clone_method_it = clone_method_tree.leaf_begin();
     for (auto& indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
       auto clone_method = (*clone_method_it++).second;
-      if (clone_method != CloneMethod_Bypass) {
+      if (clone_method != CloneMethod_Bypass &&
+          clone_method != CloneMethod_DeduceNewOrderOrBypass) {
         HloPoplarBuffer* buffer = analysis_->NewHloPoplarBuffer(
             inst, indexed_shape.index,
             /*locality=*/BufferLocality::kDeviceMemory);

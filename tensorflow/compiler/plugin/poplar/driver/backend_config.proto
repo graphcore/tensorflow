@@ -103,12 +103,21 @@ enum Tileset {
   TILESET_IO_TILES = 1;
 };
 
+
+// An enum representing copy method for each tensor copied.
 enum CloneMethod {
+  // Preserve order and aliases.
   CloneMethod_PreserveOrderAndAliases = 0;
+  // Preserve order unless there are aliases, otherwise expand them.
   CloneMethod_PreserveOrderUnlessAliases = 1;
+  // Copy nothing and return input tensor.
   CloneMethod_Bypass = 2;
+  // Try to defer copy to get better layout or do alias-preserving copy.
   CloneMethod_DeduceNewOrderOrPreserveAliases = 3;
+  // Try to defer copy to get better layout or do alias-expanding copy.
   CloneMethod_DeduceNewOrderOrExpandAliases = 4;
+  // Try to defer copy to get better layout or return input tensor.
+  CloneMethod_DeduceNewOrderOrBypass = 5;
 }
 
 enum StochasticRoundingMethod {
