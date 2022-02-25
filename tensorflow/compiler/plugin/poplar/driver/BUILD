@@ -264,6 +264,7 @@ poplar_cc_library(
         "//tensorflow/compiler/xla/service:zero_sized_hlo_elimination",
         "//tensorflow/core/common_runtime:device_mgr",
     ],
+    alwayslink = True,
 )
 
 poplar_cc_library(
@@ -360,6 +361,7 @@ poplar_cc_library(
         ":poplar_executor",
         ":poplar_platform_id",
     ],
+    alwayslink = True,
 )
 
 poplar_cc_library(
@@ -449,6 +451,7 @@ poplar_cc_library(
         "//tensorflow/core/kernels:no_op",
         "@local_config_poplar//poplar:poplar_libs",
     ],
+    alwayslink = True,
 )
 
 poplar_cc_library(

@@ -134,7 +134,6 @@ poplar_cc_library(
         "training_ops.cc",
     ],
     hdrs = [
-        "application_runtime/resource_handle_pruner.h",
         "functional/functional_util.h",
         "ipu_kernels_common.h",
     ],
