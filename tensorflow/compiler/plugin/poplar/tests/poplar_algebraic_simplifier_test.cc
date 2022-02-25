@@ -4358,6 +4358,42 @@ TEST_F(DotOfConcatSimplificationTest, ConcatIntoScalarDot) {
   ASSERT_FALSE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
 }
 
+TEST_F(DotOfConcatSimplificationTest, RankOneRHS) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      param0 = f32[2, 2, 2] parameter(0)
+      param1 = f32[2, 2, 2] parameter(1)
+      constant = f32[4] constant({-0.38, 0.07, -0.62, 0.66})
+      concat = f32[2, 2, 4] concatenate(param0, param1), dimensions={2}
+      ROOT dot = f32[2, 2] dot(concat, constant), lhs_contracting_dims={2},
+                                                  rhs_contracting_dims={0}
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  IpuOptions_IpuAlgebraicSimplifierConfig config;
+  config.set_enable_dot_strength(false);
+  ASSERT_TRUE(PoplarAlgebraicSimplifier(config).Run(m.get()).ValueOrDie());
+
+  const HloInstruction* slice0;
+  const HloInstruction* slice1;
+  auto rhs = m::Constant();
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Add(m::Dot(m::Parameter(0), m::Slice(&slice0, rhs)),
+                        m::Dot(m::Parameter(1), m::Slice(&slice1, rhs)))));
+
+  // Check slices target the same constant.
+  EXPECT_EQ(slice0->operand(0), slice1->operand(0));
+
+  // Check slice indices.
+  EXPECT_THAT(slice0->slice_starts(), ElementsAre(0));
+  EXPECT_THAT(slice0->slice_limits(), ElementsAre(2));
+  EXPECT_THAT(slice0->slice_strides(), ElementsAre(1));
+  EXPECT_THAT(slice1->slice_starts(), ElementsAre(2));
+  EXPECT_THAT(slice1->slice_limits(), ElementsAre(4));
+  EXPECT_THAT(slice1->slice_strides(), ElementsAre(1));
+}
+
 // Test that DynamicUpdateSlice update param with any dimension equal to zero
 // gets removed.
 TEST_F(PoplarAlgebraicSimplifierTest, DynamicUpdateSliceZeroUpdate) {
