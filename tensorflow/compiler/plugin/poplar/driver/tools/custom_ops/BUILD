@@ -167,6 +167,7 @@ poplar_cc_library(
     deps = [
         ":custom_ops_dependencies",
     ],
+    alwayslink = True,
 )
 
 poplar_cc_library(
@@ -312,6 +313,7 @@ poplar_cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_protobuf//:protobuf_headers",
     ],
+    alwayslink = True,
 )
 
 poplar_cc_library(
