@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import numpy as np
+import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
@@ -33,37 +34,53 @@ class TensorPathTransformTest(xla_test.XLATestCase):
     return 0
 
   def testAllocationPathWithReduce(self):
-    with self.session() as session:
+    cfg = ipu.config.IPUConfig()
+    tu.enable_ipu_events(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    with self.session() as sess:
       with ops.device('cpu'):
-        indices = array_ops.placeholder(np.int32, [8])
+        indices = array_ops.placeholder(np.int32, [2, 8])
         sequence = array_ops.placeholder(np.float32, [32, 16])
 
       def my_net(indices, sequence):
-        # Essentially multiply indices by 4 (n * 3 + n).
-        indices = math_ops.multiply(indices, 3)
-        const = array_ops.constant(list(range(8)), np.int32)
-        const = array_ops.expand_dims(const, axis=1)
-        indices = array_ops.expand_dims(indices, axis=1)
-        indices = array_ops.concat([indices, const], axis=1)
+        # A roundabout way of increasing all indices by 8.
+        # Importantly it involves a reduce back to the original input shape.
+        const = array_ops.constant([8], np.int32)
+        indices = array_ops.expand_dims(indices, axis=2)
+        const = array_ops.broadcast_to(const, [2, 8, 1])
+        indices = array_ops.concat([indices, const], axis=2)
 
         # The output shape of this reduce is the same as the original shape of
         # the indices input. This means the indices input will be allocated
         # through this reduce.
-        indices = math_ops.reduce_sum(indices, axis=1)
+        indices = math_ops.reduce_sum(indices, axis=2)
         return ipu.ops.embedding_ops.embedding_lookup(sequence, indices)
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         out = ipu.ipu_compiler.compile(my_net, inputs=[indices, sequence])
 
-      indices_data = list(range(8))
+      indices_data = np.reshape(list(range(2 * 8)), [2, 8])
       sequence_data = np.reshape(list(range(32 * 16)), [32, 16])
-      result, = session.run(out,
-                            feed_dict={
-                                indices: indices_data,
-                                sequence: sequence_data,
-                            })
 
-    expected_result = [sequence_data[i * 4] for i in indices_data]
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
+      result, = sess.run(out,
+                         feed_dict={
+                             indices: indices_data,
+                             sequence: sequence_data,
+                         })
+      report_json.parse_log()
+
+    # Check that the reduce hasn't been optimised out.
+    # This would mean the reduce case never got hit in path transform.
+    self.assertTrue(
+        any(
+            name.startswith("reduce") for name in
+            report_json.get_tensor_map().tensor_inst_name_mappings()))
+
+    expected_result = [sequence_data[i + 8] for i in indices_data]
     self.assertAllEqual(expected_result, result)
 
 
