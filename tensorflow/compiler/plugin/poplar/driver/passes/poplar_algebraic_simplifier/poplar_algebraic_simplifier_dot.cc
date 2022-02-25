@@ -148,25 +148,25 @@ StatusOr<HloInstruction*> OptimizeDotOfConcatHelper(
   // elements and the two non-contracted dimensions have M and N elements.
   HloInstruction* add_result = nullptr;
   int64 rhs_contracting_dim_offset = 0;
-  int64 n = rhs->shape().dimensions(1 - rhs_contracting_dim);
   for (HloInstruction* concat_op : lhs->operands()) {
     int64 sub_k = concat_op->shape().dimensions(lhs_contracting_dim);
     Shape rhs_slice_shape(rhs->shape());
     rhs_slice_shape.set_dimensions(rhs_contracting_dim, sub_k);
     visitor->simplifier_->UpdateLayout(&rhs_slice_shape);
 
-    std::array<int64, 2> start_indices;
+    std::vector<int64> start_indices(rhs->shape().rank(), 0);
     start_indices[rhs_contracting_dim] = rhs_contracting_dim_offset;
-    start_indices[1 - rhs_contracting_dim] = 0;
 
-    std::array<int64, 2> limit_indices;
+    std::vector<int64> limit_indices(rhs->shape().dimensions().begin(),
+                                     rhs->shape().dimensions().end());
     limit_indices[rhs_contracting_dim] = rhs_contracting_dim_offset + sub_k;
-    limit_indices[1 - rhs_contracting_dim] = n;
+
+    std::vector<int64> strides(rhs->shape().rank(), 1);
 
     HloInstruction* rhs_slice = util::PreserveFrontendAttributesIfNeeded(
         visitor->computation_->AddInstruction(HloInstruction::CreateSlice(
             rhs_slice_shape, rhs, /*start_indices=*/start_indices,
-            /*limit_indices=*/limit_indices, /*strides=*/{1, 1})),
+            /*limit_indices=*/limit_indices, /*strides=*/strides)),
         rhs);
 
     // TODO(b/69062148): We can get rid of `swapped` once all backends support
