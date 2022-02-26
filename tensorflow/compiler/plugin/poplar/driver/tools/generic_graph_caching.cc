@@ -111,6 +111,14 @@ Status GenericGraphCache::ExecuteCached(
 
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(resources, inst);
 
+  // Disabled outlining, so immediately call the function.
+  // If the caller has opted in to `always_allocate`, skip this and go to the
+  // tensor allocations.
+  if (resources.disable_graph_outlining && !always_allocate) {
+    func(args, seq);
+    return Status::OK();
+  }
+
   auto itr = table_.find(inst);
   if ((itr != table_.end()) && !resources.disable_graph_outlining) {
     // We have a cached graph for this dot operation.
