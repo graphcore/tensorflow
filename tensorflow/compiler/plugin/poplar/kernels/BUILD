@@ -71,6 +71,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver:poplar_platform",
         "@local_config_poplar//poplar:poplar_libs",
     ],
+    alwayslink = True,
 )
 
 poplar_cc_library(
