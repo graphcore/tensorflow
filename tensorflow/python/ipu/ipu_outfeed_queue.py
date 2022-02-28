@@ -81,9 +81,6 @@ class IPUOutfeedQueue:
     """Creates an IPUOutfeedQueue object.
 
     Args:
-        feed_name: a user provided name for the outfeed operation. Must be
-          unique within all IPUOutfeedQueue and IPUInfeedQueue
-          operations.
         outfeed_mode: `ipu_outfeed_queue.IPUOutfeedMode` type used to control the
           outfeed behaviour. If not specified then all elements will be
           returned by the outfeed when the dequeue operation is run.
