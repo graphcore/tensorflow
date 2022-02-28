@@ -570,6 +570,40 @@ class DefaultShapeInferenceBehaviorTest(keras_parameterized.TestCase):
     output = model(sample_input)  # pylint: disable=not-callable
     self.assertEqual(output.shape, (1, 3))
 
+  def testModelWithRequiredTrainingArg(self):
+    class MyModel(training_lib.Model):  # pylint: disable=abstract-method
+      def call(self, inputs, training):  # pylint: disable=arguments-differ,unused-argument
+        return inputs
+
+    model = MyModel()
+    model.compile()
+    x = np.ones(8)
+    y = np.ones(8)
+
+    model.build([8])
+    model.fit(x, y, batch_size=1)
+    model.evaluate(x, y, batch_size=1)
+    model.predict(x, batch_size=1)
+
+  def testModelWithAdditionalRequiredArgs(self):
+    class MyModel(training_lib.Model):  # pylint: disable=abstract-method
+      def call(self, inputs, additional_arg):  # pylint: disable=arguments-differ,unused-argument
+        return inputs
+
+    model = MyModel()
+    model.compile()
+    x = np.ones(8)
+    y = np.ones(8)
+
+    with self.assertRaisesRegex(ValueError, r'Models passed to `build`'):
+      model.build([8])
+    with self.assertRaisesRegex(ValueError, r'Models passed to `fit`'):
+      model.fit(x, y, batch_size=1)
+    with self.assertRaisesRegex(ValueError, r'Models passed to `evaluate`'):
+      model.evaluate(x, y, batch_size=1)
+    with self.assertRaisesRegex(ValueError, r'Models passed to `predict`'):
+      model.predict(x, batch_size=1)
+
   def testNoneInShapeWithFunctionalAPI(self):
     # pylint: disable=abstract-method
     class BasicBlock(training_lib.Model):
