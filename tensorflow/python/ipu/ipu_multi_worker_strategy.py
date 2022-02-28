@@ -33,6 +33,7 @@ from tensorflow.python.ops import collective_ops
 from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import variable_scope
+from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import tf_contextlib
 from tensorflow.python.util import deprecation
 
@@ -335,6 +336,8 @@ class IPUMultiWorkerExtendedV1(
         initial_value = kwargs["initial_value"]
         if callable(initial_value):
           initial_value = initial_value()
+        if isinstance(initial_value, trackable.CheckpointInitialValue):
+          initial_value = initial_value.wrapped_value
         assert not callable(initial_value)
         initial_value = ops.convert_to_tensor(initial_value,
                                               dtype=kwargs.get("dtype", None))

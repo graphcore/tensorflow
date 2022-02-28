@@ -36,6 +36,7 @@ from tensorflow.python.keras.engine import functional
 from tensorflow.python.keras.engine import sequential
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import nest
 from tensorflow.python.ipu.keras.extensions import functional_extensions
 from tensorflow.python.ipu.keras.extensions import sequential_extensions
@@ -126,6 +127,8 @@ def _get_variable_creator_initial_value(device, **kwargs):
       initial_value = kwargs["initial_value"]
       if callable(initial_value):
         initial_value = initial_value()
+      if isinstance(initial_value, trackable.CheckpointInitialValue):
+        initial_value = initial_value.wrapped_value
       assert not callable(initial_value)
       return ops.convert_to_tensor(initial_value,
                                    dtype=kwargs.get("dtype", None))
