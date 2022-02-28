@@ -215,6 +215,7 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
           return x
         return input_layer.Input(batch_shape=x)
 
+      self._check_call_args('build')
       inputs = map_shapes(input_shape, to_input_tensor)
       outputs = self._trace_graph_network(inputs)
       self._update_graph_network(inputs, outputs)
@@ -547,6 +548,18 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
       layer._inbound_nodes.clear()  # pylint: disable=protected-access
       layer._outbound_nodes.clear()  # pylint: disable=protected-access
 
+    # Case where `training` is a positional arg with no default.
+    kwargs = {}
+    # Update self._call_full_argspec.
+    self._init_call_fn_args()
+    call_signature = self._call_full_argspec
+    if len(call_signature.args) > 2:
+      n_required = len(call_signature.args) - len(call_signature.defaults
+                                                  or [])
+      for arg in call_signature.args[2:n_required]:
+        if arg == 'training':
+          kwargs['training'] = False
+
     # Invoke call within a call_context in case metrics are added in call.
     # We can't invoke self() because the base_layer __call__ override sees that
     # we are passing in keras tensors and treats the whole model as a layer
@@ -567,7 +580,7 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
           input_shape = get_shape(inputs)
 
         self.build(input_shape)
-      return self.call(inputs)
+      return self.call(inputs, **kwargs)
 
   @trackable.no_automatic_dependency_tracking
   def _update_graph_network(self, inputs, outputs):
