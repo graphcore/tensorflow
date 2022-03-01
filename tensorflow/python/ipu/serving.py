@@ -40,32 +40,31 @@ def _validate_signature(defunc,
                         input_signature,
                         input_dataset,
                         non_feed_inputs=None):
-  """Validate and update input_signature if necessary to match the defunc's
-  arguments.
+  """Validate and update `input_signature` if necessary to match the arguments
+  of `defunc`.
 
   Args:
-    defunc (Callable or tf.function): Function whose signature
-      is analyzed.
-    input_signature (list or tuple): A sequence of tf.TensorSpec objects
-      that describe the input arguments of defunc. If defunc is a
-      tf.function and input_signature was specified during tf.function
-      creation, this argument can be None.
-    input_dataset (tf.Dataset): Dataset from which input_signature will be
+    defunc (Callable or tf.function): Function whose signature is analyzed.
+    input_signature (list or tuple): A sequence of `tf.TensorSpec` objects
+      that describe the input arguments of `defunc`. If `defunc` is a
+      `tf.function` and `input_signature` was specified during `tf.function`
+      creation then this argument can be None.
+    input_dataset (tf.Dataset): Dataset from which `input_signature` will be
       inferred.
     non_feed_inputs (list, optional): List of inputs that will be provided
-      to a graph without usage of infeed queue.
+      to the graph without usage of infeed queue.
 
   Returns:
-    list: List of tf.TensorSpec objects with types, shapes and names.
+    list: List of `tf.TensorSpec` objects with types, shapes and names.
 
   Raises:
-    TypeError: If input_signature is not a tf.Dataset, tuple, list
-      or NoneType.
-    ValueError: If input_signature is not provided and defunc is
-      not a tf.function.
+    TypeError: If `input_signature` is not a `tf.Dataset`, tuple, list
+      or `NoneType`.
+    ValueError: If `input_signature` is not provided and `defunc` is
+      not a `tf.function`.
     ValueError: If the number of passed/inferred signatures of inputs that
       are passed to the graph using infeed queue is different than the number
-      of defunc's arguments.
+      of arguments of `defunc`.
   """
   if input_dataset is not None:
     input_signature = input_dataset.element_spec
@@ -105,13 +104,13 @@ def _create_feeds(input_signature, input_dataset=None):
   """Create infeed and outfeed queues for the given signature.
 
   Args:
-    input_signature (list): List of signatures describing types
-      and shapes of dataset elements.
+    input_signature (list): List of signatures describing types and shapes of
+      the dataset elements.
     input_dataset (tf.Dataset, optional): Dataset to be used for creating feeds.
 
   Returns:
     tuple(IPUInfeedQueue, IPUOutfeedQueue): Infeed and outfeed queues created
-      based on the given signature.
+    based on the `input_signature`.
   """
   if input_dataset is None:
     inputs = [array_ops.zeros(s.shape, s.dtype) for s in input_signature]
@@ -128,14 +127,15 @@ def _export_saved_model(defunc, export_dir, input_signature):
 
   Args:
     defunc (Callable or tf.function): Function that runs inference step.
-    export_dir (str): Path to the SavedModel directory.
+    export_dir (str): Path to the directory where the SavedModel will be
+      written.
     input_signature (list): List of signatures of inputs that will be provided
-      to a graph using infeed queue.
+      to the graph using infeed queue.
 
   Returns:
     tf.function: A reference to the same predict function that was exported
-      using the SavedModel format. It uses embedded runtime op to run the
-      executable included as an asset in the SavedModel directory structure.
+    using the SavedModel format. This function uses the embedded runtime op to
+    run the executable that was included in the SavedModel's `assets` subfolder.
   """
   with tempfile.TemporaryDirectory() as tmp_folder:
     # Compile poplar_exec
@@ -176,7 +176,7 @@ def export_single_step(predict_step,
                        iterations,
                        input_signature=None,
                        input_dataset=None):
-  """Create a SavedModel at `export_dir` for TF Serving.
+  """Create a SavedModel in `export_dir` for TensorFlow Serving.
 
   Wrap `predict_step` inside a while loop, add an infeed for the inputs and
   an outfeed for the outputs, freeze any variables into constants and write
@@ -184,27 +184,29 @@ def export_single_step(predict_step,
 
   Args:
     predict_step (Callable or tf.function): Function to export.
-    export_dir (str): Path to the SavedModel directory.
+    export_dir (str): Path to the directory where the SavedModel will be
+      written.
     iterations (int): Number of loop iterations.
-    input_signature (list or tuple, optional): A sequence of tf.TensorSpec
-      objects that describe the input arguments of predict_step function.
-      If input_dataset is provided, this argument should be None.
-      If input_dataset is not provided, predict_step is a tf.function and
-      input_signature was specified during tf.function creation, this argument
-      can be None and signature will be captured directly from predict_step.
-    input_dataset (tf.Dataset, optional): Dataset from which input_signature
-      will be inferred. If input_signature is provided, this argument should
+    input_signature (list or tuple, optional): A sequence of `tf.TensorSpec`
+      objects that describe the input arguments of the `predict_step` function.
+      If `input_dataset` is provided, this argument should be None.
+      If `input_dataset` is not provided and `predict_step` is a `tf.function`
+      and `input_signature` was specified during `tf.function` creation then
+      this argument can be None and the signature will be captured directly from
+      `predict_step`.
+    input_dataset (tf.Dataset, optional): Dataset from which `input_signature`
+      will be inferred. If `input_signature` is provided, this argument should
       be None.
 
   Returns:
     tf.function: A reference to the same predict function that was exported
-      using the SavedModel format. This function uses embedded runtime op to run
-      executable that was included in the SavedModel's `asset` subfolder.
+    using the SavedModel format. This function uses the embedded runtime op to
+    run the executable that was included in the SavedModel's `assets` subfolder.
 
   Raises:
-    ValueError: If both input_signature and input_dataset are provided.
-    TypeError: If input_dataset was provided and is not an instance of
-      tf.Dataset.
+    ValueError: If both `input_signature` and `input_dataset` are provided.
+    TypeError: If `input_dataset` was provided and is not an instance of
+      `tf.Dataset`.
   """
   if input_signature is not None and input_dataset is not None:
     raise ValueError('Both input_signature and input_dataset cannot be '
@@ -235,7 +237,7 @@ def export_single_step(predict_step,
 
 def export_pipeline(computational_stages,
                     export_dir,
-                    gradient_accumulation_count,
+                    pipeline_depth,
                     iterations,
                     inputs=None,
                     device_mapping=None,
@@ -244,54 +246,60 @@ def export_pipeline(computational_stages,
                     name=None,
                     input_signature=None,
                     input_dataset=None):
-  """Create a pipelined SavedModel at `export_dir` for TF Serving.
+  """Create a pipelined SavedModel in `export_dir` for TensorFlow Serving.
 
-  Create a pipeline op using provided `computational_stages`, add an infeed for
+  Create a pipeline op using `computational_stages`, add an infeed for
   the inputs and an outfeed for the outputs, freeze any variables into constants
   and write a SavedModel containing an IPU runtime function and Poplar
   executable.
 
   Args:
-    computational_stages (list): A list of python functions or TF functions,
-      where each function represents a computational pipeline stage. The
-      function takes the outputs of the previous pipeline state as its inputs.
-    export_dir (str): Path to SavedModel directory.
-    gradient_accumulation_count (int): The number of times each pipeline stage
-      will be executed.
+    computational_stages (list): A list of Python functions or TensorFlow
+      functions, where each function represents a computational stage in the
+      pipeline. The function takes the outputs of the previous pipeline stage as
+      its inputs.
+    export_dir (str): Path to the directory where the SavedModel will be
+      written.
+    pipeline_depth (int): The number of times each computational stage
+      will be executed. It should be a multiple of the number of computational
+      stages.
     iterations (int): The number of times the pipeline will be executed.
-    inputs (list, optional): Arguments passed to the first pipeline stage.
+    inputs (list, optional): Arguments passed to the first computational stage
+      without usage of infeed queue.
     device_mapping (list, optional): If provided, a list of length equal to the
       number of computational stages. An element at index `i` in the list
-      represents which IPU the computational stage `computational_stages[i]`
-      should reside on. This can be used to make sure computational stages which
-      share `tf.Variable` are resident on the same IPU.
+      represents which IPU the `computational_stages[i]` should reside on. This
+      can be used to make sure computational stages which share `tf.Variable`
+      objects are resident on the same IPU.
     pipeline_schedule (PipelineSchedule, optional): Which scheduling algorithm
       to use for pipeline lowering. Defaults to `PipelineSchedule.Grouped`.
     poplar_options (list, optional): If provided, a list of length equal to the
-      number of computational stages. Each element is a PipelineStageOptions
+      number of computational stages. Each element is a `PipelineStageOptions`
       object which allows for fine grain control of the Poplar options for a
       given forward propagation computational stage.
     name (str, optional): Name of this pipeline.
-    input_signature (list or tuple, optional): A sequence of tf.TensorSpec
-      objects that describe the input arguments of first computational stage.
-      If input_dataset is provided, this argument should be None.
-      If input_dataset is not provided, first computational stage is a
-      tf.function and input_signature was specified during tf.function creation,
-      this argument can be None and signature will be captured directly from the
-      first computational stage.
-    input_dataset (tf.Dataset, optional): Dataset from which input_signature
-      will be inferred. If input_signature is provided, this argument should
+    input_signature (list or tuple, optional): A sequence of `tf.TensorSpec`
+      objects that describe the input arguments of the first computational
+      stage. If `input_dataset` is provided, this argument should be None.
+      If `input_dataset` is not provided and the first computational stage is a
+      `tf.function` and `input_signature` was specified during `tf.function`
+      creation then this argument can be None and the signature will be captured
+      directly from the first computational stage.
+    input_dataset (tf.Dataset, optional): Dataset from which `input_signature`
+      will be inferred. If `input_signature` is provided, this argument should
       be None.
 
   Returns:
-    function: A reference to the same predict function that was exported
-      using the SavedModel format. This function uses embedded runtime op to run
-      executable that was included in the SavedModel's `asset` subfolder.
+    tf.function: A reference to the same predict function that was exported
+    using the SavedModel format. This function uses the embedded runtime op to
+    run the executable that was included in the SavedModel's `assets` subfolder.
 
   Raises:
-    ValueError: If both input_signature and input_dataset are provided.
-    TypeError: If input_dataset was provided and is not an instance of
-      tf.Dataset.
+    ValueError: If both `input_signature` and `input_dataset` are provided.
+    ValueError: If `pipeline_depth` is not a multiple of the number of
+      computational stages.
+    TypeError: If `input_dataset` was provided and is not an instance of
+      `tf.Dataset`.
   """
   if input_signature is not None and input_dataset is not None:
     raise ValueError('Both input_signature and input_dataset cannot be '
@@ -303,6 +311,11 @@ def export_pipeline(computational_stages,
     raise TypeError('If input_dataset is provided, it should be an instance '
                     'of tf.Dataset.')
 
+  if pipeline_depth % len(computational_stages) != 0:
+    raise ValueError(f'pipeline_depth ({pipeline_depth}) should be a multiple '
+                     f'of the number of computational stages '
+                     f'({len(computational_stages)}).')
+
   first_stage = computational_stages[0]
   input_signature = _validate_signature(first_stage, input_signature,
                                         input_dataset, inputs)
@@ -312,7 +325,7 @@ def export_pipeline(computational_stages,
   def defunc():
     pipelining_ops.pipeline(
         computational_stages=computational_stages,
-        gradient_accumulation_count=gradient_accumulation_count,
+        gradient_accumulation_count=pipeline_depth,
         repeat_count=iterations,
         inputs=inputs,
         infeed_queue=infeed,
