@@ -398,6 +398,120 @@ Status AlgebraicSimplifierVisitor::HandleCopy(HloInstruction* copy) {
   return Status::OK();
 }
 
+// Concatenate same slices can be replaced by broadcast + reshape
+//            +-------------+
+//            |   Operand   |
+//            +-------------+
+//               |       |
+//               |       |
+//               v       v
+//      +----------+   +----------+
+//      |   Slice  |   |   Slice  |
+//      +----------+   +----------+
+//       |  |  |  |     |  |  |  |
+//       |  |  |  |     |  |  |  |
+//       v  v  v  v     v  v  v  v
+//     +---------------------------+
+//     |        Concatenate        |
+//     +---------------------------+
+bool AlgebraicSimplifierVisitor::TrySimplifyConcatenateOfSameSlices(
+    HloInstruction* concatenate) {
+  absl::Span<HloInstruction* const> operands(concatenate->operands());
+  int64 concatenate_dimension = concatenate->concatenate_dimension();
+  // Make sure all the operands are slice, and all the slices are from the
+  // same op
+  for (int64 i = 0; i < static_cast<int64>(operands.size()); ++i) {
+    // Make sure all the operands are the slice
+    if (operands[i]->opcode() != HloOpcode::kSlice ||
+        !pp::algebraic_simplifier::util::IsUnstridedSlice(operands[i])) {
+      return false;
+    }
+
+    // Make sure all the slices are from the same op
+    if (operands[i]->mutable_operand(0) != operands[0]->mutable_operand(0)) {
+      return false;
+    }
+  }
+
+  // Record the same slice
+  bool has_same_slices = false;
+  std::vector<std::pair<HloInstruction*, int64>> slice_cnt;
+  for (auto current = operands.begin(); current != operands.end();) {
+    // Find the end of the matching slices.
+    auto next = std::partition_point(
+        current, operands.end(), [&current](HloInstruction* operand) -> bool {
+          return (((*current)->slice_starts() == operand->slice_starts()) &&
+                  ((*current)->slice_limits() == operand->slice_limits()));
+        });
+
+    // Recording the number of matching slices and whether we've seen a group
+    // larger than 1.
+    slice_cnt.push_back({*current, std::distance(current, next)});
+    has_same_slices |= (slice_cnt.back().second > 1);
+
+    // Move onto the next potential slice group.
+    current = next;
+  }
+  if (!has_same_slices) {
+    return false;
+  }
+
+  // Replace same slices with broadcast + reshape
+  std::vector<HloInstruction*> new_operands;
+  for (const auto& pair : slice_cnt) {
+    if (pair.second == 1) {
+      new_operands.push_back(pair.first);
+    } else {
+      // Create broadcast
+      // Create the broadcast output shape.
+      HloInstruction* bcast_operand = pair.first;
+      auto shape_dims = bcast_operand->shape().dimensions();
+      std::vector<int64> new_shape_dims(shape_dims.begin(), shape_dims.end());
+      new_shape_dims.insert(new_shape_dims.begin() + concatenate_dimension + 1,
+                            pair.second);
+      Shape bcast_shape = ShapeUtil::MakeShape(
+          bcast_operand->shape().element_type(), new_shape_dims);
+
+      // Create the dimensions for broadcast
+      std::vector<int64> bcast_dims(bcast_operand->shape().dimensions().size());
+      std::iota(bcast_dims.begin(),
+                bcast_dims.begin() + concatenate_dimension + 1, 0);
+      std::iota(bcast_dims.begin() + concatenate_dimension + 1,
+                bcast_dims.end(), concatenate_dimension + 2);
+
+      HloInstruction* broadcast =
+          computation_->AddInstruction(HloInstruction::CreateBroadcast(
+              bcast_shape, bcast_operand, bcast_dims));
+
+      // Create reshape
+      auto reshape_dims = bcast_operand->shape().dimensions();
+      std::vector<int64> new_reshape_dims(reshape_dims.begin(),
+                                          reshape_dims.end());
+      new_reshape_dims[concatenate_dimension] *= pair.second;
+      Shape reshape_shape = ShapeUtil::MakeShape(
+          bcast_operand->shape().element_type(), new_reshape_dims);
+
+      HloInstruction* reshape =
+          computation_->AddInstruction(HloInstruction::CreateReshape(
+              reshape_shape, broadcast, {concatenate_dimension}));
+      new_operands.push_back(reshape);
+    }
+  }
+
+  if (new_operands.size() == 1) {
+    // No need to add the concatenate if the inputs to the concatenate are all
+    // from the same slice
+    ReplaceInstructionIfSameShape(concatenate, new_operands[0]);
+  } else {
+    // Replace with new concatenate op
+    HloInstruction* new_concatenate = computation_->AddInstruction(
+        concatenate->CloneWithNewOperands(concatenate->shape(), new_operands));
+    ReplaceInstructionIfSameShape(concatenate, new_concatenate);
+  }
+
+  return true;
+}
+
 Status AlgebraicSimplifierVisitor::HandleConcatenate(
     HloInstruction* concatenate) {
   absl::Span<HloInstruction* const> operands(concatenate->operands());
@@ -451,6 +565,13 @@ Status AlgebraicSimplifierVisitor::HandleConcatenate(
             concatenate->shape(), new_operands,
             concatenate->concatenate_dimension()));
     TF_CHECK_OK(ReplaceInstruction(concatenate, new_instruction));
+    return Status::OK();
+  }
+
+  // Concatenate same slices can be replaced by broadcast + reshape
+  VLOG(10)
+      << "Trying to replace a concatenate of matching slices with a broadcast";
+  if (TrySimplifyConcatenateOfSameSlices(concatenate)) {
     return Status::OK();
   }
 
