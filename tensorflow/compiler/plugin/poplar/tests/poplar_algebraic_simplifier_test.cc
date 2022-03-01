@@ -2121,6 +2121,153 @@ TEST_F(PoplarAlgebraicSimplifierTest, SimplifyConcatenateOfSlices) {
   EXPECT_EQ(computation->root_instruction()->operand(3)->slice_starts(1), 40);
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, SimplifyConcatenateOfSameSlices_1_2_2_1) {
+  auto m = CreateNewVerifiedModule();
+  Shape r2f32 = ShapeUtil::MakeShape(F32, {3, 4});
+  Shape concat_shape = ShapeUtil::MakeShape(F32, {3, 6});
+  HloComputation::Builder builder(TestName());
+  HloInstruction* param0 = builder.AddInstruction(
+      HloInstruction::CreateParameter(0, r2f32, "param0"));
+
+  HloInstruction* slice0 = builder.AddInstruction(HloInstruction::CreateSlice(
+      ShapeUtil::MakeShape(F32, {3, 1}), param0, /*start_indices=*/{0, 0},
+      /*limit_indices=*/{3, 1}, /*strides=*/{1, 1}));
+
+  HloInstruction* slice1 = builder.AddInstruction(HloInstruction::CreateSlice(
+      ShapeUtil::MakeShape(F32, {3, 1}), param0, /*start_indices=*/{0, 1},
+      /*limit_indices=*/{3, 2}, /*strides=*/{1, 1}));
+
+  HloInstruction* slice2 = builder.AddInstruction(HloInstruction::CreateSlice(
+      ShapeUtil::MakeShape(F32, {3, 1}), param0, /*start_indices=*/{0, 2},
+      /*limit_indices=*/{3, 3}, /*strides=*/{1, 1}));
+
+  HloInstruction* slice3 = builder.AddInstruction(HloInstruction::CreateSlice(
+      ShapeUtil::MakeShape(F32, {3, 1}), param0, /*start_indices=*/{0, 3},
+      /*limit_indices=*/{3, 4}, /*strides=*/{1, 1}));
+
+  builder.AddInstruction(HloInstruction::CreateConcatenate(
+      concat_shape, {slice0, slice1, slice1, slice2, slice2, slice3}, 1));
+  auto computation = m->AddEntryComputation(builder.Build());
+
+  PoplarAlgebraicSimplifier simplifier;
+  ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+
+  auto root = computation->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::Concatenate(
+                        m::Slice(m::Parameter(0)),
+                        m::Reshape(m::Broadcast(m::Slice(m::Parameter(0)))),
+                        m::Reshape(m::Broadcast(m::Slice(m::Parameter(0)))),
+                        m::Slice(m::Parameter(0)))));
+  // Check shape of broadcast
+  EXPECT_TRUE(ShapeUtil::Equal(root->operand(1)->operand(0)->shape(),
+                               ShapeUtil::MakeShape(F32, {3, 1, 2})));
+  // check slices start/limit indices
+  EXPECT_THAT(root->operand(0)->slice_starts(), ElementsAre(0, 0));
+  EXPECT_THAT(root->operand(0)->slice_limits(), ElementsAre(3, 1));
+  EXPECT_THAT(root->operand(1)->operand(0)->operand(0)->slice_starts(),
+              ElementsAre(0, 1));
+  EXPECT_THAT(root->operand(1)->operand(0)->operand(0)->slice_limits(),
+              ElementsAre(3, 2));
+  EXPECT_THAT(root->operand(2)->operand(0)->operand(0)->slice_starts(),
+              ElementsAre(0, 2));
+  EXPECT_THAT(root->operand(2)->operand(0)->operand(0)->slice_limits(),
+              ElementsAre(3, 3));
+  EXPECT_THAT(root->operand(3)->slice_starts(), ElementsAre(0, 3));
+  EXPECT_THAT(root->operand(3)->slice_limits(), ElementsAre(3, 4));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, SimplifyConcatenateOfSameSlices_5_5_5_5) {
+  auto m = CreateNewVerifiedModule();
+  Shape r2f32 = ShapeUtil::MakeShape(F32, {1, 4});
+  Shape concat_shape = ShapeUtil::MakeShape(F32, {1, 20});
+  HloComputation::Builder builder(TestName());
+  HloInstruction* param0 = builder.AddInstruction(
+      HloInstruction::CreateParameter(0, r2f32, "param0"));
+
+  HloInstruction* slice0 = builder.AddInstruction(HloInstruction::CreateSlice(
+      ShapeUtil::MakeShape(F32, {1, 1}), param0, /*start_indices=*/{0, 0},
+      /*limit_indices=*/{1, 1}, /*strides=*/{1, 1}));
+
+  HloInstruction* slice1 = builder.AddInstruction(HloInstruction::CreateSlice(
+      ShapeUtil::MakeShape(F32, {1, 1}), param0, /*start_indices=*/{0, 1},
+      /*limit_indices=*/{1, 2}, /*strides=*/{1, 1}));
+
+  HloInstruction* slice2 = builder.AddInstruction(HloInstruction::CreateSlice(
+      ShapeUtil::MakeShape(F32, {1, 1}), param0, /*start_indices=*/{0, 2},
+      /*limit_indices=*/{1, 3}, /*strides=*/{1, 1}));
+
+  HloInstruction* slice3 = builder.AddInstruction(HloInstruction::CreateSlice(
+      ShapeUtil::MakeShape(F32, {1, 1}), param0, /*start_indices=*/{0, 3},
+      /*limit_indices=*/{1, 4}, /*strides=*/{1, 1}));
+
+  builder.AddInstruction(HloInstruction::CreateConcatenate(
+      concat_shape, {slice0, slice0, slice0, slice0, slice0, slice1, slice1,
+                     slice1, slice1, slice1, slice2, slice2, slice2, slice2,
+                     slice2, slice3, slice3, slice3, slice3, slice3},
+      1));
+  auto computation = m->AddEntryComputation(builder.Build());
+
+  PoplarAlgebraicSimplifier simplifier;
+  ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+
+  auto root = computation->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::Concatenate(
+                        m::Reshape(m::Broadcast(m::Slice(m::Parameter(0)))),
+                        m::Reshape(m::Broadcast(m::Slice(m::Parameter(0)))),
+                        m::Reshape(m::Broadcast(m::Slice(m::Parameter(0)))),
+                        m::Reshape(m::Broadcast(m::Slice(m::Parameter(0)))))));
+  EXPECT_TRUE(ShapeUtil::Equal(root->operand(0)->operand(0)->shape(),
+                               ShapeUtil::MakeShape(F32, {1, 1, 5})));
+  EXPECT_THAT(root->operand(0)->operand(0)->operand(0)->slice_starts(),
+              ElementsAre(0, 0));
+  EXPECT_THAT(root->operand(0)->operand(0)->operand(0)->slice_limits(),
+              ElementsAre(1, 1));
+  EXPECT_THAT(root->operand(1)->operand(0)->operand(0)->slice_starts(),
+              ElementsAre(0, 1));
+  EXPECT_THAT(root->operand(1)->operand(0)->operand(0)->slice_limits(),
+              ElementsAre(1, 2));
+  EXPECT_THAT(root->operand(2)->operand(0)->operand(0)->slice_starts(),
+              ElementsAre(0, 2));
+  EXPECT_THAT(root->operand(2)->operand(0)->operand(0)->slice_limits(),
+              ElementsAre(1, 3));
+  EXPECT_THAT(root->operand(3)->operand(0)->operand(0)->slice_starts(),
+              ElementsAre(0, 3));
+  EXPECT_THAT(root->operand(3)->operand(0)->operand(0)->slice_limits(),
+              ElementsAre(1, 4));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, SimplifyConcatenateOfSameSlices_1x5) {
+  auto m = CreateNewVerifiedModule();
+  Shape r2f32 = ShapeUtil::MakeShape(F32, {1, 4});
+  Shape concat_shape = ShapeUtil::MakeShape(F32, {1, 5});
+  HloComputation::Builder builder(TestName());
+  HloInstruction* param0 = builder.AddInstruction(
+      HloInstruction::CreateParameter(0, r2f32, "param0"));
+
+  HloInstruction* slice0 = builder.AddInstruction(HloInstruction::CreateSlice(
+      ShapeUtil::MakeShape(F32, {1, 1}), param0, /*start_indices=*/{0, 0},
+      /*limit_indices=*/{1, 1}, /*strides=*/{1, 1}));
+
+  builder.AddInstruction(HloInstruction::CreateConcatenate(
+      concat_shape, {slice0, slice0, slice0, slice0, slice0}, 1));
+  auto computation = m->AddEntryComputation(builder.Build());
+
+  PoplarAlgebraicSimplifier simplifier;
+  ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+
+  auto root = computation->root_instruction();
+
+  // There shouldn't be the concatenate if the inputs to the concatenate are all
+  // from the same slice
+  EXPECT_THAT(root,
+              GmockMatch(m::Reshape(m::Broadcast(m::Slice(m::Parameter(0))))));
+
+  EXPECT_TRUE(ShapeUtil::Equal(root->operand(0)->shape(),
+                               ShapeUtil::MakeShape(F32, {1, 1, 5})));
+  EXPECT_THAT(root->operand(0)->operand(0)->slice_starts(), ElementsAre(0, 0));
+  EXPECT_THAT(root->operand(0)->operand(0)->slice_limits(), ElementsAre(1, 1));
+}
+
 // Test transforming reshapes and transposes of rng.
 TEST_F(PoplarAlgebraicSimplifierTest, ReshapeOfTransposeOfRngToRng) {
   auto m = CreateNewVerifiedModule();

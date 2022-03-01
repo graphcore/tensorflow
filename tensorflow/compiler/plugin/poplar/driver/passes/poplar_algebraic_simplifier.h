@@ -226,6 +226,9 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   // Useful when we want to use the same visitor over multiple computations.
   void ResetState(HloComputation* computation);
 
+  // Tries to replace concatenate of same slices to broadcast.
+  bool TrySimplifyConcatenateOfSameSlices(HloInstruction* concatenate);
+
   // Current HloComputation instance the AlgebraicSimplifierVisitor is
   // traversing.
   HloComputation* computation_;
