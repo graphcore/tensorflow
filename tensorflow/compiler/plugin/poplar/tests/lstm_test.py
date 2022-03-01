@@ -174,7 +174,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
       options = '{}' if options is None else json.dumps(options)
       options_bwd = '{}' if options is None else json.dumps(options_bwd)
       if seq_lens is None:
-        outputs, _, _, _ = gen_popnn_ops.popnn_lstm_layer(
+        outputs, _, _ = gen_popnn_ops.popnn_lstm_layer(
             activation=activation,
             recurrent_activation=recurrent_activation,
             inputs=inputs,
@@ -188,7 +188,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
             options=options,
             options_bwd=options_bwd)
       else:
-        outputs, _, _, _ = gen_popnn_ops.popnn_dynamic_lstm_layer(
+        outputs, _, _ = gen_popnn_ops.popnn_dynamic_lstm_layer(
             activation=activation,
             recurrent_activation=recurrent_activation,
             inputs=inputs,

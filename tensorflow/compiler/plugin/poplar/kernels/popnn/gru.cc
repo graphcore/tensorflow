@@ -161,15 +161,12 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
 
     xla::Shape output_seq_shape = xla::ShapeUtil::MakeShape(
         input_type, {time_steps, batch_size, num_channels_});
-    xla::Shape output_state_shape =
-        xla::ShapeUtil::MakeShape(input_type, {batch_size, num_channels_});
     // The 3 in intermidate shape represents the number of gates.
     int num_intermediates = reset_after_ ? 4 : 3;
     xla::Shape intermediates_shape = xla::ShapeUtil::MakeShape(
         input_type, {time_steps, num_intermediates, batch_size, num_channels_});
 
-    std::vector<xla::Shape> output_shapes = {output_seq_shape,
-                                             output_state_shape};
+    std::vector<xla::Shape> output_shapes = {output_seq_shape};
     if (is_training_) {
       output_shapes.push_back(intermediates_shape);
     }
@@ -190,18 +187,16 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
         &b, op_name, args, output_tuple_shape, attribute_map_.Serialise());
 
     xla::XlaOp output_seq = xla::GetTupleElement(output_tuple, 0);
-    xla::XlaOp output_state = xla::GetTupleElement(output_tuple, 1);
     xla::XlaOp intermediates;
     if (is_training_) {
-      intermediates = xla::GetTupleElement(output_tuple, 2);
+      intermediates = xla::GetTupleElement(output_tuple, 1);
     } else {
       intermediates = xla::Broadcast(XlaHelpers::Zero(&b, ctx->input_type(0)),
                                      intermediates_shape.dimensions());
     }
 
     ctx->SetOutput(0, output_seq);
-    ctx->SetOutput(1, output_state);
-    ctx->SetOutput(2, intermediates);
+    ctx->SetOutput(1, intermediates);
   }
 
  private:

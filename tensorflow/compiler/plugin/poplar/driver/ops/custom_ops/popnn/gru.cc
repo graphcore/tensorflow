@@ -237,14 +237,14 @@ class GRULayerFwdOp : public GRULayerBaseOp {
   const std::string ClassName() const override { return "GRULayerFwdOp"; }
 
   std::vector<const char*> NameList() const override {
-    static std::vector<const char*> name_list = {
-        "input_seq", "input_state", "kernel", "bias", "output", "output_state"};
+    static std::vector<const char*> name_list = {"input_seq", "input_state",
+                                                 "kernel", "bias", "output"};
     return name_list;
   }
 
   int64 InputTensorCount() const override { return 4; }
 
-  int64 OutputTensorCount() const override { return 2; }
+  int64 OutputTensorCount() const override { return 1; }
 
   std::vector<poplar::Tensor> GetOutputParams(bool training) override {
     auto args = GRULayerBaseOp::GetOutputParams(training);
@@ -295,14 +295,11 @@ class GRULayerFwdOp : public GRULayerBaseOp {
         UnpackGruKernel(kernel, input_size, output_size);
     weights.biases = biases;
 
-    auto intermediates_ptr = training ? &args[6] : nullptr;
+    auto intermediates_ptr = training ? &args[5] : nullptr;
 
     args[4] = popnn::gru::gruFwd(
         graph, gru_params, input_state, input_seq, weights, intermediates_ptr,
         prog, {debug_name_and_id}, gru_opts, &res.matmul_cache);
-
-    args[5] = poputil::duplicate(graph, args[4][gru_params.rnn.timeSteps - 1],
-                                 prog, {debug_name_and_id, "outputHState"});
   }
 };
 REGISTER_POPLAR_OP(GRULayerFwd, GRULayerFwdOp);
@@ -320,10 +317,8 @@ class GRULayerBwdOp : public GRULayerBaseOp {
                                                  "kernel",
                                                  "bias",
                                                  "output",
-                                                 "output_state",
                                                  "intermediates",
                                                  "output_backprop",
-                                                 "output_state_backprop",
                                                  "input_backprop",
                                                  "input_state_backprop",
                                                  "kernel_backprop",
@@ -331,7 +326,7 @@ class GRULayerBwdOp : public GRULayerBaseOp {
     return name_list;
   }
 
-  int64 InputTensorCount() const override { return 9; }
+  int64 InputTensorCount() const override { return 7; }
 
   int64 OutputTensorCount() const override { return 4; }
 
@@ -349,28 +344,22 @@ class GRULayerBwdOp : public GRULayerBaseOp {
     poplar::Tensor kernel = args[2];
     poplar::Tensor biases = args[3];
     poplar::Tensor output = args[4];
-    poplar::Tensor output_state = args[5];
-    poplar::Tensor intermediates = args[6];
-    poplar::Tensor output_backprop = args[7];
-    poplar::Tensor output_state_backprop = args[8];
+    poplar::Tensor intermediates = args[5];
+    poplar::Tensor output_backprop = args[6];
 
     popnn::gru::GruWeights weights;
     std::tie(weights.inputWeights, weights.outputWeights) =
         UnpackGruKernel(kernel, input_size, output_size);
     weights.biases = biases;
 
-    popops::addInPlace(graph, output_backprop[output_backprop.dim(0) - 1],
-                       output_state_backprop, prog,
-                       {debug_name_and_id, "outputGradient"});
-
     popnn::gru::GruWeights weights_backprop;
-    args[10] = popnn::gru::gruBwdWithWU(
+    args[8] = popnn::gru::gruBwdWithWU(
         graph, gru_params, prog, input_state, intermediates, weights, input_seq,
-        output, output_backprop, &args[9], weights_backprop,
+        output, output_backprop, &args[7], weights_backprop,
         {debug_name_and_id}, gru_opts, &res.matmul_cache);
-    args[11] = PackGruKernel(weights_backprop.inputWeights,
-                             weights_backprop.outputWeights);
-    args[12] = weights_backprop.biases;
+    args[9] = PackGruKernel(weights_backprop.inputWeights,
+                            weights_backprop.outputWeights);
+    args[10] = weights_backprop.biases;
   }
 };
 REGISTER_POPLAR_OP(GRULayerBwd, GRULayerBwdOp);
@@ -386,14 +375,13 @@ class DynamicGRULayerFwdOp : public GRULayerFwdOp {
 
   std::vector<const char*> NameList() const override {
     static std::vector<const char*> name_list = {
-        "input_seq", "input_state", "kernel",      "bias",
-        "seq_len",   "output",      "output_state"};
+        "input_seq", "input_state", "kernel", "bias", "seq_len", "output"};
     return name_list;
   }
 
   int64 InputTensorCount() const override { return 5; }
 
-  int64 OutputTensorCount() const override { return 2; }
+  int64 OutputTensorCount() const override { return 1; }
 
   void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
                      const HloInstruction* inst,
@@ -411,20 +399,17 @@ class DynamicGRULayerFwdOp : public GRULayerFwdOp {
     poplar::Tensor seq_len = args[4];
 
     seq_len = seq_len.reinterpret(poplar::UNSIGNED_INT);
+    gru_params.rnn.varTimeSteps = seq_len;
 
     popnn::gru::GruWeights weights;
     std::tie(weights.inputWeights, weights.outputWeights) =
         UnpackGruKernel(kernel, input_size, output_size);
     weights.biases = biases;
 
-    auto intermediates_ptr = training ? &args[7] : nullptr;
-    args[5] =
-        popnn::gru::gruFwd(graph, gru_params, input_state, input_seq, seq_len,
-                           weights, intermediates_ptr, prog,
-                           {debug_name_and_id}, gru_opts, &res.matmul_cache);
-
-    args[6] = poputil::duplicate(graph, args[5][gru_params.rnn.timeSteps - 1],
-                                 prog, {debug_name_and_id, "outputHState"});
+    auto intermediates_ptr = training ? &args[6] : nullptr;
+    args[5] = popnn::gru::gruFwd(
+        graph, gru_params, input_state, input_seq, weights, intermediates_ptr,
+        prog, {debug_name_and_id}, gru_opts, &res.matmul_cache);
   }
 };
 REGISTER_POPLAR_OP(DynamicGRULayerFwd, DynamicGRULayerFwdOp);
@@ -443,14 +428,13 @@ class DynamicGRULayerBwdOp : public GRULayerBwdOp {
         "input_seq",       "input_state",
         "kernel",          "bias",
         "seq_len",         "output",
-        "output_state",    "intermediates",
-        "output_backprop", "output_state_backprop",
+        "intermediates",   "output_backprop",
         "input_backprop",  "input_state_backprop",
         "kernel_backprop", "biases_backprop"};
     return name_list;
   }
 
-  int64 InputTensorCount() const override { return 10; }
+  int64 InputTensorCount() const override { return 8; }
 
   int64 OutputTensorCount() const override { return 4; }
 
@@ -469,10 +453,8 @@ class DynamicGRULayerBwdOp : public GRULayerBwdOp {
     poplar::Tensor biases = args[3];
     poplar::Tensor seq_len = args[4];
     poplar::Tensor output = args[5];
-    poplar::Tensor output_state = args[6];
-    poplar::Tensor intermediates = args[7];
-    poplar::Tensor output_backprop = args[8];
-    poplar::Tensor output_state_backprop = args[9];
+    poplar::Tensor intermediates = args[6];
+    poplar::Tensor output_backprop = args[7];
 
     seq_len = seq_len.reinterpret(poplar::UNSIGNED_INT);
 
@@ -483,13 +465,13 @@ class DynamicGRULayerBwdOp : public GRULayerBwdOp {
 
     weights.biases = biases;
 
-    args[11] = popnn::gru::gruBwdWithWU(
+    args[9] = popnn::gru::gruBwdWithWU(
         graph, gru_params, prog, input_state, intermediates, weights, input_seq,
-        seq_len, output, output_backprop, &args[10], weights_backprop,
+        seq_len, output, output_backprop, &args[8], weights_backprop,
         {debug_name_and_id}, gru_opts, &res.matmul_cache);
-    args[12] = PackGruKernel(weights_backprop.inputWeights,
+    args[10] = PackGruKernel(weights_backprop.inputWeights,
                              weights_backprop.outputWeights);
-    args[13] = weights_backprop.biases;
+    args[11] = weights_backprop.biases;
   }
 };
 REGISTER_POPLAR_OP(DynamicGRULayerBwd, DynamicGRULayerBwdOp);
@@ -504,7 +486,7 @@ class AUGRULayerFwdOp : public GRULayerFwdOp {
   std::vector<const char*> NameList() const override {
     static std::vector<const char*> name_list = {
         "input_seq", "input_state", "kernel", "bias",
-        "seq_len",   "attention",   "output", "output_state"};
+        "seq_len",   "attention",   "output"};
     return name_list;
   }
 
@@ -532,31 +514,11 @@ class AUGRULayerFwdOp : public GRULayerFwdOp {
     std::tie(weights.inputWeights, weights.outputWeights) =
         UnpackGruKernel(kernel, input_size, output_size);
     weights.biases = biases;
-    auto intermediates_ptr = training ? &args[8] : nullptr;
+    auto intermediates_ptr = training ? &args[7] : nullptr;
     args[6] =
         popnn::gru::auGruFwd(graph, gru_params, input_state, input_seq, seq_len,
                              weights, intermediates_ptr, attention, prog,
                              debug_name_and_id, gru_opts, &res.matmul_cache);
-    auto one =
-        graph.addConstant(poplar::UNSIGNED_INT, {1}, 1, debug_name_and_id);
-    graph.setTileMapping(one, 0);
-    auto real_time_step_casted = popops::cast(
-        graph, seq_len, poplar::UNSIGNED_INT, prog, debug_name_and_id);
-    auto updated_time_step =
-        popops::sub(graph, real_time_step_casted, one, prog, debug_name_and_id);
-
-    args[7] = popnn::gru::createInitialState(graph, gru_params,
-                                             {debug_name_and_id, "fwdState"},
-                                             gru_opts, &res.matmul_cache);
-    for (unsigned i = 0; i < gru_params.rnn.batchSize; ++i) {
-      auto tmp_fwd_tensor = args[6].slice(i, i + 1, 1).squeeze({1});
-      auto offset = updated_time_step.slice(i, i + 1);
-      auto tmp_tensor =
-          popops::dynamicSlice(graph, tmp_fwd_tensor, offset, {0}, {1}, prog,
-                               {debug_name_and_id, "loopedDynamic"});
-      prog.add(poplar::program::Copy(tmp_tensor, args[7][i], false,
-                                     debug_name_and_id));
-    }
   }
 };
 REGISTER_POPLAR_OP(AUGRULayerFwd, AUGRULayerFwdOp);
@@ -576,10 +538,8 @@ class AUGRULayerBwdOp : public GRULayerBwdOp {
                                                  "seq_len",
                                                  "attention",
                                                  "output",
-                                                 "output_state",
                                                  "intermediates",
                                                  "output_backprop",
-                                                 "output_state_backprop",
                                                  "input_backprop",
                                                  "input_state_backprop",
                                                  "kernel_backprop",
@@ -588,7 +548,7 @@ class AUGRULayerBwdOp : public GRULayerBwdOp {
     return name_list;
   }
 
-  int64 InputTensorCount() const override { return 11; }
+  int64 InputTensorCount() const override { return 9; }
 
   int64 OutputTensorCount() const override { return 5; }
 
@@ -608,29 +568,10 @@ class AUGRULayerBwdOp : public GRULayerBwdOp {
     poplar::Tensor seq_len = args[4];
     poplar::Tensor attention = args[5].transpose();
     poplar::Tensor output = args[6];
-    poplar::Tensor intermediates = args[8];
-    poplar::Tensor output_backprop = args[9];
-    poplar::Tensor output_state_backprop = args[10];
+    poplar::Tensor intermediates = args[7];
+    poplar::Tensor output_backprop = args[8];
 
     seq_len = seq_len.reinterpret(poplar::UNSIGNED_INT);
-    auto indices =
-        graph.addVariable(poplar::UNSIGNED_INT, {output_backprop.dim(0)},
-                          {debug_name_and_id, "iotaIndices"});
-
-    graph.setTileMapping(indices, 0);
-    popops::iota(graph, indices, 1U, prog, {debug_name_and_id, "iotaIdx"});
-    indices = indices.expand({1, 1});
-    auto mask = popops::eq(graph, indices, seq_len.expand({0, 1}), prog,
-                           debug_name_and_id);
-    output_state_backprop = output_state_backprop.expand({0});
-    output_state_backprop =
-        output_state_backprop.broadcast(output_backprop.dim(0), 0);
-    mask = popops::cast(graph, mask, output_state_backprop.elementType(), prog,
-                        debug_name_and_id);
-    output_state_backprop = popops::mul(graph, output_state_backprop, mask,
-                                        prog, debug_name_and_id);
-    auto step_output_backprop = popops::add(
-        graph, output_backprop, output_state_backprop, prog, debug_name_and_id);
 
     popnn::gru::GruWeights weights;
     std::tie(weights.inputWeights, weights.outputWeights) =
@@ -639,15 +580,15 @@ class AUGRULayerBwdOp : public GRULayerBwdOp {
 
     popnn::gru::GruWeights weights_backprop;
     poplar::Tensor attention_backprop;
-    args[12] = popnn::gru::auGruBwdWithWU(
+
+    args[10] = popnn::gru::auGruBwdWithWU(
         graph, gru_params, prog, input_state, intermediates, weights, input_seq,
-        seq_len, output, step_output_backprop, &args[11], weights_backprop,
-        attention, &attention_backprop, debug_name_and_id, gru_opts,
-        &res.matmul_cache);
-    args[13] = PackGruKernel(weights_backprop.inputWeights,
+        seq_len, output, output_backprop, &args[9], weights_backprop, attention,
+        &attention_backprop, debug_name_and_id, gru_opts, &res.matmul_cache);
+    args[11] = PackGruKernel(weights_backprop.inputWeights,
                              weights_backprop.outputWeights);
-    args[14] = weights_backprop.biases;
-    args[15] = attention_backprop.transpose();
+    args[12] = weights_backprop.biases;
+    args[13] = attention_backprop.transpose();
   }
 };
 REGISTER_POPLAR_OP(AUGRULayerBwd, AUGRULayerBwdOp);
