@@ -153,8 +153,9 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
     xla::Shape intermediates_shape = xla::ShapeUtil::MakeShape(
         input_type, {time_steps, 6, batch_size, num_channels_});
 
-    std::vector<xla::Shape> output_shapes = {
-        output_seq_shape, output_h_state_shape, output_c_state_shape};
+    std::vector<xla::Shape> output_shapes = {output_seq_shape,
+                                             output_c_state_shape};
+
     if (is_training_) {
       output_shapes.push_back(intermediates_shape);
     }
@@ -174,20 +175,18 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
         output_tuple_shape, attribute_map_.Serialise());
 
     xla::XlaOp output_seq = xla::GetTupleElement(output_tuple, 0);
-    xla::XlaOp output_h_state = xla::GetTupleElement(output_tuple, 1);
-    xla::XlaOp output_c_state = xla::GetTupleElement(output_tuple, 2);
+    xla::XlaOp output_c_state = xla::GetTupleElement(output_tuple, 1);
     xla::XlaOp intermediates;
     if (is_training_) {
-      intermediates = xla::GetTupleElement(output_tuple, 3);
+      intermediates = xla::GetTupleElement(output_tuple, 2);
     } else {
       intermediates = xla::Broadcast(XlaHelpers::Zero(&b, ctx->input_type(0)),
                                      intermediates_shape.dimensions());
     }
 
     ctx->SetOutput(0, output_seq);
-    ctx->SetOutput(1, output_h_state);
-    ctx->SetOutput(2, output_c_state);
-    ctx->SetOutput(3, intermediates);
+    ctx->SetOutput(1, output_c_state);
+    ctx->SetOutput(2, intermediates);
   }
 
  private:

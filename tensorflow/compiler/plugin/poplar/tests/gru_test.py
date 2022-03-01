@@ -207,7 +207,7 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
       options = {} if options is None else options
       options_bwd = {} if options is None else options_bwd
       if seq_length is None:
-        outputs, _, _ = gen_popnn_ops.popnn_gru_layer(
+        outputs, _ = gen_popnn_ops.popnn_gru_layer(
             activation=activation,
             recurrent_activation=recurrent_activation,
             inputs=inputs,
@@ -220,7 +220,7 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
             options=json.dumps(options),
             options_bwd=json.dumps(options_bwd))
       elif att_scores is not None:
-        outputs, _, _ = gen_popnn_ops.popnn_augru_layer(
+        outputs, _ = gen_popnn_ops.popnn_augru_layer(
             activation=activation,
             recurrent_activation=recurrent_activation,
             inputs=inputs,
@@ -235,7 +235,7 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
             options=json.dumps(options),
             options_bwd=json.dumps(options_bwd))
       else:
-        outputs, _, _ = gen_popnn_ops.popnn_dynamic_gru_layer(
+        outputs, _ = gen_popnn_ops.popnn_dynamic_gru_layer(
             activation=activation,
             recurrent_activation=recurrent_activation,
             inputs=inputs,

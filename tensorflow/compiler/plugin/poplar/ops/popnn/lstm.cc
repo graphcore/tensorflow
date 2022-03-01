@@ -27,7 +27,6 @@ REGISTER_OP("PopnnLstmLayer")
     .Input("kernel: dtype")
     .Input("biases: dtype")
     .Output("output: dtype")
-    .Output("output_h_state: dtype")
     .Output("output_c_state: dtype")
     .Output("intermediates: dtype")
     .Attr("activation: string")
@@ -50,8 +49,7 @@ REGISTER_OP("PopnnLstmLayer")
       c->set_output(0,
                     c->MakeShape({time_steps, batch_size, doc_num_channels}));
       c->set_output(1, c->MakeShape({batch_size, doc_num_channels}));
-      c->set_output(2, c->MakeShape({batch_size, doc_num_channels}));
-      c->set_output(3, c->MakeShape({}));
+      c->set_output(2, c->MakeShape({}));
       return Status::OK();
     })
     .Doc(R"doc(
@@ -65,11 +63,9 @@ REGISTER_OP("PopnnLstmLayerBackprop")
     .Input("kernel: dtype")
     .Input("biases: dtype")
     .Input("output: dtype")
-    .Input("output_h_state: dtype")
     .Input("output_c_state: dtype")
     .Input("intermediates: dtype")
     .Input("output_backprop: dtype")
-    .Input("output_h_state_backprop: dtype")
     .Input("output_c_state_backprop: dtype")
     .Output("inputs_backprop: dtype")
     .Output("input_h_state_backprop: dtype")
@@ -108,7 +104,6 @@ REGISTER_OP("PopnnDynamicLstmLayer")
     .Input("biases: dtype")
     .Input("seq_len: seq_dtype")
     .Output("output: dtype")
-    .Output("output_h_state: dtype")
     .Output("output_c_state: dtype")
     .Output("intermediates: dtype")
     .Attr("activation: string")
@@ -132,8 +127,7 @@ REGISTER_OP("PopnnDynamicLstmLayer")
       c->set_output(0,
                     c->MakeShape({time_steps, batch_size, doc_num_channels}));
       c->set_output(1, c->MakeShape({batch_size, doc_num_channels}));
-      c->set_output(2, c->MakeShape({batch_size, doc_num_channels}));
-      c->set_output(3, c->MakeShape({}));
+      c->set_output(2, c->MakeShape({}));
       return Status::OK();
     })
     .Doc(R"doc(
@@ -148,11 +142,9 @@ REGISTER_OP("PopnnDynamicLstmLayerBackprop")
     .Input("biases: dtype")
     .Input("seq_len: seq_dtype")
     .Input("output: dtype")
-    .Input("output_h_state: dtype")
     .Input("output_c_state: dtype")
     .Input("intermediates: dtype")
     .Input("output_backprop: dtype")
-    .Input("output_h_state_backprop: dtype")
     .Input("output_c_state_backprop: dtype")
     .Output("inputs_backprop: dtype")
     .Output("input_h_state_backprop: dtype")

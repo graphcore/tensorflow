@@ -26,7 +26,6 @@ REGISTER_OP("PopnnGRULayer")
     .Input("kernel: dtype")
     .Input("biases: dtype")
     .Output("output: dtype")
-    .Output("output_state: dtype")
     .Output("intermediates: dtype")
     .Attr("activation: string")
     .Attr("recurrent_activation: string")
@@ -48,8 +47,7 @@ REGISTER_OP("PopnnGRULayer")
 
       c->set_output(0,
                     c->MakeShape({time_steps, batch_size, doc_num_channels}));
-      c->set_output(1, c->MakeShape({batch_size, doc_num_channels}));
-      c->set_output(2, c->MakeShape({}));
+      c->set_output(1, c->MakeShape({}));
       return Status::OK();
     })
     .Doc(R"doc(
@@ -62,10 +60,8 @@ REGISTER_OP("PopnnGRULayerBackprop")
     .Input("kernel: dtype")
     .Input("biases: dtype")
     .Input("output: dtype")
-    .Input("output_state: dtype")
     .Input("intermediates: dtype")
     .Input("output_backprop: dtype")
-    .Input("output_state_backprop: dtype")
     .Output("inputs_backprop: dtype")
     .Output("initial_state_backprop: dtype")
     .Output("kernel_backprop: dtype")
@@ -100,7 +96,6 @@ REGISTER_OP("PopnnDynamicGRULayer")
     .Input("biases: dtype")
     .Input("seq_len: seq_dtype")
     .Output("output: dtype")
-    .Output("output_state: dtype")
     .Output("intermediates: dtype")
     .Attr("activation: string")
     .Attr("recurrent_activation: string")
@@ -123,8 +118,7 @@ REGISTER_OP("PopnnDynamicGRULayer")
 
       c->set_output(0,
                     c->MakeShape({time_steps, batch_size, doc_num_channels}));
-      c->set_output(1, c->MakeShape({batch_size, doc_num_channels}));
-      c->set_output(2, c->MakeShape({}));
+      c->set_output(1, c->MakeShape({}));
       return Status::OK();
     })
     .Doc(R"doc(
@@ -138,10 +132,8 @@ REGISTER_OP("PopnnDynamicGRULayerBackprop")
     .Input("biases: dtype")
     .Input("seq_len: seq_dtype")
     .Input("output: dtype")
-    .Input("output_state: dtype")
     .Input("intermediates: dtype")
     .Input("output_backprop: dtype")
-    .Input("output_state_backprop: dtype")
     .Output("inputs_backprop: dtype")
     .Output("initial_state_backprop: dtype")
     .Output("kernel_backprop: dtype")
@@ -178,7 +170,6 @@ REGISTER_OP("PopnnAUGRULayer")
     .Input("seq_len: seq_dtype")
     .Input("att_score: dtype")
     .Output("output: dtype")
-    .Output("output_state: dtype")
     .Output("intermediates: dtype")
     .Attr("activation: string")
     .Attr("recurrent_activation: string")
@@ -201,8 +192,7 @@ REGISTER_OP("PopnnAUGRULayer")
 
       c->set_output(0,
                     c->MakeShape({time_steps, batch_size, doc_num_channels}));
-      c->set_output(1, c->MakeShape({batch_size, doc_num_channels}));
-      c->set_output(2, c->MakeShape({}));
+      c->set_output(1, c->MakeShape({}));
       return Status::OK();
     })
     .Doc(R"doc(
@@ -217,10 +207,8 @@ REGISTER_OP("PopnnAUGRULayerBackprop")
     .Input("seq_len: seq_dtype")
     .Input("att_score: dtype")
     .Input("output: dtype")
-    .Input("output_state: dtype")
     .Input("intermediates: dtype")
     .Input("output_backprop: dtype")
-    .Input("output_state_backprop: dtype")
     .Output("inputs_backprop: dtype")
     .Output("initial_state_backprop: dtype")
     .Output("kernel_backprop: dtype")

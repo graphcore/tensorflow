@@ -235,14 +235,14 @@ class LstmLayerFwdOp : public LstmLayerBaseOp {
 
   std::vector<const char*> NameList() const override {
     static std::vector<const char*> name_list = {
-        "input_seq", "input_h_state", "input_c_state",  "kernel",
-        "bias",      "output",        "output_h_state", "output_c_state"};
+        "input_seq", "input_h_state", "input_c_state", "kernel",
+        "bias",      "output",        "output_c_state"};
     return name_list;
   }
 
   int64 InputTensorCount() const override { return 5; }
 
-  int64 OutputTensorCount() const override { return 3; }
+  int64 OutputTensorCount() const override { return 2; }
 
   std::vector<poplar::Tensor> GetOutputParams(bool training) override {
     auto args = LstmLayerBaseOp::GetOutputParams(training);
@@ -295,13 +295,11 @@ class LstmLayerFwdOp : public LstmLayerBaseOp {
     weights.biases = biases;
     popnn::lstm::LstmState init_state = {input_h_state, input_c_state};
 
-    auto intermediates_ptr = training ? &args[8] : nullptr;
+    auto intermediates_ptr = training ? &args[7] : nullptr;
 
-    std::tie(args[5], args[7]) = popnn::lstm::lstmFwd(
+    std::tie(args[5], args[6]) = popnn::lstm::lstmFwd(
         graph, lstm_params, init_state, input_seq, weights, intermediates_ptr,
         prog, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
-    args[6] = poputil::duplicate(graph, args[5][lstm_params.rnn.timeSteps - 1],
-                                 prog, {debug_name_and_id, "outputHState"});
   }
 };
 REGISTER_POPLAR_OP(LstmLayerFwd, LstmLayerFwdOp);
@@ -320,11 +318,9 @@ class LstmLayerBwdOp : public LstmLayerBaseOp {
                                                  "kernel",
                                                  "bias",
                                                  "output",
-                                                 "output_h_state",
                                                  "output_c_state",
                                                  "intermediates",
                                                  "output_backprop",
-                                                 "output_h_state_backprop",
                                                  "output_c_state_backprop",
                                                  "input_backprop",
                                                  "input_h_state_backprop",
@@ -334,7 +330,7 @@ class LstmLayerBwdOp : public LstmLayerBaseOp {
     return name_list;
   }
 
-  int64 InputTensorCount() const override { return 12; }
+  int64 InputTensorCount() const override { return 10; }
 
   int64 OutputTensorCount() const override { return 5; }
 
@@ -353,12 +349,10 @@ class LstmLayerBwdOp : public LstmLayerBaseOp {
     poplar::Tensor kernel = args[3];
     poplar::Tensor biases = args[4];
     poplar::Tensor output = args[5];
-    poplar::Tensor output_h_state = args[6];
-    poplar::Tensor output_c_state = args[7];
-    poplar::Tensor intermediates = args[8];
-    poplar::Tensor output_backprop = args[9];
-    poplar::Tensor output_h_state_backprop = args[10];
-    poplar::Tensor output_c_state_backprop = args[11];
+    poplar::Tensor output_c_state = args[6];
+    poplar::Tensor intermediates = args[7];
+    poplar::Tensor output_backprop = args[8];
+    poplar::Tensor output_c_state_backprop = args[9];
 
     popnn::lstm::LstmWeights weights;
     std::tie(weights.inputWeights, weights.outputWeights) =
@@ -367,20 +361,16 @@ class LstmLayerBwdOp : public LstmLayerBaseOp {
 
     popnn::lstm::LstmState init_state = {input_h_state, input_c_state};
 
-    popops::addInPlace(graph, output_backprop[output_backprop.dim(0) - 1],
-                       output_h_state_backprop, prog,
-                       {debug_name_and_id, "outputGradient"});
-
     popnn::lstm::LstmWeights weights_backprop;
     popnn::lstm::LstmState init_state_backprop = popnn::lstm::lstmBwdWithWU(
         graph, lstm_params, prog, init_state, intermediates, weights, input_seq,
-        output, output_backprop, &output_c_state_backprop, &args[12],
+        output, output_backprop, &output_c_state_backprop, &args[10],
         weights_backprop, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
-    args[13] = init_state_backprop.output;
-    args[14] = init_state_backprop.cellState;
-    args[15] = PackLstmKernel(weights_backprop.inputWeights,
+    args[11] = init_state_backprop.output;
+    args[12] = init_state_backprop.cellState;
+    args[13] = PackLstmKernel(weights_backprop.inputWeights,
                               weights_backprop.outputWeights);
-    args[16] = weights_backprop.biases;
+    args[14] = weights_backprop.biases;
   }
 };
 REGISTER_POPLAR_OP(LstmLayerBwd, LstmLayerBwdOp);
@@ -396,14 +386,14 @@ class DynamicLstmLayerFwdOp : public LstmLayerFwdOp {
 
   std::vector<const char*> NameList() const override {
     static std::vector<const char*> name_list = {
-        "input_seq", "input_h_state", "input_c_state",  "kernel",        "bias",
-        "seq_len",   "output",        "output_h_state", "output_c_state"};
+        "input_seq", "input_h_state", "input_c_state", "kernel",
+        "bias",      "seq_len",       "output",        "output_c_state"};
     return name_list;
   }
 
   int64 InputTensorCount() const override { return 6; }
 
-  int64 OutputTensorCount() const override { return 3; }
+  int64 OutputTensorCount() const override { return 2; }
 
   void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
                      const HloInstruction* inst,
@@ -430,13 +420,11 @@ class DynamicLstmLayerFwdOp : public LstmLayerFwdOp {
     weights.biases = biases;
     popnn::lstm::LstmState init_state = {input_h_state, input_c_state};
 
-    auto intermediates_ptr = training ? &args[9] : nullptr;
+    auto intermediates_ptr = training ? &args[8] : nullptr;
 
-    std::tie(args[6], args[8]) = popnn::lstm::lstmFwd(
+    std::tie(args[6], args[7]) = popnn::lstm::lstmFwd(
         graph, lstm_params, init_state, input_seq, weights, intermediates_ptr,
         prog, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
-    args[7] = poputil::duplicate(graph, args[6][lstm_params.rnn.timeSteps - 1],
-                                 prog, {debug_name_and_id, "outputHState"});
   }
 };
 REGISTER_POPLAR_OP(DynamicLstmLayerFwd, DynamicLstmLayerFwdOp);
@@ -458,11 +446,9 @@ class DynamicLstmLayerBwdOp : public LstmLayerBwdOp {
                                                  "bias",
                                                  "seq_len",
                                                  "output",
-                                                 "output_h_state",
                                                  "output_c_state",
                                                  "intermediates",
                                                  "output_backprop",
-                                                 "output_h_state_backprop",
                                                  "output_c_state_backprop",
                                                  "input_backprop",
                                                  "input_h_state_backprop",
@@ -472,7 +458,7 @@ class DynamicLstmLayerBwdOp : public LstmLayerBwdOp {
     return name_list;
   }
 
-  int64 InputTensorCount() const override { return 13; }
+  int64 InputTensorCount() const override { return 11; }
 
   int64 OutputTensorCount() const override { return 5; }
 
@@ -492,12 +478,10 @@ class DynamicLstmLayerBwdOp : public LstmLayerBwdOp {
     poplar::Tensor biases = args[4];
     poplar::Tensor seq_len = args[5];
     poplar::Tensor output = args[6];
-    poplar::Tensor output_h_state = args[7];
-    poplar::Tensor output_c_state = args[8];
-    poplar::Tensor intermediates = args[9];
-    poplar::Tensor output_backprop = args[10];
-    poplar::Tensor output_h_state_backprop = args[11];
-    poplar::Tensor output_c_state_backprop = args[12];
+    poplar::Tensor output_c_state = args[7];
+    poplar::Tensor intermediates = args[8];
+    poplar::Tensor output_backprop = args[9];
+    poplar::Tensor output_c_state_backprop = args[10];
 
     seq_len = seq_len.reinterpret(poplar::UNSIGNED_INT);
     lstm_params.rnn.varTimeSteps = seq_len;
@@ -509,20 +493,16 @@ class DynamicLstmLayerBwdOp : public LstmLayerBwdOp {
 
     popnn::lstm::LstmState init_state = {input_h_state, input_c_state};
 
-    popops::addInPlace(graph, output_backprop[output_backprop.dim(0) - 1],
-                       output_h_state_backprop, prog,
-                       {debug_name_and_id, "outputGradient"});
-
     popnn::lstm::LstmWeights weights_backprop;
     popnn::lstm::LstmState init_state_backprop = popnn::lstm::lstmBwdWithWU(
         graph, lstm_params, prog, init_state, intermediates, weights, input_seq,
-        output, output_backprop, &output_c_state_backprop, &args[13],
+        output, output_backprop, &output_c_state_backprop, &args[11],
         weights_backprop, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
-    args[14] = init_state_backprop.output;
-    args[15] = init_state_backprop.cellState;
-    args[16] = PackLstmKernel(weights_backprop.inputWeights,
+    args[12] = init_state_backprop.output;
+    args[13] = init_state_backprop.cellState;
+    args[14] = PackLstmKernel(weights_backprop.inputWeights,
                               weights_backprop.outputWeights);
-    args[17] = weights_backprop.biases;
+    args[15] = weights_backprop.biases;
   }
 };
 REGISTER_POPLAR_OP(DynamicLstmLayerBwd, DynamicLstmLayerBwdOp);
