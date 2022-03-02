@@ -1671,7 +1671,7 @@ tf_py_test(
 
 tf_py_test(
     name = "rnn_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/rnn_test.py"],
     additional_deps = [
         ":ipu_lib",
