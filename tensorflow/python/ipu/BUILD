@@ -1994,7 +1994,7 @@ tf_py_test(
 
 tf_py_test(
     name = "rnn_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/rnn_test.py"],
     shard_count = 7,
     deps = [
