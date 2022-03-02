@@ -745,6 +745,7 @@ const char* const kSimpleMergeInductionVariablesModule = R"(
 
     a1 = TYPE[] get-tuple-element(while), index=0
     b1 = TYPE[] get-tuple-element(while), index=1
+    c1 = TYPE[] get-tuple-element(while), index=2
     ROOT sum = TYPE[] add(a1, b1)
   })";
 
@@ -793,6 +794,287 @@ TEST_F(WhileLoopSimplifierTest, MergeInductionVariables_SkipS16) {
       WhileLoopSimplifier()
           .Run(ParseAndReturnVerifiedModule(hlo_string).ValueOrDie().get())
           .ValueOrDie());
+}
+
+TEST_F(WhileLoopSimplifierTest, RemoveUnusedOutputs) {
+  const string hlo_string = R"(
+  HloModule SimpleLoop
+  SimpleLoop.body {
+    loop_var.1 = (s32[], s32[3]{0}, s32[]) parameter(0)
+    get-tuple-element.1 = s32[] get-tuple-element(loop_var.1), index=0
+    constant.1 = s32[] constant(1)
+    add = s32[] add(get-tuple-element.1, constant.1)
+    get-tuple-element.2 = s32[3]{0} get-tuple-element(loop_var.1), index=1
+    multiply = s32[3]{0} multiply(get-tuple-element.2, get-tuple-element.2)
+    invariant_bound = s32[] get-tuple-element(loop_var.1), index=2
+    ROOT tuple = (s32[], s32[3]{0}, s32[]) tuple(add, multiply, invariant_bound)
+  }
+  SimpleLoop.condition {
+    loop_var.2 = (s32[], s32[3]{0}, s32[]) parameter(0)
+    get-tuple-element.3 = s32[] get-tuple-element(loop_var.2), index=0
+    bound = s32[] get-tuple-element(loop_var.2), index=2
+    ROOT less-than = pred[] compare(get-tuple-element.3, bound), direction=LT
+  }
+  ENTRY SimpleLoop {
+    loop_bound = s32[] parameter(0)
+    constant.3 = s32[] constant(42)
+    constant.4 = s32[3]{0} constant({0, 1, 2})
+    tuple.1 = (s32[], s32[3]{0}, s32[]) tuple(constant.3, constant.4, loop_bound)
+    while = (s32[], s32[3]{0}, s32[]) while(tuple.1), condition=
+      SimpleLoop.condition, body=SimpleLoop.body
+    ROOT gte = s32[] get-tuple-element(while), index=0
+  }
+  )";
+
+  auto m = ParseAndReturnVerifiedModule(hlo_string).ValueOrDie();
+  EXPECT_TRUE(WhileLoopSimplifier().Run(m.get()).ValueOrDie());
+  HloInstruction* new_while = FindFirstWhile(m.get());
+  Shape new_while_shape = ParseShape("(s32[], s32[])").ValueOrDie();
+  EXPECT_TRUE(ShapeUtil::Equal(new_while->shape(), new_while_shape));
+  EXPECT_TRUE(ShapeUtil::Equal(
+      new_while->while_body()->root_instruction()->shape(), new_while_shape));
+  EXPECT_TRUE(ShapeUtil::Equal(
+      new_while->while_body()->parameter_instruction(0)->shape(),
+      new_while_shape));
+  EXPECT_TRUE(ShapeUtil::Equal(
+      new_while->while_condition()->parameter_instruction(0)->shape(),
+      new_while_shape));
+}
+
+TEST_F(WhileLoopSimplifierTest, DontRemoveOutputThatModifiesOther) {
+  const string hlo_string = R"(
+  HloModule SimpleLoop
+  SimpleLoop.body {
+    loop_var.1 = (s32[], s32[], s32[]) parameter(0)
+    get-tuple-element.1 = s32[] get-tuple-element(loop_var.1), index=0    
+    get-tuple-element.2 = s32[] get-tuple-element(loop_var.1), index=1
+    multiply = s32[] multiply(get-tuple-element.2, get-tuple-element.2)
+    add = s32[] add(get-tuple-element.1, multiply)
+    invariant_bound = s32[] get-tuple-element(loop_var.1), index=2
+    ROOT tuple = (s32[], s32[], s32[]) tuple(add, multiply, invariant_bound)
+  }
+  SimpleLoop.condition {
+    loop_var.2 = (s32[], s32[], s32[]) parameter(0)
+    get-tuple-element.3 = s32[] get-tuple-element(loop_var.2), index=0
+    bound = s32[] get-tuple-element(loop_var.2), index=2
+    ROOT less-than = pred[] compare(get-tuple-element.3, bound), direction=LT
+  }
+  ENTRY SimpleLoop {
+    loop_bound = s32[] parameter(0)
+    constant.3 = s32[] constant(42)
+    constant.4 = s32[] constant(100)
+    tuple.1 = (s32[], s32[], s32[]) tuple(constant.3, constant.4, loop_bound)
+    while = (s32[], s32[], s32[]) while(tuple.1), condition=
+      SimpleLoop.condition, body=SimpleLoop.body
+    ROOT gte = s32[] get-tuple-element(while), index=0
+  }
+  )";
+
+  auto m = ParseAndReturnVerifiedModule(hlo_string).ValueOrDie();
+  EXPECT_FALSE(WhileLoopSimplifier().Run(m.get()).ValueOrDie());
+}
+
+TEST_F(WhileLoopSimplifierTest, DontRemoveInstructionWithSideEffect) {
+  const string hlo_string = R"(
+  HloModule SimpleLoop
+
+  mean {
+    y = f32[] parameter(1)
+    x = f32[] parameter(0), control-predecessors={y}
+    norm_y = f32[] custom-call(y), custom_call_target="ReplicationNormalise"
+    ROOT add = f32[] add(x, norm_y), backend_config="{\"isInplace\":true}"
+  }
+
+  SimpleLoop.body {
+    loop_var.1 = (s32[], f32[3], s32[]) parameter(0)
+    get-tuple-element.1 = s32[] get-tuple-element(loop_var.1), index=0
+    constant.1 = s32[] constant(1)
+    add = s32[] add(get-tuple-element.1, constant.1)
+    get-tuple-element.2 = f32[3] get-tuple-element(loop_var.1), index=1
+    multiply = f32[3] multiply(get-tuple-element.2, get-tuple-element.2)
+    all-reduce = f32[3] all-reduce(multiply), to_apply=mean
+    invariant_bound = s32[] get-tuple-element(loop_var.1), index=2
+    ROOT tuple = (s32[], f32[3], s32[]) tuple(add, multiply, invariant_bound)
+  }
+  SimpleLoop.condition {
+    loop_var.2 = (s32[], f32[3], s32[]) parameter(0)
+    get-tuple-element.3 = s32[] get-tuple-element(loop_var.2), index=0
+    bound = s32[] get-tuple-element(loop_var.2), index=2
+    ROOT less-than = pred[] compare(get-tuple-element.3, bound), direction=LT
+  }
+  ENTRY SimpleLoop {
+    loop_bound = s32[] parameter(0)
+    constant.3 = s32[] constant(42)
+    constant.4 = f32[3] parameter(1)
+    tuple.1 = (s32[], f32[3], s32[]) tuple(constant.3, constant.4, loop_bound)
+    while = (s32[], f32[3], s32[]) while(tuple.1), condition=
+      SimpleLoop.condition, body=SimpleLoop.body
+    ROOT gte = s32[] get-tuple-element(while), index=0
+  }
+  )";
+
+  auto m = ParseAndReturnVerifiedModule(hlo_string).ValueOrDie();
+  EXPECT_FALSE(WhileLoopSimplifier().Run(m.get()).ValueOrDie());
+}
+
+TEST_F(WhileLoopSimplifierTest, DontRemoveIfIsRoot) {
+  const string hlo_string = R"(
+  HloModule SimpleLoop
+  SimpleLoop.body {
+    loop_var.1 = (s32[], s32[3]{0}, s32[]) parameter(0)
+    get-tuple-element.1 = s32[] get-tuple-element(loop_var.1), index=0
+    constant.1 = s32[] constant(1)
+    add = s32[] add(get-tuple-element.1, constant.1)
+    get-tuple-element.2 = s32[3]{0} get-tuple-element(loop_var.1), index=1
+    multiply = s32[3]{0} multiply(get-tuple-element.2, get-tuple-element.2)
+    invariant_bound = s32[] get-tuple-element(loop_var.1), index=2
+    ROOT tuple = (s32[], s32[3]{0}, s32[]) tuple(add, multiply, invariant_bound)
+  }
+  SimpleLoop.condition {
+    loop_var.2 = (s32[], s32[3]{0}, s32[]) parameter(0)
+    get-tuple-element.3 = s32[] get-tuple-element(loop_var.2), index=0
+    bound = s32[] get-tuple-element(loop_var.2), index=2
+    ROOT less-than = pred[] compare(get-tuple-element.3, bound), direction=LT
+  }
+  ENTRY SimpleLoop {
+    loop_bound = s32[] parameter(0)
+    constant.3 = s32[] constant(42)
+    constant.4 = s32[3]{0} constant({0, 1, 2})
+    tuple.1 = (s32[], s32[3]{0}, s32[]) tuple(constant.3, constant.4, loop_bound)
+    ROOT while = (s32[], s32[3]{0}, s32[]) while(tuple.1), condition=
+      SimpleLoop.condition, body=SimpleLoop.body
+  }
+  )";
+
+  auto m = ParseAndReturnVerifiedModule(hlo_string).ValueOrDie();
+  EXPECT_FALSE(WhileLoopSimplifier().Run(m.get()).ValueOrDie());
+}
+
+TEST_F(WhileLoopSimplifierTest, RemoveGroupOfUnusedOutputs) {
+  const string hlo_string = R"(
+  HloModule SimpleLoop
+  SimpleLoop.body {
+    loop_var.1 = (s32[], s32[], s32[], s32[]) parameter(0)
+    get-tuple-element.1 = s32[] get-tuple-element(loop_var.1), index=0
+    constant.1 = s32[] constant(1)
+    add = s32[] add(get-tuple-element.1, constant.1)
+    get-tuple-element.2 = s32[] get-tuple-element(loop_var.1), index=1
+    multiply = s32[] multiply(get-tuple-element.2, get-tuple-element.2)
+    get-tuple-element.3 = s32[] get-tuple-element(loop_var.1), index=3
+    output.3 = s32[] add(get-tuple-element.3, get-tuple-element.3)
+    output.1 = s32[] add(output.3, multiply)
+    invariant_bound = s32[] get-tuple-element(loop_var.1), index=2
+    ROOT tuple = (s32[], s32[], s32[], s32[]) tuple(add, output.1, invariant_bound, output.3)
+  }
+  SimpleLoop.condition {
+    loop_var.2 = (s32[], s32[], s32[], s32[]) parameter(0)
+    get-tuple-element.3 = s32[] get-tuple-element(loop_var.2), index=0
+    bound = s32[] get-tuple-element(loop_var.2), index=2
+    ROOT less-than = pred[] compare(get-tuple-element.3, bound), direction=LT
+  }
+  ENTRY SimpleLoop {
+    loop_bound = s32[] parameter(0)
+    constant.3 = s32[] constant(42)
+    constant.4 = s32[] parameter(1)
+    constant.5 = s32[] parameter(2)
+    tuple.1 = (s32[], s32[], s32[], s32[]) tuple(constant.3, constant.4, loop_bound, constant.5)
+    while = (s32[], s32[], s32[], s32[]) while(tuple.1), condition=
+      SimpleLoop.condition, body=SimpleLoop.body
+    ROOT gte = s32[] get-tuple-element(while), index=0
+  }
+  )";
+
+  auto m = ParseAndReturnVerifiedModule(hlo_string).ValueOrDie();
+  EXPECT_TRUE(WhileLoopSimplifier().Run(m.get()).ValueOrDie());
+  HloInstruction* new_while = FindFirstWhile(m.get());
+  Shape new_while_shape = ParseShape("(s32[], s32[])").ValueOrDie();
+  EXPECT_TRUE(ShapeUtil::Equal(new_while->shape(), new_while_shape));
+  EXPECT_TRUE(ShapeUtil::Equal(
+      new_while->while_body()->root_instruction()->shape(), new_while_shape));
+  EXPECT_TRUE(ShapeUtil::Equal(
+      new_while->while_body()->parameter_instruction(0)->shape(),
+      new_while_shape));
+  EXPECT_TRUE(ShapeUtil::Equal(
+      new_while->while_condition()->parameter_instruction(0)->shape(),
+      new_while_shape));
+}
+
+TEST_F(WhileLoopSimplifierTest, RemoveNestedWhileLoop) {
+  const string hlo_string = R"(
+  HloModule SimpleLoop
+
+  NestedLoop.body {
+    n_var = (s32[], s32[]) parameter(0)
+    gte.0 = s32[] get-tuple-element(n_var), index=0
+    gte.1 = s32[] get-tuple-element(n_var), index=1
+    ten = s32[] constant(10)
+    out.0 = s32[] add(gte.0, ten)
+    out.1 = s32[] add(out.0, gte.1)
+    ROOT out = (s32[], s32[]) tuple(out.0, out.1)
+  }
+  NestLoop.cond {
+    c_var = (s32[], s32[]) parameter(0)
+    cgte.0 = s32[] get-tuple-element(c_var), index=0
+    bound = s32[] constant(49)
+    ROOT lt.49 = pred[] compare(cgte.0, bound), direction=LT
+  }
+
+  SimpleLoop.body {
+    loop_var.1 = (s32[], s32[], s32[], s32[]) parameter(0)
+    get-tuple-element.1 = s32[] get-tuple-element(loop_var.1), index=0
+    constant.1 = s32[] constant(1)
+    add = s32[] add(get-tuple-element.1, constant.1)
+    get-tuple-element.2 = s32[] get-tuple-element(loop_var.1), index=1
+    multiply = s32[] multiply(get-tuple-element.2, get-tuple-element.2)
+    get-tuple-element.3 = s32[] get-tuple-element(loop_var.1), index=3
+    output.3 = s32[] add(get-tuple-element.3, get-tuple-element.3)
+    output.1 = s32[] add(output.3, multiply)
+    invariant_bound = s32[] get-tuple-element(loop_var.1), index=2
+
+    w_init = (s32[], s32[]) tuple(output.1, output.3)
+    nested_while = (s32[], s32[]) while(w_init), condition=NestLoop.cond, body=NestedLoop.body
+    new_out.1 = s32[] get-tuple-element(nested_while), index=0
+
+    ROOT tuple = (s32[], s32[], s32[], s32[]) tuple(add, new_out.1, invariant_bound, output.3)
+  }
+  SimpleLoop.condition {
+    loop_var.2 = (s32[], s32[], s32[], s32[]) parameter(0)
+    get-tuple-element.3 = s32[] get-tuple-element(loop_var.2), index=0
+    bound = s32[] get-tuple-element(loop_var.2), index=2
+    ROOT less-than = pred[] compare(get-tuple-element.3, bound), direction=LT
+  }
+  ENTRY SimpleLoop {
+    loop_bound = s32[] parameter(0)
+    constant.3 = s32[] constant(42)
+    constant.4 = s32[] parameter(1)
+    constant.5 = s32[] parameter(2)
+    tuple.1 = (s32[], s32[], s32[], s32[]) tuple(constant.3, constant.4, loop_bound, constant.5)
+    while = (s32[], s32[], s32[], s32[]) while(tuple.1), condition=
+      SimpleLoop.condition, body=SimpleLoop.body
+    ROOT gte = s32[] get-tuple-element(while), index=0
+  }
+  )";
+
+  auto m = ParseAndReturnVerifiedModule(hlo_string).ValueOrDie();
+  EXPECT_TRUE(WhileLoopSimplifier().Run(m.get()).ValueOrDie());
+  // Need to run again in case first time optimized nested loop then finished
+  WhileLoopSimplifier().Run(m.get()).ValueOrDie();
+  HloInstruction* new_while = FindFirstWhile(m.get());
+  Shape new_while_shape = ParseShape("(s32[], s32[])").ValueOrDie();
+  EXPECT_TRUE(ShapeUtil::Equal(new_while->shape(), new_while_shape));
+  EXPECT_TRUE(ShapeUtil::Equal(
+      new_while->while_body()->root_instruction()->shape(), new_while_shape));
+  EXPECT_TRUE(ShapeUtil::Equal(
+      new_while->while_body()->parameter_instruction(0)->shape(),
+      new_while_shape));
+  EXPECT_TRUE(ShapeUtil::Equal(
+      new_while->while_condition()->parameter_instruction(0)->shape(),
+      new_while_shape));
+
+  int64 num_nested_whiles = absl::c_count_if(
+      new_while->while_body()->instructions(),
+      [](const HloInstruction* w) { return w->opcode() == HloOpcode::kWhile; });
+  EXPECT_EQ(num_nested_whiles, 0);
 }
 
 }  // namespace
