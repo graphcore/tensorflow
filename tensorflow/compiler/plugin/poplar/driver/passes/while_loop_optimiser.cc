@@ -132,7 +132,7 @@ struct SliceAndIndex {
   }
 };
 
-struct UsesAndIntermediates {
+struct Uses {
   absl::InlinedVector<HloInstruction*, 1> uses;
   std::string ToString() const {
     return absl::StrCat("Uses {", absl::StrJoin(uses, ", ", NameFormatter()));
@@ -141,12 +141,12 @@ struct UsesAndIntermediates {
 
 struct BroadcastAndSlice {
   SliceAndIndex broadcast;
-  UsesAndIntermediates uses;
+  Uses uses;
   std::string ToString() const {
     return absl::StrCat("{", broadcast.ToString(), ", ",
-                        absl::StrJoin(uses.uses, ", ", NameFormatter()));
+                        absl::StrJoin(uses.uses, ", ", NameFormatter()), "}");
   }
-  BroadcastAndSlice(SliceAndIndex broadcast, UsesAndIntermediates uses)
+  BroadcastAndSlice(SliceAndIndex broadcast, Uses uses)
       : broadcast(std::move(broadcast)), uses(std::move(uses)) {}
 };
 
@@ -185,6 +185,11 @@ bool UnexpectedWhileLoopForm(HloInstruction* while_op) {
          while_op->mutable_operand(0)->opcode() != HloOpcode::kTuple;
 }
 
+// Find cases where a new value is pushed into a dynamic update buffer inside
+// a while loop. eg
+// While(i<x):
+//   Y = dynamic-update-slice(Y, Z, i)
+//   ++i
 std::vector<SliceAndIndex> FindTensorListBroadcasts(HloInstruction* while_op) {
   if (UnexpectedWhileLoopForm(while_op)) {
     VLOG(10) << "While loop in unexpected form " << while_op->name();
@@ -219,6 +224,7 @@ std::vector<SliceAndIndex> FindTensorListBroadcasts(HloInstruction* while_op) {
     }
     auto* updated_data = candidate_update[0];
     auto* root = comp->root_instruction();
+    CHECK(updated_data->opcode() == HloOpcode::kDynamicUpdateSlice);
     // Check no other instruction inside the while body are using the update
     if (updated_data->users().size() != 1U ||
         updated_data->users()[0] != root) {
@@ -228,19 +234,14 @@ std::vector<SliceAndIndex> FindTensorListBroadcasts(HloInstruction* while_op) {
     // We have the only user of the gte element as a dynamic update, now
     // check that this is fed to the root tuple at the same index as the gte
     int64 parameter_index = candidate_gte->tuple_index();
+    CHECK(parameter_index < root->operand_count());
     if (root->mutable_operand(parameter_index) != updated_data) {
       VLOG(10) << "Not at correct index to be an inplace update "
                << parameter_index;
       continue;
     }
-    // We must now check that the slice is into the outer most dimension,
-    // that the input is a loop invariant, and that the index is the loop
-    // counter.
     auto* input_slice = updated_data->mutable_operand(1);
-    if (!InputIsLoopInvariant(input_slice, loop_invariants)) {
-      VLOG(10) << "Input is not a loop invariant " << input_slice->name();
-      continue;
-    }
+
     // Need to check the dimensions are correct, we are only expecting a slice
     // into the first dimension.
     if (ShapeUtil::DeleteDimension(0, updated_data->shape()) !=
@@ -372,8 +373,8 @@ struct FindUsesTemplate {
   }
 };
 
-UsesAndIntermediates FindNonTrivialUses(HloInstruction* inst,
-                                        std::stack<int64> starting_gte_stack) {
+Uses FindNonTrivialUses(HloInstruction* inst,
+                        std::stack<int64> starting_gte_stack) {
   FindUsesTemplate args;
   FindNonTrivialUses(inst, args, starting_gte_stack);
   return {std::move(args.result)};
@@ -401,6 +402,9 @@ bool IsTripCounter(HloInstruction* while_loop, HloInstruction* gte) {
     return false;
   }
   auto* root = while_loop->while_body()->root_instruction();
+  if (gte->operand(0) != while_loop->while_body()->parameter_instruction(0)) {
+    return false;
+  }
   if (!Match(
           root->mutable_operand(gte->tuple_index()),
           m::AddAnyOrder(m::GetTupleElement(m::Parameter(), gte->tuple_index()),
@@ -577,7 +581,7 @@ bool SliceIndexAlreadyWrittenTo(HloInstruction* while_loop,
 
 bool SliceIndexAlreadyWrittenTo(HloInstruction* while_loop,
                                 const SliceAndIndex& broadcast,
-                                const UsesAndIntermediates& slices) {
+                                const Uses& slices) {
   if (!BroadcastIndexIsTripCounter(while_loop, broadcast)) {
     VLOG(10) << "Broadcast index is not trip counter";
     return false;
@@ -614,9 +618,27 @@ std::vector<BroadcastAndSlice> FindBroadcastsOnlyUsedBySlices(
   return result;
 }
 
-void RemoveTensorListBroadcasts(HloInstruction* inst,
-                                const std::vector<BroadcastAndSlice>& params) {
-  // Does nothing for now, as this diff only adds detection phase
+std::vector<BroadcastAndSlice> FindAllValidBroadcasts(HloInstruction* inst) {
+  // Detect loop constants being pushed into tensor list
+  auto broadcast_params = FindTensorListBroadcasts(inst);
+  // Filter these tensor lists down to ones only used
+  // by slice instructions
+  return FindBroadcastsOnlyUsedBySlices(inst, std::move(broadcast_params));
+}
+
+template <typename T, typename Pred>
+void FilterInPlace(T& vec, Pred p) {
+  auto not_pred = [&](const typename T::value_type& a) { return !p(a); };
+  vec.erase(std::remove_if(vec.begin(), vec.end(), not_pred), vec.end());
+}
+
+void SelectInvariantBroadcasts(HloInstruction* while_loop,
+                               std::vector<BroadcastAndSlice>& broadcasts) {
+  const auto loop_constants = FindLoopConstants(while_loop->while_body());
+  FilterInPlace(broadcasts, [&](const BroadcastAndSlice& A) {
+    return loop_constants.contains(
+        A.broadcast.dynamic_update->mutable_operand(1));
+  });
 }
 
 static StatusOr<Shape> DynamicSliceShape(HloInstruction* inst) {
@@ -862,6 +884,8 @@ HloInstruction* CreateNewTupleOutput(
 
 Status RemoveTensorListBroadcasts(HloInstruction* inst,
                                   std::vector<BroadcastAndSlice>& params) {
+  VLOG(10) << "Removing " << absl::StrJoin(params, ", ", ToStringFormatter())
+           << " from " << inst->name();
   // Hoist the input and remove the broadcast
   TF_ASSIGN_OR_RETURN(const auto output, HoistBroardcastInputs(inst, params));
   // Create a new tuple with the similar shape as the old while that
@@ -914,12 +938,8 @@ StatusOr<bool> PoplarWhileLoopOptimiser::Run(HloModule* module) {
       if (inst->opcode() != HloOpcode::kWhile) {
         continue;
       }
-      // Detect loop constants being pushed into tensor list
-      auto broadcast_params = FindTensorListBroadcasts(inst);
-      // Filter these tensor lists down to ones only used
-      // by slice instructions
-      auto slice_only_broadcast_params =
-          FindBroadcastsOnlyUsedBySlices(inst, std::move(broadcast_params));
+      auto slice_only_broadcast_params = FindAllValidBroadcasts(inst);
+      SelectInvariantBroadcasts(inst, slice_only_broadcast_params);
       if (slice_only_broadcast_params.empty()) {
         continue;
       }
