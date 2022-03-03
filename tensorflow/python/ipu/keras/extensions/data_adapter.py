@@ -159,6 +159,13 @@ class IPUDataHandler(data_adapter.DataHandler):
       raise ValueError(
           "Could not infer the size of the data. You must specify the number "
           "of steps to run.")
+    if steps % self._replication_factor:
+      logging.warn(
+          "Dataset of length {} is being evenly distributed between {} "
+          "replicas. The remaining {} batch{} will be dropped.".format(
+              len(dataset), self._replication_factor,
+              steps % self._replication_factor,
+              "es" if steps % self._replication_factor > 1 else ""))
 
     return int(steps // self._replication_factor)
 
