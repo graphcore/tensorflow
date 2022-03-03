@@ -26,8 +26,8 @@ class HloDynamicIndexInstruction;
 namespace poplarplugin {
 
 // Try and replace dynamic-slice with multi-slice instructions, since
-// mulit-slice can be planned and dynamic-slice can't be. Returns multi-slice
-// instruction or nullptr if no replacement occured.
+// multi-slice can be planned and dynamic-slice can't be. Returns multi-slice
+// instruction or nullptr if no replacement occurred.
 StatusOr<HloInstruction*> TryReplaceDynamicWithMultiSlice(
     HloDynamicIndexInstruction* dynamic_slice);
 

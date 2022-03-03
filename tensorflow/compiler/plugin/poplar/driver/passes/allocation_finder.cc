@@ -317,7 +317,7 @@ void AllocationFinder::FindConsumers(
 
     auto itr = tensor_allocation_map.find(tgt_location);
     if (itr == tensor_allocation_map.end()) {
-      // If we have run allocaiton finding there is no target then we can
+      // If we have run allocation finding there is no target then we can
       // infer that there are no targets in this part of the graph so we do not
       // need to traverse it.
       path.pop_back();
