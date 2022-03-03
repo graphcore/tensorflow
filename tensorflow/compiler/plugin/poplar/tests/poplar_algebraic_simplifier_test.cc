@@ -4136,7 +4136,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, SliceOfConcatNonScalarInput) {
     param.1 = f32[1] parameter(1)
     param.2 = f32[3] parameter(2)
     concat = f32[6] concatenate(param.0, param.1, param.2), dimensions={0}
-    ROOT slice = f32[1] slice(concat), slice={[4:5]}
+    ROOT slice = f32[2] slice(concat), slice={[4:6]}
   }
 )";
   TF_ASSERT_OK_AND_ASSIGN(auto module,
@@ -4147,7 +4147,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, SliceOfConcatNonScalarInput) {
   auto root = module->entry_computation()->root_instruction();
   EXPECT_THAT(root, GmockMatch(m::Slice(m::Parameter(2))));
   EXPECT_EQ(root->slice_starts(0), 1);
-  EXPECT_EQ(root->slice_limits(0), 2);
+  EXPECT_EQ(root->slice_limits(0), 3);
 }
 
 TEST_F(PoplarAlgebraicSimplifierTest, SliceAddPadLow) {
