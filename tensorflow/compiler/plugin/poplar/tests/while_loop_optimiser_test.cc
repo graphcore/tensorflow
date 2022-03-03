@@ -82,6 +82,53 @@ ENTRY entry {
   ASSERT_TRUE(changed);
 }
 
+TEST_F(WhileLoopOptimiserTest, DetectTwoIdentical) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[10, 1], s32[10, 1]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  one = s32[] constant(1)
+  zero = s32[] constant(0)
+  add = s32[] add(p_body.0, one)
+  two = s32[] constant(2)
+  slice-input = s32[1, 1] reshape(two)
+  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
+  p_body.2 = s32[10, 1] get-tuple-element(p_body), index=2
+  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  dyn_update.2 = s32[10, 1] dynamic-update-slice(p_body.2, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[10, 1], s32[10,1]) tuple(add, dyn_update, dyn_update.2)
+}
+
+condition {
+  p_cond = (s32[],s32[10, 1], s32[10, 1]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_2 = s32[] constant(1)
+  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1, const_1)
+  while = (s32[],s32[10, 1], s32[10, 1]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10, 1] get-tuple-element(while), index=1
+  broadcast.2 = s32[10, 1] get-tuple-element(while), index=2
+  slice.2 = s32[1, 1] dynamic-slice(broadcast.2, const_0, const_0), dynamic_slice_sizes={1, 1}
+  ROOT slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  TF_ASSERT_OK_AND_ASSIGN(bool changed,
+                          PoplarWhileLoopOptimiser().Run(module.get()));
+  ASSERT_TRUE(changed);
+}
+
 TEST_F(WhileLoopOptimiserTest, UsedByRoot) {
   const char* const hlo_string = R"(
 HloModule ModuleWithWhile

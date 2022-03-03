@@ -811,15 +811,16 @@ StatusOr<HoistedOutput> HoistBroardcastInputs(
     // to hoist isn't in unhoisted, (though if it weren't for
     // that check it would be fine as it doesn't use the
     // unhoisted set)
-    unhoisted.erase(to_hoist);
-    WhileLoopInvariantCodeMotion::CreateLoopInvariantCopy(&hoisted, &unhoisted,
-                                                          while_op, to_hoist);
-    instructions_to_replace.push_back(to_hoist);
-    auto* new_inst = FindOrDie(hoisted, to_hoist);
-    replacement_instructions.push_back(new_inst);
+    if (!hoisted.contains(to_hoist)) {
+      unhoisted.erase(to_hoist);
+      WhileLoopInvariantCodeMotion::CreateLoopInvariantCopy(
+          &hoisted, &unhoisted, while_op, to_hoist);
+      instructions_to_replace.push_back(to_hoist);
+      replacement_instructions.push_back(FindOrDie(hoisted, to_hoist));
+    }
     // From now on when looking at the params this will point to the
     // hoisted input
-    param.broadcast.dynamic_update = new_inst;
+    param.broadcast.dynamic_update = FindOrDie(hoisted, to_hoist);
   }
   TF_ASSIGN_OR_RETURN(auto live_in, WhileUtil::MakeInstructionsLiveIn(
                                         while_op, replacement_instructions));
