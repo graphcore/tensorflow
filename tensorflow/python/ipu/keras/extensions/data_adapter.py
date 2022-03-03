@@ -237,6 +237,15 @@ class IPUDataHandler(data_adapter.DataHandler):
   def element_spec(self):
     return self._dataset.element_spec
 
+  @property
+  def batch_size(self):
+    batch_size = self._adapter.batch_size()
+    if batch_size is None and self.element_spec:
+      element_spec = nest.flatten(self.element_spec)[0]
+      if element_spec.shape:
+        batch_size = element_spec.shape[0]
+    return batch_size
+
   def set_replication_factor(self, value):
     self._replication_factor = value
     self._inferred_steps = self._infer_steps(self._steps_per_epoch,
