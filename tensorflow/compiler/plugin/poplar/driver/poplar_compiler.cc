@@ -158,6 +158,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/suggest_recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/variables_offload_and_partition.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_condition_simplify.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_optimiser.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/wide_const_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
@@ -1432,8 +1433,6 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       {
         auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
             "while-loop-optimisations", pipeline_compiler_stats.get());
-        pass.AddPass<HloDCE>();
-        pass.AddPass<HloCSE>(true);
         pass.AddPass<PoplarAlgebraicSimplifier>(
             poplar_executor->GetIpuOptions().algebraic_simplifier_config());
         pass.AddPass<HloConstantFolding>();
@@ -1441,6 +1440,9 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         pass.AddPass<HloPassFix<WhileLoopInvariantCodeMotion>>(
             /*hoist_constants=*/false, /*hoist_size_inflating_ops=*/false);
         pass.AddPass<TupleSimplifier>(true);
+        pass.AddPass<HloCSE>(true);
+        pass.AddPass<HloDCE>();
+        pass.AddPass<PoplarWhileLoopOptimiser>();
       }
       pipeline.AddPass<WideConstFinder>();
       pipeline.AddPass<CommutativeInstructionReorderOperands>();
