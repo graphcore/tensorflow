@@ -55,7 +55,7 @@ struct AttrMember {
 
 /*
 Helper function to try make setting large numbers of front end attributes
-a little less repetivie. Takes an initliazer_list and iterate through
+a little less repetitive. Takes an initializer_list and iterate through
 applying each one. The point in the AttrKey and AttrValue structs is
 to avoid having to repeat calls to common string conversion functions
 when making the initializer_list by having them constructable from

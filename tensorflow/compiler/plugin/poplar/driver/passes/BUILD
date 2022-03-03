@@ -66,6 +66,20 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "allocation_analysis",
+    srcs = [
+        "allocation_analysis.cc",
+    ],
+    hdrs = [
+        "allocation_analysis.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:print_util",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:util",
+    ],
+)
+
+poplar_cc_library(
     name = "allocation_finder",
     srcs = [
         "allocation_finder.cc",
@@ -1613,6 +1627,7 @@ poplar_cc_library(
         "while_loop_optimiser.h",
     ],
     deps = [
+        ":allocation_analysis",
         "//tensorflow/compiler/plugin/poplar/driver/tools:print_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:slice_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:util",
@@ -1663,6 +1678,7 @@ poplar_cc_library(
         ":add_stochastic_rounding_options",
         ":all_reduce_simplifier",
         ":all_to_all_finder",
+        ":allocation_analysis",
         ":allocation_finder",
         ":apply_recompute_suggestion",
         ":call_optimizer",
