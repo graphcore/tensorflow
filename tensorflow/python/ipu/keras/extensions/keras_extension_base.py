@@ -139,6 +139,38 @@ class KerasExtensionBase(base_layer.KerasExtension):
                        self.name, steps_per_execution))
       logged_steps_per_execution_warning = True
 
+  def _log_optimizer_batch_size(self, data_handler):
+    """A function that logs the batch size as seen from the perspective of the
+    optimizer during training.
+
+    Args:
+        data_handler (IPUDataHandler): The data handler created in `fit()`
+    """
+    # Optimizer batch size depends on the specified batch size, the gradient
+    # accumulation and the replication factor.
+    steps_per_execution = data_handler.steps_per_execution_value
+    gradient_accumulation_steps_per_replica = \
+      self._verify_and_get_gradient_accumulation_steps_per_replica(
+          steps_per_execution)
+    total_replicas = self._get_replication_factor() * popdist.getNumInstances()
+    # Construct tailored message depending on if replication, gradient
+    # accunulation, or both are enabled.
+    is_distributed = total_replicas > 1
+    is_accumulated = gradient_accumulation_steps_per_replica > 1
+    if is_accumulated or is_distributed:
+      accumulating_n_batches = \
+        " and accumulating {} batches per optimizer step".format(
+            gradient_accumulation_steps_per_replica)
+      across_n_replicas = " across {} replicas".format(total_replicas)
+      effective_batch_size = data_handler.batch_size * \
+        gradient_accumulation_steps_per_replica * total_replicas
+      logging.info(
+          "Training is{}{}{}, your effective batch size is {}.".format(
+              " distributed" if is_distributed else "",
+              accumulating_n_batches if is_accumulated else "",
+              across_n_replicas if is_distributed else "",
+              effective_batch_size))
+
   def _get_shard_count(self):
     """Returns how many shards the model is parallelized over.
 
@@ -1195,6 +1227,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
       # they have been built.
       replication_factor = self._get_replication_factor()
       data_handler.set_replication_factor(replication_factor)
+
+      self._log_optimizer_batch_size(data_handler)
 
       # Container that configures and calls `tf.keras.Callback`s.
       if not isinstance(callbacks, callbacks_module.CallbackList):
