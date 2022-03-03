@@ -3149,14 +3149,26 @@ Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
     int64 concat_dim = concat->concatenate_dimension();
     int64 piece_start = 0;
     for (auto piece : concat->operands()) {
-      if (!ShapeUtil::Compatible(piece->shape(), slice->shape())) {
-        piece_start += piece->shape().dimensions(concat_dim);
-        continue;
+      int64 piece_size = piece->shape().dimensions(concat_dim);
+      int64 slice_start = slice->slice_starts(concat_dim);
+      int64 slice_limit = slice->slice_limits(concat_dim);
+      if (slice_start >= piece_start &&
+          slice_limit <= piece_start + piece_size) {
+        std::vector<int64> begin, end;
+        for (int64 dim = 0; dim < slice->shape().rank(); ++dim) {
+          if (dim == concat_dim) {
+            begin.push_back(slice_start - piece_start);
+            end.push_back(slice_limit - piece_start);
+          } else {
+            begin.push_back(slice->slice_starts(dim));
+            end.push_back(slice->slice_limits(dim));
+          }
+        }
+        return ReplaceWithNewInstruction(
+            slice, HloInstruction::CreateSlice(slice->shape(), piece, begin,
+                                               end, slice->slice_strides()));
       }
-      if (slice->slice_starts(concat_dim) == piece_start) {
-        return ReplaceInstruction(slice, piece);
-      }
-      piece_start += piece->shape().dimensions(concat_dim);
+      piece_start += piece_size;
     }
   }
 
