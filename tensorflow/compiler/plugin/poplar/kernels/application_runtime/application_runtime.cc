@@ -283,6 +283,8 @@ class IOConfig {
 // Base class which is used for processing the results from outfeed callbacks.
 class ResultProcessorBase {
  public:
+  virtual ~ResultProcessorBase() = default;
+
   // Returns whether all outputs have been processed.
   virtual bool ProcessOutput(const std::string& name, void* data) {
     // Check whether this is the last callback.
