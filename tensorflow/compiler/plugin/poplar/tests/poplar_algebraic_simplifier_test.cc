@@ -3950,8 +3950,10 @@ ENTRY AddBroadcastZeroWithDynamicSlice {
   ASSERT_TRUE(simplifier.Run(module.get()).ValueOrDie());
   VLOG(2) << "After rewrite dus->pad\n" << module->ToString();
   auto root = module->entry_computation()->root_instruction();
-  EXPECT_THAT(root->opcode(), HloOpcode::kAdd);
-  EXPECT_THAT(root->operand(1)->opcode(), HloOpcode::kPad);
+  // This is further optimised as concatenate(add(slice(), slice)
+  EXPECT_THAT(root, GmockMatch(m::Concatenate(
+                        m::Add(m::Slice(m::Parameter(0)), m::Parameter(1)),
+                        m::Slice(m::Parameter(0)))));
 }
 
 // Test that
@@ -4268,6 +4270,76 @@ TEST_F(PoplarAlgebraicSimplifierTest, SliceOfConcatNonScalarInput) {
   EXPECT_THAT(root, GmockMatch(m::Slice(m::Parameter(2))));
   EXPECT_EQ(root->slice_starts(0), 1);
   EXPECT_EQ(root->slice_limits(0), 2);
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, SliceAddPadLow) {
+  const char* hlo_string = R"(
+  HloModule module
+
+  ENTRY test {
+    p0 = f32[10, 10] parameter(0)
+    p1 = f32[10, 2] parameter(1)
+    c0 = f32[] constant(0)
+    pad = f32[10,10] pad(p1, c0), padding=0_0x8_0
+    ROOT add = f32[10, 10] add(pad, p0)
+  }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  EXPECT_TRUE(
+      HloPassFix<PoplarAlgebraicSimplifier>().Run(module.get()).ValueOrDie());
+  auto root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::Concatenate(
+                        m::Slice(m::Parameter(0)),
+                        m::Add(m::Slice(m::Parameter(0)), m::Parameter(1)))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, SliceAddPadHigh) {
+  const char* hlo_string = R"(
+  HloModule module
+
+  ENTRY test {
+    p0 = f32[10, 10] parameter(0)
+    p1 = f32[10, 2] parameter(1)
+    c0 = f32[] constant(0)
+    pad = f32[10,10] pad(p1, c0), padding=0_0x0_8
+    ROOT add = f32[10, 10] add(pad, p0)
+  }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  EXPECT_TRUE(
+      HloPassFix<PoplarAlgebraicSimplifier>().Run(module.get()).ValueOrDie());
+  auto root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::Concatenate(
+                        m::Add(m::Slice(m::Parameter(0)), m::Parameter(1)),
+                        m::Slice(m::Parameter(0)))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, SliceAddPadLowHigh) {
+  const char* hlo_string = R"(
+  HloModule module
+
+  ENTRY test {
+    p0 = f32[10, 10] parameter(0)
+    p1 = f32[10, 2] parameter(1)
+    c0 = f32[] constant(0)
+    pad = f32[10,10] pad(p1, c0), padding=0_0x4_4
+    ROOT add = f32[10, 10] add(pad, p0)
+  }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  EXPECT_TRUE(
+      HloPassFix<PoplarAlgebraicSimplifier>().Run(module.get()).ValueOrDie());
+  auto root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::Concatenate(
+                        m::Slice(m::Parameter(0)),
+                        m::Add(m::Slice(m::Parameter(0)), m::Parameter(1)),
+                        m::Slice(m::Parameter(0)))));
 }
 
 TEST_F(PoplarAlgebraicSimplifierTest, NegateNegate) {
