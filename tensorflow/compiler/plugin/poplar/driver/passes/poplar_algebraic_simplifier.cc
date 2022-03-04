@@ -169,6 +169,77 @@ bool AlgebraicSimplifierVisitor::ReplaceInstructionIfSameShape(
   return true;
 }
 
+namespace {
+bool IsSingleDimExternalZeroPadding(const HloInstruction* inst) {
+  if (inst->opcode() != HloOpcode::kPad ||
+      !poplarplugin::IsExternalPadding(inst)) {
+    return false;
+  }
+  if (!poplarplugin::IsConstantZero(inst->operand(1))) {
+    return false;
+  }
+
+  auto& config = inst->padding_config();
+  auto& dimensions = config.dimensions();
+  bool got_dim = false;
+  for (size_t i = 0; i < dimensions.size(); ++i) {
+    auto& dimension = dimensions[i];
+    int64 low = dimension.edge_padding_low();
+    int64 high = dimension.edge_padding_high();
+    // More than one dimension padded
+    if (high > 0 || low > 0) {
+      if (got_dim) {
+        return false;
+      }
+      got_dim = true;
+    }
+  }
+  return got_dim;
+}
+
+class SliceDescription {
+ public:
+  Shape GetSliceShape(PrimitiveType type) {
+    CHECK_EQ(begin_.size(), end_.size());
+    std::vector<int64> dims;
+    dims.reserve(begin_.size());
+    for (size_t i = 0; i < begin_.size(); ++i) {
+      dims.push_back(end_[i] - begin_[i]);
+    }
+    return ShapeUtil::MakeShape(type, dims);
+  }
+
+  std::unique_ptr<HloInstruction> Create(PrimitiveType type,
+                                         HloInstruction* op) {
+    CHECK_EQ(begin_.size(), end_.size());
+    std::vector<int64> strides(begin_.size(), 1);
+    return HloInstruction::CreateSlice(GetSliceShape(type), op, begin_, end_,
+                                       strides);
+  }
+
+  void AddDims(int64 begin, int64 end) {
+    CHECK_LE(begin, end);
+    begin_.push_back(begin);
+    end_.push_back(end);
+  }
+
+  bool IsEmpty() const {
+    CHECK_EQ(begin_.size(), end_.size());
+    for (size_t i = 0; i != begin_.size(); ++i) {
+      if (begin_[i] == end_[i]) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+ private:
+  std::vector<int64> begin_;
+  std::vector<int64> end_;
+};
+
+}  // namespace
+
 Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
   HloInstruction *lhs, *rhs;
   CHECK(Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))));
@@ -218,6 +289,78 @@ Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
     return ReplaceWithNewInstruction(
         add, HloInstruction::CreateBinary(add->shape(), HloOpcode::kAdd, a,
                                           sum_of_constants));
+  }
+
+  // Canonicalise add(pad(X), Y) -> add(Y, pad(X))
+  if (Match(add,
+            m::Add(m::Op(&lhs).WithOpcode(HloOpcode::kPad), m::Op(&rhs)))) {
+    if (rhs->opcode() != HloOpcode::kPad) {
+      VLOG(10) << "Moving pad argument to the right hand side in "
+               << add->name();
+      return ReplaceWithNewInstruction(
+          add, add->CloneWithNewOperands(add->shape(), {rhs, lhs}));
+    }
+  }
+
+  if (Match(add,
+            m::Add(m::Op(&lhs), m::Op(&rhs).WithOpcode(HloOpcode::kPad))) &&
+      IsSingleDimExternalZeroPadding(rhs)) {
+    VLOG(10) << "Slicing single dimension pad in " << add->name();
+    HloInstruction* padded = rhs->mutable_operand(0);
+
+    const auto& padding_config = rhs->padding_config();
+    SliceDescription lhs_slice_desc, input_slice_desc, rhs_slice_desc;
+
+    const Shape& shape = add->shape();
+    CHECK_EQ(padding_config.dimensions().size(), shape.rank());
+    int64 concat_dim = -1;
+    for (int64 dim_idx = 0; dim_idx < shape.rank(); ++dim_idx) {
+      auto& dimension = padding_config.dimensions().at(dim_idx);
+      int64 low = dimension.edge_padding_low();
+      int64 high = dimension.edge_padding_high();
+      auto n = shape.dimensions(dim_idx);
+      if (high > 0 || low > 0) {
+        CHECK_LT(concat_dim, 0);
+        concat_dim = dim_idx;
+        lhs_slice_desc.AddDims(0, low);
+        input_slice_desc.AddDims(low, n - high);
+        rhs_slice_desc.AddDims(n - high, n);
+      } else {
+        lhs_slice_desc.AddDims(0, n);
+        input_slice_desc.AddDims(0, n);
+        rhs_slice_desc.AddDims(0, n);
+      }
+    }
+    PrimitiveType type = padded->shape().element_type();
+
+    CHECK(!input_slice_desc.IsEmpty());
+    HloInstruction* slice =
+        computation_->AddInstruction(input_slice_desc.Create(type, lhs));
+    HloInstruction* slice_lhs =
+        !lhs_slice_desc.IsEmpty()
+            ? computation_->AddInstruction(lhs_slice_desc.Create(type, lhs))
+            : nullptr;
+    HloInstruction* slice_rhs =
+        !rhs_slice_desc.IsEmpty()
+            ? computation_->AddInstruction(rhs_slice_desc.Create(type, lhs))
+            : nullptr;
+
+    HloInstruction* new_add = computation_->AddInstruction(
+        add->CloneWithNewOperands(padded->shape(), {slice, padded}));
+    CHECK_GE(concat_dim, 0);
+
+    std::vector<HloInstruction*> concat_ops;
+    concat_ops.reserve(3);
+    if (slice_lhs) {
+      concat_ops.push_back(slice_lhs);
+    }
+    concat_ops.push_back(new_add);
+    if (slice_rhs) {
+      concat_ops.push_back(slice_rhs);
+    }
+    return ReplaceWithNewInstruction(
+        add, HloInstruction::CreateConcatenate(add->shape(), concat_ops,
+                                               concat_dim));
   }
 
   // A*C + B*C => (A+B)*C

@@ -105,50 +105,27 @@ class MappingTest(xla_test.XLATestCase):
       report_json.parse_log()
       tm = report_json.get_tensor_map()
 
-      # There are two fusions in the graph, zero pad and implicit
-      # broadcast add. We work out which one's which by looking at
-      # layouts.
-      fusion_0_layout = []
-      fusion_1_layout = []
-      slice_layout = []
-      add_layout = []
+      concat_layout = None
+      add_layout = None
       for tensor in tm.all_tensors():
-        if tensor.inst.startswith('fusion.'):
-          fusion_1_layout = tensor
-        elif tensor.inst.startswith('fusion'):
-          fusion_0_layout = tensor
-        elif tensor.inst.startswith('slice'):
-          slice_layout = tensor
+        if tensor.inst.startswith('concatenate'):
+          concat_layout = tensor
         elif tensor.inst.startswith('add'):
           add_layout = tensor
 
-      # The slice contains 4 elements on 256 tiles
-      self.assertEqual(len(slice_layout.tiles), 256)
-      for tile_idx, tile in enumerate(slice_layout.tiles):
+      # The concatenated tensor contains 4 elements on 256 tiles
+      self.assertEqual(len(concat_layout.tiles), 256)
+      for tile_idx, tile in enumerate(concat_layout.tiles):
         self.assertEqual(tile.tile, tile_idx)
         self.assertEqual(tile.num_elements, 4)
 
-      # The broadcast add will have the same layout as the slice as it
-      # should be done inplace.
-      if slice_layout.tiles == fusion_1_layout.tiles:
-        pad_layout = fusion_0_layout
-      else:
-        self.assertEqual(slice_layout.tiles, fusion_0_layout.tiles)
-        pad_layout = fusion_1_layout
+      self.assertEqual(len(add_layout.tiles), 128)
+      for tile_idx, tile in enumerate(add_layout.tiles):
+        self.assertEqual(tile.tile, tile_idx + 64)
+        self.assertEqual(tile.num_elements, 4)
 
-      # The pad contains 512 elements on tile 0,
-      # and one region with 4 elements on tiles 64-192
-      self.assertEqual(len(pad_layout.tiles), 129)
-      for tile_idx, tile in enumerate(pad_layout.tiles):
-        if tile_idx == 0:
-          self.assertEqual(tile.tile, tile_idx)
-          self.assertEqual(tile.num_elements, 512)
-        else:
-          self.assertEqual(tile.tile, 63 + tile_idx)
-          self.assertEqual(tile.num_elements, 4)
-
-      # The add is done inplace
-      self.assertEqual(slice_layout.tiles, add_layout.tiles)
+      # The add is optimised, inplace and has half of the total tiles used
+      self.assertEqual(concat_layout.tiles[64:-64], add_layout.tiles)
 
   def testInplaceReadWrite(self):
     cfg = ipu.utils.IPUConfig()
