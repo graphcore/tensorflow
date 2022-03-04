@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
@@ -73,16 +74,23 @@ class HloDynamicLSTMFwdInstruction : public HloRNNFwdInstruction {
   explicit HloDynamicLSTMFwdInstruction(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       bool is_training, rnn_helper::ActivationType activation,
-      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+      rnn_helper::ActivationType recurrent_activation,
+      bool preserve_final_state, int32 num_channels,
       xla::PrimitiveType partials_type, const std::string& options);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
+  bool preserve_final_state() const;
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       HloCloneContext* ctx) const override;
+  bool preserve_final_state_;
 };
 
 class HloDynamicLSTMBwdInstruction : public HloRNNBwdInstruction {
@@ -102,8 +110,9 @@ class HloDynamicLSTMBwdInstruction : public HloRNNBwdInstruction {
 std::unique_ptr<HloInstruction> CreateDynamicLSTMFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, rnn_helper::ActivationType activation,
-    rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-    xla::PrimitiveType partials_type, const std::string& options);
+    rnn_helper::ActivationType recurrent_activation, bool preserve_final_state,
+    int32 num_channels, xla::PrimitiveType partials_type,
+    const std::string& options);
 
 std::unique_ptr<HloInstruction> CreateDynamicLSTMBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,

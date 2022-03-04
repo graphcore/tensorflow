@@ -843,6 +843,70 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
     self.assertGreater(_totalTileMemory(reports[0]),
                        _totalTileMemory(reports[1]))
 
+  @tu.skip_on_hw
+  def test_preserve_final_state(self):
+    """Numerically verify that when `preserve_final_state=True`, the dynamic
+    LSTM op returns the correct final cell state (when using sequence lengths).
+    Also check that with `preserve_final_state=False`, the op uses less cycles.
+    """
+    # Use a different value for batch size than the default.
+    batch_size = 10
+
+    # Utility functions for generating data.
+    normal = lambda size: np.random.normal(0, 1, size).astype(DATA_TYPE)
+    shuffled_range = lambda n: np.random.permutation(np.arange(n)).astype(
+        np.int32)
+
+    # Generate input data.
+    inputs = normal((SEQ_LEN, batch_size, INPUT_SIZE))
+    input_h_state = normal((batch_size, NUM_CHANNELS))
+    input_c_state = normal((batch_size, NUM_CHANNELS))
+    kernel = normal((INPUT_SIZE + NUM_CHANNELS, 4 * NUM_CHANNELS))
+    biases = normal((4, NUM_CHANNELS))
+    seq_lens = shuffled_range(batch_size) % SEQ_LEN + 1
+    c_state_mask = np.zeros((batch_size, NUM_CHANNELS), np.bool)
+    c_state_mask[seq_lens == SEQ_LEN, :] = True
+
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    def model(preserve_final_state):
+      return gen_popnn_ops.popnn_dynamic_lstm_layer(
+          inputs=inputs,
+          input_h_state=input_h_state,
+          input_c_state=input_c_state,
+          kernel=kernel,
+          biases=biases,
+          seq_len=seq_lens,
+          activation='tanh',
+          recurrent_activation='sigmoid',
+          preserve_final_state=preserve_final_state,
+          num_channels=NUM_CHANNELS,
+          is_training=False,
+      )
+
+    def run_model(preserve_final_state):
+      with self.session() as sess:
+        with ops.device('/device:IPU:0'):
+          outputs = model(preserve_final_state)
+        return sess.run(outputs)[1]
+
+    c_states = [run_model(True), run_model(False)]
+
+    # Numerical tests.
+    self.assertNotAllEqual(c_states[0], 0)
+    self.assertAllEqual(c_state_mask, c_states[1] != 0)
+    self.assertAllEqual(c_states[0][c_state_mask], c_states[1][c_state_mask])
+
+    report_paths = report_helper.find_reports()
+    self.assertEqual(len(report_paths), 2)
+    reports = [pva.openReport(report) for report in report_paths]
+    cycles = [report.execution.totalCycles.total for report in reports]
+    self.assertAllGreater(cycles[0], cycles[1])
+
 
 if __name__ == "__main__":
   os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +

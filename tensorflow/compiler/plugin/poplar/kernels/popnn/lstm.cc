@@ -80,6 +80,13 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
     std::string options;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("options", &options));
     attribute_map_.AddAttribute("options", options);
+
+    if (lstm_type == LstmType::DYNAMIC_LSTM) {
+      bool preserve_final_state;
+      OP_REQUIRES_OK(
+          ctx, ctx->GetAttr("preserve_final_state", &preserve_final_state));
+      attribute_map_.AddAttribute("preserve_final_state", preserve_final_state);
+    }
   }
 
  public:

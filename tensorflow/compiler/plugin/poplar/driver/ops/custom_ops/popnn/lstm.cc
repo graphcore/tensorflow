@@ -411,6 +411,9 @@ class DynamicLstmLayerFwdOp : public LstmLayerFwdOp {
     poplar::Tensor biases = args[4];
     poplar::Tensor seq_len = args[5];
 
+    auto lstm_inst = Cast<HloDynamicLSTMFwdInstruction>(inst);
+    lstm_params.preserveFinalState = lstm_inst->preserve_final_state();
+
     seq_len = seq_len.reinterpret(poplar::UNSIGNED_INT);
     lstm_params.rnn.varTimeSteps = seq_len;
 
