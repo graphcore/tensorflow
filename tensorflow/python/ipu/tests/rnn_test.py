@@ -48,7 +48,10 @@ def build_cells(opts, cell_class, sizes):
   rnn_layers = []
   for idx, size in enumerate(sizes):
     cell = cell_class(size, name='RNNCell%d' % idx)
-    dropout = DropoutWrapper(cell, output_keep_prob=opts.output_keep_prob)
+    dropout = DropoutWrapper(cell,
+                             output_keep_prob=opts.output_keep_prob,
+                             variational_recurrent=False,
+                             dtype="float32")
     rnn_layers.append(dropout)
   return rnn_layers
 
@@ -249,23 +252,23 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       {
           'testcase_name': 'tf_rnn1',
           'build': build_tf_rnn1,
-          'cycles': 12622914 if TF1 else 16113962,
-          'total_memory': 21003298 if TF1 else 21196286,
-          'max_memory': 21056 if TF1 else 22213
+          'cycles': 9892094 if TF1 else 12969762,
+          'total_memory': 18308926 if TF1 else 18661282,
+          'max_memory': 19416 if TF1 else 20280
       },
       {
           'testcase_name': 'tf_rnn2',
           'build': build_tf_rnn2,
-          'cycles': 23232506 if TF1 else 25774155,
-          'total_memory': 20652470 if TF1 else 20752850,
-          'max_memory': 23429 if TF1 else 24037
+          'cycles': 18478591 if TF1 else 21954915,
+          'total_memory': 17702776 if TF1 else 17767924,
+          'max_memory': 22016 if TF1 else 22644
       },
       {
           'testcase_name': 'tf_lstm1',
           'build': build_tf_lstm1,
-          'cycles': 30276424 if TF1 else 31927436,
-          'total_memory': 68397125 if TF1 else 68670929,
-          'max_memory': 57870 if TF1 else 57952,
+          'cycles': 25246207 if TF1 else 27353594,
+          'total_memory': 56144611 if TF1 else 56530606,
+          'max_memory': 51278 if TF1 else 51754,
           'options': {
               'dims': 64,
               'steps': 3
@@ -289,23 +292,23 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       {
           'testcase_name': 'tf_gru1',
           'build': build_tf_gru1,
-          'cycles': 57141280 if TF1 else 60495375,
-          'total_memory': 44724066 if TF1 else 45459662,
-          'max_memory': 44634 if TF1 else 45002
+          'cycles': 47908969 if TF1 else 52940411,
+          'total_memory': 35142802 if TF1 else 35349686,
+          'max_memory': 36824 if TF1 else 37552
       },
       {
           'testcase_name': 'model_rnn1',
           'build': build_model_rnn1,
-          'cycles': 18787287 if TF1 else 19712915,
-          'total_memory': 23268473 if TF1 else 22921259,
-          'max_memory': 25926 if TF1 else 25737
+          'cycles': 15720790 if TF1 else 15785499,
+          'total_memory': 29223581 if TF1 else 19511535,
+          'max_memory': 23178 if TF1 else 23055
       },
       {
           'testcase_name': 'model_rnn2',
           'build': build_model_rnn2,
-          'cycles': 37560987 if TF1 else 37567976,
-          'total_memory': 30245481 if TF1 else 30250905,
-          'max_memory': 35421 if TF1 else 34364
+          'cycles': 31392149 if TF1 else 31226960,
+          'total_memory': 23736413 if TF1 else 24970739,
+          'max_memory': 31879 if TF1 else 30424
       },
       {
           'testcase_name': 'model_cnn1',
@@ -321,9 +324,9 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       {
           'testcase_name': 'trivial_multiply',
           'build': build_trivial_while,
-          'cycles': 63201498 if TF1 else 76795024,
-          'total_memory': 20610982 if TF1 else 23168214,
-          'max_memory': 15353 if TF1 else 17475,
+          'cycles': 61735537 if TF1 else 60961863,
+          'total_memory': 20610982 if TF1 else 20142774,
+          'max_memory': 15353 if TF1 else 14945,
           'options': {
               'batch_size': 4,
               'steps': 32,
@@ -421,17 +424,17 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with self.subTest("cycles check"):
       self.assert_execution_report_cycles(report,
-                                          5499404,
+                                          3764257,
                                           tolerance=opts.assert_tolerance)
 
     with self.subTest("total tile memory check"):
       self.assert_total_tile_memory(report,
-                                    8680009,
+                                    112164,
                                     tolerance=opts.assert_tolerance)
 
     with self.subTest("max tile memory check"):
       self.assert_max_tile_memory(report,
-                                  13214,
+                                  12495,
                                   tolerance=opts.assert_tolerance)
 
 
@@ -478,16 +481,16 @@ class RNNKerasModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           "testcase_name": "lstm",
           "model_fn": createLSTMKerasModel,
           "ipu_count": 1,
-          "expected_cycles": 35177821,
-          "expected_total_tile_memory": 20848699,
-          "expected_max_tile_memory": 35406
+          "expected_cycles": 32019581,
+          "expected_total_tile_memory": 20357005,
+          "expected_max_tile_memory": 33320
       }, {
           "testcase_name": "pipelined_lstm",
           "model_fn": createPipelinedLSTMKerasModel,
           "ipu_count": 2,
-          "expected_cycles": 31927436,
-          "expected_total_tile_memory": 33279764,
-          "expected_max_tile_memory": 33431
+          "expected_cycles": 29172285,
+          "expected_total_tile_memory": 32750233,
+          "expected_max_tile_memory": 31673
       })
   @test_util.run_v2_only
   def test_model(self, model_fn, ipu_count, expected_cycles,
@@ -505,6 +508,7 @@ class RNNKerasModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg, output_execution_profile=True)
     cfg.auto_select_ipus = ipu_count
+    cfg.ipu_model.tiles_per_ipu = 1472
     ipu.utils.configure_ipu_system(cfg)
 
     strategy = ipu.ipu_strategy.IPUStrategy()
