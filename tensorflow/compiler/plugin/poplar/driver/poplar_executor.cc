@@ -2017,6 +2017,11 @@ std::string ModuleFilenames::CompilationLockFilename() const {
                                   basename_ + ".compile_lock");
 }
 
+std::string ModuleFilenames::LoadLockFilename() const {
+  return tensorflow::io::JoinPath(GetExecutableCachePath(),
+                                  basename_ + ".read_lock");
+}
+
 ModuleFilenames PoplarExecutor::GetModuleFilenames(uint64 hash) const {
   return ModuleFilenames(hash, SerializationFolder());
 }
