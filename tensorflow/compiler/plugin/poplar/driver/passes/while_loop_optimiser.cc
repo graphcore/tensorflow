@@ -48,35 +48,20 @@ namespace {
 void FindLoopConstants(HloComputation* comp,
                        absl::flat_hash_set<HloInstruction*>& result,
                        const bool include_constants) {
-  // we are not finding the dropout ones because this constant looking
-  // is too restrictive. TODO fix this
   for (auto* inst : comp->MakeInstructionPostOrder()) {
-    switch (inst->opcode()) {
-      // Note this is meant to match NotWorthHoistingIndividually
-      // inside WhileLoopInvariantCodeMotion
-      case HloOpcode::kConstant: {
-        if (include_constants) {
-          result.emplace(inst);
-        }
-        break;
-      }
-      case HloOpcode::kBitcast:
-      case HloOpcode::kBroadcast:
-      case HloOpcode::kIota:
-      case HloOpcode::kReshape:
-      case HloOpcode::kReverse:
-      case HloOpcode::kSlice:
-      case HloOpcode::kTranspose:
-      case HloOpcode::kTuple: {
-        const bool all_const_inputs = absl::c_all_of(
-            inst->operands(),
-            [&](HloInstruction* operand) { return result.contains(operand); });
-        if (all_const_inputs) {
-          result.emplace(inst);
-        }
-        break;
-      }
-      default: {}
+    if (inst->opcode() == HloOpcode::kParameter || inst->HasSideEffect()) {
+      continue;
+    }
+    if (!include_constants && inst->opcode() == HloOpcode::kConstant) {
+      continue;
+    }
+    const bool all_const_inputs =
+        absl::c_all_of(inst->operands(), [&](HloInstruction* operand) {
+          return result.contains(operand) ||
+                 operand->opcode() == HloOpcode::kConstant;
+        });
+    if (all_const_inputs) {
+      result.emplace(inst);
     }
   }
 }
