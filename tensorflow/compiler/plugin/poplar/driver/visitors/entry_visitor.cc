@@ -287,6 +287,14 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
            ++tuple_index) {
         poplar::Tensor out = ConvertFromDeviceLayout(
             layout_sub_shapes[tuple_index], out_tensors[tuple_index]);
+        if (!out.isParallelWriteable()) {
+          poplar::Tensor out_copy = TensorCloneAndRebalanceAliasing(
+              graph, resources_, out, debug_name_and_id);
+
+          seq.add(
+              poplar::program::Copy(out, out_copy, false, debug_name_and_id));
+          out = out_copy;
+        }
 
         const std::string handle = out_info.Handles().at(tuple_index);
         auto fifo = graph.addDeviceToHostFIFO(handle, out.elementType(),
