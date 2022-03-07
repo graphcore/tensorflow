@@ -94,6 +94,36 @@ class MatMulSizeTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     self.assert_total_tile_memory(report, 12181182)
 
+  def testInferenceManyLayersRebalancedBroadcastInInitialisation(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 1472
+    cfg.optimizations.math.dot_strength = False
+    cfg.configure_ipu_system()
+
+    with self.session() as sess:
+      x = array_ops.placeholder(datatype, shape=[2, 112 * 112 * 4])
+      y = array_ops.placeholder(datatype, shape=[2, 4])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        logits = x
+        for idx in range(20):
+          # Any value less than tiles per ipu would work here,
+          # see ShouldRebalanceTensor().
+          logits = layer(logits, 1400, "l%d" % idx)
+        logits = layer(logits, 4, "out")
+
+        math_ops.reduce_mean(
+            nn_ops.softmax_cross_entropy_with_logits_v2(logits=logits,
+                                                        labels=y))
+
+      sess.run(variables.global_variables_initializer())
+      report = pva.openReport(report_helper.find_report())
+      self.assert_max_tile_memory(report, 162410)
+    # Skip the rest of the test, broadcast are returned for global initialisers.
+
   def testTrainingBs1(self):
     cfg = ipu.utils.IPUConfig()
     report_helper = tu.ReportHelper()
