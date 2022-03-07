@@ -164,16 +164,19 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
     strategy = popdist_strategy.PopDistStrategy()
 
     with strategy.scope():
-      dataset = test_dataset(popdist.getNumInstances() * batch_size *
+      dataset = test_dataset(popdist.getNumTotalReplicas() * batch_size *
                              steps_to_run,
                              batch_size=batch_size)
+      dataset = dataset.shard(num_shards=popdist.getNumInstances(),
+                              index=popdist.getInstanceIndex())
+      steps_per_execution = len(dataset) // popdist.getNumLocalReplicas()
       model = simple_model()
       optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
       loss_fn = tf.keras.losses.MeanSquaredError()
 
       model.compile(optimizer=optimizer,
                     loss=loss_fn,
-                    steps_per_execution=popdist.getNumTotalReplicas())
+                    steps_per_execution=steps_per_execution)
 
       # Build the model separately so we can assert that the biases are
       # broadcasted properly before training.
