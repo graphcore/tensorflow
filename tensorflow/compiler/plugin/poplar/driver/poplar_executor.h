@@ -96,6 +96,7 @@ class ModuleFilenames {
   ModuleFilenames(uint64 hash, const std::string& serialization_folder);
   std::string CachedExecutableFilename() const;
   std::string CompilationLockFilename() const;
+  std::string LoadLockFilename() const;
   std::string SerializedExecutableFilename() const;
   std::string SerializedMetadataFilename() const;
   std::string Name() const;

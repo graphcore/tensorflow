@@ -1060,23 +1060,14 @@ void AddAlgebraicOptimizerPass(HloPassPipeline& pipeline,
  */
 struct ExecutableCacheLock {
  public:
-  static StatusOr<std::unique_ptr<ExecutableCacheLock>> CreateAndAcquire(
+  static StatusOr<std::unique_ptr<ExecutableCacheLock>>
+  CreateAndAcquireExclusive(const std::string& filepath) {
+    return ExecutableCacheLock::CreateAndAcquireFlag(filepath, LOCK_EX);
+  }
+
+  static StatusOr<std::unique_ptr<ExecutableCacheLock>> CreateAndAcquireShared(
       const std::string& filepath) {
-    const int fd = ::open(filepath.c_str(), O_RDWR | O_CREAT, 0644);
-    if (fd == -1) {
-      return tensorflow::IOError("Failed to open " + filepath, errno);
-    }
-
-    VLOG(1) << "Acquiring lock for " << filepath;
-    if (::flock(fd, LOCK_EX) == -1) {
-      return tensorflow::IOError("Failed to lock " + filepath, errno);
-    }
-
-    VLOG(1) << "Acquired lock for " << filepath;
-
-    // Using plain new to be able to keep constructor private.
-    return std::unique_ptr<ExecutableCacheLock>(
-        new ExecutableCacheLock(filepath, fd));
+    return ExecutableCacheLock::CreateAndAcquireFlag(filepath, LOCK_SH);
   }
 
   ~ExecutableCacheLock() {
@@ -1107,6 +1098,25 @@ struct ExecutableCacheLock {
 
   std::string filepath_;
   int fd_;
+
+  static StatusOr<std::unique_ptr<ExecutableCacheLock>> CreateAndAcquireFlag(
+      const std::string& filepath, int flag) {
+    const int fd = ::open(filepath.c_str(), O_RDWR | O_CREAT, 0644);
+    if (fd == -1) {
+      return tensorflow::IOError("Failed to open " + filepath, errno);
+    }
+
+    VLOG(1) << "Acquiring lock for " << filepath;
+    if (::flock(fd, flag) == -1) {
+      return tensorflow::IOError("Failed to lock " + filepath, errno);
+    }
+
+    VLOG(1) << "Acquired lock for " << filepath;
+
+    // Using plain new to be able to keep constructor private.
+    return std::unique_ptr<ExecutableCacheLock>(
+        new ExecutableCacheLock(filepath, fd));
+  }
 
   TF_DISALLOW_COPY_AND_ASSIGN(ExecutableCacheLock);
 };
@@ -1168,6 +1178,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   }
 
   std::unique_ptr<ExecutableCacheLock> executable_cache_lock;
+  std::unique_ptr<ExecutableCacheLock> executable_read_cache_lock;
 
   ModuleFilenames filenames =
       poplar_executor->GetModuleFilenames(executable_hash);
@@ -1175,10 +1186,17 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   if (poplar_executor->HaveExecutableCache()) {
     TF_RETURN_IF_ERROR(poplar_executor->CreateExecutableCacheDirIfMissing());
     TF_ASSIGN_OR_RETURN(executable_cache_lock,
-                        ExecutableCacheLock::CreateAndAcquire(
+                        ExecutableCacheLock::CreateAndAcquireExclusive(
                             filenames.CompilationLockFilename()));
 
     if (poplar_executor->HaveCachedExecutable(filenames)) {
+      // Release the compile lock and take shared ownership of the read lock
+      // file.
+      TF_ASSIGN_OR_RETURN(executable_read_cache_lock,
+                          ExecutableCacheLock::CreateAndAcquireShared(
+                              filenames.LoadLockFilename()));
+      executable_cache_lock.reset();
+
       absl::optional<PoplarExecutableCore::RuntimeReplicaOptions>
           runtime_replica_options = absl::nullopt;
       if (poplar_executor->HasMultiReplicaDistributionOptions()) {
@@ -1219,6 +1237,12 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     } else {
       VLOG(1) << "Couldn't find " << filenames.CachedExecutableFilename()
               << " in executable cache";
+
+      // Keep hold of the compile lock, and take exclusive ownership of the read
+      // lock.
+      TF_ASSIGN_OR_RETURN(executable_read_cache_lock,
+                          ExecutableCacheLock::CreateAndAcquireExclusive(
+                              filenames.LoadLockFilename()));
     }
   }
 
