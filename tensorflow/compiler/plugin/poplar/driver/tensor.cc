@@ -1665,9 +1665,10 @@ StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
         if (require_parallel_writeable && !tensor.isParallelWriteable()) {
           poplar::Graph& graph =
               GetGraphWithOutputIndex(res, inst->operand(inplace_index), j);
-          tensors[i][j] = poputil::duplicate(
-              graph, tensor, seq, {debug_name_and_id, "clone"},
-              poplar::TensorCloneMethod::PRESERVE_ORDER_UNLESS_ALIASES);
+          poplar::Tensor out = TensorCloneAndRebalanceAliasing(
+              graph, res, tensor, {debug_name_and_id, "clone"});
+          seq.add(poplar::program::Copy(tensor, out, false, debug_name_and_id));
+          tensors[i][j] = out;
         }
       }
     }
