@@ -693,11 +693,11 @@ def pipeline(computational_stages,
       outfeed queue, and if it is set to `True` it is not enqueued. Cannot be
       set when `outfeed_loss` is set. Can only be used when `optimizer_function`
       has been set.
-    reduction_method: Reduction method to use when accumulating gradients.
-      During the iterations in each optimizer step, the computed gradients
-      can either be directly summed up or scaled such that we compute a mean
-      of all gradients for each variable. Computing a mean avoids potential
-      issues with overflow during accumulation especially when using
+    reduction_method: (Experimental) Reduction method to use when accumulating
+      gradients. During the iterations in each optimizer step, the computed
+      gradients can either be directly summed up or scaled such that we compute
+      a mean of all gradients for each variable. Computing a mean avoids
+      potential issues with overflow during accumulation especially when using
       float16, but gives smaller gradients and might require adjusting
       the learning-rate accordingly.
       Defaults to `GradientAccumulationReductionMethod.SUM`
