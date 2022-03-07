@@ -1,7 +1,7 @@
 .. _api-section:
 
-Python API
-----------
+TensorFlow Python API
+---------------------
 
 Remember to import the IPU API using:
 
