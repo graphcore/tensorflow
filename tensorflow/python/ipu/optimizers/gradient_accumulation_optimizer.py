@@ -118,13 +118,13 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
         a cast is needed at some point to make them compatible. If you want
         to cast the gradients immediately, you can wrap your optimizer in the
         `MapGradientOptimizer` with a `tf.cast`.
-      reduction_method: Reduction method to use when accumulating gradients.
-        During the iterations in each optimizer step, the computed gradients
-        can either be directly summed up or scaled such that we compute a mean
-        of all gradients for each variable. Computing a mean avoids potential
-        issues with overflow during accumulation especially when using
-        float16, but gives smaller gradients and might require adjusting
-        the learning-rate accordingly.
+      reduction_method: (Experimental) Reduction method to use when accumulating
+        gradients. During the iterations in each optimizer step, the computed
+        gradients can either be directly summed up or scaled such that we
+        compute a mean of all gradients for each variable. Computing a mean
+        avoids potential issues with overflow during accumulation especially
+        when using float16, but gives smaller gradients and might require
+        adjusting the learning-rate accordingly.
         Defaults to `GradientAccumulationReductionMethod.SUM`
         (see :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
       name: Optional name prefix for the operations created when applying
@@ -258,13 +258,13 @@ class CrossReplicaGradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disa
         a cast is needed at some point to make them compatible. If you want
         to cast the gradients immediately, you can wrap your optimizer in the
         `MapGradientOptimizer` with a `tf.cast`.
-      reduction_method: Reduction method to use when accumulating gradients.
-        During the iterations in each optimizer step, the computed gradients
-        can either be directly summed up or scaled such that we compute a mean
-        of all gradients for each variable. Computing a mean avoids potential
-        issues with overflow during accumulation especially when using
-        float16, but gives smaller gradients and might require adjusting
-        the learning-rate accordingly.
+      reduction_method: (Experimental) Reduction method to use when accumulating
+        gradients. During the iterations in each optimizer step, the computed
+        gradients can either be directly summed up or scaled such that we
+        compute a mean of all gradients for each variable. Computing a mean
+        avoids potential issues with overflow during accumulation especially
+        when using float16, but gives smaller gradients and might require
+        adjusting the learning-rate accordingly.
         Defaults to `GradientAccumulationReductionMethod.SUM`
         (see :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
       name: Optional name prefix for the operations created when applying

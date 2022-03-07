@@ -104,13 +104,13 @@ class IPUPipelineEstimatorSpec(
         during evaluation.
       prediction_hooks: List of instances of `tf.estimator.SessionRunHook` used
         during prediction.
-      reduction_method: Reduction method to use when accumulating gradients.
-        During the iterations in each optimizer step, the computed gradients
-        can either be directly summed up or scaled such that we compute a mean
-        of all gradients for each variable. Computing a mean avoids potential
-        issues with overflow during accumulation especially when using
-        float16, but gives smaller gradients and might require adjusting
-        the learning-rate accordingly.
+      reduction_method: (Experimental) Reduction method to use when accumulating
+        gradients. During the iterations in each optimizer step, the computed
+        gradients can either be directly summed up or scaled such that we
+        compute a mean of all gradients for each variable. Computing a mean
+        avoids potential issues with overflow during accumulation especially
+        when using float16, but gives smaller gradients and might require
+        adjusting the learning-rate accordingly.
         Defaults to `GradientAccumulationReductionMethod.SUM`
         (see :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
       pipeline_op_kwargs: All remaining keyword arguments are forwarded to
