@@ -17,7 +17,6 @@
 from absl.testing import parameterized
 import numpy as np
 
-from tensorflow.python.ops import variables
 from tensorflow.python.data.experimental.ops import cardinality
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import ops
@@ -274,17 +273,6 @@ class DataHandlerTest(keras_parameterized.TestCase):
                                                  epochs=1,
                                                  batch_size=2,
                                                  replication_factor=4)
-      del data_handler
-
-  def test_steps_per_execution_not_divisor(self):
-    x = np.ones((8, 1))
-    x = dataset_ops.Dataset.from_tensor_slices(x).batch(2, drop_remainder=True)
-    with self.assertRaisesRegex(
-        ValueError,
-        r"`steps_per_execution` must be a divisor of the number of batches in "
-        r"the dataset provided."):
-      data_handler = data_adapter.IPUDataHandler(
-          x, epochs=1, batch_size=2, steps_per_execution=variables.Variable(3))
       del data_handler
 
 

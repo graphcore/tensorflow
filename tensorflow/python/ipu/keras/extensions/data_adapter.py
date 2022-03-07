@@ -139,15 +139,6 @@ class IPUDataHandler(data_adapter.DataHandler):
   def _validate_data_handler(self):
     super()._validate_data_handler()
 
-    if self.steps_per_execution_value > self.inferred_steps:
-      logging.warn(
-          "`steps_per_execution` has been set to {} but the dataset "
-          "provided{} only contains {} batches. Using {} as "
-          "`steps_per_execution`.".format(
-              self.steps_per_execution_value,
-              " to this replica" if self._replication_factor > 1 else "",
-              self.inferred_steps, self.inferred_steps))
-
     with self._truncate_execution_to_epoch():
       if self.inferred_steps == 0:
         steps_per_replica = math.ceil(
@@ -160,11 +151,6 @@ class IPUDataHandler(data_adapter.DataHandler):
                 len(self._dataset), self._replication_factor,
                 steps_per_replica,
                 steps_per_replica * self._replication_factor))
-      elif self.inferred_steps % self._steps_per_execution != 0:
-        raise ValueError(
-            "`steps_per_execution` must be a divisor of the number of batches "
-            "in the dataset provided{}.".format(
-                " to this replica" if self._replication_factor > 1 else ""))
 
   def _infer_steps(self, steps, dataset):
     """Infers steps_per_epoch needed to loop through a dataset."""
