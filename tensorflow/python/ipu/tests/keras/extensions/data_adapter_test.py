@@ -287,6 +287,15 @@ class DataHandlerTest(keras_parameterized.TestCase):
           x, epochs=1, batch_size=2, steps_per_execution=variables.Variable(3))
       del data_handler
 
+  def test_dataset_drop_batch_with_replication(self):
+    x = np.ones((6, 1))
+    x = dataset_ops.Dataset.from_tensor_slices(x).repeat()
+    data_handler = data_adapter.IPUDataHandler(x,
+                                               steps_per_epoch=7,
+                                               replication_factor=4)
+    del data_handler
+    # No exception raised.
+
 
 if __name__ == '__main__':
   ops.enable_eager_execution()
