@@ -6,7 +6,7 @@ Keras model creation is no different than what you would use if you were
 training on other devices. To target the Poplar XLA device, Keras model creation
 must be inside the ``strategy.scope`` of an ``IPUStrategy``.
 
-For a more practical walkthrough, see `this tutorial about using Keras on the IPU <https://github.com/graphcore/tutorials/tree/sdk-release-2.4/tutorials/tensorflow2/keras>`_
+For a more practical walkthrough, see `this tutorial about using Keras on the IPU <https://github.com/graphcore/tutorials/tree/sdk-release-2.5/tutorials/tensorflow2/keras>`_
 from the Graphcore tutorials repository.
 
 Single IPU models
