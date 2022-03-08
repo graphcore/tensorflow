@@ -476,11 +476,12 @@ def create_host_embedding(name,
         shape: The shape for the tensor which will hold the embedding.
         dtype: The dtype for the tensor which will hold the embedding.
         partition_strategy: When the IPU system is configured with an IPUConfig
-          instance that has its `experimental.enable_remote_buffer_embedding`
-          option set to `True`, and when using
-          replication, the embedding must be distributed across the replicas.
-          This option decides on which axis the embedding will be split. Options
-          are "TOKEN" or "ENCODING".
+          instance that has its
+          :ref:`experimental.enable_remote_buffer_embedding
+          <experimental.enable_remote_buffer_embedding>` option set to `True`
+          and uses replication, the embedding must be distributed across the
+          replicas. This option decides on which axis the embedding will be
+          split. Options are "TOKEN" or "ENCODING".
         optimizer_spec: A description of how the embedding will be optimized.
           When `None`, the embedding is assumed to not be trainable.
         initializer: The initializer to use when creating the embedding tensor.

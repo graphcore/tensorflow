@@ -1234,7 +1234,10 @@ class _ExperimentalConfig(_ConfigBase):
     """
     When set to true,
     :py:class:`~tensorflow.python.ipu.embedding_ops.HostEmbedding` will make use
-    of Poplar remote buffers.
+    of Poplar remote buffers. The creation of this remote buffer may take a
+    while. The remote buffer will be synchronised with every IPU execution, so we
+    recommend that you use high `steps_per_execution<Using steps_per_execution>`_
+    with this option.
     """
     self.enable_remote_buffer_embedding = False
     """
