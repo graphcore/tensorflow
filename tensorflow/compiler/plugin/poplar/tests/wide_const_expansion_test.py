@@ -42,7 +42,8 @@ class WideConstExpansionTest(xla_test.XLATestCase):
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -62,20 +63,21 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       sess.run(variables.global_variables_initializer())
 
       report = pva.openReport(report_helper.find_report())
-      self.assert_max_tile_memory(report, 1081548)
+      self.assert_max_tile_memory(report, 71020)
       report_helper.clear_reports()
 
       out = sess.run(output, {pb: np.ones(shape=shape, dtype=dtype)})
       self.assertAllClose(np.full(shape, 7, dtype=dtype), out)
 
       report = pva.openReport(report_helper.find_report())
-      self.assert_max_tile_memory(report, 3195324)
+      self.assert_max_tile_memory(report, 203950)
 
   def testWideConstantWithAllocationTarget(self):
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -115,14 +117,15 @@ class WideConstExpansionTest(xla_test.XLATestCase):
         'Mean/multiply', 'add', 'add_*/fusion/Op/Add'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
-    self.assert_max_tile_memory(report, 1052184, tolerance=0.2)
-    self.assert_always_live_memory(report, 2908, tolerance=0.2)
+    self.assert_max_tile_memory(report, 68852, tolerance=0.1)
+    self.assert_always_live_memory(report, 349916, tolerance=0.1)
 
   def testCheckMaxTileSizePadding(self):
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -153,13 +156,14 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       self.assertAllClose(np.zeros(pb.shape), out[0])
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_max_tile_memory(report, 1977338)
+    self.assert_max_tile_memory(report, 534373)
 
   def testCheckMaxTileSizePadding2(self):
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 128
     cfg.configure_ipu_system()
 
     with self.session() as sess:
@@ -188,7 +192,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       self.assertAllClose(np.full(pb.shape, 65.0), out[0])
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_max_tile_memory(report, 260668, tolerance=0.2)
+    self.assert_max_tile_memory(report, 23850, tolerance=0.1)
 
 
 if __name__ == "__main__":
