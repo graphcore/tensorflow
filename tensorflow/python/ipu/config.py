@@ -1520,6 +1520,7 @@ class _MatmulConfig(_ConfigBase):
     parameter is shown below:
 
     .. code-block:: python
+
       cfg = config.IPUConfig()
       cfg.matmuls.poplar_options['partialsType'] = "half"
       cfg.configure_ipu_system()
@@ -1561,6 +1562,7 @@ class _ConvolutionConfig(_ConfigBase):
     parameter is shown below:
 
     .. code-block:: python
+
       cfg = config.IPUConfig()
       cfg.convolutions.poplar_options['partialsType'] = "half"
       cfg.configure_ipu_system()
