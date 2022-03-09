@@ -529,6 +529,70 @@ ENTRY main {
   EXPECT_TRUE(analysis->BufferIsDefinedAt(result, ShapeIndex{0}));
 }
 
+TEST_F(HloPoplarDataflowAnalysisTest, TestEmptyConditional) {
+  std::string hlo = R"(
+ HloModule top
+on_false {
+  false_t = (f32[2], f32[2]) parameter(0)
+  false_lhs = f32[2] get-tuple-element(false_t), index=0
+  false_rhs = f32[2] get-tuple-element(false_t), index=1
+  ROOT false_root = () tuple()
+}
+
+on_true {
+  true_t = (f32[2], f32[2]) parameter(0)
+  true_lhs = f32[2] get-tuple-element(true_t), index=0
+  true_rhs = f32[2] get-tuple-element(true_t), index=1
+  ROOT true_root = () tuple()
+}
+
+ENTRY main {
+  arg0 = f32[2] parameter(0)
+  arg1 = f32[2] parameter(1)
+  arg2 = pred[] parameter(2)
+  input_tuple = (f32[2], f32[2]) tuple(arg0, arg1)
+  ROOT result = () conditional(arg2, input_tuple, input_tuple), false_computation=on_false, true_computation=on_true
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo));
+  auto annotations = CompilerAnnotations(m.get());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto analysis,
+                          HloPoplarDataflowAnalysis::Run(m.get(), annotations));
+
+  EXPECT_THAT(analysis->buffer_count(), 7);
+
+  HloInstruction* input_tuple = FindInstruction(m.get(), "input_tuple");
+  HloInstruction* false_t = FindInstruction(m.get(), "false_t");
+  HloInstruction* true_t = FindInstruction(m.get(), "true_t");
+  HloInstruction* false_root = FindInstruction(m.get(), "false_root");
+  HloInstruction* true_root = FindInstruction(m.get(), "true_root");
+  HloInstruction* result = FindInstruction(m.get(), "result");
+
+  // Make sure there is no aliasing between conditional branches and the input.
+  EXPECT_NE(analysis->GetInstructionBufferSet(input_tuple),
+            analysis->GetInstructionBufferSet(false_t));
+  EXPECT_NE(analysis->GetInstructionBufferSet(input_tuple),
+            analysis->GetInstructionBufferSet(true_t));
+  EXPECT_NE(analysis->GetInstructionBufferSet(false_t),
+            analysis->GetInstructionBufferSet(true_t));
+
+  // Make sure these instructions are in buffer_sets_
+  auto& false_root_set = analysis->GetInstructionBufferSet(false_root);
+  auto& true_root_set = analysis->GetInstructionBufferSet(true_root);
+  auto& result_set = analysis->GetInstructionBufferSet(result);
+
+  // Make sure buff is empty
+  auto& false_root_buff = false_root_set.GetBufferSets();
+  auto& true_root_buff = false_root_set.GetBufferSets();
+  auto& result_buff = false_root_set.GetBufferSets();
+
+  EXPECT_EQ(false_root_buff.leaf_count(), 0);
+  EXPECT_EQ(true_root_buff.leaf_count(), 0);
+  EXPECT_EQ(result_buff.leaf_count(), 0);
+}
+
 TEST_F(HloPoplarDataflowAnalysisTest, TestWhile) {
   std::string hlo = R"(
  HloModule top
