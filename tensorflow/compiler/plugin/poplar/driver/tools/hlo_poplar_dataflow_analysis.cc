@@ -673,7 +673,14 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
 
   // A not inplace instruction defines all the output buffers on device.
   Status HandleNotInplace(HloInstruction* inst) {
-    for (auto& indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
+    const auto shapes = ShapeUtil::GetLeafShapes(inst->shape());
+
+    if (shapes.size() == 0) {
+      analysis_->SetInstructionBufferSet(
+          inst, InstructionPoplarBufferSet(inst->shape()));
+    }
+
+    for (auto& indexed_shape : shapes) {
       HloPoplarBuffer* buffer = analysis_->NewHloPoplarBuffer(
           inst, indexed_shape.index,
           /*locality=*/BufferLocality::kDeviceMemory);
