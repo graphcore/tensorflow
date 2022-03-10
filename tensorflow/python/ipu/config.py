@@ -1078,7 +1078,7 @@ class SelectionOrder(Enum):
     |_______|             |_______|
 
   Here, each numbered square represents an IPU with the given device ID and the
-  `== `and `||` connections represent IPUs directly connected via IPU-Links.
+  `==` and `||` connections represent IPUs directly connected via IPU-Links.
 
   We can see that the `ipu_shard(0)` directly communicates with `ipu_shard(1)`
   and that `ipu_shard(1)` directly communicates with `ipu_shard(2)`.
