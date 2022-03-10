@@ -189,7 +189,9 @@ StatusOr<bool> InstructionCreatesNewMapping(HloInstruction* inst) {
 // don't
 StatusOr<bool> InstructionMaybeCreatesNewMapping(HloInstruction* inst) {
   TF_ASSIGN_OR_RETURN(bool remaps, InstructionCreatesNewMapping(inst));
-  return remaps || (inst->opcode() == HloOpcode::kCall && !IsRepeatLoop(inst));
+  return remaps ||
+         (inst->opcode() == HloOpcode::kCall && !IsRepeatLoop(inst)) ||
+         inst->opcode() == HloOpcode::kConditional;
 }
 
 // Only some inputs affect tile mapping of output, for this function
