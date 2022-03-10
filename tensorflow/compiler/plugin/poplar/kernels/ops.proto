@@ -123,6 +123,7 @@ enum PoplarOp {
   AllGatherWithinReplica = 118;
   ReduceScatterWithinReplica = 119;
   AllReduceWithinReplica = 120;
+  StaticMultiSlice = 121;
 
   // Supported Fusions.
   Conv_biasadd = 200;
