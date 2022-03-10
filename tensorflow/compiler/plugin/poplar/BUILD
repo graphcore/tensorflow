@@ -417,6 +417,20 @@ xla_test(
 )
 
 xla_test(
+    name = "allocation_analysis_test",
+    srcs = ["tests/allocation_analysis_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "allocation_finder_test",
     srcs = ["tests/allocation_finder_test.cc"],
     backends = ["poplar"],
@@ -3522,6 +3536,7 @@ test_suite(
         "add_block_recompute_test",
         "add_stochastic_rounding_options_test",
         "all_to_all_finder_test",
+        "allocation_analysis_test",
         "allocation_finder_priority_test",
         "allocation_finder_test",
         "apply_recompute_suggestion_test",
