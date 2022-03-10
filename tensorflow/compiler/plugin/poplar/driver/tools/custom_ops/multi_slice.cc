@@ -85,6 +85,69 @@ std::unique_ptr<HloInstruction> CreateMultiSlice(const Shape& shape,
                                                      indices_are_sorted);
 }
 
+// StaticMultiSlice
+HloStaticMultiSliceInstruction::HloStaticMultiSliceInstruction(
+    const Shape& shape, HloInstruction* const input,
+    absl::Span<const int64> indices)
+    : HloPoplarInstruction(shape, {input}, PoplarOp::StaticMultiSlice, indices),
+      indices_(indices.begin(), indices.end()) {}
+
+absl::flat_hash_set<int64> HloStaticMultiSliceInstruction::AllocatingIndices()
+    const {
+  return {};
+}
+
+bool HloStaticMultiSliceInstruction::AllocatingOutput() const { return false; }
+
+absl::flat_hash_map<int64, int64>
+HloStaticMultiSliceInstruction::LayoutDependencies() const {
+  return {};
+}
+
+HloPoplarUseDescriptions HloStaticMultiSliceInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloStaticMultiSliceInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
+
+const FindConsumersExtensionResults
+HloStaticMultiSliceInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return {true, this, params.index, params.permutation};
+}
+
+bool HloStaticMultiSliceInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
+bool HloStaticMultiSliceInstruction::IsPopOpsElementwise() const {
+  return false;
+}
+
+std::vector<std::string>
+HloStaticMultiSliceInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {absl::StrCat("indices={", absl::StrJoin(GetIndices(), ","), "}")};
+}
+
+std::unique_ptr<HloInstruction>
+HloStaticMultiSliceInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return CreateStaticMultiSlice(shape, new_operands[0], indices_);
+}
+
+std::unique_ptr<HloInstruction> CreateStaticMultiSlice(
+    const Shape& shape, HloInstruction* const input,
+    absl::Span<const int64> indices) {
+  return absl::make_unique<HloStaticMultiSliceInstruction>(shape, input,
+                                                           indices);
+}
+
 // MultiUpdate
 HloMultiUpdateInstruction::HloMultiUpdateInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
@@ -203,6 +266,15 @@ StatusOr<std::unique_ptr<HloInstruction>> HloMultiSliceInstructionFactoryFunc(
                           call->mutable_operand(1), indices_are_sorted);
 }
 
+StatusOr<std::unique_ptr<HloInstruction>>
+HloStaticMultiSliceInstructionFactoryFunc(HloCustomCallInstruction* call) {
+  auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+  TF_ASSIGN_OR_RETURN(std::vector<int64> indices,
+                      attribute_map.GetAttributeInt64Vector("indices"));
+  return CreateStaticMultiSlice(call->shape(), call->mutable_operand(0),
+                                indices);
+}
+
 StatusOr<std::unique_ptr<HloInstruction>> HloMultiUpdateInstructionFactoryFunc(
     HloCustomCallInstruction* call) {
   auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
@@ -222,6 +294,9 @@ HloMultiUpdateAddInstructionFactoryFunc(HloCustomCallInstruction* call) {
 
 static HloPoplarInstructionFactory multi_slice_factory(
     PoplarOp::MultiSlice, HloMultiSliceInstructionFactoryFunc);
+
+static HloPoplarInstructionFactory static_multi_slice_factory(
+    PoplarOp::StaticMultiSlice, HloStaticMultiSliceInstructionFactoryFunc);
 
 static HloPoplarInstructionFactory multi_update_factory(
     PoplarOp::MultiUpdate, HloMultiUpdateInstructionFactoryFunc);

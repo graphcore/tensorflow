@@ -12,9 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
@@ -213,6 +215,41 @@ class MultiSliceOp : public PoplarOpDef {
   }
 };
 REGISTER_POPLAR_OP(MultiSlice, MultiSliceOp);
+
+class StaticMultiSliceOp : public PoplarOpDef {
+  StatusOr<poplar::program::Sequence> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "StaticMultiSliceOp");
+    poplar::program::Sequence seq({}, debug_info);
+
+    auto slice_inst = Cast<HloStaticMultiSliceInstruction>(inst);
+
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor input,
+        FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info}));
+
+    const auto& indices = slice_inst->GetIndices();
+    const auto unsigned_indices = convert_array<std::vector<unsigned>>(indices);
+    if (!unsigned_indices) {
+      return xla::FailedPrecondition(
+          "StaticMultiSliceOp::Creator - cannot cast slice indices.");
+    }
+
+    poplar::Tensor output =
+        popops::multiSlice(graph, input, unsigned_indices.value(), {0}, seq,
+                           {debug_info, "output"});
+
+    // Unflatten the output:
+    output = output.reshape(PoplarShapeFromXlaShape(output_shape));
+
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
+
+    return seq;
+  }
+};
+REGISTER_POPLAR_OP(StaticMultiSlice, StaticMultiSliceOp);
 
 enum class UpdateMode { Replace, Accumulate };
 Status MultiUpdateInternal(
