@@ -3817,6 +3817,19 @@ tf_xla_py_test(
     ],
 )
 
+xla_test(
+    name = "hash_test",
+    size = "small",
+    srcs = ["tests/hash_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -3896,6 +3909,7 @@ test_suite(
         "graph_compile_io_map_test",
         "group_norm_test",
         "gru_test",
+        "hash_test",
         "hlo_computation_name_uniquify_test",
         "hlo_hash_test",
         "hlo_matcher_test",
