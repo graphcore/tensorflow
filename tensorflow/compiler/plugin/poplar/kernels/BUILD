@@ -66,7 +66,10 @@ poplar_cc_library(
     deps = [
         "//tensorflow/compiler/jit/kernels:xla_ops",
         "//tensorflow/compiler/plugin/poplar/driver:ipu_devices",
+        "//tensorflow/compiler/plugin/poplar/driver:poplar_executor",
         "//tensorflow/compiler/plugin/poplar/driver:poplar_platform",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:poplar_executable_binary_file",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:tracepoint",
         "@local_config_poplar//poplar:poplar_libs",
     ],
     alwayslink = True,
