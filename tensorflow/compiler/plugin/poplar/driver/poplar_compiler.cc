@@ -15,8 +15,6 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_compiler.h"
 
-#include <dlfcn.h>
-#include <stdlib.h>
 #include <sys/file.h>
 #include <sys/utsname.h>
 #include <unistd.h>
@@ -25,23 +23,19 @@ limitations under the License.
 #include <fstream>
 #include <gcl/Collectives.hpp>
 #include <gcl/TileAllocation.hpp>
-#include <limits>
 #include <mutex>
 #include <popfloat/experimental/codelets.hpp>
 #include <poplar/CSRFunctions.hpp>
 #include <poplar/CodeletFileType.hpp>
 #include <poplar/CycleCount.hpp>
-#include <poplar/RandomSeed.hpp>
 #include <poplar/exceptions.hpp>
 #include <poplar/replication_factor.hpp>
 #include <poplin/codelets.hpp>
 #include <popnn/codelets.hpp>
 #include <popops/Cast.hpp>
 #include <popops/codelets.hpp>
-#include <poprand/RandomGen.hpp>
 #include <poprand/codelets.hpp>
 #include <popsparse/codelets.hpp>
-#include <poputil/exceptions.hpp>
 #include <random>
 #include <string>
 
@@ -64,7 +58,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/combine_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/commutative_instruction_reorder_operands.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/computation_flattener.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/constant_nan.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/constant_slice_folding.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/conv_bwd_input_to_fwd_weights_transpose.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
@@ -174,7 +167,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/liveness_look_ahead_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/shortest_path_scheduler.h"
-#include "tensorflow/compiler/plugin/poplar/driver/schedulers/sync_list_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
@@ -214,7 +206,6 @@ limitations under the License.
 #include "tensorflow/core/platform/cpu_info.h"
 #include "tensorflow/core/platform/posix/error.h"
 #include "tensorflow/core/public/version.h"
-#include "tensorflow/stream_executor/lib/initialize.h"
 
 namespace se = ::stream_executor;
 

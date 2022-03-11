@@ -15,7 +15,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ipu_devices.h"
 
 #include <string>
-#include <thread>
 
 #include "tensorflow/compiler/jit/xla_compilation_cache.h"
 #include "tensorflow/compiler/jit/xla_device.h"
