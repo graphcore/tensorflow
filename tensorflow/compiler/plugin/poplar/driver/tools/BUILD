@@ -45,9 +45,6 @@ poplar_cc_library(
     hdrs = [
         "hash.h",
     ],
-    deps = [
-        "@com_google_absl//absl/types:span",
-    ],
 )
 
 poplar_cc_library(
