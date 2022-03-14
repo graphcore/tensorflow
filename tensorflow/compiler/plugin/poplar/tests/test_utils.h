@@ -24,6 +24,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 
 #include "tensorflow/compiler/xla/array3d.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 
@@ -135,6 +136,13 @@ struct TemporaryDirManager {
  private:
   std::string dir_name_;
 };
+
+template <typename Instruction>
+int64 GetNumInstructions(const HloComputation* comp) {
+  return absl::c_count_if(comp->instructions(), [](const HloInstruction* inst) {
+    return DynCast<Instruction>(inst);
+  });
+}
 
 namespace reference_util {
 // Implementations of 3D functions which are missing from the reference util.

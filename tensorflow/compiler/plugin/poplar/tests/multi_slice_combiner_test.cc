@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
+#include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_fix.h"
@@ -59,13 +60,6 @@ class MultiSliceCombinerTest : public HloTestBase {
   MultiSliceCombinerTest()
       : HloTestBase(GetTestPlatform(), GetReferencePlatform()) {}
 };
-
-template <typename Instruction>
-int64 GetNumInstructions(const HloComputation* comp) {
-  return absl::c_count_if(comp->instructions(), [](const HloInstruction* inst) {
-    return DynCast<Instruction>(inst);
-  });
-}
 
 auto GetNumMultiSlice = GetNumInstructions<HloMultiSliceInstruction>;
 auto GetNumSlice = GetNumInstructions<HloSliceInstruction>;

@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_cse.h"
@@ -60,13 +61,6 @@ class MatmulCombinerTest : public HloTestBase {
   MatmulCombinerTest()
       : HloTestBase(GetTestPlatform(), GetReferencePlatform()) {}
 };
-
-template <typename Instruction>
-int64 GetNumInstructions(const HloComputation* comp) {
-  return absl::c_count_if(comp->instructions(), [](const HloInstruction* inst) {
-    return DynCast<Instruction>(inst);
-  });
-}
 
 auto GetNumMatmul = GetNumInstructions<HloDotInstruction>;
 auto GetNumSlice = GetNumInstructions<HloSliceInstruction>;
