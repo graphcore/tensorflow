@@ -100,6 +100,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_conv_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_slice_combiner.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_slice_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_apply.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_scale_apply.h"
@@ -1514,6 +1515,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
                                           // PoplarAlgebraicSimplifier
       pipeline.AddPass<SerializeGradientAccumulation>();
       pipeline.AddPass<SliceOptimizer>(resources.annotations);
+      pipeline.AddPass<MultiSliceSimplifier>(resources.annotations);
       pipeline.AddPass<RedundantTriangularMaskRemover>(resources.annotations);
       pipeline.AddPass<FuseOpsLate>(resources.annotations);
       pipeline.AddPass<HloPassFix<FuseOpsIntoPoplarOps>>(resources.annotations);

@@ -3541,6 +3541,22 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "multi_slice_simplifier_test",
+    size = "medium",
+    srcs = ["tests/multi_slice_simplifier_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":test_utils",
+        "//tensorflow/compiler/plugin/poplar/driver/passes:multi_slice_simplifier",
+        "//tensorflow/compiler/xla/service:pattern_matcher",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [

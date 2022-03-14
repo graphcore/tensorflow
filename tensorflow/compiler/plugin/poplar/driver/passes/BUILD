@@ -845,6 +845,21 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "multi_slice_simplifier",
+    srcs = [
+        "multi_slice_simplifier.cc",
+    ],
+    hdrs = [
+        "multi_slice_simplifier.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_matcher",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:util",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:multi_slice",
+    ],
+)
+
+poplar_cc_library(
     name = "multi_update_apply",
     srcs = [
         "multi_update_apply.cc",
@@ -1729,6 +1744,7 @@ poplar_cc_library(
         ":module_flatten",
         ":multi_conv_fixer",
         ":multi_slice_combiner",
+        ":multi_slice_simplifier",
         ":multi_update_apply",
         ":multi_update_combiner",
         ":multi_update_scale_apply",

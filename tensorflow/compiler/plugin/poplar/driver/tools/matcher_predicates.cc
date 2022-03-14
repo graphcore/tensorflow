@@ -518,5 +518,9 @@ bool IsTriangularShapeInst(const HloInstruction* inst) {
          inst->opcode() == HloOpcode::kTriangularSolve;
 }
 
+bool IsMultiSlice(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::MultiSlice)(inst);
+}
+
 }  // namespace poplarplugin
 }  // namespace xla
