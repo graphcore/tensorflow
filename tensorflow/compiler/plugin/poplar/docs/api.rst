@@ -156,8 +156,8 @@ Keras
 ^^^^^
 
 .. automodule:: tensorflow.python.ipu.keras.extensions
-  :members: FunctionalExtension, PipelineStage, FunctionalLayerPipelineStageAssignment, SequentialExtension, SequentialLayerPipelineStageAssignment
-  :imported-members: FunctionalExtension, PipelineStage, FunctionalLayerPipelineStageAssignment, SequentialExtension, SequentialLayerPipelineStageAssignment
+  :members: FunctionalExtension, PipelineStage, FunctionalLayerPipelineStageAssignment, SequentialExtension, SequentialLayerPipelineStageAssignment, ModelExtension, ModelLayerPipelineStageAssignment
+  :imported-members: FunctionalExtension, PipelineStage, FunctionalLayerPipelineStageAssignment, SequentialExtension, SequentialLayerPipelineStageAssignment, ModelExtension, ModelLayerPipelineStageAssignment
 
 .. _keras-layers-api:
 
