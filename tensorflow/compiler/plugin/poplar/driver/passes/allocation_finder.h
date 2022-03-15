@@ -134,7 +134,8 @@ class AllocationFinder : public HloModulePass {
 
   void FindConsumers(const TensorLocation&, const HloInstruction* tgt, int64,
                      absl::optional<std::vector<int64>>,
-                     std::vector<const HloInstruction*>&);
+                     std::vector<const HloInstruction*>&,
+                     absl::flat_hash_set<TensorLocation>&);
 
   int64 GetAllocationPriority(const TensorTarget& target) const;
 
