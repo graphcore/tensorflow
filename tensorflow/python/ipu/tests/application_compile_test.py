@@ -19,12 +19,12 @@ import numpy as np
 
 from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.driver import poplar_executable_pb2
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import errors_impl
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
@@ -578,8 +578,16 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
       self.assertEqual(len(signature.outputs), 0)
       self.assertEqual(len(signature.streamed_outputs), 1)
 
+  @parameterized.named_parameters(("resources", False), ("constants", True))
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
-  def test_compile_op_placed_on_ipu(self):
+  def test_compile_op_placed_on_ipu(self, freeze_variables):
+    # Allow IPU execution for this test only
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
+
     with session.Session() as sess:
 
       dataset = dataset_ops.Dataset.from_tensor_slices((np.ones(
@@ -588,27 +596,36 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
       infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
-      def stage1(x):
-        return layers.Dense(10, activation="relu")(x)
+      def stage1(x0, x1):
+        return layers.Dense(10, activation="relu")(x1) + x0
 
       def stage2(x):
         return layers.Dense(10, activation="softmax")(x)
 
       def my_net():
         return pipelining_ops.pipeline(computational_stages=[stage1, stage2],
+                                       inputs=[42.0],
                                        gradient_accumulation_count=4,
                                        infeed_queue=infeed_queue,
                                        outfeed_queue=outfeed_queue,
                                        device_mapping=[0, 0])
 
       with scopes.ipu_scope("/device:IPU:0"):
-        result = application_compile_op(my_net, freeze_variables=True)
+        result = application_compile_op(my_net,
+                                        freeze_variables=freeze_variables)
+      sess.run(variables.global_variables_initializer())
+      compiled_path = sess.run(result)
+      executable = parse_poplar_executable(compiled_path)
+      signature = executable.embedded_runtime_config.signature
 
-      with self.assertRaisesRegex(
-          errors_impl.InvalidArgumentError,
-          "Cannot assign a device for operation application_compile"):
-        sess.run(variables.global_variables_initializer())
-        sess.run(result)
+      if freeze_variables:
+        self.assertEqual(len(signature.inputs), 0)
+      else:
+        self.assertEqual(len(signature.inputs),
+                         len(variables.global_variables()))
+      self.assertEqual(len(signature.streamed_inputs), 1)
+      self.assertEqual(len(signature.outputs), 0)
+      self.assertEqual(len(signature.streamed_outputs), 1)
 
 
 if __name__ == "__main__":

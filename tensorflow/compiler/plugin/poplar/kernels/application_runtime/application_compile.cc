@@ -121,8 +121,29 @@ std::vector<const Tensor*> FilterResourceTensors(
   return result;
 }
 
+Status CopyDeviceTensorsToHost(OpKernelContext* ctx,
+                               std::vector<const Tensor*>* input_tensors,
+                               std::vector<Tensor>* host_tensors,
+                               const std::vector<int>& constant_indices) {
+  DeviceContext* device_context = ctx->op_device_context();
+  Device* device = static_cast<Device*>(ctx->device());
+  host_tensors->reserve(input_tensors->size());
+
+  for (const int64 input_num : constant_indices) {
+    const Tensor* input = (*input_tensors)[input_num];
+    // Create a host value and copy to it.
+    host_tensors->emplace_back(input->dtype(), input->shape());
+
+    TF_RETURN_IF_ERROR(device_context->CopyDeviceTensorToCPUSync(
+        input, /*tensor_name=*/"", device, &host_tensors->back()));
+    (*input_tensors)[input_num] = &host_tensors->back();
+  }
+  return Status::OK();
+}
+
 }  // namespace
 
+template <bool is_ipu>
 class IPUApplicationCompile : public OpKernel {
  public:
   explicit IPUApplicationCompile(OpKernelConstruction* ctx) : OpKernel(ctx) {
@@ -162,6 +183,14 @@ class IPUApplicationCompile : public OpKernel {
       OP_REQUIRES_OK(ctx, pruner.Run(function_));
     }
 
+    // Copy IPU tensors to host. XLA compiler requires compile-time constant
+    // arguments to be in host memory.
+    std::vector<Tensor> host_tensors;
+    if (is_ipu) {
+      OP_REQUIRES_OK(ctx, CopyDeviceTensorsToHost(ctx, &inputs, &host_tensors,
+                                                  constant_indices_));
+    }
+
     OP_REQUIRES_OK(ctx, GetVariableInfosFromInputs(
                             ctx->resource_manager(), ctx->device(), inputs,
                             resource_indices_, &variable_infos));
@@ -192,7 +221,12 @@ class IPUApplicationCompile : public OpKernel {
   TF_DISALLOW_COPY_AND_ASSIGN(IPUApplicationCompile);
 };
 
+// We register the op both for CPU and IPU to make it easier to use, as we then
+// can handle any colocation requirements from variables etc. The function will
+// be compiled for IPU regardless of the device placement of the op itself.
 REGISTER_KERNEL_BUILDER(Name("IPUApplicationCompile").Device(DEVICE_CPU),
-                        IPUApplicationCompile);
+                        IPUApplicationCompile<false>);
+REGISTER_KERNEL_BUILDER(Name("IPUApplicationCompile").Device(DEVICE_XLA_IPU),
+                        IPUApplicationCompile<true>);
 
 }  // namespace tensorflow
