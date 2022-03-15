@@ -1575,6 +1575,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<OutlineRemoteBuffers>();
       pipeline.AddPass<ResourceUpdateCopyInserter>();
       pipeline.AddPass<ResourceUpdateFixer>();
+      pipeline.AddPass<PoplarWhileLoopRemapper>();
     }
 
     // Passes below this point need to respect control dependencies.

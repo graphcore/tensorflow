@@ -20,6 +20,7 @@ limitations under the License.
 #include <string>
 #include <utility>
 #include <vector>
+#include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_analysis.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/print_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/slice_util.h"
@@ -611,12 +612,6 @@ std::vector<BroadcastAndSlice> FindAllValidBroadcasts(HloInstruction* inst) {
   return FindBroadcastsOnlyUsedBySlices(inst, std::move(broadcast_params));
 }
 
-template <typename T, typename Pred>
-void FilterInPlace(T& vec, Pred p) {
-  auto not_pred = [&](const typename T::value_type& a) { return !p(a); };
-  vec.erase(std::remove_if(vec.begin(), vec.end(), not_pred), vec.end());
-}
-
 void SelectInvariantBroadcasts(HloInstruction* while_loop,
                                std::vector<BroadcastAndSlice>& broadcasts) {
   const auto loop_constants = FindLoopConstants(while_loop->while_body());
@@ -886,7 +881,218 @@ Status RemoveTensorListBroadcasts(HloInstruction* inst,
   return Status::OK();
 }
 
+struct IndexAndInstruction {
+  HloInstruction* instruction;
+  int64 index;
+  HloInstruction* loop;
+  IndexAndInstruction(HloInstruction* instruction, int64 index,
+                      HloInstruction* loop)
+      : instruction(instruction), index(index), loop(loop) {}
+  std::string ToString() const {
+    return absl::StrCat(loop->name(), ", ", index, ", ",
+                        instruction->ToString());
+  }
+};
+
+std::vector<IndexAndInstruction> FindWhileInvariants(HloInstruction* loop) {
+  auto gtes = WhileUtil::GetInvariantGTEsForWhileBody(*(loop->while_body()));
+  std::vector<IndexAndInstruction> result;
+  result.reserve(gtes.size());
+  absl::c_transform(gtes, std::back_inserter(result), [&](HloInstruction* gte) {
+    return IndexAndInstruction(gte, gte->tuple_index(), loop);
+  });
+  return result;
+}
+
+std::vector<IndexAndInstruction> FindRepeatInvariants(HloInstruction* loop) {
+  std::vector<IndexAndInstruction> result;
+  auto* root = loop->to_apply()->root_instruction();
+  for (int64 i = 0; i < root->operand_count(); ++i) {
+    HloInstruction* operand = root->mutable_operand(i);
+    if (operand->opcode() == HloOpcode::kParameter &&
+        operand->parameter_number() == i) {
+      result.emplace_back(operand, i, loop);
+    }
+  }
+  return result;
+}
+
+std::vector<IndexAndInstruction> FindLoopInvariants(HloInstruction* loop) {
+  return loop->opcode() == HloOpcode::kWhile ? FindWhileInvariants(loop)
+                                             : FindRepeatInvariants(loop);
+}
+
+bool IsLoop(HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kWhile || IsRepeatLoop(inst);
+}
+
+bool InsideWhileLoopAndInvariant(HloInstruction* dot, HloInstruction* operand,
+                                 const CallGraph& call_graph) {
+  const auto& callsites = call_graph.GetNode(dot->parent()).caller_callsites();
+  if (callsites.size() != 1) {
+    return false;
+  }
+  if (!IsLoop(callsites[0].instruction())) {
+    return false;
+  }
+  // This is not very efficient as I'm finding all the loop invariants
+  // when I could just pattern match this instruction, but as I already
+  // had this function and this isn't a hot path, I think I can get
+  // away with it.
+  auto loop_invariants = FindLoopInvariants(callsites[0].instruction());
+  auto it =
+      absl::c_find_if(loop_invariants, [&](const IndexAndInstruction& val) {
+        // hack to get around fact we don't hoist reshapes, when we move
+        // the the new expensive LICM we can hoist them there and remove
+        // this.
+        if (operand->opcode() == HloOpcode::kReshape) {
+          return val.instruction == operand->operand(0);
+        }
+        return val.instruction == operand;
+      });
+  // If it's not invariant it could be written to in the while loop by
+  // an instruction that has another mapping.
+  return it != loop_invariants.end();
+}
+
+google::protobuf::RepeatedField<std::int64_t> GetContractingDimensions(
+    const InputLocation& input) {
+  auto* inst = input.instruction;
+  return input.operand_index == 0
+             ? inst->dot_dimension_numbers().lhs_contracting_dimensions()
+             : inst->dot_dimension_numbers().rhs_contracting_dimensions();
+}
+
+bool IsWorthRemapping(const AllocationGroup& group) {
+  absl::flat_hash_map<HloInstruction*, int64> dot_to_contracting_dim;
+  for (const auto& input : group.inputs_only) {
+    if (input.instruction->opcode() != HloOpcode::kDot) {
+      continue;
+    }
+    const auto contracting_dims = GetContractingDimensions(input);
+    if (contracting_dims.size() != 1) {
+      // Will try handle these cases in a separate diff
+      return false;
+    }
+    dot_to_contracting_dim.emplace(input.instruction, contracting_dims[0]);
+  }
+  // If they all have the same contracting dim then they are all ok to
+  // have the same mapping
+  if (absl::c_all_of(dot_to_contracting_dim,
+                     [&](const std::pair<HloInstruction*, int64>& val) {
+                       return val.second ==
+                              dot_to_contracting_dim.begin()->second;
+                     })) {
+    return false;
+  }
+  // We could make this more generic but for now take the simple
+  // and common case and only consider case we have 2 dot products,
+  // and I'll early out the optimisation otherwise.
+  if (dot_to_contracting_dim.size() != 2) {
+    return false;
+  }
+  auto* dotA = dot_to_contracting_dim.begin()->first;
+  auto* dotB = (++dot_to_contracting_dim.begin())->first;
+  if (dotA->parent() == dotB->parent()) {
+    // We are trying to insert a remap between these instructions
+    // but outside the while loop. Not possible if they
+    // are in the same computation
+    return false;
+  }
+  return true;
+}
+
+Status RemapInput(const InputLocation& location, const CallGraph& call_graph) {
+  auto* operand = location.instruction->mutable_operand(location.operand_index);
+  auto* input = operand->opcode() == HloOpcode::kReshape
+                    ? operand->mutable_operand(0)
+                    : operand;
+  int64 index = input->opcode() == HloOpcode::kParameter
+                    ? input->parameter_number()
+                    : input->tuple_index();
+  const auto& callsites =
+      call_graph.GetNode(operand->parent()).caller_callsites();
+  auto* loop = callsites[0].instruction();
+  auto* init =
+      loop->opcode() == HloOpcode::kWhile ? loop->mutable_operand(0) : loop;
+  auto* to_remap = init->mutable_operand(index);
+  auto* remapped =
+      to_remap->parent()->AddInstruction(HloInstruction::CreateUnary(
+          to_remap->shape(), HloOpcode::kCopy, to_remap));
+  TF_RETURN_IF_ERROR(SetCopyCloneMethod(
+      remapped,
+      ShapeTree<CloneMethod>(remapped->shape(),
+                             CloneMethod_PreserveOrderUnlessAliases)));
+  init->ReplaceOperandWith(index, remapped);
+  return Status::OK();
+}
+
+InputLocation ChooseCandidate(std::vector<InputLocation>& candidates) {
+  if (candidates.size() == 1) {
+    return candidates[0];
+  }
+  // At this stage it's not so important which candidate we pick, though
+  // as the vector is created from a hash_set don't just pick the first.
+  // When we start targeting preArrangeMatMulInputRHS we should try aim
+  // for the one in the bwd pass (and when I say backwards pass we
+  // obviously don't know what that is in HLO so need to change to be
+  // looking at contracting dims to make these decisions)
+  // Another alternative is we could see if there is a copy in the
+  // allocation group that only affects one of the dots and we
+  // could try making that allocate
+  absl::c_sort(candidates, [&](const InputLocation& A, const InputLocation& B) {
+    const auto dims_a = GetContractingDimensions(A);
+    const auto dims_b = GetContractingDimensions(B);
+    const auto span_a = absl::MakeSpan(dims_a.begin(), dims_a.size());
+    const auto span_b = absl::MakeSpan(dims_b.begin(), dims_b.size());
+    return span_a < span_b;
+  });
+  return candidates.back();
+}
+
+StatusOr<bool> MaybeRemapOperand(const AllocationGroup& group,
+                                 const CallGraph& call_graph) {
+  std::vector<InputLocation> remapping_canditate;
+  absl::c_copy_if(group.inputs_only, std::back_inserter(remapping_canditate),
+                  [&](const InputLocation& input) {
+                    return InsideWhileLoopAndInvariant(
+                        input.instruction,
+                        input.instruction->mutable_operand(input.operand_index),
+                        call_graph);
+                  });
+  if (remapping_canditate.empty()) {
+    return false;
+  }
+  // Assuming there are at most 2 candidates here. This should really
+  // be generalised at some point.
+  TF_RETURN_IF_ERROR(
+      RemapInput(ChooseCandidate(remapping_canditate), call_graph));
+  return true;
+}
+
+// If only one dot product then there is nothing for it to
+// clash with
+bool HasEnoughDotProducts(const AllocationGroup& group) {
+  return 1 < absl::c_count_if(group.inputs_only, [](const InputLocation& inst) {
+           return inst.instruction->opcode() == HloOpcode::kDot;
+         });
+}
+
 }  // namespace
+
+StatusOr<bool> PoplarWhileLoopRemapper::Run(HloModule* module) {
+  bool changed = false;
+  TF_ASSIGN_OR_RETURN(auto allocation_groups,
+                      AllocationGroups::CreateAllocationGroups(module));
+  auto call_graph = CallGraph::Build(module);
+  FilterInPlace(allocation_groups.groups, HasEnoughDotProducts);
+  FilterInPlace(allocation_groups.groups, IsWorthRemapping);
+  for (const auto& group : allocation_groups.groups) {
+    TF_ASSIGN_OR_RETURN(bool changed_, MaybeRemapOperand(group, *call_graph));
+    changed |= changed_;
+  }
+  return changed;
+}
 
 Status PoplarWhileLoopOptimiser::PropagateNewShapes(
     const std::vector<HloInstruction*>& instructions_with_new_shapes) {

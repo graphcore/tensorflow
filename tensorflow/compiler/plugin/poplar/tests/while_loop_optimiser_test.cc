@@ -642,6 +642,145 @@ ENTRY entry {
   }
 }
 
+TEST_F(WhileLoopRemapTest, RemapDots) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[10, 12]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  one = s32[] constant(1)
+  zero = s32[] constant(0)
+  zeros = s32[12, 10] broadcast(zero), dimensions={}
+  add = s32[] add(p_body.0, one)
+  two = s32[] constant(2)
+  p_body.1 = s32[10, 12] get-tuple-element(p_body), index=1
+  dot1 = s32[10, 10] dot(p_body.1, zeros), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  ROOT root = (s32[], s32[10, 12]) tuple(add, p_body.1)
+}
+
+condition {
+  p_cond = (s32[],s32[10, 12]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+bwd_body {
+  zilch = s32[] constant(0)
+  uno = s32[] constant(1)
+  b_body = (s32[], s32[1, 1], s32[10, 12]) parameter(0)
+  index = s32[] get-tuple-element(b_body), index=0
+  to_add = s32[1, 1] get-tuple-element(b_body), index=1
+  to_slice = s32[10, 12] get-tuple-element(b_body), index=2
+  zilchs = s32[10, 12] broadcast(zilch), dimensions={}
+
+  dot2 = s32[12, 12] dot(to_slice, zilchs), lhs_contracting_dims={0}, rhs_contracting_dims={0}
+  counter = s32[1, 1] add(to_add, to_add)
+  next_index = s32[] add(index, uno)
+  ROOT broot = (s32[], s32[1, 1], s32[10, 12]) tuple(next_index, counter, to_slice)
+}
+
+bwd_condition {
+  b_cond = (s32[], s32[1, 1], s32[10, 12]) parameter(0)
+  b_cond.0 = s32[] get-tuple-element(b_cond), index=0
+  b_const = s32[] constant(10)
+  ROOT result = pred[] compare(b_cond.0, b_const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[10, 12] broadcast(const_0), dimensions={}
+  const_2 = s32[] constant(1)
+  repeat_init = (s32[],s32[10, 12]) tuple(const_0, const_1)
+  while = (s32[],s32[10, 12]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10, 12] get-tuple-element(while), index=1
+  slice = s32[1, 1] reshape(const_2)
+
+  bwd_init = (s32[], s32[1, 1], s32[10, 12]) tuple(const_0, slice, broadcast)
+  bwd_while = (s32[], s32[1, 1], s32[10, 12]) while(bwd_init), condition=bwd_condition, body=bwd_body
+  ROOT final = s32[1, 1] get-tuple-element(bwd_while), index=1
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  auto count = PoplarWhileLoopRemapper().Run(module.get()).ValueOrDie();
+  ASSERT_TRUE(count);
+  auto* init =
+      module->entry_computation()->GetInstructionWithName("repeat_init");
+  ASSERT_EQ(init->operand(1)->opcode(), HloOpcode::kCopy);
+}
+
+TEST_F(WhileLoopRemapTest, SameDims) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[10, 12]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  one = s32[] constant(1)
+  zero = s32[] constant(0)
+  zeros = s32[12, 10] broadcast(zero), dimensions={}
+  add = s32[] add(p_body.0, one)
+  two = s32[] constant(2)
+  p_body.1 = s32[10, 12] get-tuple-element(p_body), index=1
+  dot1 = s32[10, 10] dot(p_body.1, zeros), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  ROOT root = (s32[], s32[10, 12]) tuple(add, p_body.1)
+}
+
+condition {
+  p_cond = (s32[],s32[10, 12]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+bwd_body {
+  zilch = s32[] constant(0)
+  uno = s32[] constant(1)
+  b_body = (s32[], s32[1, 1], s32[10, 12]) parameter(0)
+  index = s32[] get-tuple-element(b_body), index=0
+  to_add = s32[1, 1] get-tuple-element(b_body), index=1
+  to_slice = s32[10, 12] get-tuple-element(b_body), index=2
+  zilchs = s32[10, 12] broadcast(zilch), dimensions={}
+
+  dot2 = s32[10, 10] dot(to_slice, zilchs), lhs_contracting_dims={1}, rhs_contracting_dims={1}
+  counter = s32[1, 1] add(to_add, to_add)
+  next_index = s32[] add(index, uno)
+  ROOT broot = (s32[], s32[1, 1], s32[10, 12]) tuple(next_index, counter, to_slice)
+}
+
+bwd_condition {
+  b_cond = (s32[], s32[1, 1], s32[10, 12]) parameter(0)
+  b_cond.0 = s32[] get-tuple-element(b_cond), index=0
+  b_const = s32[] constant(10)
+  ROOT result = pred[] compare(b_cond.0, b_const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[10, 12] broadcast(const_0), dimensions={}
+  const_2 = s32[] constant(1)
+  repeat_init = (s32[],s32[10, 12]) tuple(const_0, const_1)
+  while = (s32[],s32[10, 12]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10, 12] get-tuple-element(while), index=1
+  slice = s32[1, 1] reshape(const_2)
+
+  bwd_init = (s32[], s32[1, 1], s32[10, 12]) tuple(const_0, slice, broadcast)
+  bwd_while = (s32[], s32[1, 1], s32[10, 12]) while(bwd_init), condition=bwd_condition, body=bwd_body
+  ROOT final = s32[1, 1] get-tuple-element(bwd_while), index=1
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  auto count = PoplarWhileLoopRemapper().Run(module.get()).ValueOrDie();
+  ASSERT_FALSE(count);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
