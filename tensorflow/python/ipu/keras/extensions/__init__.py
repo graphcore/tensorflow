@@ -23,4 +23,6 @@ from tensorflow.python.ipu.keras.extensions.functional_extensions import Functio
 from tensorflow.python.ipu.keras.extensions.functional_extensions import FunctionalExtension
 from tensorflow.python.ipu.keras.extensions.sequential_extensions import SequentialLayerPipelineStageAssignment
 from tensorflow.python.ipu.keras.extensions.sequential_extensions import SequentialExtension
+from tensorflow.python.ipu.keras.extensions.model_extensions import ModelLayerPipelineStageAssignment
+from tensorflow.python.ipu.keras.extensions.model_extensions import ModelExtension
 # pylint: enable=unused-import
