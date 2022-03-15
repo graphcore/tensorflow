@@ -225,6 +225,21 @@ int64 AllocationFinder::GetAllocationPriority(
   }
 }
 
+bool IsPreferablePath(absl::Span<const HloInstruction* const> a,
+                      absl::Span<const HloInstruction* const> b) {
+  // Returns true if path a is preferable to path b.
+  // Prefer paths without slice operations in them as they can create a high
+  // tile imbalance.
+  auto is_slice = [](const HloInstruction* inst) {
+    return inst->opcode() == HloOpcode::kSlice;
+  };
+
+  if (absl::c_any_of(b, is_slice) && !absl::c_any_of(a, is_slice)) {
+    return true;
+  }
+  return false;
+}
+
 bool AllocationFinder::ReplaceTarget(
     const TensorTarget& new_target, const TensorTarget& existing_target) const {
   const int64 new_target_priority = GetAllocationPriority(new_target);
@@ -238,15 +253,8 @@ bool AllocationFinder::ReplaceTarget(
         !IsTrainingForward(existing_target.tgt)) {
       return true;
     }
-
-    // Prefer paths without slice operations in them as they can create a high
-    // tile imbalance.
-    auto is_slice = [](const HloInstruction* inst) {
-      return inst->opcode() == HloOpcode::kSlice;
-    };
-
-    if (absl::c_any_of(existing_target.backward_path, is_slice) &&
-        !absl::c_any_of(new_target.backward_path, is_slice)) {
+    if (IsPreferablePath(new_target.backward_path,
+                         existing_target.backward_path)) {
       return true;
     }
     return false;
@@ -301,14 +309,51 @@ void AllocationFinder::AddTensorTarget(const TensorLocation& source,
 void AllocationFinder::FindConsumers(
     const TensorLocation& src, const HloInstruction* tgt, int64 index,
     absl::optional<std::vector<int64>> permutation,
-    std::vector<const HloInstruction*>& path) {
+    std::vector<const HloInstruction*>& path,
+    absl::flat_hash_set<TensorLocation>& explored) {
   path.emplace_back(tgt);
+  auto tgt_location = TensorLocation{tgt, index};
+
+  if (!explored.contains(tgt_location)) {
+    explored.insert(tgt_location);
+  } else {
+    // The path has already been explored from this point. The only benefit we
+    // could get from reexploring the rest of the path is if we find
+    // preferable overall paths (e.g. without slices) to the same targets we
+    // have already found.
+    // Compare the current path to the path of the existing target. If the
+    // current path is prefereable then it's worth continuing to explore it.
+
+    auto itr = tensor_allocation_map.find(src);
+    if (itr == tensor_allocation_map.end()) {
+      // No target has been found yet, meaning there are no targets on this
+      // path.
+      path.pop_back();
+      return;
+    }
+    auto& allocation_path = itr->second.backward_path;
+
+    // If the existing allocation path contains the current target node, look at
+    // the subpath up to that node, otherwise look at the entire path.
+    auto existing_path = absl::MakeConstSpan(allocation_path)
+                             .first(absl::c_find(allocation_path, tgt) -
+                                    allocation_path.begin());
+
+    // The paths in targets do not have the first element (the source inst).
+    auto current_path = absl::MakeConstSpan(path).subspan(1);
+
+    if (!IsPreferablePath(current_path, existing_path)) {
+      // If the current path is not already preferable to the existing path,
+      // there is no point reexploring the rest of it. The current path can
+      // only get less preferable as it gets longer.
+      path.pop_back();
+      return;
+    }
+  }
 
   // Targets can usually be inferred from allocating instructions without
   // needing to re-traverse the graph.
   if (CanInferTarget(src, tgt)) {
-    auto tgt_location = TensorLocation{tgt, index};
-
     // If allocation finding has not been run for tgt yet then run it now.
     if (!completed.contains(tgt_location)) {
       const auto shape = GetAllocationShapes(tgt)[index];
@@ -436,13 +481,13 @@ void AllocationFinder::FindConsumers(
           // Ignore the element type (paths can contain casts).
           if (shapes[src.flattened_output_tuple_index].dimensions() ==
               user->shape().dimensions()) {
-            FindConsumers(src, user, index, permutation, path);
+            FindConsumers(src, user, index, permutation, path, explored);
           }
           break;
         }
         case DoFindConsumers::TRUE: {
-          FindConsumers(src, result.tgt, result.index, result.permutation,
-                        path);
+          FindConsumers(src, result.tgt, result.index, result.permutation, path,
+                        explored);
           break;
         }
         case DoFindConsumers::FALSE:
@@ -458,7 +503,7 @@ void AllocationFinder::FindConsumers(
     if (callsites.size() == 1) {
       auto caller = callsites.front().instruction();
       if (caller->shape() == tgt->shape()) {
-        FindConsumers(src, caller, index, permutation, path);
+        FindConsumers(src, caller, index, permutation, path, explored);
       }
     }
   }
@@ -482,8 +527,10 @@ void AllocationFinder::FindAllocation(const TensorLocation& location,
   std::vector<int64> permutation(shape.rank());
   absl::c_iota(permutation, 0);
   std::vector<const HloInstruction*> path;
+  absl::flat_hash_set<TensorLocation> explored;
   FindConsumers(location, location.instruction,
-                location.flattened_output_tuple_index, permutation, path);
+                location.flattened_output_tuple_index, permutation, path,
+                explored);
 
   // Mark this location as completed (has had allocation finding run).
   completed.insert(location);

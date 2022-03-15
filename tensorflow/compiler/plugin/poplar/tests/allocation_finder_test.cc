@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/computation_flattener.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
@@ -31,6 +32,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/literal_comparison.h"
+#include "tensorflow/compiler/xla/service/flatten_call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/service/shape_inference.h"
@@ -5028,6 +5030,99 @@ ENTRY cluster_14155272572172615694__.29 (arg0.1: f32[2,2], arg1.2: f32[2,2], arg
   EXPECT_EQ(t3.tgt, dot_22);
   EXPECT_EQ(t3.input_index, 1ll);
   EXPECT_EQ(t3.sliceable_dimension, absl::nullopt);
+}
+
+TEST_F(AllocationFinderTest, ExponentialPathPermutations) {
+  std::string hlo = R"(
+HloModule module
+
+mul {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT multiply = f32[] multiply(x, y)
+}
+
+slice_and_add {
+  a = f32[4] parameter(0)
+  concat = f32[8] concatenate(a, a), dimensions={0}
+  slice = f32[4] slice(concat), slice={[2:6]}
+  reshape = f32[2, 4] reshape(concat)
+  one = f32[] constant(0)
+  reduce = f32[4] reduce(reshape, one), dimensions={0}, to_apply=mul
+  ROOT add = f32[4] add(slice, reduce)
+}
+
+main {
+  p0 = f32[4] parameter(0)
+  call0 = f32[4] call(p0), to_apply=slice_and_add
+  call1 = f32[4] call(call0), to_apply=slice_and_add
+  call2 = f32[4] call(call1), to_apply=slice_and_add
+  call3 = f32[4] call(call2), to_apply=slice_and_add
+  call4 = f32[4] call(call3), to_apply=slice_and_add
+  call5 = f32[4] call(call4), to_apply=slice_and_add
+  call6 = f32[4] call(call5), to_apply=slice_and_add
+  call7 = f32[4] call(call6), to_apply=slice_and_add
+  call8 = f32[4] call(call7), to_apply=slice_and_add
+  call9 = f32[4] call(call8), to_apply=slice_and_add
+  call10 = f32[4] call(call9), to_apply=slice_and_add
+  call11 = f32[4] call(call10), to_apply=slice_and_add
+  call12 = f32[4] call(call11), to_apply=slice_and_add
+  call13 = f32[4] call(call12), to_apply=slice_and_add
+  call14 = f32[4] call(call13), to_apply=slice_and_add
+  call15 = f32[4] call(call14), to_apply=slice_and_add
+  call16 = f32[4] call(call15), to_apply=slice_and_add
+  call17 = f32[4] call(call16), to_apply=slice_and_add
+  call18 = f32[4] call(call17), to_apply=slice_and_add
+  call19 = f32[4] call(call18), to_apply=slice_and_add
+  call20 = f32[4] call(call19), to_apply=slice_and_add
+  call21 = f32[4] call(call20), to_apply=slice_and_add
+  call22 = f32[4] call(call21), to_apply=slice_and_add
+  call23 = f32[4] call(call22), to_apply=slice_and_add
+  call24 = f32[4] call(call23), to_apply=slice_and_add
+  call25 = f32[4] call(call24), to_apply=slice_and_add
+  call26 = f32[4] call(call25), to_apply=slice_and_add
+  call27 = f32[4] call(call26), to_apply=slice_and_add
+  call28 = f32[4] call(call27), to_apply=slice_and_add
+  call29 = f32[4] call(call28), to_apply=slice_and_add
+  call30 = f32[4] call(call29), to_apply=slice_and_add
+  call31 = f32[4] call(call30), to_apply=slice_and_add
+  ROOT dot = f32[] dot(call31, call31), lhs_contracting_dims={0}, rhs_contracting_dims={0}
+}
+)";
+  // Each call doubles the permutations of the path from p0 to the target dot.
+  // The allocation finder should find the preferable path (the one permutation
+  // which contains no slices) without timing out. It does this by only
+  // searching permutations which have the potential to be preferable.
+
+  auto config = GetModuleConfigForTest();
+  auto module0 = ParseAndReturnVerifiedModule(hlo);
+  EXPECT_TRUE(module0.ok());
+  auto* module_ptr = module0.ValueOrDie().get();
+
+  auto resources = CompilerResources::CreateTestDefault(module_ptr);
+  resources->main_graph = absl::make_unique<poplar::Graph>(
+      poplar::Device::createCPUDevice(), poplar::replication_factor(1));
+  auto& annotations = resources->annotations;
+  auto* graph = resources->main_graph.get();
+
+  // Flatten into one big computation.
+  TF_ASSERT_OK(FlattenCallGraph().Run(module_ptr).status());
+  TF_ASSERT_OK(ComputationFlattener().Run(module_ptr).status());
+  EXPECT_TRUE(HloDCE().Run(module_ptr).ValueOrDie());
+
+  EXPECT_TRUE(AllocationFinder(annotations).Run(module_ptr).ValueOrDie());
+
+  const auto* entry_comp = module_ptr->entry_computation();
+  const auto* p0 = entry_comp->parameter_instruction(0);
+  const auto* dot = entry_comp->root_instruction();
+
+  auto target = annotations.tensor_allocation_map.at(TensorLocation{p0, 0});
+  EXPECT_EQ(target.tgt, dot);
+  EXPECT_EQ(target.backward_path.size(), 4 * 32);  // 4 ops per call * 32 calls.
+  EXPECT_FALSE(
+      absl::c_any_of(target.backward_path, [](const HloInstruction* inst) {
+        return inst->opcode() == HloOpcode::kSlice;
+      }));
 }
 
 // // TODO:
