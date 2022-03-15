@@ -24,10 +24,18 @@ inside the scope of an ``IPUStrategy``:
 Using steps_per_execution
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To reduce Python overhead and maximize the performance of your model, pass in
-the ``steps_per_execution`` argument to the compile method. This argument sets
-the number of batches to process sequentially in a single execution. You should
-increase this number to improve accelerator utilization.
+To reduce Python overhead and maximize the performance of your model, pass the
+``steps_per_execution`` argument to the compile method. This argument sets the
+number of batches processed sequentially by one replica in a single execution
+which can greatly improve performance because any overhead between steps is removed,
+thus increasing IPU utilization.
+
+Ideally, ``steps_per_execution`` is equal to the number of steps your model needs
+to run per replica in order to complete one epoch. Note that it is not possible
+to fetch intermediate results when ``steps_per_execution`` is specified. Model
+weights are read on the Python host after all steps are executed on the IPU. If
+you need to access model weights during an epoch (for example for saving a
+checkpoint), you must set ``steps_per_execution`` accordingly.
 
 .. note::
 
@@ -69,8 +77,7 @@ for more details.
 
   When using data-parallelism, the ``steps_per_execution`` value the model was
   compiled with must be an integer multiple of
-  ``gradient_accumulation_steps_per_replica`` multiplied by the number of
-  replicas in the model. Data parallelism is discussed in
+  ``gradient_accumulation_steps_per_replica``. Data parallelism is discussed in
   :numref:`automatic-data-parallelism`.
 
 

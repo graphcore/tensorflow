@@ -29,7 +29,7 @@ def create_dataset():
   train_ds = train_ds.map(lambda d, l:
                           (tf.cast(d, tf.float32), tf.cast(l, tf.int32)))
 
-  return train_ds.repeat().prefetch(16)
+  return train_ds.prefetch(16)
 
 
 dataset = create_dataset()
@@ -40,15 +40,31 @@ with strategy.scope():
   # Create a Keras model inside the strategy.
   model = create_model()
 
+  # `steps_per_execution` must be divisible by `gradient_accumulation_steps_per_replica`.
+  # Say we want to accumulate 10 steps before doing a weight update, then we would end up
+  # with the following values.
+  gradient_accumulation_steps_per_replica = 10
+  number_of_accumulated_steps = dataset.cardinality(
+  ) // gradient_accumulation_steps_per_replica
+
+  # In order to get the proper `steps_per_execution` value, we have to multiply
+  # `number_of_accumulated_steps` with `gradient_accumulation_steps_per_replica`.
+  steps_per_execution = number_of_accumulated_steps * \
+                        gradient_accumulation_steps_per_replica
+
+  # Now we need to truncate the dataset so Keras will not try to take more data
+  # from the dataset than is available.
+  dataset = dataset.take(steps_per_execution)
+
   # Compile the model for training.
   model.compile(
       loss=tf.keras.losses.SparseCategoricalCrossentropy(),
       optimizer=tf.keras.optimizers.RMSprop(),
       metrics=["accuracy"],
-      steps_per_execution=50,
+      steps_per_execution=steps_per_execution,
   )
 
   model.set_gradient_accumulation_options(
       gradient_accumulation_steps_per_replica=10)
 
-  model.fit(dataset, epochs=2, steps_per_epoch=100)
+  model.fit(dataset, epochs=2)
