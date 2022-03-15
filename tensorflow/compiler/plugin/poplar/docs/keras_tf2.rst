@@ -210,8 +210,8 @@ different pipeline stages as follows:
 .. literalinclude:: keras_tf2_example11.py
   :language: python
   :linenos:
-  :start-at: input_layer = tf.keras.layers.Input((28, 28))
-  :end-at: model = tf.keras.Model(inputs=input_layer, outputs=x)
+  :start-at: class MyModel(tf.keras.Model):
+  :end-at:     return x
 
 .. note::
 Layers *constructed* within an `ipu.keras.PipelineStage` context will have that
@@ -253,7 +253,8 @@ to four different pipeline stages as follows:
 .. literalinclude:: keras_tf2_example12.py
   :language: python
   :linenos:
-  :start-at: strategy = ipu.ipu_strategy.IPUStrategy()
+  :start-at:   model = ExistingModel()
+  :end-at:   model.set_pipeline_stage_assignment(assignments)
 
 .. note::
 
