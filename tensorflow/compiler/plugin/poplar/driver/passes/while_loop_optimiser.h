@@ -46,6 +46,38 @@ class PoplarWhileLoopOptimiser : public HloModulePass {
       const std::vector<HloInstruction*>& instructions_with_new_shapes);
 };
 
+// For instructions that require remapping inside a while
+// loop, remap the input to the while loop to avoid having
+// to run the remapping every iteration
+// Eg
+// body {
+//   ...
+//   A = dot(Y, Remap)
+// }
+// main {
+//   ...
+//   B = dot(X, Z)
+//   while(X, Y), to_apply=body
+// }
+// Should be transformed to
+// body {
+//   ...
+//   A = dot(Y, X)
+// }
+// main {
+//   ...
+//   B = dot(X, Z)
+//   Remap = remap(X)
+//   while(Remap, Y), to_apply=body
+// }
+class PoplarWhileLoopRemapper : public HloModulePass {
+ public:
+  absl::string_view name() const override {
+    return "poplar-while-loop-remapper";
+  }
+  StatusOr<bool> Run(HloModule* module) override;
+};
+
 }  // namespace poplarplugin
 }  // namespace xla
 
