@@ -14,6 +14,14 @@ ________________
 
   These will require changes to any code that uses them.
 
+IPU Keras changes
+'''''''''''''''''
+
+  - The argument ``steps_per_execution`` in ``model.compile()`` now reflects
+    the number of steps to process per execution *per replica* instead, whereas
+    previously this reflected the number of steps to process per execution for
+    all replicas combined.
+
 Removal of deprecated APIs
 ''''''''''''''''''''''''''
 

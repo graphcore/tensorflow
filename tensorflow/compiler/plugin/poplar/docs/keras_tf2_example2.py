@@ -29,7 +29,7 @@ def create_dataset():
   train_ds = train_ds.map(lambda d, l:
                           (tf.cast(d, tf.float32), tf.cast(l, tf.int32)))
 
-  return train_ds.repeat().prefetch(16)
+  return train_ds.prefetch(16)
 
 
 dataset = create_dataset()
@@ -45,8 +45,10 @@ with strategy.scope():
       loss=tf.keras.losses.SparseCategoricalCrossentropy(),
       optimizer=tf.keras.optimizers.RMSprop(),
       metrics=["accuracy"],
-      # Anything between 2 and `steps_per_epoch` could help here.
-      steps_per_execution=50,
+      # Anything between 2 and the length of the dataset would work,
+      # but the greater `steps_per_execution` the greater the
+      # performance gains.
+      steps_per_execution=dataset.cardinality(),
   )
 
-  model.fit(dataset, epochs=2, steps_per_epoch=100)
+  model.fit(dataset, epochs=2)
