@@ -31,7 +31,13 @@ XlaCompiler::CompileOptions GetDefaultCompileOptions();
 // to evaluate any constant inputs to a value so that they can be propagated.
 xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
     XlaOpKernelContext* ctx, const DataTypeVector& input_types,
-    int* num_resource_args, bool evaluate_constants = true);
+    bool evaluate_constants = true);
+
+xla::StatusOr<XlaCompiler::Argument> GetXlaArgument(
+    XlaOpKernelContext* ctx, size_t input, bool evaluate_constants = true);
+
+// Return the number of kResource type XlaArguments in the given vector.
+int CountResourceArgs(const std::vector<XlaCompiler::Argument>& arguments);
 
 // Function which gets all non-constant function inputs.
 xla::StatusOr<std::vector<xla::XlaOp>> GetXlaInputs(
@@ -51,11 +57,15 @@ Status CompileFunction(XlaOpKernelContext* ctx,
 // resources unless modified from the called computations.
 class FunctionBaseOp : public XlaOpKernel {
  public:
+  explicit FunctionBaseOp(OpKernelConstruction* ctx);
   FunctionBaseOp(OpKernelConstruction* ctx, bool evaluate_constants);
+
   void Compile(XlaOpKernelContext* ctx) override;
 
  protected:
   virtual Status SetConfig(xla::XlaBuilder* builder, xla::XlaOp& operation) = 0;
+  virtual xla::StatusOr<std::vector<XlaCompiler::Argument>> GetArguments(
+      XlaOpKernelContext* ctx) const;
 
  private:
   const bool evaluate_constants_;

@@ -45,67 +45,80 @@ XlaCompiler::CompileOptions GetDefaultCompileOptions() {
 // to evaluate any constant inputs to a value so that they can be propagated.
 xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
     XlaOpKernelContext* ctx, const DataTypeVector& input_types,
-    int* num_resource_args, bool evaluate_constants) {
-  auto builder = ctx->builder();
-
+    bool evaluate_constants) {
   std::vector<XlaCompiler::Argument> arguments(input_types.size());
-  (*num_resource_args) = 0;
   for (size_t i = 0; i < input_types.size(); ++i) {
-    XlaCompiler::Argument& arg = arguments[i];
-    DataType type = ctx->input_type(i);
+    TF_ASSIGN_OR_RETURN(auto arg, GetXlaArgument(ctx, i, evaluate_constants));
+    arguments[i] = std::move(arg);
+  }
 
-    if (type == DT_RESOURCE) {
-      XlaResource* resource;
-      TF_RETURN_IF_ERROR(ctx->GetResourceInput(i, &resource));
+  return arguments;
+}
 
-      arg.initialized = resource->initialized();
-      if (!arg.initialized) {
-        return errors::Unimplemented("Uninitialized arguments: ", arg.name);
-      }
-      arg.kind = XlaCompiler::Argument::kResource;
-      arg.resource_kind = resource->kind();
+xla::StatusOr<XlaCompiler::Argument> GetXlaArgument(XlaOpKernelContext* ctx,
+                                                    size_t input,
+                                                    bool evaluate_constant) {
+  XlaCompiler::Argument arg;
+  DataType type = ctx->input_type(input);
 
-      arg.type = resource->type();
-      arg.shape = resource->shape();
-      arg.max_array_size = resource->max_array_size();
-      for (const auto& gradient : resource->tensor_array_gradients()) {
-        arg.tensor_array_gradients.insert(gradient.first);
-      }
-      arg.name = resource->name();
-      VLOG(2) << "Resource " << resource->name()
-              << " type: " << DataTypeString(arg.type)
-              << " shape: " << arg.HumanString()
-              << " initialized: " << arg.initialized;
+  if (type == DT_RESOURCE) {
+    XlaResource* resource;
+    TF_RETURN_IF_ERROR(ctx->GetResourceInput(input, &resource));
 
-      (*num_resource_args)++;
+    arg.initialized = resource->initialized();
+    if (!arg.initialized) {
+      return errors::Unimplemented("Uninitialized arguments: ", arg.name);
+    }
+    arg.kind = XlaCompiler::Argument::kResource;
+    arg.resource_kind = resource->kind();
+
+    arg.type = resource->type();
+    arg.shape = resource->shape();
+    arg.max_array_size = resource->max_array_size();
+    for (const auto& gradient : resource->tensor_array_gradients()) {
+      arg.tensor_array_gradients.insert(gradient.first);
+    }
+    arg.name = resource->name();
+    VLOG(2) << "Resource " << resource->name()
+            << " type: " << DataTypeString(arg.type)
+            << " shape: " << arg.HumanString()
+            << " initialized: " << arg.initialized;
+
+  } else {
+    arg.type = type;
+    arg.shape = ctx->InputShape(input);
+    // Try and replace kParameters with compile-time kConstant.
+    const XlaExpression& expression = ctx->InputExpression(input);
+    // NOTE: We can not simply check that this is Kind::kConstant because
+    // this could be the output of a MetadataOnly op e.g. Size.
+    xla::StatusOr<absl::optional<Tensor>> maybe_constant =
+        expression.ResolveConstant(ctx->compiler()->client());
+    if (evaluate_constant && maybe_constant.ok() &&
+        maybe_constant.ValueOrDie().has_value()) {
+      arg.kind = XlaCompiler::Argument::kConstant;
+      arg.constant_value = std::move(maybe_constant.ValueOrDie().value());
+      VLOG(2) << "Constant type: " << DataTypeString(arg.type)
+              << " shape: " << arg.HumanString();
     } else {
-      arg.type = input_types[i];
-      arg.shape = ctx->InputShape(i);
-      // Try and replace kParameters with compile-time kConstant.
-      const XlaExpression& expression = ctx->InputExpression(i);
-      // NOTE: We can not simply check that this is Kind::kConstant because
-      // this could be the output of a MetadataOnly op e.g. Size.
-      xla::StatusOr<absl::optional<Tensor>> maybe_constant =
-          expression.ResolveConstant(ctx->compiler()->client());
-      if (evaluate_constants && maybe_constant.ok() &&
-          maybe_constant.ValueOrDie().has_value()) {
-        arg.kind = XlaCompiler::Argument::kConstant;
-        arg.constant_value = std::move(maybe_constant.ValueOrDie().value());
-        VLOG(2) << "Constant type: " << DataTypeString(arg.type)
-                << " shape: " << arg.HumanString();
-      } else {
-        arg.kind = XlaCompiler::Argument::kParameter;
-        // Use the xla::Shape for the input instead of ctx->InputShape. This
-        // is necessary for forwarding shapes of DT_VARIANTs, e.g.
-        // TensorLists.
-        TF_ASSIGN_OR_RETURN(arg.shape, builder->GetShape(ctx->Input(i)));
-        arg.type = type;
-        VLOG(2) << "Parameter type: " << DataTypeString(arg.type)
-                << " shape: " << arg.HumanString();
-      }
+      arg.kind = XlaCompiler::Argument::kParameter;
+      // Use the xla::Shape for the input instead of ctx->InputShape. This
+      // is necessary for forwarding shapes of DT_VARIANTs, e.g.
+      // TensorLists.
+      auto* builder = ctx->builder();
+      TF_ASSIGN_OR_RETURN(arg.shape, builder->GetShape(ctx->Input(input)));
+      arg.type = type;
+      VLOG(2) << "Parameter type: " << DataTypeString(arg.type)
+              << " shape: " << arg.HumanString();
     }
   }
-  return arguments;
+
+  return arg;
+}
+
+int CountResourceArgs(const std::vector<XlaCompiler::Argument>& arguments) {
+  return absl::c_count_if(arguments, [](const XlaCompiler::Argument& arg) {
+    return arg.kind == XlaCompiler::Argument::kResource;
+  });
 }
 
 xla::StatusOr<std::vector<xla::XlaOp>> GetXlaInputs(
@@ -180,6 +193,8 @@ Status CompileFunction(XlaOpKernelContext* ctx,
   return Status::OK();
 }
 
+FunctionBaseOp::FunctionBaseOp(OpKernelConstruction* ctx)
+    : FunctionBaseOp(ctx, /*evaluate constants*/ false) {}
 FunctionBaseOp::FunctionBaseOp(OpKernelConstruction* ctx,
                                bool evaluate_constants)
     : XlaOpKernel(ctx), evaluate_constants_(evaluate_constants) {
@@ -191,12 +206,11 @@ FunctionBaseOp::FunctionBaseOp(OpKernelConstruction* ctx,
 void FunctionBaseOp::Compile(XlaOpKernelContext* ctx) {
   auto builder = ctx->builder();
   // First get all the arguments.
-  int num_resource_args = 0;
-  auto arguments_or = poplarplugin::GetXlaArguments(
-      ctx, input_types_, &num_resource_args, evaluate_constants_);
+  auto arguments_or = GetArguments(ctx);
   OP_REQUIRES_OK(ctx, arguments_or.status());
   std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
 
+  const int num_resource_args = CountResourceArgs(arguments);
   VLOG(2) << "Building function " << ctx->op_kernel().name() << " with "
           << input_types_.size() << " inputs including " << num_resource_args
           << " resources.";
@@ -267,5 +281,14 @@ void FunctionBaseOp::Compile(XlaOpKernelContext* ctx) {
     ctx->SetResourceOutput(pair.first, pair.second);
   }
 }
+
+xla::StatusOr<std::vector<XlaCompiler::Argument>> FunctionBaseOp::GetArguments(
+    XlaOpKernelContext* ctx) const {
+  TF_ASSIGN_OR_RETURN(
+      auto arguments,
+      poplarplugin::GetXlaArguments(ctx, input_types_, evaluate_constants_));
+  return arguments;
+}
+
 }  // namespace poplarplugin
 }  // namespace tensorflow

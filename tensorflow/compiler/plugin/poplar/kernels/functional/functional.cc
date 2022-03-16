@@ -32,10 +32,15 @@ namespace tensorflow {
 class FunctionOp : public poplarplugin::FunctionBaseOp {
  public:
   explicit FunctionOp(OpKernelConstruction* ctx)
-      : poplarplugin::FunctionBaseOp(ctx, /*evaluate_constants=*/false) {
+      : poplarplugin::FunctionBaseOp(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("unique_sharding", &unique_sharding_));
     OP_REQUIRES_OK(ctx,
                    ctx->GetAttr("keep_input_layouts", &keep_input_layouts_));
+
+    // Mask for whether a particular input should be evaluated as a constant or
+    // not.
+    OP_REQUIRES_OK(
+        ctx, ctx->GetAttr("evaluate_as_constants", &evaluate_as_constants_));
   }
 
  protected:
@@ -53,9 +58,22 @@ class FunctionOp : public poplarplugin::FunctionBaseOp {
     return Status::OK();
   }
 
+  xla::StatusOr<std::vector<XlaCompiler::Argument>> GetArguments(
+      XlaOpKernelContext* ctx) const override {
+    std::vector<XlaCompiler::Argument> arguments(ctx->num_inputs());
+    for (size_t i = 0; i < arguments.size(); ++i) {
+      TF_ASSIGN_OR_RETURN(auto arg, poplarplugin::GetXlaArgument(
+                                        ctx, i, evaluate_as_constants_[i]));
+      arguments[i] = std::move(arg);
+    }
+
+    return arguments;
+  }
+
  private:
   bool unique_sharding_;
   bool keep_input_layouts_;
+  std::vector<bool> evaluate_as_constants_;
   TF_DISALLOW_COPY_AND_ASSIGN(FunctionOp);
 };
 REGISTER_IPU_OP("Function", FunctionOp);

@@ -44,6 +44,12 @@ from tensorflow.python.training import gradient_descent
 
 
 class FunctionalOpsTest(test_util.TensorFlowTestCase):
+  def assertNoThrow(self, call, *args, **kwargs):
+    try:
+      call(*args, **kwargs)
+    except Exception as e:  # pylint: disable=broad-except
+      self.fail(f"An unexpected exception was thrown: '{e}'")
+
   @test_util.deprecated_graph_mode_only
   def testFunctionInferenceWithVariableScope(self):
     cfg = ipu.config.IPUConfig()
@@ -796,6 +802,132 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
                     loss=keras.losses.SparseCategoricalCrossentropy())
 
       model.fit(ds, batch_size=micro_batch_size)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutlineWithConstCapture(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    def func(tensor):
+      # This test checks that const_value is captured as a constant expression
+      # (since it's an external capture). Otherwise we will get an error,
+      # as transpose requires a const perm.
+      const_value = array_ops.identity([1, 0])
+
+      @ipu.outlined_function
+      def inner(tensor):
+        return array_ops.transpose(tensor, perm=const_value)
+
+      return inner(tensor)
+
+    def body(tensor):
+      return func(tensor)
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      tensor = array_ops.placeholder(np.float32, [4, 1])
+      res = ipu.ipu_compiler.compile(body, inputs=[tensor])
+
+    with tu.ipu_session() as sess:
+      tu.move_variable_initialization_to_cpu()
+      sess.run(variables.global_variables_initializer())
+
+      self.assertNoThrow(sess.run, res, {tensor: [[1.0], [2.0], [3.0], [4.0]]})
+
+  @test_util.deprecated_graph_mode_only
+  def testOutlineWithConstParam(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    @ipu.outlined_function
+    def func(tensor, const_value):
+      # This test checks that const_value is treated as a reference
+      # and not evaluated as a constant, since it's passed as a parameter.
+      return array_ops.transpose(tensor, perm=const_value)
+
+    def body(tensor):
+      const_value = array_ops.identity([1, 0])
+      return func(tensor, const_value)
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      tensor = array_ops.placeholder(np.float32, [4, 1])
+      res = ipu.ipu_compiler.compile(body, inputs=[tensor])
+
+    with tu.ipu_session() as sess:
+      tu.move_variable_initialization_to_cpu()
+      sess.run(variables.global_variables_initializer())
+
+      self.assertRaises(Exception, sess.run, res,
+                        {tensor: [[1.0], [2.0], [3.0], [4.0]]})
+
+  @test_util.deprecated_graph_mode_only
+  def testOutlineGradWithConstCapture(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    def func(tensor, other):
+      # This test checks that const_value gets evaluated as a constant by the
+      # gradient function, since it's an external capture of the fwd function
+      # Otherwise we will get an error, as transpose requires a const perm.
+      const_value = array_ops.identity([1, 0])
+
+      @ipu.outlined_function
+      def inner(tensor, other):
+        return math_ops.matmul(other,
+                               array_ops.transpose(tensor, perm=const_value))
+
+      return inner(tensor, other)
+
+    def body(tensor):
+      w0 = variables.Variable([[1], [2], [3], [4]], dtype=np.float32)
+      value = func(tensor, w0)
+      loss = math_ops.reduce_mean(value)
+      train = gradient_descent.GradientDescentOptimizer(0.001).minimize(loss)
+      return train
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      tensor = array_ops.placeholder(np.float32, [4, 1])
+      res = ipu.ipu_compiler.compile(body, inputs=[tensor])
+
+    with tu.ipu_session() as sess:
+      tu.move_variable_initialization_to_cpu()
+      sess.run(variables.global_variables_initializer())
+
+      self.assertNoThrow(sess.run, res, {tensor: [[1.0], [2.0], [3.0], [4.0]]})
+
+  @test_util.deprecated_graph_mode_only
+  def testOutlineGradWithIntermediateConst(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    @ipu.outlined_function
+    def func(tensor, other):
+      # This test checks that const_value gets evaluated as a constant by the
+      # gradient function, since it's an intermediate value of the fwd function
+      # Otherwise we will get an error, as transpose requires a const perm.
+      const_value = array_ops.identity([1, 0])
+      return math_ops.matmul(other,
+                             array_ops.transpose(tensor, perm=const_value))
+
+    def body(tensor):
+      w0 = variables.Variable([[1], [2], [3], [4]], dtype=np.float32)
+      value = func(tensor, w0)
+      loss = math_ops.reduce_mean(value)
+      train = gradient_descent.GradientDescentOptimizer(0.001).minimize(loss)
+      return train
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      tensor = array_ops.placeholder(np.float32, [4, 1])
+      res = ipu.ipu_compiler.compile(body, inputs=[tensor])
+
+    with tu.ipu_session() as sess:
+      tu.move_variable_initialization_to_cpu()
+      sess.run(variables.global_variables_initializer())
+
+      self.assertNoThrow(sess.run, res, {tensor: [[1.0], [2.0], [3.0], [4.0]]})
 
 
 if __name__ == "__main__":

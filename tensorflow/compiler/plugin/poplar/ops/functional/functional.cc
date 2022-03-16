@@ -30,6 +30,7 @@ REGISTER_OP("Function")
     .Attr("output_shapes: list(shape) >= 0")
     .Attr("unique_sharding: bool")
     .Attr("keep_input_layouts: bool = True")
+    .Attr("evaluate_as_constants: list(bool) >=0")
     .SetIsStateful()
     .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(

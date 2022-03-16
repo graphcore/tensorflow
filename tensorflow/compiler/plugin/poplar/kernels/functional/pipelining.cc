@@ -92,12 +92,11 @@ class ResourceUpdateOp : public XlaOpKernel {
   void Compile(XlaOpKernelContext* ctx) override {
     auto builder = ctx->builder();
     // First get all the arguments and compile the computation.
-    int num_resource_args = 0;
-    auto arguments_or =
-        poplarplugin::GetXlaArguments(ctx, input_types_, &num_resource_args);
+    auto arguments_or = poplarplugin::GetXlaArguments(ctx, input_types_);
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
 
+    const int num_resource_args = poplarplugin::CountResourceArgs(arguments);
     VLOG(2) << "Building ResourceUpdate (" << ctx->op_kernel().name()
             << ") function with " << input_types_.size() << " inputs including "
             << num_resource_args << " resources.";
@@ -329,9 +328,7 @@ class PipelineOp : public XlaOpKernel {
   void Compile(XlaOpKernelContext* ctx) override {
     auto builder = ctx->builder();
     // First get all the arguments and compile the computation.
-    int num_resource_args = 0;
-    auto arguments_or =
-        poplarplugin::GetXlaArguments(ctx, input_types_, &num_resource_args);
+    auto arguments_or = poplarplugin::GetXlaArguments(ctx, input_types_);
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
 
@@ -342,6 +339,7 @@ class PipelineOp : public XlaOpKernel {
     }));
     const auto num_constants = FindNumberOfConstantParameters(arguments);
 
+    const int num_resource_args = poplarplugin::CountResourceArgs(arguments);
     VLOG(2) << "Building Pipeline (" << ctx->op_kernel().name()
             << ") function with " << input_types_.size() << " inputs including "
             << num_resource_args << " resources.";
