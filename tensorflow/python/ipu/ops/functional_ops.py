@@ -20,6 +20,9 @@ Functional operators
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
+from tensorflow.python.distribute import distribution_strategy_context
+from tensorflow.python.eager import def_function
+from tensorflow.python.eager import context as eager_context
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import func_graph as func_graph_module
@@ -73,32 +76,55 @@ def outlined_function(func=None,
   """
   name = name if name else "function"
 
+  parent_graph = ops.get_default_graph()
+  proto = xla_data_pb2.FrontendAttributes()
+  value = parent_graph._attr_scope_map.get(scopes.FRONTEND_ATTRIBUTES_NAME)  # pylint: disable=protected-access
+  if value:
+    proto.ParseFromString(value.s)
+  attribute = attr_value_pb2.AttrValue(s=proto.SerializeToString())
+  gradient_override_map = dict(parent_graph._gradient_override_map)  # pylint: disable=protected-access
+
   def decorated(inner_func):
     def func_wrapper(*args):
-      args = _convert_to_list(args)
-      with ops.name_scope(name) as scope:
-        func_graph, captured_args, constant_outputs = _compile_function(
-            inner_func, args, scope, [], allow_external_captures=True)
+      g = ops.get_default_graph()
+      attributes = dict(g._attr_scope_map)  # pylint: disable=protected-access
+      attributes[scopes.FRONTEND_ATTRIBUTES_NAME] = attribute
 
-        with ops.control_dependencies(list(func_graph.control_captures)):
-          outputs = gen_functional_ops.function(
-              captured_args,
-              to_apply=util.create_new_tf_function(func_graph),
-              Tout=func_graph.output_types,
-              output_shapes=func_graph.output_shapes,
-              unique_sharding=unique_sharding,
-              keep_input_layouts=keep_input_layouts,
-              name=name)
-          outputs = _replace_outputs(outputs, constant_outputs)
+      with g._attr_scope(attributes):  # pylint: disable=protected-access
+        with g.gradient_override_map(gradient_override_map):
+          args = _convert_to_list(args)
+          with ops.name_scope(name) as scope:
+            func_graph, captured_args, constant_outputs = _compile_function(
+                inner_func, args, scope, [], allow_external_captures=True)
 
-          # pack_sequence_as requires a list of Tensors, but the gen_ operation
-          # returns an Operation under some circumstances (probably when that
-          # list would be empty)
-          if isinstance(outputs, ops.Operation):
-            outputs = outputs.outputs
+            with ops.control_dependencies(list(func_graph.control_captures)):
+              outputs = gen_functional_ops.function(
+                  captured_args,
+                  to_apply=util.create_new_tf_function(func_graph),
+                  Tout=func_graph.output_types,
+                  output_shapes=func_graph.output_shapes,
+                  unique_sharding=unique_sharding,
+                  keep_input_layouts=keep_input_layouts,
+                  name=name)
+              outputs = _replace_outputs(outputs, constant_outputs)
 
-        return _pack_sequence_as(func_graph.structured_outputs, outputs)
+              # pack_sequence_as requires a list of Tensors, but the gen_ operation
+              # returns an Operation under some circumstances (probably when that
+              # list would be empty)
+              if isinstance(outputs, ops.Operation):
+                outputs = outputs.outputs
 
+            return _pack_sequence_as(func_graph.structured_outputs, outputs)
+
+    # Without wrapping in a tf.function, ipu.outlined_function gets the
+    # default function gradient in tf.eager, which returns a _MockOp.
+    # _MockOp is an internal (to tf.eager) class. By wrapping in tf.function,
+    # it gets the Function gradient registered in functional_ops_grad.py
+    if distribution_strategy_context.has_strategy() or \
+      eager_context.executing_eagerly():
+      return def_function.function(func_wrapper)
+
+    # If we are executing with a session.
     return func_wrapper
 
   if func is not None:
