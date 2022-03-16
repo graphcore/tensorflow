@@ -103,6 +103,53 @@ One method to achieve model parallelism is called *pipelining*, where the
 model layers are assigned to *pipeline stages*. Each pipeline stage can be
 assigned to a different device and different devices can execute in parallel.
 
+By default, these pipeline stages will be executed using the grouped schedule
+(:numref:`fig-grouped-pipeline`), where the forward and backward stages are grouped
+together on each IPU. All IPUs alternate between executing a forward pass and then a
+backward pass.
+
+.. figure:: figures/grouped_pipeline.png
+    :width: 95%
+    :alt: Grouped pipeline schedule illustration
+    :align: center
+    :name: fig-grouped-pipeline
+
+    Grouped schedule
+
+Two other schedules are available and can be configured as shown in
+:numref:`pipelining-options`. When using the interleaved schedule
+(:numref:`fig-interleaved-pipeline`) the forward and backward passes are
+interleaved (which requires less memory but is likely to be slower). The
+sequential schedule (:numref:`fig-sequential-pipeline`) executes one stage at a
+time and may be useful when debugging your model.
+
+.. figure:: figures/interleaved_pipeline.png
+    :width: 95%
+    :alt: Interleaved pipeline schedule illustration
+    :align: center
+    :name: fig-interleaved-pipeline
+
+    Interleaved schedule
+
+.. figure:: figures/sequential_pipeline.png
+    :width: 95%
+    :alt: Sequential pipeline schedule illustration
+    :align: center
+    :name: fig-sequential-pipeline
+
+    Sequential schedule
+
+.. note::
+
+  In :numref:`fig-grouped-pipeline`, :numref:`fig-interleaved-pipeline`
+  and :numref:`fig-sequential-pipeline`, `T` refers to the number of gradient accumulation
+  steps per replica. See :numref:`pipelining-options` for how to
+  specify this value. 
+
+
+A detailed explanation of pipelining can be found in the technical note on `Model parallelism with
+TensorFlow: sharding and pipelining <https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/pipelining.html>`_.
+
 The method to pipeline your model depends on whether your model is a
 ``Sequential`` model, a ``Functional`` model, or is subclassed from the ``Model``
 class.
@@ -196,6 +243,8 @@ everything else to the second stage, as follows:
   :py:class:`~tensorflow.python.ipu.keras.extensions.ModelExtension`
   equivalents.
 
+.. _model-subclass:
+
 Model subclass
 ______________
 
@@ -278,6 +327,37 @@ to four different pipeline stages as follows:
   equivalents.
 
 
+.. _pipelining-options:
+
+Pipelining options
+__________________
+
+Pipelining options can be set with
+:py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_pipelining_options` for a Sequential model,
+:py:meth:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension.set_pipelining_options` for a Functional model, and
+:py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension.set_pipelining_options` for models which subclass `tf.keras.model`.
+
+Gradient accumulation is always used when training a pipelined model (unless using the ``Sequential`` schedule). This means
+that you must set the option ``gradient_accumulation_steps_per_replica`` using this API when using the ``Grouped`` or
+``Interleaved`` schedule. It is optional when using the ``Sequential`` schedule.
+
+
+The API documentation for :py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_pipelining_options` (Sequential model),
+:py:meth:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension.set_pipelining_options` (Functional model)
+and :py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension.set_pipelining_options` (Model subclass) explains that the
+additional keyword arguments (``pipelining_kwargs``)
+will be forwarded to the :py:func:`tensorflow.python.ipu.pipelining_ops.pipeline` operator (which is used internally -
+see :numref:`implementation-details`). Refer to the API documentation for :py:func:`~tensorflow.python.ipu.pipelining_ops.pipeline`
+for details about these arguments.
+
+The code sample below illustrates how options can be set with the `set_pipelining_options` API.
+
+.. literalinclude:: keras_tf2_example7.py
+  :language: python
+  :linenos:
+  :start-at:   model.set_pipelining_options(
+  :end-at:   pipeline_schedule=ipu.ops.pipelining_ops.PipelineSchedule.Interleaved)
+
 .. _automatic-data-parallelism:
 
 Automatic data parallelism
@@ -357,6 +437,8 @@ order to save/load IPU-specific information.
   call ``set_pipelining_options()`` or ``set_gradient_accumulation_options()``
   again.
 
+
+.. _implementation-details:
 
 Implementation details
 ~~~~~~~~~~~~~~~~~~~~~~

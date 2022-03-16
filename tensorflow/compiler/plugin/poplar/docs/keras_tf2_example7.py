@@ -53,6 +53,8 @@ with strategy.scope():
                 metrics=["accuracy"],
                 steps_per_execution=256)
 
-  model.set_pipelining_options(gradient_accumulation_steps_per_replica=16)
+  model.set_pipelining_options(
+        gradient_accumulation_steps_per_replica=16,
+        pipeline_schedule=ipu.ops.pipelining_ops.PipelineSchedule.Interleaved)
 
   model.fit(dataset, epochs=2, steps_per_epoch=128)
