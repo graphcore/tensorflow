@@ -39,6 +39,13 @@ def outlined_function(func=None,
   application and a high degree of code reusing which can decrease the memory
   usage at the expense of passing the arguments around.
 
+  Arguments can be passed in two ways, as a parameter of the python function
+  `func`, or as a value defined in the enclosing scope and used within `func`.
+  Arguments that are compile-time graph constants should be defined in the
+  enclosing scope, as this makes them eligible for expression evaluation.
+  Arguments passed via function params will always be treated as a runtime
+  value.
+
   Functions can be used by models constrained by memory which have common
   structures or to serialize some large operations.
 
@@ -78,6 +85,10 @@ def outlined_function(func=None,
         func_graph, captured_args = _compile_function(
             inner_func, args, scope, [], allow_external_captures=True)
 
+        evaluate_as_constants = _build_evaluate_as_constants_mask(
+            captured_args, func_graph)
+        assert len(func_graph.inputs) == len(evaluate_as_constants)
+
         with ops.control_dependencies(list(func_graph.control_captures)):
           outputs = gen_functional_ops.function(
               captured_args,
@@ -86,6 +97,7 @@ def outlined_function(func=None,
               output_shapes=func_graph.output_shapes,
               unique_sharding=unique_sharding,
               keep_input_layouts=keep_input_layouts,
+              evaluate_as_constants=evaluate_as_constants,
               name=name)
 
           # pack_sequence_as requires a list of Tensors, but the gen_ operation
@@ -102,6 +114,31 @@ def outlined_function(func=None,
     return decorated(func)
 
   return decorated
+
+
+def _build_evaluate_as_constants_mask(input_args, func_graph):  #pylint: disable=missing-type-doc
+  """Return a mask that describes which `func_graph` inputs should be
+  eligible for evaluation as a constant.
+
+  Args:
+    input_args: List of input arguments to `func_graph`.
+    func_graph: `FuncGraph` of outlined function.
+
+  Returns:
+    list: A list of of bools, indicating whether the i'th input
+    be evaluated as a constant.
+  """
+  # Using tensor_id for equality checks as we want to compare
+  # using object identity not value equality.
+  input_arg_ids = [ops.tensor_id(arg) for arg in input_args]
+
+  # Only external captures should be evaluated as constants
+  evaluate_as_constants = [False] * len(input_args)
+  for tensor in func_graph.external_captures:
+    tensor_id = ops.tensor_id(tensor)
+    evaluate_as_constants[input_arg_ids.index(tensor_id)] = True
+
+  return evaluate_as_constants
 
 
 class _InvalidCaptureException(Exception):

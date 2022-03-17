@@ -85,7 +85,7 @@ class _XlaFuncGradGraph(FuncGraph):
     return super(_XlaFuncGradGraph, self)._capture_helper(tensor, name)
 
 
-def _resolve_grad_inputs(graph, grad_graph, op):
+def _resolve_grad_inputs(graph, grad_graph, op):  #pylint: disable=missing-type-doc
   """Returns the tensors to pass as inputs to `grad_graph`.
 
   The `grad_graph` may have external references to
@@ -96,11 +96,15 @@ def _resolve_grad_inputs(graph, grad_graph, op):
      corresponding tensor in `graph.outer_graph`.
 
   Args:
-    graph: FuncGraph. The forward-pass function.
-    grad_graph: FuncGraph. The gradients function.
+    graph: `FuncGraph`. The forward-pass function.
+    grad_graph: `FuncGraph`. The gradients function.
+    op: The original forward op.
 
   Returns:
-    A list of inputs tensors to be passed to grad_graph.
+    list: A list of input tensors to be passed to `grad_graph`.
+
+  Raises:
+    ValueError: if inputs cannot be resolved to `graph.outer_graph`
   """
   new_inputs = []
   for t in grad_graph.external_captures:
@@ -125,6 +129,45 @@ def _resolve_grad_inputs(graph, grad_graph, op):
   return new_inputs
 
 
+def _build_evaluate_as_constants_mask(op, grad_graph):  #pylint: disable=missing-type-doc
+  """Return a mask that describes which grad inputs should be
+  eligible for evaluation as a constant.
+
+  Args:
+    op: The original forward op.
+    grad_graph: `FuncGraph`. The gradients function.
+
+  Returns:
+    list: A list of of bools, indicating whether the i'th input
+    should be evaluated as a constant.
+  """
+  fwd_graph = _get_func_graph(op)
+
+  # Using tensor_id for equality checks as we want to compare
+  # using object identity not value equality.
+  fwd_input_ids = [ops.tensor_id(tensor) for tensor in fwd_graph.inputs]
+  fwd_evaluate_as_constants = op.get_attr("evaluate_as_constants")
+  assert len(fwd_input_ids) == len(fwd_evaluate_as_constants)
+
+  # The grad_graph arguments are based on grad_graph.external_captures, so
+  # we can use them to determine whether a grad_graph input was also
+  # an input to the forward graph.
+  bwd_evaluate_as_constants = []
+  for tensor in grad_graph.external_captures:
+    tensor_id = ops.tensor_id(tensor)
+    # We try to evaluate everything as a constant expression unless it was an
+    # input to the forward graph, in which case we evaluate it as it was in
+    # the original fwd outlined op. We can't filter inputs the same way as
+    # the fwd op because all the gradient inputs are external captures.
+    evaluate_as_constant = True
+    if tensor.graph == fwd_graph and tensor_id in fwd_input_ids:
+      evaluate_as_constant = \
+          fwd_evaluate_as_constants[fwd_input_ids.index(tensor_id)]
+    bwd_evaluate_as_constants.append(evaluate_as_constant)
+
+  return bwd_evaluate_as_constants
+
+
 def _get_gradients_for_function(op, *grads):
   # Note that this function assumes that the op has function graph at attribute `to_apply` which has only single user (this op).
   assert control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph())
@@ -134,8 +177,7 @@ def _get_gradients_for_function(op, *grads):
 
   # Use the original graph incase any values were captured.
   # We know we can modify this graph as we generate unique Functional graphs.
-  func_graph = fwd_op.graph._get_function(  # pylint: disable=protected-access
-      fwd_op.get_attr("to_apply").name).graph
+  func_graph = _get_func_graph(fwd_op)
   assert func_graph.outer_graph == op.graph
   for external_t, internal_t in zip(inputs, func_graph.inputs):
     custom_gradient.copy_handle_data(external_t, internal_t)
@@ -175,17 +217,28 @@ def _get_gradients_for_function(op, *grads):
   return func_grad_graph, func_grad_inputs
 
 
+def _get_func_graph(op):
+  func_name = op.get_attr("to_apply").name
+  func = op.graph._get_function(func_name)  # pylint: disable=protected-access
+  return func.graph
+
+
 @ops.RegisterGradient("Function")
 def _function_grad(op, *grads):
   """The gradient of a Function op."""
   func_grad_graph, func_grad_inputs = _get_gradients_for_function(op, *grads)
+
+  func_grad_evaluate_as_constants = \
+      _build_evaluate_as_constants_mask(op, func_grad_graph)
+
   outputs = gen_functional_ops.function(
       func_grad_inputs,
       to_apply=util.create_new_tf_function(func_grad_graph),
       Tout=func_grad_graph.output_types,
       output_shapes=func_grad_graph.output_shapes,
       unique_sharding=op.get_attr("unique_sharding"),
-      keep_input_layouts=True)
+      keep_input_layouts=True,
+      evaluate_as_constants=func_grad_evaluate_as_constants)
 
   return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
       func_grad_graph.structured_outputs, outputs)
