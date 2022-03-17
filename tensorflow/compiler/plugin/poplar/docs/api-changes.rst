@@ -33,11 +33,11 @@ Removal of deprecated APIs
     :py:class:`~tensorflow.python.ipu.horovod.popdist_strategy.PopDistStrategy`.
   - The `save_interval_report` flag provided to `TF_POPLAR_FLAGS` has been
     removed following deprecation in Poplar SDK version 2.4. From Poplar SDK
-    version 2.5, LIBPVA should be used.
+    version 2.5, libpva should be used.
   - `tensorflow.python.ipu.ops.summary_ops` has been removed as both
     `ipu_compile_summary` and `get_ipu_reports` were deprecated in Poplar
     SDK version 2.4. From Poplar SDK 2.5 onwards, the
-    [PopVision] (https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/profiler.html)
+    `PopVision <https://docs.graphcore.ai/en/latest/software.html#profiling-and-debugging>`_
     suite of tools should be used instead. Additionally, the `compile_summary`
     parameter of `IPURunConfig` has been removed.
 
@@ -64,13 +64,13 @@ release.
 The table below lists all of the deprecated layers, and their new locations:
 
 +----------------------------------------------------+-------------------------------------------------------+
-| **TensorFlow**                                     | **IPU TensorFlow Addons**                             |
+| TensorFlow                                         | IPU TensorFlow Addons                                 |
 +====================================================+=======================================================+
-| tensorflow.python.ipu.ops.rnn_ops.PopnnAUGRU       | ipu_tensorflow_addons.layers.rnn_ops.PopnnAUGRU       |
-| tensorflow.python.ipu.ops.rnn_ops.PopnnDynamicGRU  | ipu_tensorflow_addons.layers.rnn_ops.PopnnDynamicGRU  |
-| tensorflow.python.ipu.ops.rnn_ops.PopnnDynamicLSTM | ipu_tensorflow_addons.layers.rnn_ops.PopnnDynamicLSTM |
-| tensorflow.python.ipu.ops.rnn_ops.PopnnGRU         | ipu_tensorflow_addons.layers.rnn_ops.PopnnGRU         |
-| tensorflow.python.ipu.ops.rnn_ops.PopnnLSTM        | ipu_tensorflow_addons.layers.rnn_ops.PopnnLSTM        |
+| tensorflow.python.ipu.ops.rnn_ops.PopnnAUGRU       | ipu_tensorflow_addons.layers.PopnnAUGRU               |
+| tensorflow.python.ipu.ops.rnn_ops.PopnnDynamicGRU  | ipu_tensorflow_addons.layers.PopnnDynamicGRU          |
+| tensorflow.python.ipu.ops.rnn_ops.PopnnDynamicLSTM | ipu_tensorflow_addons.layers.PopnnDynamicLSTM         |
+| tensorflow.python.ipu.ops.rnn_ops.PopnnGRU         | ipu_tensorflow_addons.layers.PopnnGRU                 |
+| tensorflow.python.ipu.ops.rnn_ops.PopnnLSTM        | ipu_tensorflow_addons.layers.PopnnLSTM                |
 +----------------------------------------------------+-------------------------------------------------------+
 
 RNN available_memory_proportion_fwd/available_memory_proportion_bwd deprecated
@@ -214,7 +214,7 @@ ____________________
   - `IPUMultiWorkerStrategy` is deprecated. Using `IPUMultiWorkerStrategy`
     will trigger a deprecation warning.
   - The flag `save_interval_report` from `TF_POPLAR_FLAGS` is now deprecated. Please
-    use LIBPVA instead.
+    use libpva instead.
 
 Release 2.3
 ~~~~~~~~~~~
