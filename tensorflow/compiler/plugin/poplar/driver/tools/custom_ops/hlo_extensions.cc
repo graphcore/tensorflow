@@ -46,11 +46,13 @@ void RegisterReduceExtensions(HloOpcode opcode) {
   auto do_find_consumers =
       [](const HloInstruction* user,
          FindConsumersExtensionParams params) -> FindConsumersExtensionResults {
-    if (params.op_index != 0) {
-      // It only makes sense to allocate through input 0.
-      return FindConsumersExtensionResults::DoNotFindConsumers();
+    if (params.op_index == 0) {
+      FindConsumersExtensionResults result{/*do_find_consumers=*/true, user,
+                                           params.index, params.permutation};
+      return result;
     }
-    return FindConsumersExtensionResults{};  // Default behaviour.
+    // It only makes sense to allocate through input 0.
+    return FindConsumersExtensionResults::DoNotFindConsumers();
   };
   RegisterHloInstructionExtension<FindConsumersExtension>(opcode,
                                                           do_find_consumers);
