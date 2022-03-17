@@ -22,6 +22,8 @@ cc_library(
         "popef/include",
         "libpva/include",
         "gccs/include",
+        "popir/include",
+        "poprithms/include",
     ],
 )
 
@@ -31,6 +33,9 @@ cc_library(
         [
             "lib*/poplar/libpoplar.so",
             "lib*/poplar/libpoplar_test.so",
+            "lib*/popir/libpopir.so",
+            "lib*/popir/libsnap.so",
+            "lib*/poprithms/libpoprithms.so",
         ] + if_custom_poplibs([
             "lib*/poplar/libgcl_ct*",
             "lib*/poplar/libpva.so",
