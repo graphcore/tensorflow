@@ -99,6 +99,7 @@ poplar_cc_library(
         "popnn/onehot.cc",
         "popnn/pooling.cc",
         "popnn/topk.cc",
+        "popops/all_gather.cc",
         "popops/all_reduce.cc",
         "popops/all_to_all.cc",
         "popops/erf.cc",
