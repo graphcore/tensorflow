@@ -149,18 +149,9 @@ Estimators
 Keras layers
 ^^^^^^^^^^^^
 
-.. note::
-
-  `tensorflow.python.ipu.keras.layers.GRU` is an alias of
-  :py:class:`tensorflow.python.ipu.keras.layers.PopnnGRU`
-
-  `tensorflow.python.ipu.keras.layers.LSTM` is an alias of
-  :py:class:`tensorflow.python.ipu.keras.layers.PopnnLSTM`
-
-
 .. automodule:: tensorflow.python.ipu.keras.layers
-  :members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, PopnnGRU, PopnnLSTM, RecomputationCheckpoint
-  :imported-members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, PopnnGRU, PopnnLSTM, RecomputationCheckpoint
+  :members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, RecomputationCheckpoint
+  :imported-members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, RecomputationCheckpoint
 
 .. _operators-api:
 

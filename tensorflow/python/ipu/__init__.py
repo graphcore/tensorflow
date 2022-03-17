@@ -45,7 +45,6 @@ from tensorflow.python.ipu.ops import rand_ops
 from tensorflow.python.ipu.ops import rand_ops_grad
 from tensorflow.python.ipu.ops import reduce_scatter_op
 from tensorflow.python.ipu.ops import replication_ops
-from tensorflow.python.ipu.ops import rnn_ops
 from tensorflow.python.ipu.ops import rnn_ops_grad
 from tensorflow.python.ipu.ops import slicing_ops
 from tensorflow.python.ipu.ops import slicing_ops_grad

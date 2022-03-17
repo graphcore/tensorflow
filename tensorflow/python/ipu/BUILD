@@ -27,7 +27,6 @@ py_library(
         "ops/op_util.py",
         "ops/pipelining_ops.py",
         "ops/rand_ops.py",
-        "ops/rnn_ops.py",
         "ops/slicing_ops.py",
         "ops/statistics_ops.py",
         "ops/within_replica_ops.py",
@@ -129,7 +128,6 @@ py_library(
         "keras/layers/embedding_lookup.py",
         "keras/layers/normalization.py",
         "keras/layers/recomputation.py",
-        "keras/layers/rnn.py",
         "loops.py",
         "ops/all_to_all_op.py",
         "ops/control_flow_ops.py",
@@ -148,7 +146,6 @@ py_library(
         "ops/rand_ops.py",
         "ops/reduce_scatter_op.py",
         "ops/replication_ops.py",
-        "ops/rnn_ops.py",
         "ops/slicing_ops.py",
         "ops/statistics_ops.py",
         "ops/within_replica_ops.py",
@@ -1204,18 +1201,6 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "keras_rnn_test",
-    size = "medium",
-    srcs = ["tests/keras/keras_rnn_test.py"],
-    additional_deps = [
-        "//tensorflow/python/keras:layers",
-        "//third_party/py/numpy",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python:framework_test_lib",
-    ],
-)
-
-tf_py_test(
     name = "keras_normalization_test",
     size = "medium",
     srcs = ["tests/keras/keras_normalization_test.py"],
@@ -1357,20 +1342,6 @@ tf_py_test(
     name = "reductions_test",
     size = "large",
     srcs = ["tests/reductions_test.py"],
-    additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-    ],
-    tags = ["hw_poplar_test_1_ipus"],
-)
-
-tf_py_test(
-    name = "keras_rnn_hw_test",
-    size = "large",
-    srcs = ["tests/keras_rnn_hw_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow:tensorflow_py",
@@ -1760,8 +1731,6 @@ test_suite(
         "keras_dropout_test",
         "keras_embedding_lookup_test",
         "keras_normalization_test",
-        "keras_rnn_hw_test",
-        "keras_rnn_test",
         "map_gradient_optimizer_test",
         "math_ops_test",
         "multi_conv_test",

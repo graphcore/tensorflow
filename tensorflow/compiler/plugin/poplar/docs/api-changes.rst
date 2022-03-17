@@ -1,6 +1,25 @@
 TensorFlow API changes
 ----------------------
 
+Release 2.6
+~~~~~~~~~~~
+
+The following changes have been made to the TensorFlow API in the Poplar SDK version 2.6.
+This may require you to change your code.
+
+Breaking changes
+________________
+
+.. warning::
+
+  These will require changes to any code that uses them.
+
+Removal of deprecated APIs
+''''''''''''''''''''''''''
+
+  - The `tensorflow.python.ipu.ops.rnn_ops` module has been removed (deprecated in Poplar SDK version 2.5). As a result, the following ops are no longer available - `PopnnLSTM`, `PopnnDynamicLSTM`, `PopnnGRU`, `PopnnDynamicGRU`, and `PopnnAUGRU`.
+  - The `tensorflow.python.ipu.keras.layers.rnn` module has been removed (deprecated in Poplar SDK version 2.5). As a result, the following Keras layers are no longer available - `PopnnLSTM`, `PopnnGRU`.
+
 Release 2.5
 ~~~~~~~~~~~
 
