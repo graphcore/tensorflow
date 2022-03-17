@@ -41,11 +41,11 @@ Removal of deprecated APIs
     :py:class:`~tensorflow.python.ipu.horovod.popdist_strategy.PopDistStrategy`.
   - The `save_interval_report` flag provided to `TF_POPLAR_FLAGS` has been
     removed following deprecation in Poplar SDK version 2.4. From Poplar SDK
-    version 2.5, LIBPVA should be used.
+    version 2.5, libpva should be used.
   - `tensorflow.python.ipu.ops.summary_ops` has been removed as both
     `ipu_compile_summary` and `get_ipu_reports` were deprecated in Poplar
     SDK version 2.4. From Poplar SDK 2.5 onwards, the
-    [PopVision] (https://docs.graphcore.ai/projects/tf-model-parallelism/en/latest/profiler.html)
+    `PopVision <https://docs.graphcore.ai/en/latest/software.html#profiling-and-debugging>`_
     suite of tools should be used instead. Additionally, the `compile_summary`
     parameter of `IPURunConfig` has been removed.
 
@@ -76,45 +76,60 @@ release.
 
 The table below lists all of the deprecated layers, and their new locations:
 
-+-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| **TensorFlow**                                                                            | **IPU TensorFlow Addons**                                                                 |
-+===========================================================================================+===========================================================================================+
-| tensorflow.python.ipu.keras.layers.assume_equal_across_replicas.AssumeEqualAcrossReplicas | ipu_tensorflow_addons.keras.layers.assume_equal_across_replicas.AssumeEqualAcrossReplicas |
-+-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| tensorflow.python.ipu.keras.layers.ctc.CTCInferenceLayer                                  | ipu_tensorflow_addons.keras.layers.ctc.CTCInferenceLayer                                  |
-| tensorflow.python.ipu.keras.layers.ctc.CTCPredictionsLayer                                | ipu_tensorflow_addons.keras.layers.ctc.CTCPredictionsLayer                                |
-| tensorflow.python.ipu.keras.**losses**.ctc.CTCLoss                                        | ipu_tensorflow_addons.keras.**layers**.ctc.CTCLoss                                        |
-+-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| tensorflow.python.ipu.keras.layers.dropout.Dropout                                        | ipu_tensorflow_addons.keras.layers.dropout.Dropout                                        |
-+-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| tensorflow.python.ipu.keras.layers.effective_transformer.EffectiveTransformer             | ipu_tensorflow_addons.keras.layers.effective_transformer.EffectiveTransformer             |
-+-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| tensorflow.python.ipu.keras.layers.embedding_lookup.Embedding                             | ipu_tensorflow_addons.keras.layers.embedding_lookup.Embedding                             |
-+-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| tensorflow.python.ipu.keras.layers.ipu_layer.IPULayer                                     | ipu_tensorflow_addons.keras.layers.ipu_layer.IPULayer                                     |
-+-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| tensorflow.python.ipu.keras.layers.**math**.SerialDense                                   | ipu_tensorflow_addons.keras.layers.**dense**.SerialDense                                  |
-+-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| tensorflow.python.ipu.keras.layers.normalization.GroupNorm                                | ipu_tensorflow_addons.keras.layers.normalization.GroupNorm                                |
-| tensorflow.python.ipu.keras.layers.normalization.GroupNormalization                       | ipu_tensorflow_addons.keras.layers.normalization.GroupNormalization                       |
-| tensorflow.python.ipu.keras.layers.normalization.InstanceNorm                             | ipu_tensorflow_addons.keras.layers.normalization.InstanceNorm                             |
-| tensorflow.python.ipu.keras.layers.normalization.InstanceNormalization                    | ipu_tensorflow_addons.keras.layers.normalization.InstanceNormalization                    |
-| tensorflow.python.ipu.keras.layers.normalization.LayerNorm                                | ipu_tensorflow_addons.keras.layers.normalization.LayerNorm                                |
-| tensorflow.python.ipu.keras.layers.normalization.LayerNormalization                       | ipu_tensorflow_addons.keras.layers.normalization.LayerNormalization                       |
-+-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| tensorflow.python.ipu.keras.layers.recomputation.RecomputationCheckpoint                  | ipu_tensorflow_addons.keras.layers.recomputation.RecomputationCheckpoint                  |
-+-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| tensorflow.python.ipu.keras.layers.rnn.GRU                                                | ipu_tensorflow_addons.keras.layers.rnn.GRU                                                |
-| tensorflow.python.ipu.keras.layers.rnn.LSTM                                               | ipu_tensorflow_addons.keras.layers.rnn.LSTM                                               |
-| tensorflow.python.ipu.keras.layers.rnn.PopnnGRU                                           | ipu_tensorflow_addons.keras.layers.rnn.PopnnGRU                                           |
-| tensorflow.python.ipu.keras.layers.rnn.PopnnLSTM                                          | ipu_tensorflow_addons.keras.layers.rnn.PopnnLSTM                                          |
-+-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| tensorflow.python.ipu.ops.rnn_ops.PopnnAUGRU                                              | ipu_tensorflow_addons.v1.layers.rnn_ops.PopnnAUGRU                                        |
-| tensorflow.python.ipu.ops.rnn_ops.PopnnDynamicGRU                                         | ipu_tensorflow_addons.v1.layers.rnn_ops.PopnnDynamicGRU                                   |
-| tensorflow.python.ipu.ops.rnn_ops.PopnnDynamicLSTM                                        | ipu_tensorflow_addons.v1.layers.rnn_ops.PopnnDynamicLSTM                                  |
-| tensorflow.python.ipu.ops.rnn_ops.PopnnGRU                                                | ipu_tensorflow_addons.v1.layers.rnn_ops.PopnnGRU                                          |
-| tensorflow.python.ipu.ops.rnn_ops.PopnnLSTM                                               | ipu_tensorflow_addons.v1.layers.rnn_ops.PopnnLSTM                                         |
-+-------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
+.. table:: Mapping from TensorFlow and IPU Addons
+    :class: nostripe
+
+    +-------------------------------+---------------------------------------------------------------------+
+    | **TensorFlow**                | ``tensorflow.python.ipu.keras.layers``                              |
+    +-------------------------------+---------------------------------------------------------------------+
+    | **IPU Addons**                | ``ipu_tensorflow_addons.keras.layers``                              |
+    +-------------------------------+---------------------------------------------------------------------+
+    | ``AssumeEqualAcrossReplicas``                                                                       |
+    +-------------------------------+---------------------------------------------------------------------+
+    | **TensorFlow**                | ``tensorflow.python.ipu.keras.losses``                              |
+    +-------------------------------+---------------------------------------------------------------------+
+    | **IPU Addons**                | ``ipu_tensorflow_addons.keras.layers``                              |
+    +-------------------------------+---------------------------------------------------------------------+
+    | ``CTCLoss``                                                                                         |
+    +-------------------------------+---------------------------------------------------------------------+
+    | **TensorFlow**                | ``tensorflow.python.ipu.keras.layers``                              |
+    +-------------------------------+---------------------------------------------------------------------+
+    | **IPU Addons**                | ``ipu_tensorflow_addons.keras.layers``                              |
+    +-------------------------------+---------------------------------------------------------------------+
+    | | ``CTCInferenceLayer``                                                                             |
+    | | ``CTCPredictionsLayer``                                                                           |
+    | | ``Dropout``                                                                                       |
+    | | ``EffectiveTransformer``                                                                          |
+    | | ``Embedding``                                                                                     |
+    | | ``GroupNorm``                                                                                     |
+    | | ``GroupNormalization``                                                                            |
+    | | ``GRU``                                                                                           |
+    | | ``InstanceNorm``                                                                                  |
+    | | ``InstanceNormalization``                                                                         |
+    | | ``LayerNorm``                                                                                     |
+    | | ``LayerNormalization``                                                                            |
+    | | ``LSTM``                                                                                          |
+    | | ``PopnnGRU``                                                                                      |
+    | | ``PopnnLSTM``                                                                                     |
+    | | ``RecomputationCheckpoint``                                                                       |
+    | | ``SerialDense``                                                                                   |
+    +-------------------------------+---------------------------------------------------------------------+
+    | **TensorFlow**                | ``tensorflow.python.ipu.keras.layers.ipu_layer``                    |
+    +-------------------------------+---------------------------------------------------------------------+
+    | **IPU Addons**                | ``ipu_tensorflow_addons.keras.layers.ipu_layer``                    |
+    +-------------------------------+---------------------------------------------------------------------+
+    | ``IPULayer``                                                                                        |
+    +-------------------------------+---------------------------------------------------------------------+
+    | **TensorFlow**                | ``tensorflow.python.ipu.ops.rnn_ops``                               |
+    +-------------------------------+---------------------------------------------------------------------+
+    | **IPU Addons**                | ``ipu_tensorflow_addons.v1.layers``                                 |
+    +-------------------------------+---------------------------------------------------------------------+
+    | | ``PopnnAUGRU``                                                                                    |
+    | | ``PopnnDynamicGRU``                                                                               |
+    | | ``PopnnDynamicLSTM``                                                                              |
+    | | ``PopnnGRU``                                                                                      |
+    | | ``PopnnLSTM``                                                                                     |
+    +-----------------------------------------------------------------------------------------------------+
 
 .. deprecated_pipeline_ga_options:
 
@@ -123,9 +138,9 @@ Deprecated pipeline and gradient_accumulation options
 
 The `experimental_normalize_gradients` parameter when setting gradient accumulation options
 (`Model.set_gradient_accumulation_options()`) and pipeline options (`Model.set_pipelining_options()`)
-has been deprecated and will be removed in future. This feature will be provided by new mean reduction
-methods being added via the `reduction_method` parameter
-(`tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`).
+has been deprecated and will be removed in future. This feature is now provided
+by new mean reduction methods (see:py:class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)
+that are selected using the `reduction_method` parameter in `Model.set_gradient_accumulation_options()` and the `gradient_accumulation_reduction_method` parameter in `Model.set_pipelining_options()`.
 
 RNN available_memory_proportion_fwd/available_memory_proportion_bwd deprecated
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -277,7 +292,7 @@ ____________________
   - `IPUMultiWorkerStrategy` is deprecated. Using `IPUMultiWorkerStrategy`
     will trigger a deprecation warning.
   - The flag `save_interval_report` from `TF_POPLAR_FLAGS` is now deprecated. Please
-    use LIBPVA instead.
+    use libpva instead.
 
 
 Release 2.3
