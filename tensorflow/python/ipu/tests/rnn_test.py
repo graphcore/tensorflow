@@ -129,13 +129,6 @@ def build_model_cnn1(opts, inputs):
   return cnn
 
 
-def build_custom_lstm(opts, inputs):
-  x = array_ops.transpose(inputs, [1, 0, 2])
-  x, _ = ipu.ops.rnn_ops.PopnnLSTM(128)(x)
-  _, x = ipu.ops.rnn_ops.PopnnLSTM(384)(x)
-  return layers.dense(x[1], opts.out_dim)
-
-
 def build_trivial_while(_, inputs):
   x = array_ops.transpose(inputs, [1, 0, 2])
   output = tensor_array_ops.TensorArray(x.dtype,
@@ -272,21 +265,6 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           'options': {
               'dims': 64,
               'steps': 3
-          }
-      },
-      {
-          # This is just included so that I have an easy comparison
-          # against what the native RNNs should be performing at, and
-          # an easy way to get a report for it
-          'testcase_name': 'popnn_lstm1',
-          'build': build_custom_lstm,
-          # As this test is skipped by default we don't track these
-          # values so skip the checks
-          'cycles': None,
-          'total_memory': None,
-          'max_memory': None,
-          'options': {
-              'skip': True
           }
       },
       {

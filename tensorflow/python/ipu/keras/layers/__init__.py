@@ -26,6 +26,4 @@ from tensorflow.python.ipu.keras.layers.embedding_lookup import Embedding
 from tensorflow.python.ipu.keras.layers.normalization import GroupNorm, InstanceNorm, LayerNorm
 from tensorflow.python.ipu.keras.layers.normalization import GroupNormalization, InstanceNormalization, LayerNormalization
 from tensorflow.python.ipu.keras.layers.recomputation import RecomputationCheckpoint
-from tensorflow.python.ipu.keras.layers.rnn import PopnnLSTM, LSTM
-from tensorflow.python.ipu.keras.layers.rnn import PopnnGRU, GRU
 from tensorflow.python.ipu.keras.layers.math import SerialDense

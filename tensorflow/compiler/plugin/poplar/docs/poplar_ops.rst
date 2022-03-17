@@ -31,23 +31,6 @@ See :py:func:`tensorflow.python.ipu.math_ops.serialized_matmul` for details of t
 An example of its use can be found in the ``mlm_head()`` function in the `BERT application example <https://github.com/graphcore/examples/blob/master/applications/tensorflow/bert/modeling.py>`_ 
 in Graphcore's examples repository on GitHub.
 
-LSTM and GRU
-~~~~~~~~~~~~
-
-.. warning::
-
-  LSTM and GRU have been deprecated and will be removed in a future release.
-  They can now be found in IPU TensorFlow Addons.
-
-  See :ref:`layers-moved-to-addons` for more information.
-
-For recurrent neural networks, the custom LSTM
-(:py:class:`~tensorflow.python.ipu.rnn_ops.PopnnLSTM`) and GRU
-(:py:class:`~tensorflow.python.ipu.rnn_ops.PopnnGRU`) ops need to be used
-because they will use significantly less memory on the IPU.
-
-These are also available as :ref:`keras-layers-api`.
-
 Dropout
 ~~~~~~~
 
