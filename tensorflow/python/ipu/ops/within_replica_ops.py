@@ -28,7 +28,7 @@ def all_reduce(input_shards, op):  #pylint: disable=missing-type-doc,missing-ret
   on the results, so each shard contains all the reduced results. Inputs
   are 0 padded to the same size. Example:
 
-  .. code-block: none
+  .. code-block:: none
 
     Input: IPU0 [x0, y0]
            IPU1 [x1, y1, z1]
@@ -105,14 +105,17 @@ def all_gather(input_shards, axis=0):  #pylint: disable=missing-type-doc,missing
   Perform an all gather for a list of sharded tensors within a replica.
 
   Args:
-    input_shards: the sharded input tensors to gather. These are expected to
+    input_shards: The sharded input tensors to gather. These are expected to
       be supplied in incrementing sharded order, so that input_shards[0] is on
-      shard0 and input_shard[i] is on shard i. Additionally these tensors must
+      shard 0 and input_shard[i] is on shard i. Additionally these tensors must
       all be of the same type and of the same rank.
-:
+    axis: `input_shards` are flattened to rank 1 prior to being gathered and
+      reshaped on return. This argument specifies the axis that the gathered
+      elements should be added to.
+
   Returns:
     A tuple of tensors that contains a copy of the data for each shard. Element
-    i is the `Tensor` mapped to shard i. Each sub tensor is of shape
+    i is the tensor mapped to shard i. Each sub-tensor is of shape
     `tf.concat(input_shards, axis=axis)`.
   """
   _validate_inputs(input_shards)
