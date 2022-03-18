@@ -287,6 +287,19 @@ class DataHandlerTest(keras_parameterized.TestCase):
           x, epochs=1, batch_size=2, steps_per_execution=variables.Variable(3))
       del data_handler
 
+  def test_deferred_setting_of_replication_factor(self):
+    x = np.ones((8, 1))
+    x = dataset_ops.Dataset.from_tensor_slices(x).batch(2, drop_remainder=True)
+    # With a batch size of 2, the steps_per_execution value of 3 is not valid
+    # until we set a replication_factor which is a muliple of 3.
+    data_handler = data_adapter.IPUDataHandler(
+        x,
+        epochs=1,
+        batch_size=2,
+        steps_per_execution=variables.Variable(3),
+        replication_factor=None)
+    data_handler.set_replication_factor(3)
+
   def test_dataset_drop_batch_with_replication(self):
     x = np.ones((6, 1))
     x = dataset_ops.Dataset.from_tensor_slices(x).repeat()

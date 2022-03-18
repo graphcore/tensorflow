@@ -32,7 +32,7 @@ from tensorflow.python.keras import layers, losses
 from tensorflow.python.keras import Model, Input
 from tensorflow.python.keras.engine import data_adapter
 from tensorflow.python.keras.optimizer_v2 import gradient_descent
-from tensorflow.python.keras.callbacks import History
+from tensorflow.python.keras.callbacks import Callback, History
 from tensorflow.python.types.core import Tensor
 
 
@@ -210,39 +210,44 @@ def predict_on_full_dataset_without_fixed_size_with_fixed_steps(model):
 
 
 TESTCASES = [
+    # The first arg is the name to use for the test case.
     (
+        "fit_on_full_dataset_with_fixed_size_one_epoch",
         fit_on_full_dataset_with_fixed_size_one_epoch,
         True,
     ),
     (
+        "fit_on_full_dataset_with_fixed_size_two_epochs",
         fit_on_full_dataset_with_fixed_size_two_epochs,
         True,
     ),
     (
+        "evaluate_on_full_dataset_with_fixed_size",
         evaluate_on_full_dataset_with_fixed_size,
         False,
     ),
     (
+        "evaluate_on_full_dataset_with_fixed_size_with_fixed_steps",
         evaluate_on_full_dataset_with_fixed_size_with_fixed_steps,
         False,
     ),
     (
+        "evaluate_on_full_dataset_without_fixed_size_with_fixed_steps",
         evaluate_on_full_dataset_without_fixed_size_with_fixed_steps,
         False,
     ),
     (
+        "predict_on_full_dataset_with_fixed_size",
         predict_on_full_dataset_with_fixed_size,
         False,
     ),
     (
-        predict_on_full_dataset_with_fixed_size,
-        False,
-    ),
-    (
+        "predict_on_full_dataset_with_fixed_size_with_fixed_steps",
         predict_on_full_dataset_with_fixed_size_with_fixed_steps,
         False,
     ),
     (
+        "predict_on_full_dataset_without_fixed_size_with_fixed_steps",
         predict_on_full_dataset_without_fixed_size_with_fixed_steps,
         False,
     ),
@@ -326,7 +331,7 @@ class KerasPoprunTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     else:
       self.assertAllClose(result_1, result_2)
 
-  @parameterized.parameters(*TESTCASES)
+  @parameterized.named_parameters(*TESTCASES)
   def test_popdist_horovod_are_equal(self, callback, did_weights_change):
     """Tests whether the results of using keras from `keras_extensions_base`
     yields the same results as the upstream version after running a callback.
@@ -344,6 +349,27 @@ class KerasPoprunTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assert_weight_updates_are_equal(popdist_model, horovod_model,
                                          did_weights_change)
     self.assert_result_is_equal(popdist_result, horovod_result)
+
+  def test_popdist_dataset_truncation(self):
+    class StepCounterCallback(Callback):
+      def __init__(self):
+        super().__init__()
+        self.step_count = 0
+
+      def on_train_batch_begin(self, batch, logs=None):
+        self.step_count += 1
+
+    def fn(model):
+      cb = StepCounterCallback()
+      # 5 batches of size 4.
+      dataset = test_dataset(20, batch_size=4)
+      model.fit(dataset, callbacks=[cb], verbose=False)
+      return cb.step_count
+
+    _, result = run_with_popdist(fn)
+
+    # 5 batches should be truncated to 4 batches (2 instances, 2 per instance).
+    self.assertEqual(result, 2)
 
 
 if __name__ == "__main__":
