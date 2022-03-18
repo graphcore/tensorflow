@@ -16,7 +16,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 
 #include <poplar/Device.hpp>
-#include <poplar/DeviceManager.hpp>
 #include <poplar/Graph.hpp>
 
 #include "absl/memory/memory.h"
@@ -27,11 +26,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
 #include "tensorflow/compiler/xla/status_macros.h"
-#include "tensorflow/core/public/version.h"
-#include "tensorflow/stream_executor/lib/error.h"
 #include "tensorflow/stream_executor/lib/initialize.h"
 #include "tensorflow/stream_executor/lib/status.h"
-#include "tensorflow/stream_executor/lib/status_macros.h"
 
 // Pre-processor convert token to string
 #define QUOTE(str) #str
