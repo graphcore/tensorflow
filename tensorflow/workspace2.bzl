@@ -3,6 +3,7 @@
 # Import third party config rules.
 load("//tensorflow:version_check.bzl", "check_bazel_version_at_least")
 load("//third_party/ipus:poplar_configure.bzl", "poplar_configure")
+load("//third_party/ipus/popit_lib:popit_configure.bzl", "popit_configure")
 load("//third_party/ipus/horovod:horovod_configure.bzl", "ipu_horovod_configure")
 load("//third_party/gpus:cuda_configure.bzl", "cuda_configure")
 load("//third_party/gpus:rocm_configure.bzl", "rocm_configure")
@@ -100,6 +101,7 @@ def _tf_toolchains():
 
     # IPU specific.
     poplar_configure(name="local_config_poplar")
+    popit_configure(name="local_config_popit")
     ipu_horovod_configure(name="local_config_ipu_horovod")
 
     # For windows bazel build

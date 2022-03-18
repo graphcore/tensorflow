@@ -483,6 +483,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/ops:ops_helper",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops:ops",
         "//tensorflow/compiler/plugin/poplar/driver/passes",
+        "//tensorflow/compiler/plugin/poplar/driver/popit_backend",
         "//tensorflow/compiler/plugin/poplar/driver/poplar_passes",
         "//tensorflow/compiler/plugin/poplar/driver/schedulers",
         "//tensorflow/compiler/plugin/poplar/driver/tools",
