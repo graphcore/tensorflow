@@ -245,6 +245,10 @@ It is also possible to access the operators via the
   :members:
   :imported-members:
 
+.. automodule:: tensorflow.python.ipu.within_replica_ops
+  :members:
+  :imported-members:
+
 .. Poprand
 
 .. automodule:: tensorflow.python.ipu.rand_ops
