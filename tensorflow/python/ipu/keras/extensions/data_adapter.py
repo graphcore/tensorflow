@@ -48,7 +48,9 @@ def _call_counter(token):  #pylint: disable=missing-type-doc,missing-return-type
 
 
 class IPUDataHandler(data_adapter.DataHandler):
-  """Handles iterating over epoch-level Iterator objects on IPU."""
+  """Handles iterating over epoch-level Iterator objects on IPU.
+  To defer setting the replication factor pass replication_factor=None,
+  then set it later using set_replication_factor."""
   def __init__(  # pylint: disable=super-init-not-called
       self,
       x,
@@ -121,22 +123,27 @@ class IPUDataHandler(data_adapter.DataHandler):
           "compatible with the IPU's requirement to know the data shape ahead "
           "of time. Please {}".format(type(x).__name__, hint))
 
-    dataset = self._get_and_post_process_dataset(class_weight)
-
-    self._replication_factor = replication_factor
-    self._inferred_steps = self._infer_steps(steps_per_epoch, dataset)
+    self._dataset = self._get_and_post_process_dataset(class_weight)
     self._steps_per_epoch = steps_per_epoch
+    self._replication_factor = None
+    self._inferred_steps = None
 
-    self._validate_dataset(dataset)
-
-    self._dataset = dataset
     self._current_step = 0
     self._step_increment = self._steps_per_execution_value - 1
     self._insufficient_data = False
 
-    self._validate_data_handler()
+    if replication_factor is not None:
+      self.set_replication_factor(replication_factor)
+
+  def _check_replication_factor_set(self, function_name):
+    if self._replication_factor is None or self._infer_steps is None:
+      raise RuntimeError(
+          f"Cannot call {function_name} before the replication factor is set. "
+          f"Either specify the replication factor in the constructor or set it "
+          f"using set_replication_factor.")
 
   def _validate_data_handler(self):
+    self._check_replication_factor_set("_validate_data_handler")
     super()._validate_data_handler()
 
     if self.steps_per_execution_value > self.inferred_steps:
@@ -212,6 +219,7 @@ class IPUDataHandler(data_adapter.DataHandler):
     return dataset
 
   def _validate_dataset(self, dataset):
+    self._check_replication_factor_set("_validate_dataset")
     # Validate the size of the dataset.
     dataset_size = cardinality.cardinality(dataset)
     if dataset_size == cardinality.UNKNOWN:
@@ -263,6 +271,12 @@ class IPUDataHandler(data_adapter.DataHandler):
     return batch_size
 
   def set_replication_factor(self, value):
+    """Set the replication factor and calculate inferred steps based on the
+    replication factor.
+
+    Args:
+      value (int): The value for the replication factor.
+    """
     self._replication_factor = value
     self._inferred_steps = self._infer_steps(self._steps_per_epoch,
                                              self._dataset)
@@ -271,6 +285,7 @@ class IPUDataHandler(data_adapter.DataHandler):
 
   def enumerate_epochs_with_reuse(self, manager, mode, infeed_kwargs):
     """Yields `(epoch, InfeedQueue)`."""
+    self._check_replication_factor_set("enumerate_epochs_with_reuse")
     with self._truncate_execution_to_epoch():
       data_iterator = manager.get_infeed(mode, self._dataset, infeed_kwargs)
       for epoch in range(self._initial_epoch, self._epochs):

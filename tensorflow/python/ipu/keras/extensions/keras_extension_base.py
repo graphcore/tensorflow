@@ -1214,7 +1214,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
           workers=workers,
           use_multiprocessing=use_multiprocessing,
           model=self,
-          steps_per_execution=self._steps_per_execution)
+          steps_per_execution=self._steps_per_execution,
+          replication_factor=None)
 
       # Build the model with specific dtypes. This is important for models
       # without explicit input dtypes (model subclasses and some sequential
@@ -1440,7 +1441,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
             workers=workers,
             use_multiprocessing=use_multiprocessing,
             model=self,
-            steps_per_execution=self._steps_per_execution)
+            steps_per_execution=self._steps_per_execution,
+            replication_factor=None)
 
       # Build the model with specific dtypes. This is important for models
       # without explicit input dtypes (model subclasses and some sequential
@@ -1597,7 +1599,8 @@ class KerasExtensionBase(base_layer.KerasExtension):
           workers=workers,
           use_multiprocessing=use_multiprocessing,
           model=self,
-          steps_per_execution=self._steps_per_execution)
+          steps_per_execution=self._steps_per_execution,
+          replication_factor=None)
 
       # Build the model with specific dtypes. This is important for models
       # without explicit input dtypes (model subclasses and some sequential
