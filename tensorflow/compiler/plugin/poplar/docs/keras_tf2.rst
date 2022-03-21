@@ -66,12 +66,21 @@ For example, if we have a model where each step is of batch size 16 and we set
 batch of size 64.
 
 Gradient accumulation can be easily enabled for Keras models created inside of
-an ``IPUStrategy`` by calling the
-:py:meth:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension.set_gradient_accumulation_options`
-method for Functional Keras models and the
-:py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_gradient_accumulation_options`
-method for Sequential Keras models. See the respective method documentation
-for more details.
+an ``IPUStrategy`` by calling the following methods:
+
+.. table::
+  :width: 100%
+
+  +----------------------+----------------------------------------------------------------------------------------------------------+
+  | ``Functional`` model | :py:meth:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension.set_gradient_accumulation_options` |
+  +----------------------+----------------------------------------------------------------------------------------------------------+
+  | ``Sequential`` model | :py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_gradient_accumulation_options` |
+  +----------------------+----------------------------------------------------------------------------------------------------------+
+  | ``Model`` subclass   | :py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension.set_gradient_accumulation_options`      |
+  +----------------------+----------------------------------------------------------------------------------------------------------+
+
+
+See the respective API documentation for more details.
 
 .. note::
 
@@ -144,7 +153,7 @@ time and may be useful when debugging your model.
   In :numref:`fig-grouped-pipeline`, :numref:`fig-interleaved-pipeline`
   and :numref:`fig-sequential-pipeline`, `T` refers to the number of gradient accumulation
   steps per replica. See :numref:`pipelining-options` for how to
-  specify this value. 
+  specify this value.
 
 
 A detailed explanation of pipelining can be found in the technical note on `Model parallelism with
@@ -332,22 +341,31 @@ to four different pipeline stages as follows:
 Pipelining options
 __________________
 
-Pipelining options can be set with
-:py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_pipelining_options` for a Sequential model,
-:py:meth:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension.set_pipelining_options` for a Functional model, and
-:py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension.set_pipelining_options` for models which subclass `tf.keras.model`.
+Pipelining options can be set with the following methods:
+
+.. table::
+  :width: 100%
+
+  +----------------------+-----------------------------------------------------------------------------------------------+
+  | ``Functional`` model | :py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_pipelining_options` |
+  +----------------------+-----------------------------------------------------------------------------------------------+
+  | ``Sequential`` model | :py:meth:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension.set_pipelining_options` |
+  +----------------------+-----------------------------------------------------------------------------------------------+
+  | ``Model`` subclass   | :py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension.set_pipelining_options`      |
+  +----------------------+-----------------------------------------------------------------------------------------------+
+
+
+See the respective API documentation for more details.
 
 Gradient accumulation is always used when training a pipelined model (unless using the ``Sequential`` schedule). This means
 that you must set the option ``gradient_accumulation_steps_per_replica`` using this API when using the ``Grouped`` or
 ``Interleaved`` schedule. It is optional when using the ``Sequential`` schedule.
 
-
-The API documentation for :py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_pipelining_options` (Sequential model),
-:py:meth:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension.set_pipelining_options` (Functional model)
-and :py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension.set_pipelining_options` (Model subclass) explains that the
-additional keyword arguments (``pipelining_kwargs``)
-will be forwarded to the :py:func:`tensorflow.python.ipu.pipelining_ops.pipeline` operator (which is used internally -
-see :numref:`implementation-details`). Refer to the API documentation for :py:func:`~tensorflow.python.ipu.pipelining_ops.pipeline`
+The API documentation for ``set_pipelining_options`` explains that the
+additional keyword arguments (``pipelining_kwargs``) will be forwarded to the
+:py:func:`tensorflow.python.ipu.pipelining_ops.pipeline` operator
+(which is used internally - see :numref:`implementation-details`).
+Refer to the API documentation for :py:func:`~tensorflow.python.ipu.pipelining_ops.pipeline`
 for details about these arguments.
 
 The code sample below illustrates how options can be set with the `set_pipelining_options` API.
@@ -390,9 +408,22 @@ results.
 
 However, IPU TensorFlow also supports *asynchronous callbacks* by providing a
 polling mechanism which allows results to be accessed at the earliest possible
-instance. Asynchronous callbacks can be enabled by invoking
-:py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_asynchronous_callbacks`
-with `True` on your ``Sequential`` or ``Functional`` Keras model.
+instance. Asynchronous callbacks can be enabled by passing `True` to the
+following methods:
+
+.. table::
+  :width: 100%
+
+  +----------------------+---------------------------------------------------------------------------------------------------+
+  | ``Functional`` model | :py:meth:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension.set_asynchronous_callbacks` |
+  +----------------------+---------------------------------------------------------------------------------------------------+
+  | ``Sequential`` model | :py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_asynchronous_callbacks` |
+  +----------------------+---------------------------------------------------------------------------------------------------+
+  | ``Model`` subclass   | :py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension.set_asynchronous_callbacks`      |
+  +----------------------+---------------------------------------------------------------------------------------------------+
+
+
+See the respective API documentation for more details.
 
 Configuring Infeeds and Outfeed
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -405,13 +436,33 @@ data to and from the IPU devices when using ``fit()``, ``evaluate()`` and
 Instances of ``IPUInfeedQueue`` and ``IPUOutfeedQueue`` can be created with
 optional arguments which can affect performance of the model.
 
-For configuring the ``IPUInfeedQueue`` use
-:py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_infeed_queue_options`
-on your ``Sequential`` or ``Functional`` Keras model.
+Use the following methods to configure the ``IPUInfeedQueue`` for your Keras model:
 
-For configuring the ``IPUOutfeedQueue`` use
-:py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_outfeed_queue_options`
-on your ``Sequential`` or ``Functional`` Keras model.
+.. table::
+  :width: 100%
+
+  +----------------------+-------------------------------------------------------------------------------------------------+
+  | ``Functional`` model | :py:meth:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension.set_infeed_queue_options` |
+  +----------------------+-------------------------------------------------------------------------------------------------+
+  | ``Sequential`` model | :py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_infeed_queue_options` |
+  +----------------------+-------------------------------------------------------------------------------------------------+
+  | ``Model`` subclass   | :py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension.set_infeed_queue_options`      |
+  +----------------------+-------------------------------------------------------------------------------------------------+
+
+
+Use the following methods to configure the ``IPUOutfeedQueue`` for your Keras model:
+
+.. table::
+  :width: 100%
+
+  +--------------------+--------------------------------------------------------------------------------------------------+
+  | ``Functional``     | :py:meth:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension.set_outfeed_queue_options` |
+  +--------------------+--------------------------------------------------------------------------------------------------+
+  | ``Sequential``     | :py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_outfeed_queue_options` |
+  +--------------------+--------------------------------------------------------------------------------------------------+
+  | ``Model`` subclass | :py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension.set_outfeed_queue_options`      |
+  +--------------------+--------------------------------------------------------------------------------------------------+
+
 
 For example the ``prefetch_depth`` parameter of the ``IPUInfeedQueue`` and the
 ``buffer_depth`` parameter of the ``IPUOutfeedQueue`` can be configured as
@@ -428,6 +479,12 @@ Saving and loading Keras models
 
 Saving and loading a Keras model must be done within the IPUStrategy scope in
 order to save/load IPU-specific information.
+
+When saving and loading ``Model`` subclasses, make sure to save and restore
+class members, such as layers, via the config. This can be done by overriding
+the ``get_config`` and ``from_config`` methods. Re-creating members from scratch
+can cause errors, as the original members may be restored as part of the
+IPU-specific internal state.
 
 .. note::
   The arguments `pipelining_kwargs` from :py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension.set_pipelining_options` and
@@ -446,8 +503,15 @@ Implementation details
 When instantiating a standard TensorFlow Keras model inside the scope of
 an `IPUStrategy` instance, it is dynamically injected with additional,
 IPU-specific, functions.
-This is done through the relevant *IPU Keras extension classes*.
-For `tensorflow.keras.Sequential`, IPU-specific extensions exist in
-:py:class:`~tensorflow.python.ipu.keras.extensions.SequentialExtension` and for
-`tensorflow.keras.Model` in
-:py:class:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension`.
+This is done through the relevant *IPU Keras extension classes*:
+
+.. table::
+  :width: 100%
+
+  +----------------------+------------------------------------------------------------------------+
+  | ``Functional`` model | :py:meth:`~tensorflow.python.ipu.keras.extensions.FunctionalExtension` |
+  +----------------------+------------------------------------------------------------------------+
+  | ``Sequential`` model | :py:meth:`~tensorflow.python.ipu.keras.extensions.SequentialExtension` |
+  +----------------------+------------------------------------------------------------------------+
+  | ``Model`` subclass   | :py:meth:`~tensorflow.python.ipu.keras.extensions.ModelExtension`      |
+  +----------------------+------------------------------------------------------------------------+
