@@ -310,6 +310,12 @@ some help for each option. The available options are described below:
 
       This option cannot be used when dequeuing an ``IPUOutfeedQueue`` which is
       in ``IPUOutfeedMode.LAST`` mode.
+
+      When using synthetic data, communication between the host and IPUs is turned off. This can
+      cause an error: "Host sync timed out". The amount of time the host waits before it
+      times out can be changed using the `poplar runtime options
+      <https://docs.graphcore.ai/projects/poplar-api/en/latest/poplar/execution/RuntimeOptions.html>`__.
+      For example: `export POPLAR_RUNTIME_OPTIONS='{"target.hostSyncTimeout":350}'`.
   * - ``--synthetic_data_categories``
     - Prevent the system from downloading or uploading data of the given types
       to the IPU when executing code. This can be useful for testing performance
@@ -327,29 +333,35 @@ some help for each option. The available options are described below:
 
       This option is a more selective alternative to ``--use_synthetic_data``;
       you shouldn't specify both.
+
+      When using synthetic data, communication between the host and IPUs is turned off. This can
+      cause an error: "Host sync timed out". The amount of time the host waits before it
+      times out can be changed using the `poplar runtime options
+      <https://docs.graphcore.ai/projects/poplar-api/en/latest/poplar/execution/RuntimeOptions.html>`__.
+      For example: `export POPLAR_RUNTIME_OPTIONS='{"target.hostSyncTimeout":350}'`.
   * - :samp:`--synthetic_data_initializer={X}`
-    - When using synthetic data, by default, the graph's input tensors will not 
-      be initialized and therefore will have undefined content. 
+    - When using synthetic data, by default, the graph's input tensors will not
+      be initialized and therefore will have undefined content.
       You can use this option to initialize these tensors on the device.
-      
+
       The argument ``X`` can be set to ``uniform``, ``normal``, or a number.
 
-      When ``uniform`` is specified, each input tensor is initialized with 
+      When ``uniform`` is specified, each input tensor is initialized with
       uniformly distributed random numbers (of the numerical type of the tensor).
-      The range of the uniform distribution is between the 
-      minimum and maximum representable numbers for the specific numerical 
+      The range of the uniform distribution is between the
+      minimum and maximum representable numbers for the specific numerical
       type of each tensor (for example, for FP16, the range would be [-65504.0,
-      +65504.0], whereas for uint16, it would be [0,65535]). 
-      
+      +65504.0], whereas for uint16, it would be [0,65535]).
+
       When ``normal`` is specified, each input tensor is initialized with random
-      numbers drawn from the Gaussian distribution of mean 0 and 
+      numbers drawn from the Gaussian distribution of mean 0 and
       standard deviation 1, when the tensor type is floating point.
-      For integral types, a constant of value 1 is used instead. 
-      
-      Finally, when the argument ``X`` is a number, only its integer part is 
+      For integral types, a constant of value 1 is used instead.
+
+      Finally, when the argument ``X`` is a number, only its integer part is
       used to initialize the tensors.
 
-      For the ``--synthetic_data_initializer`` option to have an effect, you 
+      For the ``--synthetic_data_initializer`` option to have an effect, you
       must also specify ``--use_synthetic_data`` **or**
       ``--synthetic_data_categories``.
   * - :samp:`--while_loop_brute_force_max_trip_count={int}`
