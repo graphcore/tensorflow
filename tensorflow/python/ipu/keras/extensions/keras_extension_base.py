@@ -27,6 +27,7 @@ import popdist
 from collections import OrderedDict
 from functools import partial
 
+from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import context
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import device as tf_device
@@ -1854,12 +1855,31 @@ class KerasExtensionBase(base_layer.TFKerasExtension):
     iterations = array_ops.constant(self._steps_per_execution,
                                     dtype=dtypes.int32)
 
-    @def_function.function(input_signature=input_signature)
-    def predict_step(*args):
-      return self.__call__(args)
+    if self._is_pipelined():
+      inputs = {
+          idx: array_ops.zeros(s.shape, s.dtype)
+          for idx, s in enumerate(input_signature)
+      }
+      input_dataset = dataset_ops.Dataset.from_tensors(inputs).repeat()
+      iterator = self._infeed_manager.get_infeed(_Mode.PREDICT, input_dataset,
+                                                 self._infeed_kwargs)
+      outfeed = self._outfeed_manager.get_outfeed(_Mode.PREDICT,
+                                                  self._outfeed_kwargs)
 
-    return serving._wrap_in_loop(  # pylint: disable=protected-access
-        predict_step, input_signature, None, iterations)
+      predict_fn = self._make_pipeline_ipu_predict_function(iterations)
+
+      @def_function.function
+      def defunc():
+        predict_fn(None, iterator, outfeed)
+    else:
+
+      @def_function.function(input_signature=input_signature)
+      def predict_step(*args):
+        return self.__call__(args)
+
+      defunc = serving._wrap_in_loop(  # pylint: disable=protected-access
+          predict_step, input_signature, None, iterations)
+    return defunc
 
   def export_for_ipu_serving(self, export_dir):
     """Export Keras model using the SavedModel format for TensorFlow serving.
@@ -1878,13 +1898,7 @@ class KerasExtensionBase(base_layer.TFKerasExtension):
       using the SavedModel format. This function uses the embedded runtime op to
       run the executable that was included in the SavedModel's ``assets``
       subfolder.
-
-    Raises:
-      ValueError: If model is pipelined.
     """
-    if self._is_pipelined():
-      raise ValueError("Exporting pipelined Keras models is not supported.")
-
     input_signature = self._get_call_signature()
     defunc = self._wrap_model_call_for_serving(input_signature)
     return serving._export_saved_model(defunc, export_dir, input_signature)  # pylint: disable=protected-access
