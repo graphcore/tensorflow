@@ -308,6 +308,12 @@ some help for each option. The available options are described below:
 
       This option cannot be used when dequeuing an ``IPUOutfeedQueue`` which is
       in ``IPUOutfeedMode.LAST`` mode.
+
+      When using synthetic data, communication between the host and IPUs is turned off. This can
+      cause an error: "Host sync timed out". The amount of time the host waits before it
+      times out can be changed using the `poplar runtime options
+      <https://docs.graphcore.ai/projects/poplar-api/en/latest/poplar/execution/RuntimeOptions.html>`__.
+      For example: `export POPLAR_RUNTIME_OPTIONS='{"target.hostSyncTimeout":350}'`.
   * - ``--synthetic_data_categories``
     - Prevent the system from downloading or uploading data of the given types
       to the IPU when executing code. This can be useful for testing performance
@@ -325,6 +331,12 @@ some help for each option. The available options are described below:
 
       This option is a more selective alternative to ``--use_synthetic_data``;
       you shouldn't specify both.
+
+      When using synthetic data, communication between the host and IPUs is turned off. This can
+      cause an error: "Host sync timed out". The amount of time the host waits before it
+      times out can be changed using the `poplar runtime options
+      <https://docs.graphcore.ai/projects/poplar-api/en/latest/poplar/execution/RuntimeOptions.html>`__.
+      For example: `export POPLAR_RUNTIME_OPTIONS='{"target.hostSyncTimeout":350}'`.
   * - :samp:`--synthetic_data_initializer={X}`
     - When using synthetic data, by default, the graph's input tensors will not
       be initialized and therefore will have undefined content.
