@@ -39,12 +39,16 @@ def _poplar_autoconf_impl(repository_ctx):
                 fail("Cannot find poplar bin path.")
 
             repository_ctx.symlink(poplar_base + "/lib", "poplar/lib/poplar")
+            repository_ctx.symlink(poplar_base + "/lib", "poplar/lib/popir")
+            repository_ctx.symlink(poplar_base + "/lib", "poplar/lib/poprithms")
             repository_ctx.symlink(poplar_base + "/lib/python", "poplar/lib/python")
             repository_ctx.symlink(poplar_base + "/bin", "poplar/poplar/bin")
             repository_ctx.symlink(poplar_base + "/python", "poplar/poplar/python")
 
             if repository_ctx.path(poplar_base + "/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/lib64", "poplar/lib64/poplar")
+                repository_ctx.symlink(poplar_base + "/lib64", "poplar/lib64/popir")
+                repository_ctx.symlink(poplar_base + "/lib64", "poplar/lib64/poprithms")
                 repository_ctx.symlink(poplar_base + "/lib64/python", "poplar/lib64/python")
 
             if tf_custom_poplibs_available == "False":
