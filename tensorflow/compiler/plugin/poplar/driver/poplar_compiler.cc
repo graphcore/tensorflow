@@ -1911,9 +1911,6 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       };
 
       if (poplar_executor->HasMultiReplicaDistributionOptions()) {
-        SetRuntimeReplicaOptions(
-            &opt_flags, poplar_executor->GetMultiReplicaProcessIndex(),
-            poplar_executor->GetMultiReplicaProcessCount(), replication_factor);
         opt_flags.set("target.syncReplicasIndependently", "true");
       }
 
@@ -1996,6 +1993,12 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
                  "operations metadata function. Please see the documentation "
                  "for further details.";
         }
+      }
+
+      if (poplar_executor->HasMultiReplicaDistributionOptions()) {
+        SetRuntimeReplicaOptions(
+            &opt_flags, poplar_executor->GetMultiReplicaProcessIndex(),
+            poplar_executor->GetMultiReplicaProcessCount(), replication_factor);
       }
 
       engine = absl::make_unique<poplar::Engine>(std::move(exec), opt_flags);
