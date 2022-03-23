@@ -2,6 +2,7 @@
 
 load("//third_party/gpus:cuda_configure.bzl", "cuda_configure")
 load("//third_party/ipus:poplar_configure.bzl", "poplar_configure")
+load("//third_party/ipus/popit_lib:popit_configure.bzl", "popit_configure")
 load("//third_party/ipus/horovod:horovod_configure.bzl", "ipu_horovod_configure")
 load("//third_party/gpus:rocm_configure.bzl", "rocm_configure")
 load("//third_party/tensorrt:tensorrt_configure.bzl", "tensorrt_configure")
@@ -69,6 +70,7 @@ def tf_repositories(path_prefix = "", tf_repo_name = ""):
 
     # Note that we check the minimum bazel version in WORKSPACE.
     poplar_configure(name="local_config_poplar")
+    popit_configure(name="local_config_popit")
     ipu_horovod_configure(name="local_config_ipu_horovod")
     clang6_configure(name = "local_config_clang6")
     cc_download_clang_toolchain(name = "local_config_download_clang")
