@@ -59,6 +59,13 @@ std::unique_ptr<HloInstruction> CreateFlattened2DInput(HloInstruction* input) {
   return HloInstruction::CreateReshape(flattened_2d_shape, input);
 }
 
+Shape GetMultiSliceShape(Shape shape, int64 slice_dim_size) {
+  // MultiSlice is always 2d and it slices the outer dimension.
+  // Patch slice dim with provided value.
+  shape.set_dimensions(0, slice_dim_size);
+  return shape;
+}
+
 StatusOr<HloInstruction*> Replace1DDynamicWithMultiSlice(
     HloDynamicIndexInstruction* dynamic_slice, int64 slice_dim) {
   auto comp = dynamic_slice->parent();
@@ -79,9 +86,17 @@ StatusOr<HloInstruction*> Replace1DDynamicWithMultiSlice(
 
   HloInstruction* multislice = nullptr;
   if (dynamic_slice->opcode() == HloOpcode::kDynamicSlice) {
-    multislice = comp->AddInstruction(
-        CreateMultiSlice(dynamic_slice->shape(), flattened_2d_input, offset));
-    TF_RETURN_IF_ERROR(dynamic_slice->ReplaceAllUsesWith(multislice));
+    int64 slice_dim_size = dynamic_slice->shape().dimensions(slice_dim);
+    multislice = comp->AddInstruction(CreateMultiSlice(
+        GetMultiSliceShape(flattened_2d_input->shape(), slice_dim_size),
+        flattened_2d_input, offset));
+    // Restore the input to its original shape..
+    auto unflatten = comp->AddInstruction(HloInstruction::CreateReshape(
+        GetMultiSliceShape(shuffled_input->shape(), slice_dim_size),
+        multislice));
+    auto unshuffle = comp->AddInstruction(
+        CreateShuffledInput(unflatten, slice_dim, /*reverse=*/true));
+    TF_RETURN_IF_ERROR(dynamic_slice->ReplaceAllUsesWith(unshuffle));
   } else {
     CHECK_EQ(dynamic_slice->opcode(), HloOpcode::kDynamicUpdateSlice);
     auto slice = dynamic_slice->mutable_operand(1);
@@ -104,7 +119,7 @@ StatusOr<HloInstruction*> Replace1DDynamicWithMultiSlice(
     auto unflatten = comp->AddInstruction(
         HloInstruction::CreateReshape(shuffled_input->shape(), multislice));
     auto unshuffle = comp->AddInstruction(
-        CreateShuffledInput(unflatten, slice_dim, /*reverse*/ true));
+        CreateShuffledInput(unflatten, slice_dim, /*reverse=*/true));
     TF_RETURN_IF_ERROR(dynamic_slice->ReplaceAllUsesWith(unshuffle));
   }
 

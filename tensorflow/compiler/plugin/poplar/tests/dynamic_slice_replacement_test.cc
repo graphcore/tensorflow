@@ -123,6 +123,9 @@ TEST_P(DynamicSliceSupportedHloTest, CheckCanReplaceSlice) {
 
   ASSERT_TRUE(IsPoplarInstruction(expected_poplar_op, multi_slice));
   ASSERT_EQ(multi_slice->parent(), expected_parent);
+  if (expected_poplar_op == PoplarOp::MultiSlice) {
+    ASSERT_EQ(multi_slice->shape().dimensions(0), 1);
+  }
 }
 
 TEST_P(DynamicSliceSupportedHloTest, CompareReplacedSlice) {
