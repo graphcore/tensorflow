@@ -27,8 +27,13 @@ namespace xla {
 namespace poplarplugin {
 
 namespace {
+using InstructionToOperandIndices = absl::flat_hash_map<
+    HloInstruction*,
+    absl::flat_hash_map<HloInstruction*, absl::InlinedVector<int64, 1>>>;
 
 struct AllocationLoopState {
+  AllocationLoopState() = default;
+  AllocationLoopState(const AllocationLoopState&) = delete;
   // holds index into state.result
   std::vector<int64> to_visit;
   AllocationGroups result;
@@ -36,7 +41,7 @@ struct AllocationLoopState {
   absl::flat_hash_map<IndexedLocation, int64> producer_to_index;
   absl::flat_hash_set<int64> visited_groups;
   absl::flat_hash_set<IndexedLocation> visited;
-
+  InstructionToOperandIndices instruction_to_operand_indices;
   AllocationGroup& group(int64 i) { return result.groups[i]; }
 };
 
@@ -128,42 +133,6 @@ bool IsHandledSeperately(HloInstruction* inst) {
   }
 }
 
-// Instructions that take in no tensors which affect their output tile mapping
-bool IsProducer(HloInstruction* inst) {
-  if (inst->operand_count() == 0) {
-    return true;
-  }
-  if (absl::c_all_of(inst->operands(), [](HloInstruction* op) {
-        return GenerateAllLocations(op).empty();
-      })) {
-    return true;
-  }
-  if (inst->opcode() == HloOpcode::kGetTupleElement) {
-    return false;
-  }
-  // This shouldn't be needed as if no inputs affect mapping then I'd say
-  // that the instruction allocates. As code currently stand though,
-  // broadcast instructions have no inputs that affect the output and
-  // don't allocate. Though I'd say this is because one of those extensions
-  // isn't correct for them.
-  return OperandsAffectingMapping(inst).empty();
-}
-
-void FindStartPoints(AllocationLoopState& state, HloModule* module) {
-  for (auto* comp : module->MakeComputationPostOrder()) {
-    if (IsPopOpsFusion(comp)) {
-      continue;
-    }
-    for (auto* inst : comp->MakeInstructionPostOrder()) {
-      if (IsProducer(inst)) {
-        for (auto& location : GenerateAllLocations(inst)) {
-          AddGroupToVisit(AllocationGroup(location), state);
-        }
-      }
-    }
-  }
-}
-
 StatusOr<bool> InstructionCreatesNewMapping(HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kDot) {
     return true;
@@ -194,20 +163,56 @@ StatusOr<bool> InstructionMaybeCreatesNewMapping(HloInstruction* inst) {
          inst->opcode() == HloOpcode::kConditional;
 }
 
+// Instructions that take in no tensors which affect their output tile mapping
+StatusOr<bool> IsProducer(HloInstruction* inst) {
+  if (inst->operand_count() == 0) {
+    return true;
+  }
+  if (absl::c_all_of(inst->operands(), [](HloInstruction* op) {
+        return GenerateAllLocations(op).empty();
+      })) {
+    return true;
+  }
+  if (inst->opcode() == HloOpcode::kGetTupleElement) {
+    return false;
+  }
+  TF_ASSIGN_OR_RETURN(bool maybe_remaps,
+                      InstructionMaybeCreatesNewMapping(inst));
+  if (maybe_remaps) {
+    return true;
+  }
+  // This shouldn't be needed as if no inputs affect mapping then I'd say
+  // that the instruction allocates. As code currently stand though,
+  // broadcast instructions have no inputs that affect the output and
+  // don't allocate. Though I'd say this is because one of those extensions
+  // isn't correct for them.
+  return OperandsAffectingMapping(inst).empty();
+}
+
+Status FindStartPoints(AllocationLoopState& state, HloModule* module) {
+  for (auto* comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+    for (auto* inst : comp->MakeInstructionPostOrder()) {
+      TF_ASSIGN_OR_RETURN(bool is_producer, IsProducer(inst));
+      if (is_producer) {
+        for (auto& location : GenerateAllLocations(inst)) {
+          AddGroupToVisit(AllocationGroup(location), state);
+        }
+      }
+    }
+  }
+  return Status::OK();
+}
+
 // Only some inputs affect tile mapping of output, for this function
 // only add the user if next.instruction's tile mapping is related to
 // it's output
 Status AddIfMappingDependsOnOperand(std::vector<IndexedLocation>& to_visit,
                                     HloInstruction* user,
-                                    const IndexedLocation& operand) {
-  TF_ASSIGN_OR_RETURN(bool remaps, InstructionMaybeCreatesNewMapping(user));
-  if (remaps) {
-    // if user allocates take convention that all
-    // output tensors are added
-    auto all_locs = GenerateAllLocations(user);
-    to_visit.insert(to_visit.end(), all_locs.begin(), all_locs.end());
-    return Status::OK();
-  }
+                                    const IndexedLocation& operand,
+                                    const AllocationLoopState& state) {
   switch (user->opcode()) {
     case HloOpcode::kCall: {
       if (!IsRepeatLoop(user)) {
@@ -217,12 +222,12 @@ Status AddIfMappingDependsOnOperand(std::vector<IndexedLocation>& to_visit,
       // fall through for repeats as inputs match outputs
     }
     case HloOpcode::kTuple: {
-      for (int64 i = 0; i < user->operand_count(); ++i) {
-        if (user->operand(i) == operand.instruction) {
-          auto new_index = operand.index;
-          new_index.push_front(i);
-          to_visit.emplace_back(user, std::move(new_index));
-        }
+      const auto& indices =
+          state.instruction_to_operand_indices.at(user).at(operand.instruction);
+      for (auto i : indices) {
+        auto new_index = operand.index;
+        new_index.push_front(i);
+        to_visit.emplace_back(user, std::move(new_index));
       }
       break;
     }
@@ -256,26 +261,12 @@ Status IterateThroughUsers(int64 index, AllocationLoopState& state) {
     // Hit the end of the group as this is an allocating instruction.
     // If the instruction allocates (or in kCall case maybe allocates),
     // stop iterating and add a new group to the to visit state.
-    TF_ASSIGN_OR_RETURN(bool maybe_remaps,
-                        InstructionMaybeCreatesNewMapping(next.instruction));
-    TF_ASSIGN_OR_RETURN(bool remaps,
-                        InstructionCreatesNewMapping(next.instruction));
-    if (maybe_remaps && next != state.group(index).producer) {
-      // Only add an endpoint to the group if the instruction
-      // definitely allocates
-      if (remaps) {
-        auto& group = state.group(index);
-        for (int64 i = 0; i < next.instruction->operand_count(); ++i) {
-          if (group.group.contains(
-                  IndexedLocation(next.instruction->mutable_operand(i), {}))) {
-            // bit bad to assume shape index is {} but as for now only looking
-            // at dots with this pass it's fine to assume this
-            group.AddGroupEndInstruction(InputLocation(next.instruction, i));
-          }
-        }
+    if (next != state.group(index).producer) {
+      TF_ASSIGN_OR_RETURN(bool maybe_remaps,
+                          InstructionMaybeCreatesNewMapping(next.instruction));
+      if (maybe_remaps) {
+        continue;
       }
-      AddGroupToVisit(AllocationGroup(std::move(next)), state);
-      continue;
     }
     // Note this doesn't guard above code as end/start points need to visited
     // multiple times. One to mark the end, and one to start the next group
@@ -285,7 +276,8 @@ Status IterateThroughUsers(int64 index, AllocationLoopState& state) {
     }
     state.group(index).AddInstructionToGroup(next);
     for (auto* user : next.instruction->users()) {
-      TF_RETURN_IF_ERROR(AddIfMappingDependsOnOperand(to_visit, user, next));
+      TF_RETURN_IF_ERROR(
+          AddIfMappingDependsOnOperand(to_visit, user, next, state));
     }
   }
   return Status::OK();
@@ -401,11 +393,11 @@ void MergeGroupsFromCallsites(AllocationLoopState& state, HloModule* module) {
 }
 
 bool IsHandlableMergePoint(HloInstruction* inst) {
-  const auto indices = OperandsAffectingMapping(inst);
-  if (indices.size() < 2) {
+  if (IsHandledSeperately(inst)) {
     return false;
   }
-  if (IsHandledSeperately(inst)) {
+  const auto indices = OperandsAffectingMapping(inst);
+  if (indices.size() < 2) {
     return false;
   }
   for (auto i : indices) {
@@ -464,18 +456,63 @@ void FilterEmpty(AllocationLoopState& state) {
   });
 }
 
+bool WorthBuilding(HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kTuple || IsRepeatLoop(inst);
+}
+
+InstructionToOperandIndices CreateInstructionOperandsMap(HloModule* module) {
+  InstructionToOperandIndices result;
+  for (auto* comp : module->computations()) {
+    for (auto* inst : comp->instructions()) {
+      if (WorthBuilding(inst)) {
+        auto& inst_map = result[inst];
+        for (int64 i = 0; i < inst->operand_count(); ++i) {
+          inst_map[inst->mutable_operand(i)].emplace_back(i);
+        }
+      }
+    }
+  }
+  return result;
+}
+
+Status AddGroupInputInstructions(AllocationLoopState& state) {
+  const auto loc_to_group = CreateLocationToGroupMap(state);
+  for (auto& group : state.result.groups) {
+    const auto& producer = group.producer;
+    TF_ASSIGN_OR_RETURN(bool remaps,
+                        InstructionCreatesNewMapping(producer.instruction));
+    if (!remaps) {
+      continue;
+    }
+    for (int64 i = 0; i < producer.instruction->operand_count(); ++i) {
+      HloInstruction* operand = producer.instruction->mutable_operand(i);
+      if (!operand->shape().IsArray()) {
+        continue;
+      }
+      const auto input_group_index =
+          loc_to_group.at(IndexedLocation(operand, {}));
+      auto& input_group = state.result.groups[input_group_index];
+      input_group.AddGroupEndInstruction(
+          InputLocation(producer.instruction, i));
+    }
+  }
+  return Status::OK();
+}
+
 }  // namespace
 
 StatusOr<AllocationGroups> AllocationGroups::CreateAllocationGroups(
     HloModule* module) {
   AllocationLoopState state;
+  state.instruction_to_operand_indices = CreateInstructionOperandsMap(module);
   state.call_graph = CallGraph::Build(module);
-  FindStartPoints(state, module);
+  TF_RETURN_IF_ERROR(FindStartPoints(state, module));
   TF_RETURN_IF_ERROR(AddUsersInSameComputationsToGroups(state));
   MergeGroupsFromRelatedOperands(state);
   FilterEmpty(state);
   MergeGroupsFromCallsites(state, module);
   FilterEmpty(state);
+  TF_RETURN_IF_ERROR(AddGroupInputInstructions(state));
   return state.result;
 }
 
