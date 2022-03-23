@@ -92,6 +92,9 @@ class ArithmeticExprVisitor : public BaseVisitor {
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleCollectivePermuteDone);
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleRngBitGenerator);
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleDynamicReshape);
+  ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleAllReduceScatter);
+  ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleAllReduceStart);
+  ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleAllReduceDone);
 #undef ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED
 
   const TensorVector& outputs() { return outputs_; }

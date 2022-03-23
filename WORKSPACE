@@ -28,8 +28,10 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 new_git_repository(
     name = "horovod_repo",
     remote = "https://github.com/horovod/horovod.git",
-    commit = "b52e4b3e6ce5b1b494b77052878a0aad05c2e3ce",
+    commit = "93a2f2583ed63391a904aaeb03b602729be90f15",
     build_file = "//third_party/ipus/horovod:horovod.BUILD",
+    patches = ["//third_party/ipus/horovod:nvtx_op_range_fix.patch"],
+    patch_args = ["-p1"]
 )
 
 new_git_repository(

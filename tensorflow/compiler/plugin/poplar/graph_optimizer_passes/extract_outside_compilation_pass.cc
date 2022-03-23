@@ -490,7 +490,7 @@ Status AddWhileLoop(Graph* graph, FunctionLibraryDefinition* fld,
   // that seems to work with the collective executor (when the loop body
   // contains collective ops).
   TF_RETURN_IF_ERROR(
-      RewriteWhileNode(while_node, graph, /*keep_node_fetchable=*/false));
+      RewriteWhileNode(while_node, graph, fld, /*keep_node_fetchable=*/false));
 
   return Status::OK();
 }
@@ -672,7 +672,7 @@ Status ExtractOutsideCompilationPass::Run(
   // Run the placer again to assign devices to the nodes added by this pass.
   // Make sure the default local device is used when in a distributed context.
   Device* default_local_device = options.device_set->client_device();
-  Placer placer(graph, "", options.device_set, default_local_device);
+  Placer placer(graph, "", flib_def, options.device_set, default_local_device);
 
   TF_RETURN_IF_ERROR(placer.Run());
 

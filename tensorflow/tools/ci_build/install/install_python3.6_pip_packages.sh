@@ -102,7 +102,7 @@ pip3 install --upgrade termcolor
 pip3 install --upgrade h5py==3.1.0
 
 # Keras
-pip3 install keras-nightly --no-deps
+pip3 install keras==2.6.* --no-deps
 pip3 install keras_preprocessing==1.0.5
 
 # Estimator

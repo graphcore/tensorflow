@@ -41,7 +41,7 @@ tf_cc_test(
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
         "//tensorflow/core/data:dataset_utils",
-        "//tensorflow/core/kernels/data:dataset_test_base",
+        "//tensorflow/core/data:dataset_test_base",
         "//tensorflow/core/kernels/data:iterator_ops",
         "//tensorflow/core/kernels/data:tensor_slice_dataset_op",
     ],
