@@ -168,7 +168,7 @@ Service::Service(const ServiceOptions& options,
       CHECK_GE(execute_backend_->device_count(), options_.number_of_replicas())
           << "Requested more replicas than there are devices.";
     }
-    LOG(INFO) << StrFormat(
+    VLOG(1) << StrFormat(
         "XLA service %p initialized for platform %s (this does not guarantee "
         "that XLA will be used). Devices:",
         this, execute_backend_->platform()->Name());
@@ -176,9 +176,9 @@ Service::Service(const ServiceOptions& options,
     for (int i = 0; i < execute_backend_->device_count(); ++i) {
       se::StreamExecutor* executor = stream_executors.at(i);
       const auto& description = executor->GetDeviceDescription();
-      LOG(INFO) << StrFormat("  StreamExecutor device (%d): %s, %s", i,
-                             description.name(),
-                             description.platform_version());
+      VLOG(1) << StrFormat("  StreamExecutor device (%d): %s %s", i,
+                           description.name(),
+                           description.platform_version());
     }
   } else {
     VLOG(1) << "XLA compile-only service constructed";

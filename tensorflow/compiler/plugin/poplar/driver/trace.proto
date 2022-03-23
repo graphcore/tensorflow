@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package tensorflow;
+
+message IpuTraceCompileBeginEvent {
+  bytes deprecated_1 = 1;
+
+  // The name of the module associated with the event
+  bytes module_name = 2;
+};
+
+message IpuTraceCompileEndEvent {
+  // duration of compilation
+  int64 duration = 1;
+
+  // The name of the module associated with the event
+  bytes module_name = 2;
+
+  // A JSON structure describing the tensor mappings
+  bytes tensor_map = 3;
+
+  // A JSON structure describing the allocation targets
+  // and convolution/matmul classifications
+  bytes instruction_info = 4;
+};
+
+message IpuTraceDataTransferEvent {
+  // JSON description fo IO transfer
+  bytes data_transfer = 1;
+};
+
+message IpuTraceLoadEngineEvent {
+  // The name of the module associated with the event
+  bytes module_name = 1;
+};
+
+message IpuTraceExecuteEvent {
+  // Activity trace
+  bytes activity_trace = 1;
+
+  // The name of the module associated with the event
+  bytes module_name = 2;
+};
+
+message IpuTraceEvent {
+  // Timestamp. Seconds since the epoch. As python time()
+  double timestamp = 1;
+
+  // The device/stream_executor which performed the action
+  int32 ordinal = 2;
+
+  // The type of event
+  enum Type {
+    COMPILE_BEGIN = 0;
+    COMPILE_END = 1;
+    HOST_TO_DEVICE_TRANSFER = 2;
+    DEVICE_TO_HOST_TRANSFER = 3;
+    LOAD_ENGINE = 4;
+    EXECUTE = 5;
+  };
+  Type type = 3;
+
+  oneof msg {
+    IpuTraceCompileBeginEvent compile_begin = 5;
+    IpuTraceCompileEndEvent compile_end = 6;
+    IpuTraceDataTransferEvent data_transfer = 7;
+    IpuTraceLoadEngineEvent load_engine = 8;
+    IpuTraceExecuteEvent execute = 9;
+  };
+};

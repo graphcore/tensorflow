@@ -17,8 +17,12 @@
 set -e
 
 # Get the latest version of pip so it recognize manylinux2010
-wget https://bootstrap.pypa.io/get-pip.py
-python3.6 get-pip.py
+if python3 --version 2>&1 | grep -q '^Python 3\.6'; then
+  wget -O get-pip.py https://bootstrap.pypa.io/pip/3.6/get-pip.py
+else
+  wget -O get-pip.py https://bootstrap.pypa.io/pip/get-pip.py
+fi
+python3 get-pip.py
 rm -f get-pip.py
 
 # Install pip packages from whl files to avoid the time-consuming process of
@@ -67,10 +71,10 @@ fi
 
 pip3 install scipy==1.4.1
 
-pip3 install scikit-learn==0.18.1
+pip3 install scikit-learn==0.22.0
 
 # pandas required by `inflow`
-pip3 install pandas==0.19.2
+pip3 install pandas==0.25.2
 
 # Benchmark tests require the following:
 pip3 install psutil

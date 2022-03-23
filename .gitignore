@@ -26,6 +26,7 @@ tensorflow/contrib/cmake/_build/
 /api_init_files_list.txt
 /estimator_api_init_files_list.txt
 *.whl
+.bazelrc
 
 # Android
 .gradle
@@ -47,3 +48,7 @@ gradleBuild
 Podfile.lock
 Pods
 xcuserdata
+.linters
+
+errors.log
+tests.log

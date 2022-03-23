@@ -213,10 +213,16 @@ static Status CompileToLocalExecutable(
   compile_options.alias_resource_update = !has_ref_vars &&
                                           may_alias_resource_update;
 
-  StatusOr<std::vector<XlaCompiler::Argument>> args =
+  // IPU Specific - store the names of all inputs.
+  std::vector<std::string> mangled_input_names(inputs.size());
+  for (int64 i = 0; i != inputs.size(); ++i) {
+    mangled_input_names[i] = ctx->op_kernel().requested_input(i);
+  }
+
+  xla::StatusOr<std::vector<XlaCompiler::Argument>> args =
       XlaComputationLaunchContext::BuildXlaCompilerArguments(
           constants, inputs, variable_infos,
-          static_cast<Device*>(ctx->device()));
+          static_cast<Device*>(ctx->device()), mangled_input_names);
   TF_RETURN_IF_ERROR(args.status());
   return cache->Compile(options, function, *args, compile_options, compile_mode,
                         compilation_result, executable);
@@ -235,6 +241,14 @@ void XlaLocalLaunchBase::Compute(OpKernelContext* ctx) {
 
   std::vector<VariableInfo> variable_infos;
   {
+    // IPU specific changes begin.
+    // TODO(T54498): IPU specific change to disable the input-output aliasing
+    // at Hlo level for resource updates as the Poplar runtime does not support
+    // it and implements it's own version of alaising.
+    const bool may_alias_resource_update =
+      platform_info_.SupportsMayAliasResourceUpdate();
+    // IPU specific changes end.
+
     OP_REQUIRES_OK(
         ctx, GetVariableInfosFromInputs(ctx->resource_manager(), ctx->device(),
                                         inputs, resources_, &variable_infos));
@@ -242,7 +256,7 @@ void XlaLocalLaunchBase::Compute(OpKernelContext* ctx) {
     Status s = CompileToLocalExecutable(
         ctx, function_, /*has_ref_vars=*/has_ref_vars_, platform_info_, inputs,
         variable_infos, constants_, XlaCompilationCache::CompileMode::kStrict,
-        /*may_alias_resource_update=*/true, &client, &compilation_result,
+        may_alias_resource_update, &client, &compilation_result,
         &executable);
     OP_REQUIRES_OK(ctx, s);
   }

@@ -1203,6 +1203,285 @@ static StatusOr<HloInstruction*> TryMergeInductionVariables(
   return new_while;
 }
 
+// Take in a set of used indices, add any user of this instruction
+// that is a GTE to the set. Set used indices to nullopt to signify
+// to later functions that optimisation can't be performed.
+void AddAllGTEUsers(absl::optional<absl::flat_hash_set<int64>>& used_indices,
+                    HloInstruction* instruction) {
+  if (!used_indices) {
+    // Already hit an instruction can't deal with so no point
+    // looking further
+    return;
+  }
+  if (instruction == instruction->parent()->root_instruction()) {
+    // If this is the root instruction bail out. We could
+    // definatelty do better and check callsites and find
+    // those uses but in reality this is marginal gains for
+    // a lot of extra cost in creating the CallGraph
+    used_indices = absl::nullopt;
+    return;
+  }
+  absl::flat_hash_set<int64> result;
+  for (HloInstruction* user : instruction->users()) {
+    if (user->opcode() != HloOpcode::kGetTupleElement) {
+      // If something absorbs all outputs, bail out. Again
+      // if this is a call or other while we could do better
+      // but this is consistent with other code in this file
+      // to only analyse GTEs.
+      used_indices = absl::nullopt;
+      return;
+    }
+    used_indices->emplace(user->tuple_index());
+  }
+}
+
+// Take in a set of instructions that contributes to the output
+// and add any instructions that either have a side effect,
+// or can't be removed by DCE to the set
+static void AddInstructionsWithSideEffects(
+    absl::flat_hash_set<HloInstruction*>& contributes_to_output,
+    HloComputation* body) {
+  for (HloInstruction* instruction : body->instructions()) {
+    // These conditions are set to match the ones inside DCE
+    auto maybe_collective_op = DynCast<HloAllReduceInstruction>(instruction);
+    const bool is_param = instruction->opcode() == HloOpcode::kParameter;
+    if (instruction->HasSideEffect() ||
+        (!is_param && !body->IsSafelyRemovable(instruction)) ||
+        maybe_collective_op != nullptr) {
+      // If Instruction has side effect it can contribute
+      // to the output so must put these in the to_visit.
+      // Any instruction we don't reach we are going to
+      // try and remove so if it can't be removed then
+      // mark it.
+      contributes_to_output.emplace(instruction);
+    }
+  }
+}
+
+static void AddUsedIndicesInstructions(
+    absl::flat_hash_set<HloInstruction*>& contributes_to_output,
+    const absl::flat_hash_set<int64>& used_indices, HloInstruction* root) {
+  for (int64 i : used_indices) {
+    contributes_to_output.emplace(root->mutable_operand(i));
+  }
+}
+
+// Starting from the instructions that contribute to the output
+// walk through operands, and put any GTE of the parameter instruction
+// into the used_indices
+static void IterateBackwardsThroughUsedOutputs(
+    absl::flat_hash_set<HloInstruction*> contributes_to_output,
+    absl::optional<absl::flat_hash_set<int64>>& used_indices,
+    HloComputation* body) {
+  std::vector<HloInstruction*> to_visit;
+  to_visit.reserve(contributes_to_output.size());
+  to_visit.insert(to_visit.end(), contributes_to_output.begin(),
+                  contributes_to_output.end());
+  HloInstruction* parameter = body->parameter_instruction(0);
+  HloInstruction* root = body->root_instruction();
+  while (!to_visit.empty()) {
+    HloInstruction* inst = to_visit.back();
+    to_visit.pop_back();
+    if (inst->opcode() == HloOpcode::kGetTupleElement &&
+        inst->mutable_operand(0) == parameter) {
+      // As inputs at position i are affected by output at
+      // position i so may need to add that output to to_visit
+      auto insert_result = used_indices->insert(inst->tuple_index());
+      if (insert_result.second) {
+        // We haven't seen this tuple index so must add the outut
+        // to to_visit
+        HloInstruction* new_contributer =
+            root->mutable_operand(inst->tuple_index());
+        contributes_to_output.insert(new_contributer);
+        to_visit.emplace_back(new_contributer);
+      }
+      continue;
+    }
+    if (inst->opcode() == HloOpcode::kParameter) {
+      // If we have managed to get to the parameter not
+      // going via a GTE bail out
+      used_indices = absl::nullopt;
+      return;
+    }
+    for (HloInstruction* operand : inst->operands()) {
+      auto insert_result = contributes_to_output.insert(operand);
+      if (insert_result.second) {
+        // The instruction wasn't already in the contributes set and
+        // so we need to look through it's operands as we need to
+        // mark them all
+        to_visit.emplace_back(operand);
+      }
+    }
+  }
+}
+
+static bool AnyUsersNotGTE(HloInstruction* param) {
+  return absl::c_any_of(param->users(), [](HloInstruction* user) {
+    return user->opcode() != HloOpcode::kGetTupleElement;
+  });
+}
+
+// Take in the used indices found from the uses of the while and it's
+// condition, and add in the indices that might affect these indices
+// by searching the uses inside the while body. This does this first
+// by finding instruction that have side effects to the set
+// contributes_to_output. Then adds the instructions that correspond
+// to outputs of the while that are used indices, and then calls
+// IterateBackwardsThroughUsedOutputs to find any other indices
+// used inside the while that contribute to the output
+static void AddAllUserIndicesFromBody(
+    absl::optional<absl::flat_hash_set<int64>>& used_indices,
+    HloComputation* body) {
+  HloInstruction* root = body->root_instruction();
+  if (AnyUsersNotGTE(body->parameter_instruction(0))) {
+    used_indices = absl::nullopt;
+    return;
+  }
+  absl::flat_hash_set<HloInstruction*> contributes_to_output;
+  contributes_to_output.reserve(used_indices->size());
+  AddInstructionsWithSideEffects(contributes_to_output, body);
+  AddUsedIndicesInstructions(contributes_to_output, *used_indices, root);
+
+  IterateBackwardsThroughUsedOutputs(std::move(contributes_to_output),
+                                     used_indices, body);
+}
+
+// Return if the while loop is in the form
+// body {
+//   ...
+//   ROOT Tuple(...)
+// }
+// init = Tuple(...)
+// while = while(init, body, cond)
+static bool LoopInExpectedFormForOutputElimination(HloInstruction* while_op) {
+  HloComputation* body = while_op->while_body();
+  HloComputation* cond = while_op->while_condition();
+  if (body->num_parameters() != 1 || cond->num_parameters() != 1) {
+    return false;
+  }
+  const HloInstruction* init = while_op->operand(0);
+  const HloInstruction* root = body->root_instruction();
+  if (init->opcode() != HloOpcode::kTuple ||
+      root->opcode() != HloOpcode::kTuple) {
+    return false;
+  }
+  return true;
+}
+
+// Find a GetTupleElement in the body corresponding to each input index
+// of the while loop. If none exists, put in a null optional, if
+// multiple exist put in any (in this case we put the last found
+// but it doesn't matter)
+static std::vector<absl::optional<HloInstruction*>> FindGTEInputs(
+    HloComputation* body, int64 num_inputs) {
+  std::vector<absl::optional<HloInstruction*>> result(num_inputs,
+                                                      absl::nullopt);
+  HloInstruction* param = body->parameter_instruction(0);
+  for (HloInstruction* user : param->users()) {
+    // we've already checked all users are gtes
+    result[user->tuple_index()] = user;
+  }
+  return result;
+}
+
+// We want to remove the loop inputs/outputs that aren't used
+// In order to do this I want to call RemoveDeadTupleIndices
+// which is used to remove unused inputs. RemoveDeadTupleIndices
+// only handles cases where there is no uses of the GTE for that
+// parameter, or it's only use is the root instruction. In order
+// to ensure that remove all uses of GTE's that don't affect the
+// output first and then call RemoveDeadTupleIndices.
+static StatusOr<bool> EliminateUnusedInstructions(
+    HloInstruction* while_op, absl::flat_hash_set<int64> used_indices) {
+  int64 num_outputs = ShapeUtil::TupleElementCount(while_op->shape());
+  HloComputation* body = while_op->while_body();
+  auto gte_for_index = FindGTEInputs(body, num_outputs);
+  std::vector<HloInstruction*> dead_roots;
+  HloInstruction* root = body->root_instruction();
+  dead_roots.reserve(num_outputs - used_indices.size());
+  for (int64 i = 0; i < num_outputs; ++i) {
+    if (used_indices.contains(i)) {
+      continue;
+    }
+    HloInstruction* old_instruction = root->mutable_operand(i);
+    if (Match(old_instruction,
+              m::GetTupleElement(m::Op().Is(body->parameter_instruction(0)),
+                                 i))) {
+      // no need to do anything if this is a loop invariant as
+      // RemoveDeadTupleIndices can already handle this case
+      continue;
+    }
+    if (gte_for_index[i]) {
+      // As we know this instruction doesn't contribute to the output
+      // we can replace it with any instruction the same shape
+      // without effecting the output. So swap it with the input
+      // at this index. We do this so that after the dead roots
+      // have been eliminated the only user of of this unused gte
+      // is the root instruction. This means it's safe to call
+      // RemoveDeadTupleIndices.
+      HloInstruction* replacement = *gte_for_index[i];
+      old_instruction->ReplaceAllUsesWith(replacement);
+      dead_roots.emplace_back(old_instruction);
+    }
+  }
+  for (HloInstruction* dead_root : dead_roots) {
+    TF_RETURN_IF_ERROR(body->RemoveInstructionAndUnusedOperands(dead_root));
+  }
+  // This function expects that each input (gte(param)) has either
+  // 0 or 1 users so required code above to eliminate uses from the
+  // computation
+  TF_ASSIGN_OR_RETURN(HloInstruction * new_while_op,
+                      RemoveDeadTupleIndices(while_op, used_indices));
+  return true;
+}
+
+// Pass to extend dead code elimination to look through while loops.
+// Does so by:
+// - Finding all used tuple indices of the while op by seaching the
+//   GTEs that use it.
+// - Adding all indices that are used in the while loop condition
+// - Adding all used indices from the body. This happens in several parts:
+//   - Create a map of instructions in the while body that contribute to
+//     the output.
+//   - add the root tuple operands at the index of used_indices to this map
+//   - add any instruction with side effects or instructions we can't remove
+//     to this map
+//   - Iterate through operands from these starting instructions, if we hit
+//     a new GTE(ParameterInstruction) add the index to the used tuple indices
+// - After we have detected all used tuple indices, eliminate the old ones.
+//   This is done first by eliminating all it's users, then using the eliminate
+//   function from RemoveDeadParameters
+static StatusOr<bool> TryRemoveDeadOutputs(HloInstruction* while_op) {
+  if (!LoopInExpectedFormForOutputElimination(while_op)) {
+    return false;
+  }
+  absl::optional<absl::flat_hash_set<int64>> used_indices =
+      absl::flat_hash_set<int64>();
+  AddAllGTEUsers(used_indices, while_op);
+  AddAllGTEUsers(used_indices,
+                 while_op->while_condition()->parameter_instruction(0));
+  const int64 tuple_size = ShapeUtil::TupleElementCount(while_op->shape());
+  if (!used_indices || used_indices->size() == tuple_size) {
+    // This condidition is duplicated later but as iterating through the
+    // body is the most expensive bit it's worth checking if
+    // we  can early out
+    return false;
+  }
+  // We have now found all outputs that have uses outside of the loop body
+  // now we can check how they are used inside the loop body to see if we
+  // can remove any
+  AddAllUserIndicesFromBody(used_indices, while_op->while_body());
+  if (!used_indices || used_indices->size() == tuple_size) {
+    // Either hit an instruction couldn't deal with or every parameter is used
+    return false;
+  }
+  VLOG(10) << "Removing " << (tuple_size - used_indices->size())
+           << " unused outputs from " << while_op->name();
+
+  // Remove the inputs that don't contribute to the output.
+  return EliminateUnusedInstructions(while_op, std::move(*used_indices));
+}
+
 StatusOr<bool> WhileLoopSimplifier::Run(HloModule* module) {
   XLA_VLOG_LINES(3,
                  "WhileLoopSimplifier::Run(), before:\n" + module->ToString());
@@ -1211,9 +1490,12 @@ StatusOr<bool> WhileLoopSimplifier::Run(HloModule* module) {
   // Gather all the while ops in our module.  We do this ahead of time so we
   // don't have to worry about mutating the lists of computations or
   // instructions while we iterate.
+  // We need to iterate instructions post order as remove dead outputs
+  // can remove other while loops. If we iterate post order it means
+  // we can't iterate over while loops we have already removed.
   std::vector<HloInstruction*> while_ops;
-  for (auto* comp : module->computations()) {
-    for (auto* instr : comp->instructions()) {
+  for (auto* comp : module->MakeComputationPostOrder()) {
+    for (auto* instr : comp->MakeInstructionPostOrder()) {
       if (instr->opcode() == HloOpcode::kWhile) {
         while_ops.push_back(instr);
       }
@@ -1300,6 +1582,12 @@ StatusOr<bool> WhileLoopSimplifier::Run(HloModule* module) {
       }
     }
     if (merged_induction_vars) {
+      continue;
+    }
+
+    TF_ASSIGN_OR_RETURN(result, TryRemoveDeadOutputs(while_op));
+    changed |= result;
+    if (result) {
       continue;
     }
   }

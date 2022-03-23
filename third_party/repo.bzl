@@ -34,6 +34,25 @@ def _get_link_dict(ctx, link_files, build_file):
         link_dict[ctx.path("BUILD.bazel")] = ctx.path(Label(build_file))
     return link_dict
 
+def _archive_name(url):
+    index = url.rfind("/")
+    if index < 0:
+        fail("Couldn't find the beginning of the archive name in "+url)
+    return url[index:]
+
+# Executes specified command with arguments and calls 'fail' if it exited with
+# non-zero code
+def _execute_and_check_ret_code(repo_ctx, cmd_and_args):
+    result = repo_ctx.execute(cmd_and_args, timeout = 60)
+    if result.return_code != 0:
+        fail(("Non-zero return code({1}) when executing '{0}':\n" + "Stdout: {2}\n" +
+              "Stderr: {3}").format(
+            " ".join([str(x) for x in cmd_and_args]),
+            result.return_code,
+            result.stdout,
+            result.stderr,
+        ))
+
 def _tf_http_archive_impl(ctx):
     # Construct all paths early on to prevent rule restart. We want the
     # attributes to be strings instead of labels because they refer to files
@@ -48,14 +67,52 @@ def _tf_http_archive_impl(ctx):
             build_file = ctx.attr.system_build_file,
         ))
     else:
+        # IPU specific changes for using the mirror for dependencies.
+        mirror = _get_env_var(ctx, "HTTP_MIRROR") or ""
+        create_mirror_script = _get_env_var(ctx, "CREATE_MIRROR")
+        archive_path = ""
+        url = ctx.attr.urls[0]
+        archive_name = ctx.path("./"+_archive_name(url))
+
+        if mirror or create_mirror_script:
+            roots = ["mirror.tensorflow.org", "mirror.bazel.build", "download.tensorflow.org"]
+            for r in roots:
+                index = url.find(r)
+                if index >= 0:
+                    index += len(r)
+                    break
+            if index < 0:
+                fail("Couldn't substitute the mirror's url in " + url)
+            archive_path = url[index:]
+            new_url = mirror + url[index:]
+            if create_mirror_script:
+                # Stick to the original public urls
+                urls = ctx.attr.urls;
+            elif _get_env_var(ctx, "ENABLE_MIRROR_FALLBACK"):
+                urls = [ new_url ] + ctx.attr.urls
+            else:
+                urls = [ new_url ]
+        else:
+            urls = ctx.attr.urls
+
         patch_file = ctx.attr.patch_file
         patch_file = ctx.path(Label(patch_file)) if patch_file else None
         ctx.download_and_extract(
-            url = ctx.attr.urls,
+            url = urls,
             sha256 = ctx.attr.sha256,
             type = ctx.attr.type,
             stripPrefix = ctx.attr.strip_prefix,
         )
+
+        if create_mirror_script:
+            ctx.download(
+                urls,
+                archive_name,
+                ctx.attr.sha256,
+            )
+            _execute_and_check_ret_code(ctx,
+                                        [create_mirror_script, archive_path, archive_name, mirror])
+
         if patch_file:
             ctx.patch(patch_file, strip = 1)
 

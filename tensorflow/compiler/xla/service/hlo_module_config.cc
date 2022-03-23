@@ -67,6 +67,22 @@ string HloModuleConfig::compilation_cache_key() const {
   if (replica_count() != 1) {
     StrAppend(&key, "::replica_count=", replica_count());
   }
+  if (argument_input_indices().size()) {
+    StrAppend(&key, "::argument_input_indices=",
+              absl::StrJoin(argument_input_indices(), ","));
+  }
+  if (resource_input_indices().size()) {
+    StrAppend(&key, "::resource_input_indices=",
+              absl::StrJoin(resource_input_indices(), ","));
+  }
+  if (resource_input_initialized().size()) {
+    StrAppend(&key, "::resource_input_initialized=",
+              absl::StrJoin(resource_input_initialized(), ","));
+  }
+  if (resource_update_to_input_index().size()) {
+    StrAppend(&key, "::resource_update_to_input_index=",
+              absl::StrJoin(resource_update_to_input_index(), ","));
+  }
   StrAppend(&key, debug_options_.DebugString());
   if (intra_op_parallelism_threads() > 0) {
     StrAppend(&key, "::intra_op_parallelism_threads=",

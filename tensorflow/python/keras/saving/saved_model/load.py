@@ -184,6 +184,14 @@ def load(path, compile=True, options=None):  # pylint: disable=redefined-builtin
     sess = backend.get_session()  # Variables are initialized by this call.
     sess.run(ops.get_collection(ops.GraphKeys.TABLE_INITIALIZERS))
 
+  # Begin IPU specific changes.
+  model_config = \
+    model._serialized_attributes['metadata'].get('model_config', dict())
+  config = model_config.get('config', dict())
+  base_layer.extension_delegate_if_exists(
+    "deserialize_from_config", model, config)
+  # End IPU specific changes.
+
   return model
 
 

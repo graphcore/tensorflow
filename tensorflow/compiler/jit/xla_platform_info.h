@@ -44,6 +44,11 @@ class XlaPlatformInfo {
     return xla_device_metadata_ && xla_device_metadata_->UseMultipleStreams();
   }
 
+  bool SupportsMayAliasResourceUpdate() const {
+    return !xla_device_metadata_ ||
+           xla_device_metadata_->SupportsMayAliasResourceUpdate();
+  }
+
   // Non-null only when run on an XLA device.
   std::shared_ptr<se::DeviceMemoryAllocator> custom_allocator() const {
     return device_allocator_;

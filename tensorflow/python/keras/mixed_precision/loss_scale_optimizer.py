@@ -1228,6 +1228,9 @@ def strategy_supports_loss_scaling():
   # gradients are unscaled once per compute replica, but they should be unscaled
   # once per variable replica. When there is one variable replica for each
   # compute replica, this works fine, but otherwise issues will occur.
+  if hasattr(strategy, 'supports_loss_scaling'):
+    return strategy.supports_loss_scaling
+
   # TODO(reedwm): Support all strategies.
   return isinstance(strategy, (
       collective_all_reduce_strategy.CollectiveAllReduceStrategy,

@@ -99,6 +99,33 @@ StatusOr<std::unique_ptr<HloModuleConfig>> CreateModuleConfig(
     config->set_seed(execution_options->seed());
     config->set_launch_id(execution_options->launch_id());
     config->set_debug_options(execution_options->debug_options());
+
+    // IPU specific changes begin.
+    const auto& proto_argument_input_indices =
+        execution_options->argument_input_indices();
+    std::vector<int> argument_input_indices(
+        proto_argument_input_indices.begin(),
+        proto_argument_input_indices.end());
+    config->set_argument_input_indices(argument_input_indices);
+    const auto& proto_resource_input_indices =
+        execution_options->resource_input_indices();
+    std::vector<int> resource_input_indices(
+        proto_resource_input_indices.begin(),
+        proto_resource_input_indices.end());
+    config->set_resource_input_indices(resource_input_indices);
+    const auto& proto_resource_input_initialized =
+        execution_options->resource_input_initialized();
+    std::vector<bool> resource_input_initialized(
+        proto_resource_input_initialized.begin(),
+        proto_resource_input_initialized.end());
+    config->set_resource_input_initialized(resource_input_initialized);
+    const auto& proto_resource_update_to_input_index =
+        execution_options->resource_update_to_input_index();
+    std::vector<int> resource_update_to_input_index(
+        proto_resource_update_to_input_index.begin(),
+        proto_resource_update_to_input_index.end());
+    config->set_resource_update_to_input_index(resource_update_to_input_index);
+    // IPU specific changes end.
   } else {
     config->set_replica_count(default_num_replicas);
     config->set_debug_options(GetDebugOptionsFromFlags());

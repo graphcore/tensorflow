@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+import "tensorflow/compiler/plugin/poplar/driver/option_flag.proto";
+
+package xla.poplarplugin;
+
+// Protobufs for configuring the lowering of pipeline stages to Poplar.
+
+message PipelineStagePoplarConfig {
+  repeated PoplarOptionFlag convolution_options = 1;
+  repeated PoplarOptionFlag matmul_options = 2;
+  repeated PoplarOptionFlag slice_options = 3;
+};
+
+message PipelinePoplarConfig {
+  repeated PipelineStagePoplarConfig forward_stages = 1;
+  repeated PipelineStagePoplarConfig backward_stages = 2;
+  PipelineStagePoplarConfig resource_update = 3;
+};

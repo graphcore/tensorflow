@@ -349,11 +349,11 @@ cc_library(
         "include/curl/easy.h",
         "include/curl/mprintf.h",
         "include/curl/multi.h",
-        "include/curl/options.h",
         "include/curl/stdcheaders.h",
         "include/curl/system.h",
         "include/curl/typecheck-gcc.h",
         "include/curl/urlapi.h",
+        "include/curl/options.h",
     ],
     copts = select({
         "@org_tensorflow//tensorflow:windows": CURL_WIN_COPTS,

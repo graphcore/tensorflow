@@ -150,7 +150,8 @@ class XlaComputationLaunchContext {
   static StatusOr<std::vector<XlaCompiler::Argument>> BuildXlaCompilerArguments(
       absl::Span<int const> must_be_constant_idxs,
       absl::Span<const Tensor* const> inputs,
-      absl::Span<VariableInfo const> variable_args, Device* device);
+      absl::Span<VariableInfo const> variable_args, Device* device,
+      const std::vector<std::string>& mangled_input_names = {});
 
   // Add all inputs within `ctx` as XLA arguments (returned by arguments()).
   // `variables` is a map from TensorFlow argument number to resource variable.

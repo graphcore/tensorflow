@@ -2014,6 +2014,7 @@ tf_xla_py_test(
         "cpu",
         "cpu_ondemand",
         "gpu",
+        "poplar",
     ],
     enable_mlir_bridge = False,
     deps = [

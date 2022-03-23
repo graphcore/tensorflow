@@ -861,44 +861,117 @@ ProgramShape HloComputation::ComputeProgramShape(bool include_ids) const {
 
 bool HloComputation::EqualInternal(const HloComputation& other,
                                    bool is_layout_sensitive,
-                                   bool ignore_channel_id_values) const {
+                                   bool ignore_channel_id_values,
+                                   bool is_sharding_sensitive) const {
   if (this == &other) {
     return true;
   }
+
+  // Keep track of the pairs of instructions which have been matched.
   absl::flat_hash_set<std::pair<const HloInstruction*, const HloInstruction*>>
-      visited;
-  std::vector<std::pair<const HloInstruction*, const HloInstruction*>> worklist;
+      matched_between_comps;
 
-  worklist.push_back({root_instruction(), other.root_instruction()});
-
-  while (!worklist.empty()) {
-    auto pair = worklist.back();
-    worklist.pop_back();
-
-    if (visited.contains(pair)) {
-      continue;
-    }
-    visited.emplace(pair);
-    // TODO(b/123082518): Avoid recursively invoking Equal because it may
-    // cause a stack overflow with deeply nested subcomputations.
-    auto operands_eq = [](const HloInstruction*, const HloInstruction*) {
+  auto identical_from_instr = [&matched_between_comps, is_layout_sensitive,
+                               ignore_channel_id_values, is_sharding_sensitive](
+                                  const HloInstruction* instr_this,
+                                  const HloInstruction* instr_other) {
+    std::pair<const HloInstruction*, const HloInstruction*> to_match = {
+        instr_this, instr_other};
+    // Exit early if we already matched this pairing.
+    if (matched_between_comps.contains(to_match)) {
       return true;
-    };
-    auto comp_eq = [&](const HloComputation* a, const HloComputation* b) {
-      return a->EqualInternal(*b, is_layout_sensitive,
-                              ignore_channel_id_values);
-    };
-    bool identical_ignoring_operands =
+    }
+
+    absl::flat_hash_set<std::pair<const HloInstruction*, const HloInstruction*>>
+        visited;
+    std::vector<std::pair<const HloInstruction*, const HloInstruction*>>
+        worklist;
+
+    worklist.push_back(to_match);
+
+    while (!worklist.empty()) {
+      auto pair = worklist.back();
+      worklist.pop_back();
+
+      if (visited.contains(pair)) {
+        continue;
+      }
+      visited.emplace(pair);
+      // TODO(b/123082518): Avoid recursively invoking Equal because it may
+      // cause a stack overflow with deeply nested subcomputations.
+      auto operands_eq = [](const HloInstruction*, const HloInstruction*) {
+        return true;
+      };
+      auto comp_eq = [&](const HloComputation* a, const HloComputation* b) {
+        return a->EqualInternal(*b, is_layout_sensitive,
+                                ignore_channel_id_values,
+                                is_sharding_sensitive);
+      };
+
+      bool identical_ignoring_operands =
         ignore_channel_id_values
             ? pair.first->IdenticalIgnoringChannelIdValues(
                   *pair.second, operands_eq, comp_eq, is_layout_sensitive)
             : pair.first->Identical(*pair.second, operands_eq, comp_eq,
                                     is_layout_sensitive);
-    if (!identical_ignoring_operands) {
-      return false;
+      if (!identical_ignoring_operands) {
+        return false;
+      }
+
+      if (is_sharding_sensitive &&
+          !pair.first->has_compatible_sharding(pair.second)) {
+        return false;
+      }
+
+      for (size_t i = 0; i < pair.first->operands().size(); ++i) {
+        worklist.push_back({pair.first->operand(i), pair.second->operand(i)});
+      }
     }
-    for (size_t i = 0; i < pair.first->operands().size(); ++i) {
-      worklist.push_back({pair.first->operand(i), pair.second->operand(i)});
+    absl::c_copy(visited, std::inserter(matched_between_comps,
+                                        matched_between_comps.begin()));
+    return true;
+  };
+  // Check if identical when starting from root for both computations.
+  bool identical_from_root =
+      identical_from_instr(root_instruction(), other.root_instruction());
+  if (!identical_from_root) {
+    return false;
+  }
+
+  // Make sure each instruction with side-effects is accounted for.
+  auto instr_has_side_effect = [](const HloInstruction* instr) {
+    return instr->HasSideEffect();
+  };
+  absl::flat_hash_set<const HloInstruction*> side_effect_instrs_this;
+  absl::c_copy_if(
+      instructions(),
+      std::inserter(side_effect_instrs_this, side_effect_instrs_this.begin()),
+      instr_has_side_effect);
+
+  absl::flat_hash_set<const HloInstruction*> side_effect_instrs_other;
+  absl::c_copy_if(
+      other.instructions(),
+      std::inserter(side_effect_instrs_other, side_effect_instrs_other.begin()),
+      instr_has_side_effect);
+
+  if (side_effect_instrs_this.size() != side_effect_instrs_other.size()) {
+    return false;
+  }
+
+  // Make sure there is a mapping for each side-effect instruction.
+  for (const HloInstruction* instr_this : side_effect_instrs_this) {
+    bool found_match = false;
+    for (const HloInstruction* instr_other : side_effect_instrs_other) {
+      if (identical_from_instr(instr_this, instr_other)) {
+        // Make sure an instruction is only matched once.
+        side_effect_instrs_other.erase(instr_other);
+        found_match = true;
+        break;
+      }
+    }
+    if (!found_match) {
+      // Did not find a matching pair between computations.
+      return false;
     }
   }
   return true;

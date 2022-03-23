@@ -130,6 +130,10 @@ class XlaCompiler {
     // Resource updates are converted into input / output of xla. The two
     // buffers are aliased with other if this option is true.
     bool alias_resource_update = false;
+
+    // IPU Specific - keeps constant expression outputs instead of converting
+    // them into non-constant outputs.
+    bool keep_constant_expression_outputs = false;
   };
 
   using OutputDescription = ::tensorflow::XlaOutputDescription;

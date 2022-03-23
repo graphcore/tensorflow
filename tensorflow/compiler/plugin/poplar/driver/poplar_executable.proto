@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package xla.poplarplugin;
+
+import "tensorflow/compiler/xla/xla_data.proto";
+import "tensorflow/compiler/plugin/poplar/driver/option_flag.proto";
+import "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.proto";
+
+// Configuration for one of the infeed/outfeed streams
+message FeedConfig {
+  PoplarFeedConfig config = 1;
+  ShapeProto shape = 2;
+}
+
+message SendRecvConfig {
+  string stream_handle = 1;
+  string rendezvous_key = 2;
+  ShapeProto shape = 3;
+}
+
+message HostEmbeddingConfig {
+  string stream_handle = 1;
+  string embedding_id = 2;
+  ShapeProto indices_shape = 3;
+  ShapeProto activations_shape = 4;
+}
+
+message CollectiveBalancedRefSlice {
+  int64 begin = 1;
+  int64 end = 2;
+}
+
+message CollectiveBalancedHostRearrangement {
+  int64 id = 1;
+  int64 total_elements_per_replica = 2;
+  int64 replication_factor = 3;
+  repeated CollectiveBalancedRefSlice gathered_to_ref_slices = 4;
+  repeated uint32 element_map = 5 [packed = true];
+}
+
+message RemoteParameterConfig {
+  int64 parameter_number = 1;
+  bool is_replica_partitioned = 2;
+  string buffer_name = 3;
+  int64 buffer_offset = 4;
+  int64 num_merged = 5;
+  repeated int64 merged_params = 6 [packed = true];
+  int64 host_rearrangement_id = 7;
+}
+
+message KeyIdMapping {
+  string handle = 1;
+  int64 key = 2;
+  int64 start_id = 3;
+}
+
+message Input {
+  string name = 1;
+  string handle = 2;
+  int64 argument = 3;
+  int64 tuple_index = 4;
+  ShapeProto shape = 5;
+}
+
+message Output {
+  string name = 1;
+  string handle = 2;
+  int64 tuple_index = 3;
+  ShapeProto shape = 4;
+}
+
+message Signature {
+  repeated Input inputs = 1;
+  repeated Output outputs = 2;
+
+  repeated Input streamed_inputs = 3;
+  repeated Output streamed_outputs = 4;
+}
+
+message EmbeddedRuntimeConfig {
+  // The functional signature of the poplar executable.
+  Signature signature = 1;
+
+  // Information about runtime used to compile executable
+  int64 num_IPUs = 2;
+  string target_type = 3;
+  string target_arch = 4;
+  bool gateway_mode = 5;
+  bool supports_remote_buffers = 6;
+
+  // Whether this is model can stall without more data arriving. This can
+  // currently happen when using pipelining with Grouped or Interleaved schedule
+  // or IO tiles.
+  bool executable_can_stall = 7;
+}
+
+message PoplarExecutableProto {
+
+  // The number of replicas
+  uint32 replication_factor = 1;
+
+  // Names of the infeed instructions
+  repeated FeedConfig infeeds = 2;
+
+  // Names of the outfeed instructions
+  repeated FeedConfig outfeeds = 3;
+
+  // The OptionFlags which were used during engine compilation
+  repeated PoplarOptionFlag option_flags = 4;
+
+  repeated SendRecvConfig sends = 5;
+  repeated SendRecvConfig recvs = 6;
+
+  repeated HostEmbeddingConfig lookups = 7;
+  repeated HostEmbeddingConfig updates = 8;
+  repeated HostEmbeddingConfig notifications = 9;
+
+  repeated RemoteParameterConfig remote_parameters = 10;
+
+  bool logging_cycle_count = 11;
+
+  EmbeddedRuntimeConfig embedded_runtime_config = 12;
+
+  uint32 tf_major_version = 13;
+  uint32 tf_minor_version = 14;
+  string tf_git_version = 15;
+
+  repeated CollectiveBalancedHostRearrangement collective_balanced_host_rearrangements = 16;
+
+  string poplar_package_hash = 17;
+};

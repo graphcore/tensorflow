@@ -1,0 +1,10 @@
+{
+  "phabricator.uri" : "https://phabricator.sourcevertex.net",
+  "load": [
+    "../arcanist_linters/gc_copyright_linter",
+    "../arcanist_linters/clang-format-linter",
+    "../arcanist_linters/yapf-linter"
+  ],
+  "arc.land.onto.default": "poplar/r2.5/release",
+  "arc.land.onto": ["poplar/r2.5/release"]
+}

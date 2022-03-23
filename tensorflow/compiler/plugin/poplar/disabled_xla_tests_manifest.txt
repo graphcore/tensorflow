@@ -1,0 +1,428 @@
+ArrayElementwiseOpTest.RemF64s    POPLAR // F64
+ArrayElementwiseOpTest.MaxF64s    POPLAR
+ArrayElementwiseOpTest.MinF64s    POPLAR
+ArrayElementwiseOpTest.NegConstantF64      POPLAR
+ArrayElementwiseOpTest.DivTwoConstantF64s  POPLAR
+ArrayElementwiseOpTest.SubTwoConstantF64s  POPLAR
+ArrayElementwiseOpTest.CompareGeF32sTO     POPLAR
+ArrayElementwiseOpTest.CompareEqF32sTO     POPLAR
+ScalarComputationsTest.TanhDoubleScalar    POPLAR
+ScalarComputationsTest.AddTwoScalarsF64    POPLAR
+ParametricDotTestWithoutLayoutAssignment.TestF64 POPLAR
+ParametricDotTestWithoutLayoutAssignment.TestC64 POPLAR
+ParametricDotTestWithoutLayoutAssignment.TestC128 POPLAR
+ParametricDotTest.TestF64 POPLAR
+ParametricDotTest.TestC64 POPLAR
+ParametricDotTest.TestC128 POPLAR
+DotOperationTest.VectorDotF64 POPLAR
+DotOperationTest.OneElementVectorDotF64 POPLAR
+DotOperationTest.NonsquareMatrixDotF64 POPLAR
+DotOperationTest.SquareMatrixDotF64 POPLAR
+DotOperationTextTest.S8Dot POPLAR
+DotOperationTextTest.S32Dot POPLAR
+DotOperationTextTest.S16IotaDot POPLAR
+DotOperationTextTest.U16IotaDot POPLAR
+DotOperationTextTest.S32IotaDot POPLAR
+DotOperationTextTest.U32IotaDot POPLAR
+DotOperationTextTest.S16IotaSquaredDot POPLAR
+DotOperationTextTest.U16IotaSquaredDot POPLAR
+DotOperationTextTest.S32IotaSquaredDot POPLAR
+DotOperationTextTest.U32IotaSquaredDot POPLAR
+ConvertTest.ConvertR1F32ToR1F64 POPLAR
+ConvertTest.ConvertR1F64ToR1F32 POPLAR
+SliceR1Test.DoIt_F64 POPLAR
+MultiOutputFusionTest.DiffentTypesNoFusion POPLAR
+MultiOutputFusionTest.DiffentTypesFusion POPLAR
+PrngTest.HundredValuesB10p5F64 POPLAR
+PrngTest.HundredValuesB10p1F64 POPLAR
+ConvertTest.ConvertU64S64 POPLAR
+ConvertTest.ConvertS64U64 POPLAR
+ConvolutionHloTest.ConvolveF64BackwardFilter POPLAR
+ConvolutionHloTest.ConvolveF64BackwardInput POPLAR
+ConvolutionHloTest.ConvolveF64Forward POPLAR
+ComparatorsTest.CompareLtF64 POPLAR
+ComparatorsTest.CompareGtF64 POPLAR
+ReducedPrecisionAccuracyTest POPLAR
+MathTest.BesselI0eDouble POPLAR
+MathTest.BesselI1eDouble POPLAR
+
+Bfloat16Test POPLAR // No bfloat16
+DynamicSliceTest.Int32R1BF16 POPLAR
+DynamicSliceTest.Int32R2BF16 POPLAR
+DynamicSliceTest.Int32R3BF16 POPLAR
+DynamicUpdateSliceTest.Int32R1BF16 POPLAR
+DynamicUpdateSliceTest.Int32R2BF16 POPLAR
+DynamicUpdateSliceTest.Int32R3BF16 POPLAR
+DynamicUpdateSliceTest.R3ContiguousSingleElementBF16 POPLAR
+DynamicUpdateSliceTest.R3ContiguousMultipleElementsBF16 POPLAR
+DynamicUpdateSliceTest.R3ContiguousTooLargeBF16 POPLAR
+DynamicUpdateSliceTest.R3ContiguousUnalignedBF16 POPLAR
+DynamicUpdateSliceTest.R3ContiguousLargerBF16 POPLAR
+ConvolutionTest.Convolve_bf16_1x1x1x2_1x1x1x2_Valid POPLAR
+MatOpsDotAddTest.Dot_Add_2x2_2x2BF16 POPLAR
+PrngTest.ScalarBF16Tests POPLAR
+PrngTest.ScalarBF16CountTests POPLAR
+DynamicUpdateSliceTest.Int32R0BF16 POPLAR
+ConvertTest.ConvertBF16F32 POPLAR
+ComparatorsTest.CompareLtBF16 POPLAR
+ComparatorsTest.CompareGtBF16 POPLAR
+DequantizeTest.MinCombinedUint16R1 POPLAR
+DequantizeTest.MinCombinedUint8R1 POPLAR
+DequantizeTest.MinCombinedUint8R2 POPLAR
+DequantizeTest.MinCombinedUint8R2TransposeOutput POPLAR
+DequantizeTest.MinCombinedUint8R2TailingZero POPLAR
+DequantizeTest.MinCombinedUint8R2TailingZeroTransposeOutput POPLAR
+DequantizeTest.MinCombinedUint8LargeSizeTest POPLAR
+DequantizeTest.MinCombinedUint8LargeSizeTestTransposeOutput POPLAR
+DotOperationTextTest.MatrixVectorBF16 POPLAR
+ScalarBF16Test POPLAR
+HloTestBase.ReduceWindowVariadicSupport POPLAR
+HloTestBase.ReduceWindowVariadicSupport2 POPLAR
+HloTestBase.ReduceWindowVariadicSupport3 POPLAR
+HloTestBase.ReduceWindowVariadicSupport4 POPLAR
+
+UnaryOpTest.UnsignedAbsTestR1         POPLAR // U32
+UnaryOpTest.UnsignedSignTestR1        POPLAR
+ReduceTest.VectorizedReduce_Add       POPLAR
+ReduceTest.UnsignedInt_MaxReduce      POPLAR
+ReduceTest.VectorizedReduce_Max       POPLAR
+ReduceTest.VectorizedReduce_Multiply  POPLAR
+ReduceTest.VectorizedReduce_Min       POPLAR
+ReduceTest.UnsignedInt_MinReduce      POPLAR
+ScalarComputationsTest.MulTwoScalarsU32      POPLAR
+ScalarComputationsTest.CompareLtU32      POPLAR
+ScalarComputationsTest.CompareLeU32      POPLAR
+ScalarComputationsTest.CompareGtU32      POPLAR
+ScalarComputationsTest.CompareNeU32       POPLAR
+ScalarComputationsTest.CompareGeU32Equal      POPLAR
+ScalarComputationsTest.CompareGeU32Greater    POPLAR
+ScalarComputationsTest.MaxU32Below      POPLAR
+ScalarComputationsTest.AddTwoScalarsU32      POPLAR
+ScalarComputationsTest.CompareEqU32False      POPLAR
+ScalarComputationsTest.MinU32Above      POPLAR
+ScalarComputationsTest.MinU32Below      POPLAR
+ScalarComputationsTest.RemTwoScalarsU32      POPLAR
+ScalarComputationsTest.RemU32s      POPLAR
+ScalarComputationsTest.DivU32s      POPLAR
+ScalarComputationsTest.DivideTwoScalarsU32   POPLAR
+ScalarComputationsTest.MaxU32Above      POPLAR
+ScalarComputationsTest.AndU32      POPLAR
+ScalarComputationsTest.NotU32      POPLAR
+ScalarComputationsTest.OrU32      POPLAR
+ScalarComputationsTest.ClampScalarLowU32 POPLAR
+ScalarComputationsTest.ClampScalarHighU32 POPLAR
+ScalarComputationsTest.ClampScalarMiddleU32 POPLAR
+ArrayElementwiseOpTest.MulTwoConstantU32s      POPLAR
+ArrayElementwiseOpTest.CompareLeU32s      POPLAR
+ArrayElementwiseOpTest.CompareLtU32s      POPLAR
+ArrayElementwiseOpTest.DivU32s      POPLAR
+ArrayElementwiseOpTest.CompareGtU32s      POPLAR
+ArrayElementwiseOpTest.MinU32s      POPLAR
+ArrayElementwiseOpTest.MaxU32s      POPLAR
+ArrayElementwiseOpTest.CompareGeU32s      POPLAR
+ArrayElementwiseOpTest.CompareNeU32s      POPLAR
+ArrayElementwiseOpTest.CompareEqU32s      POPLAR
+ArrayElementwiseOpTest.NotU32R2      POPLAR
+ArrayElementwiseOpTest.NotU32R1      POPLAR
+ArrayElementwiseOpTest.AndU32R2      POPLAR
+ArrayElementwiseOpTest.OrU32R2      POPLAR
+ArrayElementwiseOpTest.OrU32R1      POPLAR
+ArrayElementwiseOpTest.ShiftRightArithmeticU32      POPLAR
+ArrayElementwiseOpTest.ShiftLeftU32      POPLAR
+ArrayElementwiseOpTest.ShiftRightLogicalU32      POPLAR
+ArrayElementwiseOpTest.ClampU32Vector POPLAR
+ArrayElementwiseOpTest.ClampU32ScalarVector POPLAR
+IntegerDivideOpTest.DivU32s POPLAR
+IntegerDivideOpTest.UnsignedOverflow POPLAR
+VecOpsSimpleTest.NegateUint32Values      POPLAR
+PrngTest.HundredValuesB10p5      POPLAR
+PrngTest.HundredValuesB10p1      POPLAR
+PrngTest.HundredValuesB10p5U32 POPLAR
+PrngTest.HundredValuesB10p1U32 POPLAR
+VecOpsSimpleTest.NegateUint32Values POPLAR
+ConvertTest.ConvertR1U32ToR1F32 POPLAR
+ConvertTest.ConvertR1U32ToR1S64 POPLAR
+ConvertTest.ConvertR1F32ToR1U32 POPLAR
+
+ArrayElementwiseOpTest.NegConstantS64 POPLAR // S64
+ArrayElementwiseOpTest.SubTwoConstantS64s POPLAR
+ArrayElementwiseOpTest.ClzS64s POPLAR
+ArrayElementwiseOpTest.PopcntS64 POPLAR
+ScalarComputationsTest.AddTwoScalarsS64      POPLAR
+DynamicUpdateSliceTest.Int64R3 POPLAR
+DynamicUpdateSliceTest.Int64R2 POPLAR
+DynamicUpdateSliceTest.Int64R1 POPLAR
+DynamicSliceTest.Int64R3 POPLAR
+DynamicSliceTest.Int64R2 POPLAR
+DynamicSliceTest.Int64R1 POPLAR
+ScalarComputationsTest.CastS64ToF32 POPLAR
+ConvertTest.ConvertR1S64ToR1F32 POPLAR
+ConvertTest.ConvertR1F32ToR1S64 POPLAR
+HloTestBase.ReduceWindowS64 POPLAR
+MatrixTest.SetMatrixDiagonal_S64 POPLAR
+
+ScalarComputationsTest.AddTwoScalarsU64      POPLAR // U64
+DynamicUpdateSliceTest.UInt64R3 POPLAR
+DynamicUpdateSliceTest.UInt64R2 POPLAR
+DynamicUpdateSliceTest.UInt64R1 POPLAR
+DynamicSliceTest.UInt64R3 POPLAR
+DynamicSliceTest.UInt64R2 POPLAR
+DynamicSliceTest.UInt64R1 POPLAR
+ArrayElementwiseOpTest.AddTwoConstantU64s POPLAR
+ArrayElementwiseOpTest.CmpTwoConstantU64s POPLAR
+ReduceInitializerTest.U64InitializerZero POPLAR
+ReduceInitializerTest.U64InitializerOne POPLAR
+ReduceInitializerTest.U64InitializerBigValue POPLAR
+ReduceTest.AndReduceU64 POPLAR
+ReduceTest.OrReduceU64 POPLAR
+
+ComparatorsTest.CompareLtF16 POPLAR // U16
+ComparatorsTest.CompareGtF16 POPLAR
+
+ParamsTest.ConstantR1U8Param      POPLAR // U8
+ScalarComputationsTest.AddTwoScalarsU8      POPLAR
+ReverseTest.Reverse4DU8ArrayOnDim23 POPLAR
+PadTest.Pad4DU8Array POPLAR
+ConvertTest.ConvertR1U8ToR1F32 POPLAR
+ConvertTest.ConvertR1U8ToR1S32 POPLAR
+ConvertTest.ConvertR1U8ToR1U32 POPLAR
+ReduceTest.ReduceAndPredR2_128x64_To_R1 POPLAR
+ReduceTest.ReduceOrPredR2_64x32_To_R1 POPLAR
+ReduceInitializerTest.U8BigPowerOf2 POPLAR
+ReduceInitializerTest.U8InitializerBigNonPowerOf2 POPLAR
+ReduceInitializerTest.U8Small POPLAR
+
+UnaryOpTest.AbsTestR1Size0 POPLAR // Complex<float>
+UnaryOpTest.AbsTestR1 POPLAR
+UnaryOpTest.AbsTestR0 POPLAR
+UnaryOpTest.SignTestR0 POPLAR
+UnaryOpTest.SignTestR1 POPLAR
+UnaryOpTest.SignAbsTestR1 POPLAR
+SquareMatrixDot/3.TypesTT POPLAR
+SquareMatrixDot/3.TypesTF POPLAR
+SquareMatrixDot/3.TypesFF POPLAR
+RandomCholeskyTest.Complex POPLAR // Complex
+
+DotOperationTextTest.PREDDot POPLAR // Pred
+
+ArrayElementwiseOpTest.NegConstantZeroElementC64 POPLAR // Complex<double>
+ArrayElementwiseOpTest.NegConstantC64 POPLAR
+ArrayElementwiseOpTest.AddTwoConstantC64s POPLAR
+ArrayElementwiseOpTest.AddTwoConstantZeroElementC64s POPLAR
+ArrayElementwiseOpTest.SubTwoConstantC64s POPLAR
+ArrayElementwiseOpTest.SubTwoConstantZeroElementC64s POPLAR
+ArrayElementwiseOpTest.DivTwoConstantC64s POPLAR
+ArrayElementwiseOpTest.DivTwoConstantZeroElementC64s POPLAR
+ArrayElementwiseOpTest.MulTwoConstantC64s POPLAR
+ArrayElementwiseOpTest.MulTwoConstantZeroElementC64s POPLAR
+ArrayElementwiseOpTest.CompareEqC64s POPLAR
+ArrayElementwiseOpTest.CompareEqZeroElementC64s POPLAR
+ArrayElementwiseOpTest.CompareNeC64s POPLAR
+ConvolutionHloTest.ConvolveC64Forward POPLAR
+TupleTest.ComplexTuples POPLAR
+DotOperationTest.MatrixVectorC64 POPLAR
+DotOperationTextTest.MatrixVectorComplex POPLAR
+ConvertTest.ConvertC64ToC64 POPLAR
+ArrayElementwiseOpTest.PowC64s POPLAR
+TriangularSolveTest.SimpleRightLowerTransposeConjugate POPLAR
+TriangularSolveTest.SimpleLeftUpperTransposeNoconjugate POPLAR
+MathTest.AcosComplexValues POPLAR
+MatrixTest.SymmetrizeComplex POPLAR
+
+ConvolveWithAndWithoutCanonicalization.Convolve2D_NoSpatialDims POPLAR // ??
+
+ReducePrecisionInsertionTest POPLAR // Don't support this
+ReducePrecisionAccuracyTest POPLAR
+CustomCallTest POPLAR
+
+DynamicSliceTest.Int32R1OOB POPLAR // Tests out of bounds behaviour
+DynamicSliceTest.Int32R2OOB POPLAR
+DynamicSliceTest.Int32R3OOB POPLAR
+DynamicSliceTest.UInt32R1OOB POPLAR
+DynamicSliceTest.UInt32R2OOB POPLAR
+DynamicSliceTest.UInt32R3OOB POPLAR
+DynamicUpdateSliceTest.UInt32R1OOB POPLAR
+DynamicUpdateSliceTest.UInt32R2OOB POPLAR
+DynamicUpdateSliceTest.UInt32R3OOB POPLAR
+DynamicUpdateSliceTest.Int32OOBBF16 POPLAR
+DynamicUpdateSliceTest.Int32OOB POPLAR
+DynamicUpdateSliceTest.Int64OOB POPLAR
+DynamicUpdateSliceTest.UInt64OOB POPLAR
+DynamicUpdateSliceTest.R3ContiguousMultipleOOBBF16 POPLAR
+
+LocalClientExecuteTest.InfeedOutfeedTest POPLAR // Don't support InFeed/OutFeed
+LocalClientExecuteTest.InfeedTest POPLAR
+OutfeedInNestedComputationTest POPLAR
+WhileTest.WhileInfeedCondition POPLAR
+TupleHloTest.NonAmbiguousTopLevelAllocation POPLAR
+
+DeconstructTupleTest.DeconstructTupleFromParam POPLAR // Bad test
+
+ReduceWithLayoutTest POPLAR // Some layout issue
+
+ClientTest.ExecuteParallel POPLAR // Don't support parallel execution
+
+TupleTest.TuplesInAMap POPLAR // Don't support complex mapping
+
+HloProfileTest POPLAR // Don't support profiling
+
+ArrayElementwiseOpTest.ShiftLeftS32 POPLAR // Shifting > word length
+ArrayElementwiseOpTest.ShiftRightArithmeticS32 POPLAR
+ArrayElementwiseOpTest.ShiftRightLogicalS32 POPLAR
+
+ParamsTest.ThreeThousandParameters POPLAR // Too long
+ParamsTest.ThreeThousandParametersAndOutputElements POPLAR
+ParamsTest.ManyParametersIntoWhileLoop POPLAR
+DynamicUpdateSliceTest.R3ContiguousTooLarge POPLAR
+R4ReduceWindowLargeTest POPLAR
+SliceR1LargeTest POPLAR
+SelectAndScatterTest.ParamTest POPLAR
+ConcatTest.ConcatDeeplyNested POPLAR
+
+ScalarComputationsTest.MinPropagatesNan POPLAR // NaN passing
+ScalarComputationsTest.MaxPropagatesNan POPLAR
+ArrayElementwiseOpTest.MinF32s POPLAR
+ArrayElementwiseOpTest.MaxF32s POPLAR
+VecOpsSimpleTest.ClampFloatEdgeCases POPLAR
+
+MatOpsSimpleTest_F16F32.ExpTwoByTwoValues POPLAR // Precision error
+MathTest.IgammacF16 POPLAR
+
+DotOperationTest.ZeroElementVectorDot POPLAR // Zero sized matmul
+DotOperationTest_F16F32F64CF64.ZeroElementVectorDot POPLAR
+
+SelectAndScatterTest.R2F32Tie POPLAR // Is this even valid?
+
+TransposeTest.Transpose0x2x3_2x3x0 POPLAR // Fix up poplar to enable this
+
+TupleTest.TupleConstant POPLAR // generates unsupported/invalid instructions
+TupleHloTest.BitcastAfterGTE POPLAR
+ConstantsHloTest.BitcastOfConstant POPLAR
+
+DotOperationTest.DotOfInputTupleElem POPLAR // dot of a tuple
+
+ParametricDotTest.TestS32 POPLAR // Dot of an integer
+DotOperationTextTest.IntegerDotCodegen POPLAR
+DotOperationTextTest.WiderIntegralResultAccumulation POPLAR
+
+GatherOperationTest.OutOfBoundsIndex POPLAR
+GatherOperationTest.OutOfBoundsUnsignedIndex POPLAR
+
+TrivialCrossReplicaSumTest POPLAR // Don't support cross-replica-sum
+
+TestUtilsTest.UnusedParam POPLAR // Decide what to do with strange reductions
+ReduceWindowTest.NonstandardReduceFunction POPLAR
+
+MultiOutputFusionTest POPLAR // Don't support fusion
+FusionTest.FusionWithLayout POPLAR
+
+ReduceTest.AddReduce2DScalarToR0 POPLAR // Reduction is too big for poplibs CPU mode
+ReduceTest.MaxReduce2DScalarToR0 POPLAR
+ReduceTest.ReduceR1_1M_F32_To_R0 POPLAR
+ReduceTest.ReduceR1_16M_F32_To_R0 POPLAR
+ReduceTest.ReduceR2_1000x1500_To_R0 POPLAR
+ReduceTest.ReduceR2_1024x1024_To_R0 POPLAR
+ReduceR3ToR2Test.ReduceR3ToR2 POPLAR
+
+TokenHloTest POPLAR // Don't do tokens
+
+IntegerDivideOpTest.SignedOverflow POPLAR // Crashes - find out why
+
+IotaR3PredTest POPLAR // iota PRED support
+
+ArrayElementwiseOpTest.ClampF32 POPLAR // NaN propagation
+
+DynamicUpdateSliceTest.R3ContiguousLarger POPLAR // Update slice is too big for dynamic slice
+
+ExhaustiveF32ElementwiseOpTest POPLAR // Too long
+ExhaustiveOpTest POPLAR
+
+TriangularSolveParametricTest.Random POPLAR // Too long
+
+DotOperationTextTest.GpuIntegerDotCodegen POPLAR // GPU codegen
+
+FmaxSimpleTest.FmaxEdgeCases POPLAR // Tests NaN behaviour on CPU model
+FmaxSimpleTest.FminEdgeCases POPLAR
+ComparatorsTest.CompareLtF32 POPLAR
+ComparatorsTest.CompareGtF32 POPLAR
+
+MatrixTest.GetMatrixDiagonal_S32 POPLAR // Don't support int32 reduction.
+MatrixTest.GetMatrixDiagonal_S64 POPLAR // Don't support int64 reduction.
+
+SortingTest.TopKFullSortWithDuplicates POPLAR // T9438 Requires stable sort.
+SortingTest.TopKFullSortWithDuplicates2Partitions POPLAR // T9438 Requires stable sort.
+ExecutionTest.DynamicReshapeDoubleDynamicDimensions POPLAR // T9438 Requires stable sort.
+
+ExecutionTest.DynamicSort POPLAR // Unsupported sort computation.
+ExecutionTest.DynamicTupleSort POPLAR // Unsupported sort computation.
+
+MathExhaustiveTest POPLAR // Precision errors
+
+SVDTest POPLAR // Crashing in while loop
+SelfAdjointEigTest POPLAR
+
+VariadicReduceTest.Reduce_R3x2_to_R1x2_simple POPLAR // Variadic reduce
+VariadicReduceTest.Reduce_R1x2_to_R0x2_simple POPLAR
+VariadicReduceTest.Reduce_R3x2_to_R2x2_simple POPLAR
+VariadicReduceTest.Reduce_R1x2_to_R0x2_argmax POPLAR
+VariadicReduceTest.ReduceMultiOutputVariadicAnd POPLAR
+
+ScatterTest.OutOfBoundsIndex POPLAR // Don't currently handle bad bounds
+ScatterTest.OutOfBoundsUnsignedIndex POPLAR
+ScatterTest.NegativeIndex POPLAR
+ScatterTest.OutOfBoundsUpdateWindow POPLAR
+
+PrngTest.PassInGlobalRngSeed POPLAR // disable until poplar CPU random works
+PrngTest.DifferentValuesForIdenticalRngNodesInSameComputation  POPLAR
+
+QrTest POPLAR // No Qr op
+
+ArithmeticTest POPLAR // Requires multi-variate reduction
+
+IotaR1Test POPLAR // Slow
+IotaR3Test POPLAR
+
+Exhaustive32BitOrLessUnaryTest POPLAR
+
+LocalClientExecuteTest.LargeNestedTuple POPLAR // Too long on IPU
+
+CholeskyTest.NonPSDInput POPLAR // Incompatible input, implementation dependent results
+CholeskyTest.NonPSDBatched POPLAR // Incompatible input, implementation dependent results
+ConstantsTest.NanValueF32 POPLAR // NaNs
+MathTypedTest.IsInfOrNan POPLAR // NaNs
+ArrayElementwiseOpTest.IsFiniteScalarF32 POPLAR // NaNs
+ArrayElementwiseOpTest.IsFiniteR1F32s POPLAR // NaNs
+ArrayElementwiseOpTest.CompareEqF32s POPLAR // NaNs
+ArrayElementwiseOpTest.CompareGeF32s POPLAR // NaNs
+ArrayElementwiseOpTest.CompareGtF32s POPLAR // NaNs
+ArrayElementwiseOpTest.CompareLeF32s POPLAR // NaNs
+ArrayElementwiseOpTest.CompareLtF32s POPLAR // NaNs
+ArrayElementwiseOpTest.CompareNeF32s POPLAR // NaNs
+ArrayElementwiseOpTest.PowF32s POPLAR // NaNs
+
+SlicingTest.TorchGatherDense POPLAR // requires bitwise reduce OR
+SlicingTest.EmptyIndexSelectNonZero POPLAR // Unusual output size
+MatrixTest.SetMatrixDiagonal_S32 POPLAR
+MatrixTest.GetMatrixDiagonal4D_S32 POPLAR
+MatrixTest.GetMatrixDiagonal4D_S64 POPLAR
+
+ExecutionTest.ScatterUpdate POPLAR // Dynamic size updates
+ExecutionTest.ScatterUpdateF32 POPLAR
+ExecutionTest.OutputMinorDimensionReshape POPLAR
+ExecutionTest.DoubleDynamicDimension POPLAR
+
+HloParserTestLong POPLAR // Failing to get shape of TridiaganalSolve
+HloParserTestLongProto POPLAR
+
+ParametricDotTestWithoutLayoutAssignment.TestF16 POPLAR // Fail to handle major/minor ordering
+
+LogDetTest POPLAR # Unsupported matmul type.
+
+BufferDonationTest.SimpleWhileTupleTest POPLAR // Unsupported aliasing of buffers. (T36704)
+BufferDonationTest.TestMustAliasNotDonated POPLAR
+
+LocalClientExecuteTest.SizeOfGeneratedCodeInBytes POPLAR // Unsupported features.
+LocalClientExecuteTest.CompilePartitionedExecutable POPLAR
+
+ArrayElementwiseOpTest.IntPow POPLAR // No int32 power operator in Poplar. (T53427)
+ArrayElementwiseOpTest.IntPowLarge POPLAR
