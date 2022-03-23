@@ -28,10 +28,10 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape.h"
 
 #include "tensorflow/core/common_runtime/process_function_library_runtime.h"
+#include "tensorflow/core/data/unbounded_thread_pool.h"
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/function_handle_cache.h"
 #include "tensorflow/core/framework/resource_mgr.h"
-#include "tensorflow/core/kernels/data/unbounded_thread_pool.h"
 #include "tensorflow/core/platform/env.h"
 
 namespace tensorflow {

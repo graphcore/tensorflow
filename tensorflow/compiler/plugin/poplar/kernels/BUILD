@@ -155,7 +155,7 @@ poplar_cc_library(
         "//tensorflow/compiler/xla/client/lib:prng",
         "//tensorflow/compiler/xla/client/lib:sorting",
         "//tensorflow/core:framework_headers_lib",
-        "//tensorflow/core/kernels/data:dataset_utils",
+        "//tensorflow/core/data:dataset_utils",
         "//third_party/eigen3",
         "@com_google_protobuf//:protobuf_headers",
         "@jsoncpp_git//:jsoncpp",

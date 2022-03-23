@@ -102,6 +102,9 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleBatchNormGrad);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleAddDependency);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleConstant);
+  HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleAllReduceScatter);
+  HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleAllReduceStart);
+  HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleAllReduceDone);
 
   Status HandleOutfeed(HloInstruction* hlo) override;
 

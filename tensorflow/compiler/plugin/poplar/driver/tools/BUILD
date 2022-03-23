@@ -131,7 +131,7 @@ poplar_cc_library(
         "//tensorflow/core/common_runtime:device",
         "//tensorflow/core/common_runtime:device_mgr",
         "//tensorflow/core/common_runtime:device_set",
-        "//tensorflow/core/kernels/data:unbounded_thread_pool",
+        "//tensorflow/core/data:unbounded_thread_pool",
         "//tensorflow/core/platform:path",
         "//tensorflow/stream_executor:dnn",
         "//tensorflow/stream_executor:dnn_proto_cc_impl",
@@ -307,7 +307,7 @@ poplar_cc_library(
         "//tensorflow/core/common_runtime:device_factory",
         "//tensorflow/core/common_runtime:device_mgr",
         "//tensorflow/core/common_runtime:device_set",
-        "//tensorflow/core/kernels/data:unbounded_thread_pool",
+        "//tensorflow/core/data:unbounded_thread_pool",
     ],
 )
 
@@ -790,7 +790,7 @@ poplar_cc_library(
         "//tensorflow/compiler/xla/service/cpu:cpu_runtime",
         "//tensorflow/core:framework_headers_lib",
         "//tensorflow/core/common_runtime:core_cpu",
-        "//tensorflow/core/kernels/data:unbounded_thread_pool",
+        "//tensorflow/core/data:unbounded_thread_pool",
         "//third_party/eigen3",
         "@com_google_absl//absl/types:optional",
         "@com_google_protobuf//:protobuf_headers",

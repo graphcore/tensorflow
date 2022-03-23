@@ -21,8 +21,8 @@ tf_kernel_library(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
+        "//tensorflow/core/data:name_utils",
         "//tensorflow/core/kernels/data:dataset_ops",
-        "//tensorflow/core/kernels/data:name_utils",
     ],
 )
 
@@ -40,8 +40,8 @@ tf_cc_test(
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
+        "//tensorflow/core/data:dataset_utils",
         "//tensorflow/core/kernels/data:dataset_test_base",
-        "//tensorflow/core/kernels/data:dataset_utils",
         "//tensorflow/core/kernels/data:iterator_ops",
         "//tensorflow/core/kernels/data:tensor_slice_dataset_op",
     ],
