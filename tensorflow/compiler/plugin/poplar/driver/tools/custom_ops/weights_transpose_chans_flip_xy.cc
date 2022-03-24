@@ -43,9 +43,8 @@ HloWeightsTransposeChansFlipXYInstruction::
     HloWeightsTransposeChansFlipXYInstruction(
         HloInstruction* operand,
         const ConvolutionDimensionNumbers& conv_dimension_numbers,
-        const std::vector<size_t>& conv_input_shape,
-        const std::vector<size_t>& conv_output_shape, xla::Window window,
-        int64 feature_group_count)
+        const Shape& conv_input_shape, const Shape& conv_output_shape,
+        xla::Window window, int64 feature_group_count)
     : HloPoplarInstruction(
           GetWeightsShape(operand->shape(), conv_dimension_numbers), {operand},
           PoplarOp::WeightsTransposeChansFlipXY),
@@ -56,13 +55,12 @@ HloWeightsTransposeChansFlipXYInstruction::
   set_feature_group_count(feature_group_count);
 }
 
-const std::vector<size_t>&
-HloWeightsTransposeChansFlipXYInstruction::ConvInputShape() const {
+const Shape& HloWeightsTransposeChansFlipXYInstruction::ConvInputShape() const {
   return conv_input_shape_;
 }
 
-const std::vector<size_t>&
-HloWeightsTransposeChansFlipXYInstruction::ConvOutputShape() const {
+const Shape& HloWeightsTransposeChansFlipXYInstruction::ConvOutputShape()
+    const {
   return conv_output_shape_;
 }
 
@@ -127,11 +125,9 @@ HloWeightsTransposeChansFlipXYInstruction::ExtraPoplarAttributesToStringImpl(
 
   extra.push_back(absl::StrCat("window=", window_util::ToString(window())));
   extra.push_back(
-      absl::StrCat("conv_input_shape_=",
-                   "{ " + absl::StrJoin(conv_input_shape_, ", ") + "}"));
+      absl::StrCat("conv_input_shape_=", conv_input_shape_.ToString()));
   extra.push_back(
-      absl::StrCat("conv_output_shape_=",
-                   "{ " + absl::StrJoin(conv_output_shape_, ", ") + "}"));
+      absl::StrCat("conv_output_shape_=", conv_output_shape_.ToString()));
 
   return extra;
 }
@@ -139,9 +135,8 @@ HloWeightsTransposeChansFlipXYInstruction::ExtraPoplarAttributesToStringImpl(
 std::unique_ptr<HloInstruction> CreateHloWeightsTransposeChansFlipXY(
     HloInstruction* operand,
     const ConvolutionDimensionNumbers& conv_dimension_numbers,
-    const std::vector<size_t>& conv_input_shape,
-    const std::vector<size_t>& conv_output_shape, xla::Window window,
-    int64 feature_group_count) {
+    const Shape& conv_input_shape, const Shape& conv_output_shape,
+    xla::Window window, int64 feature_group_count) {
   return absl::make_unique<HloWeightsTransposeChansFlipXYInstruction>(
       operand, conv_dimension_numbers, conv_input_shape, conv_output_shape,
       window, feature_group_count);

@@ -30,12 +30,11 @@ class HloWeightsTransposeChansFlipXYInstruction : public HloPoplarInstruction {
   explicit HloWeightsTransposeChansFlipXYInstruction(
       HloInstruction* operand,
       const ConvolutionDimensionNumbers& conv_dimension_numbers,
-      const std::vector<size_t>& conv_input_shape,
-      const std::vector<size_t>& conv_output_shape, xla::Window window,
-      int64 feature_group_count);
+      const Shape& conv_input_shape, const Shape& conv_output_shape,
+      xla::Window window, int64 feature_group_count);
 
-  const std::vector<size_t>& ConvInputShape() const;
-  const std::vector<size_t>& ConvOutputShape() const;
+  const Shape& ConvInputShape() const;
+  const Shape& ConvOutputShape() const;
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -58,16 +57,15 @@ class HloWeightsTransposeChansFlipXYInstruction : public HloPoplarInstruction {
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
 
-  std::vector<size_t> conv_input_shape_;
-  std::vector<size_t> conv_output_shape_;
+  const Shape conv_input_shape_;
+  const Shape conv_output_shape_;
 };
 
 std::unique_ptr<HloInstruction> CreateHloWeightsTransposeChansFlipXY(
     HloInstruction* operand,
     const ConvolutionDimensionNumbers& conv_dimension_numbers,
-    const std::vector<size_t>& conv_input_shape,
-    const std::vector<size_t>& conv_output_shape, xla::Window window,
-    int64 feature_group_count);
+    const Shape& conv_input_shape, const Shape& conv_output_shape,
+    xla::Window window, int64 feature_group_count);
 
 }  // namespace poplarplugin
 }  // namespace xla

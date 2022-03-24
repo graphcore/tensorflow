@@ -63,12 +63,6 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
   TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers conv_dimension_numbers,
                       GetConvolutionDims(inst_conv_with_reverse));
 
-  std::vector<size_t> conv_input_shape(conv_input->shape().dimensions().begin(),
-                                       conv_input->shape().dimensions().end());
-  std::vector<size_t> conv_output_shape(
-      inst_conv_with_reverse->shape().dimensions().begin(),
-      inst_conv_with_reverse->shape().dimensions().end());
-
   TF_ASSIGN_OR_RETURN(Window window,
                       GetConvolutionWindow(inst_conv_with_reverse));
   TF_ASSIGN_OR_RETURN(int64 feature_group_count,
@@ -76,8 +70,8 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
 
   HloInstruction* weights_transpose_flip =
       comp->AddInstruction(CreateHloWeightsTransposeChansFlipXY(
-          conv_kernel, conv_dimension_numbers, conv_input_shape,
-          conv_output_shape, window, feature_group_count));
+          conv_kernel, conv_dimension_numbers, conv_input->shape(),
+          inst_conv_with_reverse->shape(), window, feature_group_count));
 
   inst_conv_with_reverse->SetupDerivedInstruction(weights_transpose_flip);
 
