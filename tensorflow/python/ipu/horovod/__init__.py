@@ -62,7 +62,11 @@ def _normalize_name(name):
   return re.sub('[^a-zA-Z0-9_]', '_', name)
 
 
-def _allreduce(tensor, name=None, op=Sum):
+def _allreduce(tensor,
+               name=None,
+               op=Sum,
+               prescale_factor=1.0,
+               postscale_factor=1.0):
   """An op which reduces an input tensor over all the Horovod processes. The
   default reduction is a sum.
 
@@ -77,10 +81,14 @@ def _allreduce(tensor, name=None, op=Sum):
   """
   if name is None and not context.executing_eagerly():
     name = 'HorovodAllreduce_%s' % _normalize_name(tensor.name)
-  return horovod_allreduce(tensor, name=name, reduce_op=op)
+  return horovod_allreduce(tensor,
+                           name=name,
+                           reduce_op=op,
+                           prescale_factor=prescale_factor,
+                           postscale_factor=postscale_factor)
 
 
-def allreduce(tensor, op=None):
+def allreduce(tensor, op=None, prescale_factor=1.0, postscale_factor=1.0):
   """Perform an allreduce on a tf.Tensor or tf.IndexedSlices.
 
   This function performs a bandwidth-optimal ring allreduce on the input
@@ -93,6 +101,8 @@ def allreduce(tensor, op=None):
               The shape of the input must be identical across all ranks.
       op: The reduction operation to combine tensors across different ranks.
           Defaults to Average if None is given.
+      prescale_factor: Multiplicative factor to scale tensor before allreduce.
+      postscale_factor: Multiplicative factor to scale tensor after allreduce.
 
   Returns:
       A tensor of the same shape and type as `tensor`, summed across all
@@ -121,7 +131,10 @@ def allreduce(tensor, op=None):
                                         dense_shape=tensor.dense_shape)
 
   horovod_size = math_ops.cast(size(), dtype=tensor.dtype)
-  summed_tensor = _allreduce(tensor, op=true_op)
+  summed_tensor = _allreduce(tensor,
+                             op=true_op,
+                             prescale_factor=prescale_factor,
+                             postscale_factor=postscale_factor)
   new_tensor = (summed_tensor /
                 horovod_size) if op == Average else summed_tensor
   return new_tensor
