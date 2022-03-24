@@ -26,8 +26,8 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import cond_v2
 from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import control_flow_util_v2 as util
-from tensorflow.python.ops import custom_gradient
 from tensorflow.python.ops import gradients_util
+from tensorflow.python.ops import handle_data_util
 """
     These gradient function should *never* be called directly.
 """
@@ -187,7 +187,7 @@ def _get_gradients_for_function(op, *grads):
   func_graph = _get_func_graph(fwd_op)
   assert func_graph.outer_graph == op.graph
   for external_t, internal_t in zip(inputs, func_graph.inputs):
-    custom_gradient.copy_handle_data(external_t, internal_t)
+    handle_data_util.copy_handle_data(external_t, internal_t)
 
   func_graph.reset_captures(zip(inputs, func_graph.inputs))
 
