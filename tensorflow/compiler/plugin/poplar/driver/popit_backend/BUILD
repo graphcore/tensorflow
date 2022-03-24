@@ -33,8 +33,24 @@ popit_cc_library(
 )
 
 popit_cc_library(
+    name = "popit_executor",
+    srcs = [
+        "popit_executor.cc",
+    ],
+    hdrs = [
+        "popit_executor.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:tracepoint",
+        "//tensorflow/compiler/xla/service:executable",
+        "//tensorflow/stream_executor:platform",
+    ],
+)
+
+popit_cc_library(
     name = "popit_backend",
     deps = [
         ":popit_compiler",
+        ":popit_executor",
     ],
 )
