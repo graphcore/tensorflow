@@ -80,7 +80,7 @@ class IPUOutfeedQueue(collections_abc.Iterable):
       self,
       outfeed_mode=None,
       device_ordinal=None,
-      buffer_depth=1,
+      buffer_depth=3,
       optimise_latency=False):
     """Creates an IPUOutfeedQueue object.
 
