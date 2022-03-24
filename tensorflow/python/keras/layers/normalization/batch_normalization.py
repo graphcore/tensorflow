@@ -285,8 +285,8 @@ class BatchNormalizationBase(Layer):
 
   @property
   def _param_dtype(self):
-    # Raise parameters of fp16 batch norm to fp32
-    if self.dtype == dtypes.float16 or self.dtype == dtypes.bfloat16:
+    # Raise parameters of bloat16 batch norm to fp32
+    if self.dtype == dtypes.bfloat16:
       return dtypes.float32
     else:
       return self.dtype or dtypes.float32
