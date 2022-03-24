@@ -26,7 +26,7 @@ def dataset_benchmark(dataset,
                       number_of_epochs,
                       elements_per_epochs,
                       print_stats=True,
-                      apply_options=True,
+                      apply_debug_options=True,
                       do_memcpy=True):
   """Allows the user to benchmark performance of a `tf.data.Dataset`.
 
@@ -36,8 +36,7 @@ def dataset_benchmark(dataset,
       elements_per_epochs: The number of elements there are in each epoch.
       print_stats: Whether to print statistics about the performance to the
         console.
-      apply_options: Whether to apply optimization options which can improve the
-        dataset performance.
+      apply_debug_options: Whether to apply debug options.
       do_memcpy: Whether to perform a `memcpy` operation which simulates a
         dataset buffer being copied to a Poplar managed buffer.
 
@@ -68,8 +67,8 @@ def dataset_benchmark(dataset,
                      "`tf.data.Dataset`, but got %s "
                      "instead." % (str(dataset)))
 
-  if apply_options:
-    dataset = dataset._apply_options()  # pylint: disable=protected-access
+  if apply_debug_options:
+    dataset = dataset._apply_debug_options()  # pylint: disable=protected-access
 
   try:
     dataset_variant = dataset._variant_tensor  # pylint: disable=protected-access
@@ -123,11 +122,11 @@ def infeed_benchmark(infeed_queue,
                      "`ipu.ipu_infeed_queue.IPUInfeedQueue`, but got %s "
                      "instead." % (str(infeed_queue)))
   # Don't need to apply options because the infeed queue already applies them.
-  apply_options = False
+  apply_debug_options = False
   return dataset_benchmark(
       infeed_queue._dataset,  # pylint: disable=protected-access
       number_of_epochs,
       elements_per_epochs,
       print_stats=print_stats,
-      apply_options=apply_options,
+      apply_debug_options=apply_debug_options,
       do_memcpy=do_memcpy)

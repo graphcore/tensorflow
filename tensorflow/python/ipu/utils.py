@@ -179,7 +179,7 @@ def export_dataset_to_file(dataset_or_infeed,
                            output_filename,
                            num_elements,
                            feed_name="",
-                           apply_options=True):
+                           apply_debug_options=True):
   """Export as binary `num_elements` from the given `infeed` to the specified
   `output_filename`.
 
@@ -204,8 +204,7 @@ def export_dataset_to_file(dataset_or_infeed,
     output_filename: Where to export the tensors to.
     num_elements: Number of elements to export from the dataset.
     feed_name: Specify the feed name.
-    apply_options: Whether to apply optimization options which can improve the
-      dataset performance.
+    apply_debug_options: Whether to apply debug options.
   """
   assert isinstance(dataset_or_infeed,
                     (dataset_ops.Dataset, ipu_infeed_queue.IPUInfeedQueue))
@@ -214,8 +213,8 @@ def export_dataset_to_file(dataset_or_infeed,
     feed_name = feed_name or dataset_or_infeed._id  # pylint: disable=protected-access
   else:
     dataset = dataset_or_infeed
-  if apply_options:
-    dataset = dataset._apply_options()  # pylint: disable=protected-access
+  if apply_debug_options:
+    dataset = dataset._apply_debug_options()  # pylint: disable=protected-access
 
   extractor = dataset_extractor.dataset_extractor(dataset, num_elements,
                                                   output_filename, feed_name)

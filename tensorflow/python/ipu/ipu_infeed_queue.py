@@ -176,9 +176,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       self._prefetch_depth = prefetch_depth
       self._optimise_latency = optimise_latency
 
-      # Apply the dataset options - do this before replica handling to make sure
-      # all the optimizations can be applied.
-      self._dataset = self._dataset._apply_options()  # pylint: disable=protected-access
+      self._dataset = self._dataset._apply_debug_options()  # pylint: disable=protected-access
 
       # ID used for differentiating between datasets.
       self._id = kwargs[
