@@ -24,13 +24,13 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 class HloMultiConvInstruction;
+class HloWeightsTransposeChansFlipXYInstruction;
 
 StatusOr<poplin::ConvParams> GetConvolutionParameters(
     const HloInstruction* operand_op, int64 input_index, int64 kernel_index);
 
 StatusOr<poplin::ConvParams> GetConvolutionParametersForWeightsTranspose(
-    const HloInstruction* inst, const std::vector<size_t>& conv_input_shape,
-    const std::vector<size_t>& conv_output_shape);
+    const HloWeightsTransposeChansFlipXYInstruction* inst);
 
 StatusOr<std::vector<poplin::ConvParams>> GetConvolutionParametersForMultiConv(
     const HloMultiConvInstruction* inst);

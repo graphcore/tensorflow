@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_conv.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/weights_transpose_chans_flip_xy.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -29,7 +30,7 @@ StatusOr<poplin::ConvParams> GetConvolutionParametersCore(
     const std::vector<size_t>& kernel_dims,
     const std::vector<size_t>& output_dims, int64 f_g, int64 b_g,
     const xla::ConvolutionDimensionNumbers& dims, const Window& window,
-    poplar::Type dtype) {
+    poplar::Type input_dtype, poplar::Type output_dtype) {
   if (f_g > 1 && b_g > 1) {
     return xla::FailedPrecondition(
         "Poplar doesn't support grouping in batch and feature dimensions on ",
@@ -123,7 +124,8 @@ StatusOr<poplin::ConvParams> GetConvolutionParametersCore(
 
   auto n_g = std::max(f_g, b_g);
 
-  poplin::ConvParams params(dtype, dtype, n_b, n_s, f_s, n_i, n_o, n_g,
+  poplin::ConvParams params(input_dtype, output_dtype, n_b, n_s, f_s, n_i, n_o,
+                            n_g,
                             {in_t_l, in_t_u, in_d, in_p_l, in_p_u, flipInput},
                             {zeros, zeros, w_d, zeros, zeros, flipKernel},
                             {out_t_l, out_t_u, out_s, zeros, zeros});
@@ -138,7 +140,8 @@ StatusOr<poplin::ConvParams> GetConvolutionParameters(
   const Shape& kernel = inst->operand(kernel_index)->shape();
   const Shape& output = inst->shape();
 
-  TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(input));
+  TF_ASSIGN_OR_RETURN(poplar::Type input_dtype, PoplarDataType(input));
+  TF_ASSIGN_OR_RETURN(poplar::Type output_dtype, PoplarDataType(output));
 
   std::vector<size_t> input_dims = PoplarShapeFromXlaShape(input);
   std::vector<size_t> kernel_dims = PoplarShapeFromXlaShape(kernel);
@@ -152,25 +155,31 @@ StatusOr<poplin::ConvParams> GetConvolutionParameters(
 
   return GetConvolutionParametersCore(inst, input_dims, kernel_dims,
                                       output_dims, f_g, b_g, dims, window,
-                                      dtype);
+                                      input_dtype, output_dtype);
 }
 
 StatusOr<poplin::ConvParams> GetConvolutionParametersForWeightsTranspose(
-    const HloInstruction* inst, const std::vector<size_t>& conv_input_shape,
-    const std::vector<size_t>& conv_output_shape) {
+    const HloWeightsTransposeChansFlipXYInstruction* inst) {
+  const Shape& input = inst->ConvInputShape();
   const Shape& kernel = inst->operand(0)->shape();
-  TF_ASSIGN_OR_RETURN(Window window, GetConvolutionWindow(inst));
-  TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(kernel));
+  const Shape& output = inst->ConvOutputShape();
 
-  std::vector<size_t> kernel_shape = PoplarShapeFromXlaShape(kernel);
+  TF_ASSIGN_OR_RETURN(Window window, GetConvolutionWindow(inst));
+
+  TF_ASSIGN_OR_RETURN(poplar::Type input_dtype, PoplarDataType(input));
+  TF_ASSIGN_OR_RETURN(poplar::Type output_dtype, PoplarDataType(output));
+
+  std::vector<size_t> input_dims = PoplarShapeFromXlaShape(input);
+  std::vector<size_t> kernel_dims = PoplarShapeFromXlaShape(kernel);
+  std::vector<size_t> output_dims = PoplarShapeFromXlaShape(output);
 
   TF_ASSIGN_OR_RETURN(auto dims, GetConvolutionDims(inst));
   TF_ASSIGN_OR_RETURN(unsigned int f_g, GetFeatureGroupCount(inst));
   TF_ASSIGN_OR_RETURN(unsigned int b_g, GetBatchGroupCount(inst));
 
-  return GetConvolutionParametersCore(inst, conv_input_shape, kernel_shape,
-                                      conv_output_shape, f_g, b_g, dims, window,
-                                      dtype);
+  return GetConvolutionParametersCore(inst, input_dims, kernel_dims,
+                                      output_dims, f_g, b_g, dims, window,
+                                      input_dtype, output_dtype);
 }
 
 StatusOr<std::vector<poplin::ConvParams>> GetConvolutionParametersForMultiConv(
@@ -183,7 +192,8 @@ StatusOr<std::vector<poplin::ConvParams>> GetConvolutionParametersForMultiConv(
     const Shape& kernel = inst->operand(i + convolution_specs.size())->shape();
     const Shape& output = ShapeUtil::GetTupleElementShape(inst->shape(), i);
 
-    TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(input));
+    TF_ASSIGN_OR_RETURN(poplar::Type input_dtype, PoplarDataType(input));
+    TF_ASSIGN_OR_RETURN(poplar::Type output_dtype, PoplarDataType(output));
 
     std::vector<size_t> input_dims = PoplarShapeFromXlaShape(input);
     std::vector<size_t> kernel_dims = PoplarShapeFromXlaShape(kernel);
@@ -196,9 +206,9 @@ StatusOr<std::vector<poplin::ConvParams>> GetConvolutionParametersForMultiConv(
     const auto& dims = convolution_spec.dims;
 
     TF_ASSIGN_OR_RETURN(
-        params[i],
-        GetConvolutionParametersCore(inst, input_dims, kernel_dims, output_dims,
-                                     f_g, b_g, dims, window, dtype));
+        params[i], GetConvolutionParametersCore(
+                       inst, input_dims, kernel_dims, output_dims, f_g, b_g,
+                       dims, window, input_dtype, output_dtype));
   }
   return params;
 }

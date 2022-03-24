@@ -37,16 +37,9 @@ StatusOr<poplar::Tensor> AddConvWeightsTransposeChansFlipXY(
   const ConvolutionDimensionNumbers& conv_dimension_numbers =
       weights_transpose_inst->convolution_dimension_numbers();
 
-  const std::vector<size_t>& conv_input_shape =
-      weights_transpose_inst->ConvInputShape();
-
-  const std::vector<size_t>& conv_output_shape =
-      weights_transpose_inst->ConvOutputShape();
-
   TF_ASSIGN_OR_RETURN(
       poplin::ConvParams conv_params,
-      GetConvolutionParametersForWeightsTranspose(
-          weights_transpose_inst, conv_input_shape, conv_output_shape));
+      GetConvolutionParametersForWeightsTranspose(weights_transpose_inst));
 
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                       GetConvolutionOptionsForInst(inst, resources));
@@ -86,16 +79,9 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
     in_weights = ShuffleConvolutionWeightsToPoplar(
         conv_dimension_numbers, in_weights, /* swap_features= */ true);
 
-    const std::vector<size_t>& conv_input_shape =
-        weights_transpose_inst->ConvInputShape();
-
-    const std::vector<size_t>& conv_output_shape =
-        weights_transpose_inst->ConvOutputShape();
-
     TF_ASSIGN_OR_RETURN(
         poplin::ConvParams conv_params,
-        GetConvolutionParametersForWeightsTranspose(
-            weights_transpose_inst, conv_input_shape, conv_output_shape));
+        GetConvolutionParametersForWeightsTranspose(weights_transpose_inst));
 
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                         GetConvolutionOptionsForInst(inst, res));

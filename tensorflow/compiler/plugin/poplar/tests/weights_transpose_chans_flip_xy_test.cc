@@ -65,24 +65,16 @@ TEST_P(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXY0) {
   conv_dim_num.add_output_spatial_dimensions(2);
   conv_dim_num.set_output_feature_dimension(3);
 
-  std::vector<size_t> conv_input_shape;
-  conv_input_shape.push_back(1);
-  conv_input_shape.push_back(4);
-  conv_input_shape.push_back(4);
-  conv_input_shape.push_back(2);
-
-  std::vector<size_t> conv_output_shape;
-  conv_output_shape.push_back(1);
-  conv_output_shape.push_back(4);
-  conv_output_shape.push_back(4);
-  conv_output_shape.push_back(2);
+  std::vector<int64> conv_input_shape = {1, 4, 4, 2};
+  std::vector<int64> conv_output_shape = {1, 4, 4, 2};
 
   xla::Window window = window_util::MakeWindow({1, 1});
   int64 feature_group_count = 1;
 
   auto weights_transpose_inst =
       builder.AddInstruction(CreateHloWeightsTransposeChansFlipXY(
-          weights, conv_dim_num, conv_input_shape, conv_output_shape, window,
+          weights, conv_dim_num, ShapeUtil::MakeShape(F32, conv_input_shape),
+          ShapeUtil::MakeShape(F32, conv_output_shape), window,
           feature_group_count));
 
   auto computation = builder.Build();
@@ -150,24 +142,16 @@ TEST_P(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXYGroup) {
   conv_dim_num.add_output_spatial_dimensions(2);
   conv_dim_num.set_output_feature_dimension(3);
 
-  std::vector<size_t> conv_input_shape;
-  conv_input_shape.push_back(16);
-  conv_input_shape.push_back(9);
-  conv_input_shape.push_back(9);
-  conv_input_shape.push_back(16);
-
-  std::vector<size_t> conv_output_shape;
-  conv_output_shape.push_back(16);
-  conv_output_shape.push_back(9);
-  conv_output_shape.push_back(9);
-  conv_output_shape.push_back(16);
+  std::vector<int64> conv_input_shape = {16, 9, 9, 16};
+  std::vector<int64> conv_output_shape = {16, 9, 9, 16};
 
   Window window = window_util::MakeWindow({4, 4});
   int64 feature_group_count = 16;
 
   auto weights_transpose_inst =
       builder.AddInstruction(CreateHloWeightsTransposeChansFlipXY(
-          weights, conv_dim_num, conv_input_shape, conv_output_shape, window,
+          weights, conv_dim_num, ShapeUtil::MakeShape(F32, conv_input_shape),
+          ShapeUtil::MakeShape(F32, conv_output_shape), window,
           feature_group_count));
   auto reshape = builder.AddInstruction(HloInstruction::CreateReshape(
       ShapeUtil::MakeShape(weights->shape().element_type(), {4, 4, 1, 16}),
