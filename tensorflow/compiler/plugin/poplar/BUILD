@@ -1117,6 +1117,7 @@ tf_xla_py_test(
     name = "random_ops",
     size = "small",
     srcs = ["tests/random_ops.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     tags = ["hw_poplar_test_1_ipus"],
     deps = [
@@ -2412,6 +2413,7 @@ tf_xla_py_test(
     name = "ml_type_classify_test",
     size = "large",
     srcs = ["tests/ml_type_classify_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 2,
     deps = [
@@ -2464,6 +2466,7 @@ tf_xla_py_test(
     name = "matmul_test",
     size = "large",
     srcs = ["tests/matmul_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -2474,6 +2477,7 @@ tf_xla_py_test(
     name = "matmul_option_test",
     size = "large",
     srcs = ["tests/matmul_option_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -2499,6 +2503,7 @@ tf_xla_py_test(
         "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor",
         "//third_party/ipus/tools:PoplarExecutableRunner",
     ],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -2509,6 +2514,7 @@ tf_xla_py_test(
     name = "serialization_test",
     size = "large",
     srcs = ["tests/serialization_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -2571,6 +2577,7 @@ tf_xla_py_test(
     name = "variable_test",
     size = "large",
     srcs = ["tests/variable_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -2581,6 +2588,7 @@ tf_xla_py_test(
     name = "synthetic_data_test",
     size = "large",
     srcs = ["tests/synthetic_data_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -2591,6 +2599,7 @@ tf_xla_py_test(
     name = "synthetic_data_with_outfeeds_test",
     size = "large",
     srcs = ["tests/synthetic_data_with_outfeeds_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 3,
     deps = [
@@ -2613,6 +2622,7 @@ tf_xla_py_test(
     name = "multi_run_test",
     size = "large",
     srcs = ["tests/multi_run_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 3,
     tags = ["hw_poplar_test_1_ipus"],
@@ -2655,6 +2665,7 @@ tf_xla_py_test(
     name = "batch_norm_test",
     size = "large",
     srcs = ["tests/batch_norm_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -2839,6 +2850,7 @@ tf_xla_py_test(
     name = "fuse_ops_test",
     size = "medium",
     srcs = ["tests/fuse_ops_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -2900,6 +2912,7 @@ tf_xla_py_test(
     name = "sendrecv_ops_test",
     size = "large",
     srcs = ["tests/sendrecv_ops_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -2910,6 +2923,7 @@ tf_xla_py_test(
     name = "outside_compilation_scope_test",
     size = "large",
     srcs = ["tests/outside_compilation_scope_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 8,
     tags = ["isolated_poplar_tests"],
@@ -2932,6 +2946,7 @@ tf_xla_py_test(
     name = "norm_graph_caching_test",
     size = "medium",
     srcs = ["tests/norm_graph_caching_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -2942,6 +2957,7 @@ tf_xla_py_test(
     name = "norm_graph_caching_sharded_test",
     size = "medium",
     srcs = ["tests/norm_graph_caching_sharded_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -2952,6 +2968,7 @@ tf_xla_py_test(
     name = "conv_graph_caching_test",
     size = "medium",
     srcs = ["tests/conv_graph_caching_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -2972,6 +2989,7 @@ tf_xla_py_test(
     name = "lstm_test",
     size = "medium",
     srcs = ["tests/lstm_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 8,
     deps = [
@@ -2983,6 +3001,7 @@ tf_xla_py_test(
     name = "group_norm_test",
     size = "large",
     srcs = ["tests/group_norm_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 6,
     deps = [
@@ -3016,6 +3035,7 @@ tf_xla_py_test(
     name = "stateful_gradient_accumulate_test",
     size = "medium",
     srcs = ["tests/stateful_gradient_accumulate_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -3026,6 +3046,7 @@ tf_xla_py_test(
     name = "case_test",
     size = "large",
     srcs = ["tests/case_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -3056,6 +3077,7 @@ tf_xla_py_test(
     name = "remapping_test",
     size = "large",
     srcs = ["tests/remapping_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -3066,6 +3088,7 @@ tf_xla_py_test(
     name = "candidate_sampler_test",
     size = "large",
     srcs = ["tests/candidate_sampler_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -3076,6 +3099,7 @@ tf_xla_py_test(
     name = "conditional_test",
     size = "large",
     srcs = ["tests/conditional_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -3086,6 +3110,7 @@ tf_xla_py_test(
     name = "combined_weights_test",
     size = "large",
     srcs = ["tests/size_speed_tests/combined_weights_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -3096,6 +3121,7 @@ tf_xla_py_test(
     name = "resnet_size_test",
     size = "large",
     srcs = ["tests/size_speed_tests/resnet_size_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 8,
     deps = [
@@ -3107,6 +3133,7 @@ tf_xla_py_test(
     name = "matmul_size_test",
     size = "large",
     srcs = ["tests/size_speed_tests/matmul_size_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 4,
     deps = [
@@ -3118,6 +3145,7 @@ tf_xla_py_test(
     name = "while_loop_test",
     size = "medium",
     srcs = ["tests/while_loop_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -3128,6 +3156,7 @@ tf_xla_py_test(
     name = "while_loop_sharded_test",
     size = "medium",
     srcs = ["tests/while_loop_sharded_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -3138,6 +3167,7 @@ tf_xla_py_test(
     name = "subcomputation_graph_caching_test",
     size = "medium",
     srcs = ["tests/subcomputation_graph_caching_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -3148,6 +3178,7 @@ tf_xla_py_test(
     name = "multi_ipu_test",
     size = "medium",
     srcs = ["tests/multi_ipu_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     tags = ["isolated_poplar_tests"],
     deps = [
@@ -3159,6 +3190,7 @@ tf_xla_py_test(
     name = "scalar_elementwise_graph_test",
     size = "medium",
     srcs = ["tests/scalar_elementwise_graph_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -3212,6 +3244,7 @@ tf_xla_py_test(
     data = [
         ":libadd_incrementing_custom_with_metadata.so",
     ],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 8,
     tags = ["hw_poplar_test_1_ipus"],
@@ -3313,6 +3346,7 @@ tf_xla_py_test(
     name = "tensor_path_transform_test",
     size = "small",
     srcs = ["tests/tensor_path_transform_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -3471,6 +3505,7 @@ tf_xla_py_test(
     name = "gru_test",
     size = "medium",
     srcs = ["tests/gru_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 6,
     deps = [
@@ -3494,6 +3529,7 @@ tf_xla_py_test(
     name = "allocation_finder_priority_test",
     size = "large",
     srcs = ["tests/allocation_finder_priority_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 2,
     deps = [
@@ -3588,6 +3624,7 @@ tf_xla_py_test(
     data = [
         ":libadd_incrementing_custom_with_metadata.so",
     ],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 4,
     deps = [
@@ -3791,6 +3828,7 @@ tf_xla_py_test(
     name = "compile_cache_test",
     size = "large",
     srcs = ["tests/compile_cache_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
