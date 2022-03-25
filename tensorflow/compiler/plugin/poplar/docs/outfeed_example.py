@@ -2,6 +2,7 @@ from threading import Thread
 
 from tensorflow.python import ipu
 import tensorflow as tf
+from tensorflow.python.keras.datasets import mnist
 
 NUM_ITERATIONS = 100
 
@@ -17,8 +18,6 @@ cfg.configure_ipu_system()
 # The input data and labels
 #
 def create_dataset():
-  mnist = tf.keras.datasets.mnist
-
   (x_train, y_train), (_, _) = mnist.load_data()
   x_train = x_train / 255.0
 

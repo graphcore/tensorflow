@@ -18,12 +18,13 @@ import tensorflow.compat.v1 as tf
 from tensorflow.python import ipu
 from tensorflow.python.ipu import horovod as hvd
 from tensorflow.python.ipu.horovod import ipu_horovod_strategy
+from tensorflow.python.keras.datasets import mnist
 
 BATCH_SIZE = 64
 
 
 def input_fn(mode):  # pylint: disable=unused-argument
-  train_data, _ = tf.keras.datasets.mnist.load_data()
+  train_data, _ = mnist.load_data()
 
   def normalise(image, label):
     image = image.astype(np.float32) / 255.0

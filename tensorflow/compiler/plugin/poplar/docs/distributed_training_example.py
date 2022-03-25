@@ -18,12 +18,13 @@ import numpy as np
 import tensorflow.compat.v1 as tf
 
 from tensorflow.python import ipu
+from tensorflow.python.keras.datasets import mnist
 
 BATCH_SIZE = 64
 
 
 def input_fn(mode, input_context=None):  # pylint: disable=unused-argument
-  train_data, _ = tf.keras.datasets.mnist.load_data()
+  train_data, _ = mnist.load_data()
 
   def normalise(image, label):
     image = image.astype(np.float32) / 255.0

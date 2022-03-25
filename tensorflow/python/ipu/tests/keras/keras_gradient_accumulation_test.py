@@ -19,6 +19,7 @@ from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python import keras
+from tensorflow.python.keras.datasets import mnist
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import test
@@ -27,8 +28,6 @@ from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 
 
 def get_mnist_dataset(batch_size):
-  mnist = keras.datasets.mnist
-
   (x_train, y_train), (_, _) = mnist.load_data()
   x_train = x_train / 255.0
 

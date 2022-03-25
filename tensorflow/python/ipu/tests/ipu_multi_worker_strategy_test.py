@@ -54,7 +54,7 @@ from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUSyncOnReadVariabl
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu.scopes import ipu_scope
-from tensorflow.python.keras.layers.normalization import BatchNormalization
+from tensorflow.python.layers import normalization
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -646,7 +646,7 @@ class IPUMultiWorkerStrategyV1Test(multi_worker_test_base.MultiWorkerTestBase):
     variable_device, compute_device = self._get_devices(task_type, task_id)
 
     with strategy.scope():
-      batch_norm = BatchNormalization(momentum=0.0)
+      batch_norm = normalization.BatchNormalization(momentum=0.0)
 
       def per_replica_fn(x):
         with ops.device("/device:IPU:0"):

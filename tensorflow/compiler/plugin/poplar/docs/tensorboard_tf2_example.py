@@ -6,6 +6,7 @@ import shutil
 import numpy as np
 import tensorflow as tf
 from tensorflow.python import ipu
+from tensorflow.python.keras.datasets import mnist
 
 
 def create_tensorboard_log_dir():
@@ -191,7 +192,6 @@ def create_datasets(train_validate_split=0.8, num_to_prefetch=16):
 
   # Load MNIST dataset. The training set is split into training and
   # validation sets.
-  mnist = tf.keras.datasets.mnist
   (x_train, y_train), (x_test, y_test) = mnist.load_data()
   N = int(train_validate_split * x_train.shape[0])
 

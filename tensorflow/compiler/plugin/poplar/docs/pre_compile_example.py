@@ -2,6 +2,7 @@ import tensorflow as tf
 
 from tensorflow import keras
 from tensorflow.python import ipu
+from tensorflow.python.keras.datasets import mnist
 
 #
 # Configure the IPU system.
@@ -21,8 +22,6 @@ cfg.configure_ipu_system()
 # Create the input data and labels.
 #
 def create_dataset():
-  mnist = tf.keras.datasets.mnist
-
   (x_train, y_train), (_, _) = mnist.load_data()
   x_train = x_train / 255.0
 

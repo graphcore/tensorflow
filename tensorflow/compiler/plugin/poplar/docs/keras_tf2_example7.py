@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.python import ipu
+from tensorflow.python.keras.datasets import mnist
 
 # Configure the IPU device.
 config = ipu.config.IPUConfig()
@@ -19,8 +20,6 @@ def create_model():
 
 # Create a dataset for the model.
 def create_dataset():
-  mnist = tf.keras.datasets.mnist
-
   (x_train, y_train), (_, _) = mnist.load_data()
   x_train = x_train / 255.0
 
@@ -54,7 +53,7 @@ with strategy.scope():
                 steps_per_execution=256)
 
   model.set_pipelining_options(
-        gradient_accumulation_steps_per_replica=16,
-        pipeline_schedule=ipu.ops.pipelining_ops.PipelineSchedule.Interleaved)
+      gradient_accumulation_steps_per_replica=16,
+      pipeline_schedule=ipu.ops.pipelining_ops.PipelineSchedule.Interleaved)
 
   model.fit(dataset, epochs=2, steps_per_epoch=128)

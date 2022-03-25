@@ -1,6 +1,7 @@
 # Setup.
 import tensorflow as tf
 from tensorflow.python import ipu
+from tensorflow.python.keras.datasets import mnist
 
 config = ipu.config.IPUConfig()
 config.auto_select_ipus = 1
@@ -9,8 +10,6 @@ config.configure_ipu_system()
 
 # Create a dataset.
 def create_dataset():
-  mnist = tf.keras.datasets.mnist
-
   (x_train, y_train), (_, _) = mnist.load_data()
   x_train = x_train / 255.0
 

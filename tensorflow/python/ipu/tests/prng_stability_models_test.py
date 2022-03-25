@@ -19,6 +19,7 @@ from absl.testing import parameterized
 from tensorflow import keras
 from tensorflow.keras.utils import to_categorical
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
+from tensorflow.python.keras.datasets import mnist
 from tensorflow.python import ipu
 from tensorflow.python.client import session
 from tensorflow.python.platform import googletest
@@ -149,7 +150,6 @@ class PrngStabilityModelsTest(test_util.TensorFlowTestCase):
     def generator():
       return zip(x_train, y_train)
 
-    mnist = keras.datasets.mnist
     train_data, _ = mnist.load_data()
     x_train, y_train = normalize(*train_data)
     types = x_train.dtype, y_train.dtype
@@ -368,8 +368,6 @@ class PrngStabilityModelsTest(test_util.TensorFlowTestCase):
 class PrngStabilityModelsKerasTest(test_util.TensorFlowTestCase):
   @staticmethod
   def make_mnist_dataset(y_as_categorical=False):
-    mnist = keras.datasets.mnist
-
     (x_train, y_train), _ = mnist.load_data()
     x_train = x_train / 255.0
     x_train = x_train[..., np.newaxis]
