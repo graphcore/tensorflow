@@ -2861,6 +2861,7 @@ tf_xla_py_test(
     name = "assert_test",
     size = "large",
     srcs = ["tests/assert_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -3014,6 +3015,7 @@ tf_xla_py_test(
     name = "wide_const_expansion_test",
     size = "medium",
     srcs = ["tests/wide_const_expansion_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",

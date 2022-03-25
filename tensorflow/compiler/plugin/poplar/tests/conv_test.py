@@ -27,6 +27,7 @@ from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import nn_ops
@@ -351,6 +352,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
 
+  @test_util.disable_mlir_bridge("Not supported in MLIR")
   def testDepthwiseConvBackpropInput1x1(self):
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()

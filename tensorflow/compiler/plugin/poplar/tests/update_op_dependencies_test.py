@@ -62,11 +62,11 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
     cfg.configure_ipu_system()
 
     with self.session() as sess:
-      data_a = np.array([[10, -20], [5, 1]])
-      data_b = np.array([[-12, 11], [12, -13]])
+      data_a = np.broadcast_to(np.array([[10, -20], [5, 1]]), (2, 2, 2, 2))
+      data_b = np.broadcast_to(np.array([[-12, 11], [12, -13]]), (2, 2, 2, 2))
       with ops.device("/device:IPU:0"):
-        pa = array_ops.placeholder(np.float32, [2, 2])
-        pb = array_ops.placeholder(np.float32, [2, 2])
+        pa = array_ops.placeholder(np.float32, [2, 2, 2, 2])
+        pb = array_ops.placeholder(np.float32, [2, 2, 2, 2])
         c = array_ops.transpose(pa)
         d = pa + pb
         e = c / d
@@ -118,7 +118,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        'add_1/add.*/expression/Op/Add', 'add_1/add.*/expression/Op/Multiply',
+        'expression/Op/Add', 'expression/Op/Multiply',
         'add/scaled-inplace-xb-y/AddTo', 'truediv/divide*/Op/Divide'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
@@ -151,11 +151,8 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       self.assertAllClose(result, [5, 7])
 
     report = pva.openReport(report_helper.find_report())
-    ok = [
-        'truediv/*/expression/Op/Add', 'truediv/*/expression/Op/Divide',
-        'add_1/add.*/Add', 'host-exchange-local-copy'
-    ]
-    self.assert_all_compute_sets_and_list(report, ok)
+    ok = ['expression/Op/Add', 'expression/Op/Divide', 'add_1/add.*/Add']
+    self.assert_compute_sets_contain_list(report, ok)
 
   def testInplaceTuple(self):
     cfg = IPUConfig()

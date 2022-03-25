@@ -28,6 +28,7 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import test_util
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.platform import googletest
@@ -170,6 +171,7 @@ class AutoReportDirTest(xla_test.XLATestCase):
         repdirs = find_files_by_substring(os.getcwd(), REPORT_DIR_PREFIX)
         self.assertTrue(len(repdirs) == num_dirs)
 
+  @test_util.disable_mlir_bridge("MLIR modules have the same name")
   def testAutoAssignReportSubdirectoriesAllowsMultipleReports(self):
     report_helper = tu.ReportHelper()
     cfg = ipu.config.IPUConfig()

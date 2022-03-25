@@ -24,6 +24,7 @@ from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python import keras
+from tensorflow.python.keras.datasets import mnist
 from tensorflow.python.eager import context
 from tensorflow.python.eager import def_function
 from tensorflow.python.eager.backprop import GradientTape
@@ -305,7 +306,7 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       model.add(keras.layers.Dense(num_classes, activation='softmax'))
       return model
 
-    (x_train, y_train), _ = keras.datasets.mnist.load_data()
+    (x_train, y_train), _ = mnist.load_data()
     x_train = x_train[:num_examples]
     y_train = y_train[:num_examples]
 
@@ -361,7 +362,7 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       model.add(keras.layers.Dense(num_classes, activation='softmax'))
       return model
 
-    (x_train, y_train), _ = keras.datasets.mnist.load_data()
+    (x_train, y_train), _ = mnist.load_data()
     x_train = x_train[:num_examples]
     y_train = y_train[:num_examples]
 
@@ -421,7 +422,7 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       return model
 
     def load_data(n):
-      (x, y), _ = keras.datasets.mnist.load_data()
+      (x, y), _ = mnist.load_data()
       x = x[:n]
       y = y[:n]
 

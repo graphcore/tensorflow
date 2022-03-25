@@ -85,7 +85,7 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
     # It checks if "embedding_lookup/gather*/multiSlice" string was
     # replaced by embedding_lookup/multi-slice/*/multiSlice".
     ok = [
-        'embedding_lookup/multi-slice/output/multiSlice/*',
+        'embedding_lookup*multi-slice/output/multiSlice/*',
         '__seed/set/setMasterSeed',
     ]
     # pylint: enable=line-too-long

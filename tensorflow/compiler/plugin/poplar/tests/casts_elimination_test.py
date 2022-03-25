@@ -164,10 +164,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [3.0, 1.5, 2.0])
 
     report = pva.openReport(report_helper.find_report())
-    ok = [
-        'add/*/expression/Cast', 'add/*/expression/Op/Add',
-        'Cast_1/convert.*/Cast'
-    ]
+    ok = ['expression/Cast', 'expression/Op/Add', 'convert.*/Cast']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testReduceMean(self):
