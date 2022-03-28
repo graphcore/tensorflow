@@ -48,9 +48,24 @@ popit_cc_library(
 )
 
 popit_cc_library(
+    name = "popit_transfer_manager",
+    srcs = [
+        "popit_transfer_manager.cc",
+    ],
+    hdrs = [
+        "popit_transfer_manager.h",
+    ],
+    deps = [
+        ":popit_platform_id",
+        "//tensorflow/compiler/xla/service:generic_transfer_manager",
+    ],
+)
+
+popit_cc_library(
     name = "popit_backend",
     deps = [
         ":popit_compiler",
         ":popit_executor",
+        ":popit_transfer_manager",
     ],
 )
