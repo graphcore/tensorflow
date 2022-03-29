@@ -1903,23 +1903,6 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "prng_stability_models_test",
-    size = "large",
-    srcs = [
-        "tests/prng_stability_models_test.py",
-    ],
-    shard_count = 4,
-    tags = ["hw_poplar_test_4_ipus"],
-    deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
-        "//third_party/py/numpy",
-    ],
-)
-
-tf_py_test(
     name = "sequence_slice_test",
     size = "large",
     srcs = ["tests/sequence_slice_test.py"],
@@ -2140,7 +2123,6 @@ test_suite(
         "popops_cross_replica_mean_test",
         "popops_cross_replica_sum_test",
         "poprun_replica_partitioning_test",
-        "prng_stability_models_test",
         "random_constant_matmul_test",
         "random_number_generation_test",
         "reconfigure_ipu_test",
