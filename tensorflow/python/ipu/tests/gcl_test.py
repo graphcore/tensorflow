@@ -103,7 +103,6 @@ class GclTest(test_util.TensorFlowTestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.auto_select_ipus = num_replicas * num_shards
-    cfg.gcl_poplar_options = {'useSynclessCollectives': 'true'}
     cfg.io_tiles.num_io_tiles = 128
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
@@ -113,8 +112,7 @@ class GclTest(test_util.TensorFlowTestCase):
 
     self.assertEqual(result, sum(range(1, num_replicas + 1)))
     report = pva.openReport(report_helper.find_report())
-    self.assert_compute_sets_contain_list(
-        report, ["my_all_reduce/all-reduce.*/AllReduceGCL"])
+    self.assert_compute_sets_contain_list(report, ["my_all_reduce/all-reduce"])
 
 
 if __name__ == "__main__":
