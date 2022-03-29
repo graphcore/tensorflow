@@ -16,6 +16,7 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_SCHEDULERS_IPU_SCHEDULER_H_
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
@@ -41,6 +42,8 @@ using IpuSchedulerAlgorithm = std::function<StatusOr<HloInstructionSequence>(
 struct NamedIpuSchedulerAlgorithm {
   std::string name;
   IpuSchedulerAlgorithm function;
+  NamedIpuSchedulerAlgorithm(std::string name, IpuSchedulerAlgorithm function)
+      : name(std::move(name)), function(std::move(function)) {}
 };
 
 /**
@@ -72,7 +75,7 @@ MemorySchedulerAlgorithm IpuToMemorySchedulerAlgorithm(
  * @returns a valid IpuSchedulerAlgorithm
  */
 StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
-    const std::vector<NamedIpuSchedulerAlgorithm>& algorithms);
+    std::vector<NamedIpuSchedulerAlgorithm> algorithms);
 
 /**
  * An HLO module pass which applies the given scheduling algorithm to each
@@ -83,7 +86,7 @@ class IpuScheduler : public HloModulePass {
   // size_function is the function returning the number of bytes required for a
   // LogicalBuffer. algorithm is the memory scheduling algorithm to use.
   IpuScheduler(const LogicalBuffer::SizeFunction& size_function,
-               const IpuSchedulerAlgorithm& algorithm);
+               IpuSchedulerAlgorithm algorithm);
 
   absl::string_view name() const override { return "ipu-scheduler"; }
 
