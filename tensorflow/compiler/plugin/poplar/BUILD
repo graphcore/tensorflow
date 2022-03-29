@@ -2676,6 +2676,7 @@ tf_xla_py_test(
     name = "distributed_batch_norm_test",
     size = "large",
     srcs = ["tests/distributed_batch_norm_test.py"],
+    enable_mlir_bridge = False,
     enabled_backends = ["poplar"],
     shard_count = 2,
     tags = ["hw_poplar_test_8_ipus"],

@@ -15,7 +15,6 @@
 import numpy as np
 
 from tensorflow import debugging
-from tensorflow.keras import mixed_precision
 from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.distribute.reduce_util import ReduceOp
 from tensorflow.python.eager import def_function
@@ -167,26 +166,6 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
       strategy.run(per_replica_fn,
                    args=[constant_op.constant(hvd.rank() + 1.0)])
       debugging.assert_equal([2.5], w.read_value())
-
-  def test_mixed_precision_training(self):
-    config = IPUConfig()
-    config.auto_select_ipus = 1
-    config.configure_ipu_system()
-
-    hvd.init()
-
-    policy = mixed_precision.Policy('mixed_float16')
-    mixed_precision.set_global_policy(policy)
-
-    strategy = popdist_strategy.PopDistStrategy()
-    optimizer = gradient_descent.SGD(learning_rate=0.01)
-    loss_fn = losses.MeanSquaredError()
-
-    with strategy.scope():
-      dataset = test_dataset(batch_size=4)
-      model = simple_model()
-      model.compile(optimizer=optimizer, loss=loss_fn, steps_per_execution=4)
-      model.fit(dataset, steps_per_epoch=1, epochs=1)
 
 
 if __name__ == "__main__":

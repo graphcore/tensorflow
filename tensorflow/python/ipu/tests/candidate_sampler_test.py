@@ -19,7 +19,7 @@ import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
-from tensorflow.python import keras
+from tensorflow.python.keras.datasets import cifar100
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import dtypes
@@ -44,8 +44,7 @@ def softmax_cifar(sampled=True, k=25, iters=1000):
     N = 100
     BATCH_SIZE = 8
     HIDDEN_DIM = 3 * 32**2
-    (x_train,
-     y_train), _ = keras.datasets.cifar100.load_data(label_mode="fine")
+    (x_train, y_train), _ = cifar100.load_data(label_mode="fine")
     x_train = np.reshape(x_train, [x_train.shape[0], -1])
     x_train = x_train.astype('float32') / 255
     y_train = np.reshape(y_train.astype(np.int32), [-1, 1])

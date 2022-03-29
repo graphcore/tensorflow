@@ -21,6 +21,8 @@ import popdist.tensorflow
 
 import tensorflow as tf
 from tensorflow.python import ipu
+from tensorflow.python import keras
+from tensorflow.python.keras.optimizer_v2 import gradient_descent
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import constant_op, test_util
@@ -40,7 +42,7 @@ def simple_model():
   np.random.seed(random_seed)
   test_util.random_seed.set_seed(random_seed)
 
-  bias = tf.keras.initializers.Constant(value=popdist.getInstanceIndex())
+  bias = keras.initializers.Constant(value=popdist.getInstanceIndex())
 
   inputs = Input(shape=(32,))
   outputs = layers.Dense(1, bias_initializer=bias, name='test_bias')(inputs)
@@ -79,17 +81,17 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
   def prepare_model(self):
     # Make sure we have different parameters on each index
-    bias = tf.keras.initializers.Constant(value=popdist.getInstanceIndex())
+    bias = keras.initializers.Constant(value=popdist.getInstanceIndex())
 
-    return tf.keras.models.Sequential([
-        tf.keras.layers.Conv2D(4,
-                               3,
-                               activation='relu',
-                               bias_initializer=bias,
-                               name='test_bias'),
-        tf.keras.layers.MaxPooling2D(),
-        tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(2),
+    return keras.models.Sequential([
+        keras.layers.Conv2D(4,
+                            3,
+                            activation='relu',
+                            bias_initializer=bias,
+                            name='test_bias'),
+        keras.layers.MaxPooling2D(),
+        keras.layers.Flatten(),
+        keras.layers.Dense(2),
     ])
 
   def prepare_dataset(self):
@@ -131,8 +133,8 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
                              steps_to_run,
                              batch_size=batch_size)
       model = simple_model()
-      optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
-      loss_fn = tf.keras.losses.MeanSquaredError()
+      optimizer = gradient_descent.SGD(learning_rate=0.01)
+      loss_fn = keras.losses.MeanSquaredError()
 
       model.compile(optimizer=optimizer,
                     loss=loss_fn,
@@ -171,8 +173,8 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
                               index=popdist.getInstanceIndex())
       steps_per_execution = len(dataset) // popdist.getNumLocalReplicas()
       model = simple_model()
-      optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
-      loss_fn = tf.keras.losses.MeanSquaredError()
+      optimizer = gradient_descent.SGD(learning_rate=0.01)
+      loss_fn = keras.losses.MeanSquaredError()
 
       model.compile(optimizer=optimizer,
                     loss=loss_fn,
@@ -206,7 +208,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
     with strategy.scope():
       learning_rate = 0.5
       initial_w = 2.0
-      optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate)
+      optimizer = gradient_descent.SGD(learning_rate=learning_rate)
 
       w = tf.Variable(initial_w)
 
@@ -252,13 +254,13 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
     with strategy.scope():
       learning_rate = 0.5
       initial_w = 2.0
-      model = tf.keras.Sequential([
-          tf.keras.layers.Dense(
+      model = keras.Sequential([
+          keras.layers.Dense(
               1,
-              kernel_initializer=tf.keras.initializers.Constant(initial_w),
+              kernel_initializer=keras.initializers.Constant(initial_w),
               use_bias=False)
       ])
-      optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate)
+      optimizer = gradient_descent.SGD(learning_rate=learning_rate)
 
       @tf.function(experimental_compile=True)
       def loss_fn(_, y_pred):
@@ -292,18 +294,17 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
     def initialize_model_with_seed():
       # Make sure we initialize the kernels in a reproducible manner, create
       # an initializer with a constant seed.
-      initializer = tf.keras.initializers.GlorotNormal(seed=1234)
+      initializer = keras.initializers.GlorotNormal(seed=1234)
 
-      return tf.keras.models.Sequential([
-          tf.keras.layers.Conv2D(4,
-                                 3,
-                                 kernel_initializer=initializer,
-                                 use_bias=False,
-                                 activation='relu'),
-          tf.keras.layers.Flatten(),
-          tf.keras.layers.Dense(2,
-                                kernel_initializer=initializer,
-                                use_bias=False),
+      return keras.models.Sequential([
+          keras.layers.Conv2D(4,
+                              3,
+                              kernel_initializer=initializer,
+                              use_bias=False,
+                              activation='relu'),
+          keras.layers.Flatten(),
+          keras.layers.Dense(2, kernel_initializer=initializer,
+                             use_bias=False),
       ])
 
     config = ipu.config.IPUConfig()
@@ -319,14 +320,15 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
       model_tf = initialize_model_with_seed()
       model_keras = initialize_model_with_seed()
-      optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate)
+      optimizer = gradient_descent.SGD(learning_rate=learning_rate)
 
       @tf.function(experimental_compile=True)
       def step_fn_tf(x, y):
         with tf.GradientTape() as tape:
           output = model_tf(x)
-          loss = tf.keras.losses.sparse_categorical_crossentropy(
-              y_true=y, y_pred=output, from_logits=True)
+          loss = keras.losses.sparse_categorical_crossentropy(y_true=y,
+                                                              y_pred=output,
+                                                              from_logits=True)
           loss = tf.nn.compute_average_loss(
               loss, global_batch_size=popdist.getNumTotalReplicas())
         optimizer.minimize(loss,
@@ -343,7 +345,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
         return loss_reduced
 
-      loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+      loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 
       model_keras.compile(optimizer=optimizer,
                           loss=loss_fn,
@@ -389,8 +391,9 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
       @tf.function(experimental_compile=True)
       def step_fn_eval_tf(x, y):
         output = model_tf(x, training=False)
-        loss = tf.keras.losses.sparse_categorical_crossentropy(
-            y_true=y, y_pred=output, from_logits=True)
+        loss = keras.losses.sparse_categorical_crossentropy(y_true=y,
+                                                            y_pred=output,
+                                                            from_logits=True)
         loss = tf.nn.compute_average_loss(
             loss, global_batch_size=popdist.getNumTotalReplicas())
 
@@ -459,13 +462,12 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
     def initialize_model_with_seed():
       # Make sure we initialize the kernels in a reproducible manner, create
       # an initializer with a constant seed.
-      initializer = tf.keras.initializers.GlorotNormal(seed=1234)
+      initializer = keras.initializers.GlorotNormal(seed=1234)
 
-      return tf.keras.models.Sequential([
-          tf.keras.layers.Flatten(),
-          tf.keras.layers.Dense(2,
-                                kernel_initializer=initializer,
-                                use_bias=False),
+      return keras.models.Sequential([
+          keras.layers.Flatten(),
+          keras.layers.Dense(2, kernel_initializer=initializer,
+                             use_bias=False),
       ])
 
     with self.control_flow_v1(), strategy.scope():
@@ -474,7 +476,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
       dataset = dataset.repeat()
       dataset = dataset.batch(batch_size=batch_size, drop_remainder=True)
 
-      optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate)
+      optimizer = gradient_descent.SGD(learning_rate=learning_rate)
 
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
       outfeed_queue_gradients = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
@@ -485,7 +487,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
       def per_replica_step(loss_sum, x, y):
         with tf.GradientTape() as tape:
           logits = model_tf(x)
-          per_example_loss = tf.keras.losses.sparse_categorical_crossentropy(
+          per_example_loss = keras.losses.sparse_categorical_crossentropy(
               y_true=y, y_pred=logits, from_logits=True)
           loss = tf.nn.compute_average_loss(per_example_loss,
                                             global_batch_size=batch_size *
@@ -536,18 +538,17 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
     def initialize_model_with_seed():
       # Make sure we initialize the kernels in a reproducible manner, create
       # an initializer with a constant seed.
-      initializer = tf.keras.initializers.GlorotNormal(seed=1234)
+      initializer = keras.initializers.GlorotNormal(seed=1234)
 
-      return tf.keras.models.Sequential([
-          tf.keras.layers.Flatten(),
-          tf.keras.layers.Dense(2,
-                                kernel_initializer=initializer,
-                                use_bias=False),
+      return keras.models.Sequential([
+          keras.layers.Flatten(),
+          keras.layers.Dense(2, kernel_initializer=initializer,
+                             use_bias=False),
       ])
 
     # Instantiate a custom optimizer that allows us to keep track of the
     # gradients in `model.fit()`.
-    class ModelKeras(tf.keras.Sequential):
+    class ModelKeras(keras.Sequential):
       def __init__(self, layers):
         super(ModelKeras, self).__init__(layers)
         self.outfeed_queue_gradients = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
@@ -602,8 +603,8 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
       dataset = dataset.repeat()
       dataset = dataset.batch(batch_size=batch_size, drop_remainder=True)
 
-      optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate)
-      loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+      optimizer = gradient_descent.SGD(learning_rate=learning_rate)
+      loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 
       model_keras = ModelKeras(initialize_model_with_seed())
       model_keras.compile(optimizer=optimizer,
