@@ -100,11 +100,12 @@ class AliasAnalysisCache {
 
 IpuSchedulerAlgorithm MemorySchedulerAlgorithmToIPU(
     MemorySchedulerAlgorithm algorithm) {
-  return [algorithm](HloComputation* computation,
-                     const TuplePointsToAnalysis& points_to_analysis,
-                     const LogicalBuffer::SizeFunction& size_function,
-                     const absl::flat_hash_map<const HloComputation*, int64>&
-                         memory_by_computation) {
+  return [algorithm = std::move(algorithm)](
+             HloComputation* computation,
+             const TuplePointsToAnalysis& points_to_analysis,
+             const LogicalBuffer::SizeFunction& size_function,
+             const absl::flat_hash_map<const HloComputation*, int64>&
+                 memory_by_computation) {
     std::unique_ptr<HloAliasAnalysis> alias_analysis =
         HloAliasAnalysis::NewEmptyAnalysis(computation->parent());
     auto postprocessor =
@@ -119,28 +120,29 @@ IpuSchedulerAlgorithm MemorySchedulerAlgorithmToIPU(
 
 MemorySchedulerAlgorithm IpuToMemorySchedulerAlgorithm(
     IpuSchedulerAlgorithm algorithm) {
-  return [algorithm](HloComputation* computation,
-                     const TuplePointsToAnalysis& points_to_analysis,
-                     const HloAliasAnalysis& alias_analysis,
-                     const LogicalBuffer::SizeFunction& size_function,
-                     const absl::flat_hash_map<const HloComputation*, int64>&
-                         memory_by_computation,
-                     const MemorySchedulerPostprocessor& postprocessor,
-                     int64* peak_mem) {
+  return [algorithm = std::move(algorithm)](
+             HloComputation* computation,
+             const TuplePointsToAnalysis& points_to_analysis,
+             const HloAliasAnalysis& alias_analysis,
+             const LogicalBuffer::SizeFunction& size_function,
+             const absl::flat_hash_map<const HloComputation*, int64>&
+                 memory_by_computation,
+              const MemorySchedulerPostprocessor& postprocessor,
+             int64* peak_mem) {
     return algorithm(computation, points_to_analysis, size_function,
                      memory_by_computation);
   };
 }
 
 StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
-    const std::vector<NamedIpuSchedulerAlgorithm>& algorithms) {
+    std::vector<NamedIpuSchedulerAlgorithm> algorithms) {
   if (algorithms.empty()) {
     return xla::FailedPrecondition(
         "Cannot construct BestIpuSchedule when the input is empty");
   }
 
   return IpuSchedulerAlgorithm{
-      [algorithms,
+      [algorithms = std::move(algorithms),
        alias_analysis_cache = std::make_shared<AliasAnalysisCache>()](
           HloComputation* computation,
           const TuplePointsToAnalysis& tuple_points_to_analysis,
@@ -202,8 +204,8 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
 }
 
 IpuScheduler::IpuScheduler(const LogicalBuffer::SizeFunction& size_function,
-                           const IpuSchedulerAlgorithm& algorithm)
-    : size_function_(size_function), algorithm_(algorithm) {}
+                           IpuSchedulerAlgorithm algorithm)
+    : size_function_(size_function), algorithm_(std::move(algorithm)) {}
 
 StatusOr<bool> IpuScheduler::Run(HloModule* module) {
   if (!algorithm_) {

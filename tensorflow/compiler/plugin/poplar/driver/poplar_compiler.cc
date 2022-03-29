@@ -925,26 +925,26 @@ StatusOr<std::vector<NamedIpuSchedulerAlgorithm>> GetSchedulerList(
   const bool all =
       res.scheduler_selection == IpuSchedulingAlgorithm::CHOOSE_BEST;
   if (all || res.scheduler_selection == IpuSchedulingAlgorithm::POST_ORDER) {
-    schedulers.push_back(
-        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::POST_ORDER),
-         MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler)});
+    schedulers.emplace_back(
+        IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::POST_ORDER),
+        MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler));
   }
   if (all || res.scheduler_selection == IpuSchedulingAlgorithm::CLUSTERING) {
-    schedulers.push_back(
-        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::CLUSTERING),
-         CreateClusteringMemoryScheduler(res.information)});
+    schedulers.emplace_back(
+        IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::CLUSTERING),
+        CreateClusteringMemoryScheduler(res.information));
   }
   if (all || res.scheduler_selection == IpuSchedulingAlgorithm::SHORTEST_PATH) {
-    schedulers.push_back(
-        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::SHORTEST_PATH),
-         CreateShortestPathScheduler(res.information)});
+    schedulers.emplace_back(
+        IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::SHORTEST_PATH),
+        CreateShortestPathScheduler(res.information));
   }
 
   // Not enabled with CHOOSE_BEST because of its time complexity.
   if (res.scheduler_selection == IpuSchedulingAlgorithm::LOOK_AHEAD) {
-    schedulers.push_back(
-        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::LOOK_AHEAD),
-         CreateLivenessLookAheadMemoryScheduler(res.information)});
+    schedulers.emplace_back(
+        IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::LOOK_AHEAD),
+        CreateLivenessLookAheadMemoryScheduler(res.information));
   }
 
   if (schedulers.empty()) {
@@ -1682,7 +1682,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       TF_ASSIGN_OR_RETURN(auto scheduler, BestIpuSchedule(schedulers));
 
       pipeline.AddPass<ResourceUpdateScheduleOptimizer>();
-      pipeline.AddPass<IpuScheduler>(SizeFunction, scheduler);
+      pipeline.AddPass<IpuScheduler>(SizeFunction, std::move(scheduler));
       pipeline.AddPass<ModuleFlatten>(resources.annotations);
       pipeline.AddPass<LowerFrontendAttributes>();
       pipeline.AddPass<MarkReplicaIdenticalInstructions>();
