@@ -66,6 +66,7 @@ from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import serving
 from tensorflow.python.ipu import sharding
+from tensorflow.python.ipu import sharding_utils
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_pipeline_estimator
@@ -85,3 +86,5 @@ from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.ipu.ops.functional_ops import outlined_function
 
 # pylint: enable=wildcard-import,unused-import
+
+sharding_utils.enable_sharded_gradient_tape()
