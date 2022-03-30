@@ -21,8 +21,10 @@ import numpy as np
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import sharding
 from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops.variable_scope import variable_scope
+from tensorflow.python.util import compat
 from tensorflow.python.util import tf_contextlib
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
@@ -128,7 +130,10 @@ def ipu_shard(index):
   """Control sharding for a set of operations.
 
   Provides a scope which targets operations onto a particular shard (IPU) of a
-  multi-IPU sharded device.
+  multi-IPU sharded device. Gradients created from these operations will
+  also be put onto the same shard. Consequently an `ipu_shard` scope
+  enclosing a call to `tf.gradients` or `tf.GradientTape.gradient` won't change
+  the sharding of the backwards ops.
 
   Args:
     index: The index of the IPU on which to place the enclosed operations.
@@ -144,13 +149,23 @@ def ipu_shard(index):
 
   proto = xla_data_pb2.OpSharding(type=xla_data_pb2.OpSharding.MAXIMAL,
                                   tile_assignment_devices=ipus)
-
   attr_value = attr_value_pb2.AttrValue(s=proto.SerializeToString())
   attrs = {"_XlaSharding": attr_value}
 
   # pylint: disable=protected-access
+
+  old_operations = ops.get_default_graph().get_operations()
+
   with ops.get_default_graph()._attr_scope(attrs):
     yield
+
+  operations = ops.get_default_graph().get_operations()
+  new_operations = [op for op in operations if op not in old_operations]
+  # Make sure that the gradients of the new Ops also have the same sharding.
+  # There's a context manager that does the same thing, but this way we dont
+  # accidentally override what would have been the intended gradient function.
+  _make_gradients_sharded(new_operations)
+
   # pylint: enable=protected-access
 
 
@@ -242,3 +257,56 @@ def partials_type(override_type):
       xla_data_pb2.PrimitiveType.Name(xla_type),
       xla_data_pb2.PrimitiveType.Name(xla_data_pb2.PRIMITIVE_TYPE_INVALID)):
     yield
+
+
+# Custom gradient for a dummy type that we can use for applying
+# the sharding of an Op to its gradient.
+@ops.RegisterGradient("_ShardedGradientWrapper")
+def _sharded_gradient_wrapper(op, *args, **kwargs):
+  gradient_fn = op._orig_grad_fn  # pylint: disable=protected-access
+
+  shard = sharding.get_sharding(op)
+  assert shard is not None, "Expected forward Op to be sharded."
+  with ipu_shard(shard):
+    return gradient_fn(op, *args, **kwargs)
+
+
+def _make_gradients_sharded(operations):
+  for op in operations:
+    gradient_fn = _get_gradient_function(op)
+    has_gradient = gradient_fn is not None
+
+    # Pipeline backward stage cant be explicitly sharded, its implicitly
+    # sharded based on the corresponding forward stage.
+    if has_gradient and op.type != "PipelineStage":
+
+      # An Op might already have a shared gradient if ipu_shard scopes
+      # are nested.
+      if _get_gradient_op_type(op) != "_ShardedGradientWrapper":
+        _set_gradient_op_type(op, "_ShardedGradientWrapper")
+        # Stash the original function - dirty but options are limited since the
+        # gradient functions have to be registered with TF.
+        op._orig_grad_fn = gradient_fn  # pylint: disable=protected-access
+
+
+def _get_gradient_function(op):
+  try:
+    gradient_fn = ops.get_gradient_function(op)
+  except LookupError:
+    return None
+
+  return gradient_fn
+
+
+def _set_gradient_op_type(op, op_type):
+  as_bytes = compat.as_bytes(op_type)
+  op._set_attr("_gradient_op_type", attr_value_pb2.AttrValue(s=as_bytes))  # pylint: disable=protected-access
+
+
+def _get_gradient_op_type(op):
+  try:
+    op_type = op.get_attr("_gradient_op_type")
+  except ValueError:
+    return None
+
+  return compat.as_str(op_type)

@@ -17,10 +17,33 @@ Utility functions for sharding graphs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.framework import ops
 
 _XLA_SHARDING = '_XlaSharding'
+
+
+def get_sharding(op):  # pylint: disable=missing-type-doc,missing-return-type-doc
+  """Get the sharding for the given op.
+
+  Args:
+    op: An operation.
+
+  Returns:
+    None if the operation has no sharding, otherwise
+    the shard number.
+  """
+  if has_attr(op, _XLA_SHARDING):
+    attr = op.get_attr(_XLA_SHARDING)
+
+    sharding_proto = xla_data_pb2.OpSharding()
+    sharding_proto.ParseFromString(attr)
+
+    # Don't return a protobuf type.
+    return list(sharding_proto.tile_assignment_devices)
+
+  return None
 
 
 def has_attr(o, attr_name):
