@@ -174,8 +174,11 @@ ENTRY main {
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
-                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
+      DeferredArgRBVectors{
+          // TODO(T58443) - Remove the cast after conversion from poplar::Tensor
+          // to DriverTensor
+          {TensorOrRemoteBuffer{(poplar::Tensor)placeholder}},
+          {TensorOrRemoteBuffer{(poplar::Tensor)grad_acc_placeholder}}},
       GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -317,8 +320,11 @@ ENTRY main {
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
-                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
+      DeferredArgRBVectors{
+          // TODO(T58443) - Remove the cast after conversion from poplar::Tensor
+          // to DriverTensor
+          {TensorOrRemoteBuffer{(poplar::Tensor)placeholder}},
+          {TensorOrRemoteBuffer{(poplar::Tensor)grad_acc_placeholder}}},
       GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -529,8 +535,11 @@ ENTRY main {
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
-                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
+      DeferredArgRBVectors{
+          // TODO(T58443) - Remove the cast after conversion from poplar::Tensor
+          // to DriverTensor
+          {TensorOrRemoteBuffer{(poplar::Tensor)placeholder}},
+          {TensorOrRemoteBuffer{(poplar::Tensor)grad_acc_placeholder}}},
       GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -735,8 +744,11 @@ ENTRY main {
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
-                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
+      DeferredArgRBVectors{
+          // TODO(T58443) - Remove the cast after conversion from poplar::Tensor
+          // to DriverTensor
+          {TensorOrRemoteBuffer{(poplar::Tensor)placeholder}},
+          {TensorOrRemoteBuffer{(poplar::Tensor)grad_acc_placeholder}}},
       GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -945,8 +957,11 @@ ENTRY main {
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
-                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
+      DeferredArgRBVectors{
+          // TODO(T58443) - Remove the cast after conversion from poplar::Tensor
+          // to DriverTensor
+          {TensorOrRemoteBuffer{(poplar::Tensor)placeholder}},
+          {TensorOrRemoteBuffer{(poplar::Tensor)grad_acc_placeholder}}},
       GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 

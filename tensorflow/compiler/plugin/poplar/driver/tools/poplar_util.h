@@ -34,6 +34,7 @@ limitations under the License.
 #include "absl/types/optional.h"
 #include "ipu/poplar_executable_data.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_replica_groups.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
@@ -73,10 +74,10 @@ Status SetVertexField(poplar::Graph& graph, const poplar::FieldRef& field,
                       const Literal& literal);
 
 // Get the master graph
-poplar::Graph& GetMasterGraph(CompilerResources&);
+DriverGraph& GetMasterGraph(CompilerResources&);
 
 // Get the appropriate virtual graph, or the replicated/master graph if not
-poplar::Graph& GetGraph(CompilerResources&, const HloInstruction*);
+DriverGraph& GetGraph(CompilerResources&, const HloInstruction*);
 
 // Get the current process ID
 int32 GetPID();
@@ -102,9 +103,8 @@ int64 GetShardForOutputIndex(const HloInstruction* inst,
 // Get the virtual graph for a particular output of an operation. Operations
 // like Parameter, Infeed, Call, While, Tuple can have multiple tensor
 // outputs on different IPUs.
-poplar::Graph& GetGraphWithOutputIndex(CompilerResources&,
-                                       const HloInstruction*,
-                                       int flattened_output_tuple_index);
+DriverGraph& GetGraphWithOutputIndex(CompilerResources&, const HloInstruction*,
+                                     int flattened_output_tuple_index);
 
 // Convert a poplar/poplibs exception to a Tensorflow error Status
 Status PoplarExceptionToTensorflowStatus(const std::string& origin,

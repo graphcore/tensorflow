@@ -931,6 +931,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver:threestate_proto_cc_impl",
         "//tensorflow/compiler/plugin/poplar/driver/passes:allocation_finder",
         "//tensorflow/compiler/plugin/poplar/driver/tools:alias_info_proto_cc_impl",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:poplar_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:host_embedding",
         "//tensorflow/compiler/plugin/poplar/kernels:ops_proto_cc_impl",
         "//tensorflow/core:framework_headers_lib",
