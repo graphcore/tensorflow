@@ -134,6 +134,22 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "driver_backend",
+    srcs = [
+        "extended_graph.cc",
+    ],
+    hdrs = [
+        "driver_types.h",
+        "extended_graph.h",
+        "extended_program.h",
+        "extended_tensor.h",
+    ],
+    deps = [
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
+)
+
+poplar_cc_library(
     name = "compiler_resources",
     srcs = [
     ],
@@ -144,6 +160,7 @@ poplar_cc_library(
     deps = [
         ":compiler_annotations",
         ":compiler_information",
+        ":driver_backend",
     ],
 )
 
