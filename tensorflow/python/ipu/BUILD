@@ -199,7 +199,6 @@ py_library(
         "scopes.py",
         "serving.py",
         "sharding.py",
-        "sharding_utils.py",
         "utils.py",
         "vertex_edsl.py",
     ],
