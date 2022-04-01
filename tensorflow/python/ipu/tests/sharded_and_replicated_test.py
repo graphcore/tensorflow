@@ -21,6 +21,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
+from tensorflow.python.eager import backprop
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
@@ -383,134 +384,146 @@ def compilation_test(input_shape):  # pylint: disable=missing-type-doc,missing-p
   """
   def compilation_wrapper(body):
     def wrapped(self):
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
-        placholder = array_ops.placeholder(np.float32, input_shape)
-        ipu.ipu_compiler.compile(lambda input_value: body(self, input_value),
-                                 [placholder])
+      self.compile(body, input_shape)
 
     return wrapped
 
   return compilation_wrapper
 
 
-@test_util.deprecated_graph_mode_only
-class TestShardedGradient(test_util.TensorFlowTestCase):
-  @staticmethod
-  def create_weights(shape):
-    weights = variable_scope.get_variable(
-        'weights',
-        shape=shape,
-        trainable=True,
-        initializer=init_ops.constant_initializer(2.5))
-    return weights
+class CommonShardedGradient:
+  # Putting these tests in a namespace so only their subclasses are
+  # instantiated, otherwise the Tests baseclass would also be executed.
+  @test_util.deprecated_graph_mode_only
+  class Tests(test_util.TensorFlowTestCase):
+    @staticmethod
+    def create_weights(shape):
+      weights = variable_scope.get_variable(
+          'weights',
+          shape=shape,
+          trainable=True,
+          initializer=init_ops.constant_initializer(2.5))
+      return weights
 
-  @compilation_test(input_shape=[16, 512])
-  def testSameSharding(self, input_value):
-    # Test that the gradients can be sharded when everything is
-    # in the same shard.
-    with ipu.scopes.ipu_shard(1):
+    @compilation_test(input_shape=[16, 512])
+    def testSameSharding(self, input_value):
+      # Test that the gradients can be sharded when everything is
+      # in the same shard.
+      with ipu.scopes.ipu_shard(1):
+        weights = self.create_weights(shape=[512, 100])
+        matmul = math_ops.matmul(input_value, weights)
+        loss = math_ops.reduce_sum(matmul)
+      grads = self.gradients(loss, [weights, input_value])
+
+      matmul_sharding = ipu.sharding.get_sharding(matmul.op)
+      self.assertEqual(matmul_sharding, [1])
+
+      grad_sharding = [ipu.sharding.get_sharding(grad.op) for grad in grads]
+      self.assertEqual(grad_sharding[0], matmul_sharding)
+      self.assertEqual(grad_sharding[1], matmul_sharding)
+
+    @compilation_test(input_shape=[4])
+    def testDifferentSharding(self, input_value):
+      # Test that the gradients can be sharded when the work is split between
+      # multiple shards
+      weights = self.create_weights(shape=[4])
+      with ipu.scopes.ipu_shard(0):
+        mul0 = weights * 5
+      with ipu.scopes.ipu_shard(1):
+        mul1 = input_value * 5
+      with ipu.scopes.ipu_shard(3):
+        output = mul0 + mul1
+        loss = math_ops.reduce_sum(output**2)
+      grad = self.gradients(loss, [weights, input_value])
+
+      mul0_sharding = ipu.sharding.get_sharding(mul0.op)
+      grad0_sharding = ipu.sharding.get_sharding(grad[0].op)
+      self.assertEqual(mul0_sharding, [0])
+      self.assertEqual(grad0_sharding, mul0_sharding)
+
+      mul1_sharding = ipu.sharding.get_sharding(mul1.op)
+      grad1_sharding = ipu.sharding.get_sharding(grad[1].op)
+      self.assertEqual(mul1_sharding, [1])
+      self.assertEqual(grad1_sharding, mul1_sharding)
+
+    @compilation_test(input_shape=[16, 512])
+    def testNoSharding(self, input_value):
+      # Test that the sharding comes from the forward op, so if there is no
+      # sharding for it then there isn't any for the bwd op.
       weights = self.create_weights(shape=[512, 100])
       matmul = math_ops.matmul(input_value, weights)
-      loss = math_ops.reduce_sum(matmul)
-    grads = gradients_impl.gradients(loss, [weights, input_value])
+      with ipu.scopes.ipu_shard(0):
+        loss = math_ops.reduce_sum(matmul)
+      grad = self.gradients(loss, [input_value])
 
-    matmul_sharding = ipu.sharding.get_sharding(matmul.op)
-    self.assertEqual(matmul_sharding, [1])
+      grad_sharding = ipu.sharding.get_sharding(grad[0].op)
+      self.assertIsNone(grad_sharding)
 
-    grad_sharding = [ipu.sharding.get_sharding(grad.op) for grad in grads]
-    self.assertEqual(grad_sharding[0], matmul_sharding)
-    self.assertEqual(grad_sharding[1], matmul_sharding)
-
-  @compilation_test(input_shape=[4])
-  def testDifferentSharding(self, input_value):
-    # Test that the gradients can be sharded when the work is split between
-    # multiple shards
-    weights = self.create_weights(shape=[4])
-    with ipu.scopes.ipu_shard(0):
-      mul0 = weights * 5
-    with ipu.scopes.ipu_shard(1):
-      mul1 = input_value * 5
-    with ipu.scopes.ipu_shard(3):
-      output = mul0 + mul1
-      loss = math_ops.reduce_sum(output**2)
-    grad = gradients_impl.gradients(loss, [weights, input_value])
-
-    mul0_sharding = ipu.sharding.get_sharding(mul0.op)
-    grad0_sharding = ipu.sharding.get_sharding(grad[0].op)
-    self.assertEqual(mul0_sharding, [0])
-    self.assertEqual(grad0_sharding, mul0_sharding)
-
-    mul1_sharding = ipu.sharding.get_sharding(mul1.op)
-    grad1_sharding = ipu.sharding.get_sharding(grad[1].op)
-    self.assertEqual(mul1_sharding, [1])
-    self.assertEqual(grad1_sharding, mul1_sharding)
-
-  @compilation_test(input_shape=[16, 512])
-  def testNoSharding(self, input_value):
-    # Test that the sharding comes from the forward op, so if there is no
-    # sharding for it then there isn't any for the bwd op.
-    weights = self.create_weights(shape=[512, 100])
-    matmul = math_ops.matmul(input_value, weights)
-    with ipu.scopes.ipu_shard(0):
-      loss = math_ops.reduce_sum(matmul)
-    grad = gradients_impl.gradients(loss, [input_value])
-
-    grad_sharding = ipu.sharding.get_sharding(grad[0].op)
-    self.assertIsNone(grad_sharding)
-
-  @compilation_test(input_shape=[16, 512])
-  def testPrecedence(self, input_value):
-    # Test that the sharding from the forward op takes precedence
-    # over any sharding scope over the gradient call.
-    with ipu.scopes.ipu_shard(0):
-      weights = self.create_weights(shape=[512, 100])
-    with ipu.scopes.ipu_shard(1):
-      matmul = math_ops.matmul(input_value, weights)
-      loss = math_ops.reduce_sum(matmul)
-    with ipu.scopes.ipu_shard(2):
-      #The gradiet call needs to be in a different scope, as it's only when the
-      # we leave the shard scope that the sharded gradient function gets made.
-      grad = gradients_impl.gradients(loss, [input_value])
-
-    matmul_sharding = ipu.sharding.get_sharding(matmul.op)
-    grad_sharding = ipu.sharding.get_sharding(grad[0].op)
-    self.assertEqual(matmul_sharding, [1])
-    self.assertEqual(grad_sharding, matmul_sharding)
-
-  @compilation_test(input_shape=[16, 512])
-  def testNestedSharding(self, input_value):
-    # Test that the inner most sharding is used for the fwd/bwd Op
-    # when they're nested.
-    with ipu.scopes.ipu_shard(0):
-      weights = self.create_weights(shape=[512, 100])
+    @compilation_test(input_shape=[16, 512])
+    def testPrecedence(self, input_value):
+      # Test that the sharding from the forward op takes precedence
+      # over any sharding scope over the gradient call.
+      with ipu.scopes.ipu_shard(0):
+        weights = self.create_weights(shape=[512, 100])
       with ipu.scopes.ipu_shard(1):
         matmul = math_ops.matmul(input_value, weights)
         loss = math_ops.reduce_sum(matmul)
-    grad = gradients_impl.gradients(loss, [input_value])
+      with ipu.scopes.ipu_shard(2):
+        #The gradiet call needs to be in a different scope, as it's only when the
+        # we leave the shard scope that the sharded gradient function gets made.
+        grad = self.gradients(loss, [input_value])
 
-    matmul_sharding = ipu.sharding.get_sharding(matmul.op)
-    grad_sharding = ipu.sharding.get_sharding(grad[0].op)
-    self.assertEqual(matmul_sharding, [1])
-    self.assertEqual(grad_sharding, matmul_sharding)
+      matmul_sharding = ipu.sharding.get_sharding(matmul.op)
+      grad_sharding = ipu.sharding.get_sharding(grad[0].op)
+      self.assertEqual(matmul_sharding, [1])
+      self.assertEqual(grad_sharding, matmul_sharding)
 
-  @compilation_test(input_shape=[16, 512])
-  def testSecondDerivativeSharding(self, input_value):
-    # Test that the second derivative uses the same
-    # sharding as the first.
-    with ipu.scopes.ipu_shard(1):
-      weights = self.create_weights(shape=[512, 100])
-      matmul = math_ops.matmul(input_value, weights)
-      loss = math_ops.reduce_sum(matmul**2)
-    first_grad = gradients_impl.gradients(loss, [weights])
-    second_grad = gradients_impl.gradients(first_grad[0], [matmul])
+    @compilation_test(input_shape=[16, 512])
+    def testNestedSharding(self, input_value):
+      # Test that the inner most sharding is used for the fwd/bwd Op
+      # when they're nested.
+      with ipu.scopes.ipu_shard(0):
+        weights = self.create_weights(shape=[512, 100])
+        with ipu.scopes.ipu_shard(1):
+          matmul = math_ops.matmul(input_value, weights)
+          loss = math_ops.reduce_sum(matmul)
+      grad = self.gradients(loss, [input_value])
 
-    matmul_sharding = ipu.sharding.get_sharding(matmul.op)
-    self.assertEqual(matmul_sharding, [1])
+      matmul_sharding = ipu.sharding.get_sharding(matmul.op)
+      grad_sharding = ipu.sharding.get_sharding(grad[0].op)
+      self.assertEqual(matmul_sharding, [1])
+      self.assertEqual(grad_sharding, matmul_sharding)
 
-    first_grad_sharding = ipu.sharding.get_sharding(first_grad[0].op)
-    second_grad_sharding = ipu.sharding.get_sharding(second_grad[0].op)
-    self.assertEqual(first_grad_sharding, matmul_sharding)
-    self.assertEqual(second_grad_sharding, first_grad_sharding)
+    @compilation_test(input_shape=[16, 512])
+    def testSecondDerivativeSharding(self, input_value):
+      # Test that the second derivative uses the same
+      # sharding as the first.
+      with ipu.scopes.ipu_shard(1):
+        weights = self.create_weights(shape=[512, 100])
+        matmul = math_ops.matmul(input_value, weights)
+        loss = math_ops.reduce_sum(matmul**2)
+      first_grad = self.gradients(loss, [weights])
+      second_grad = self.gradients(first_grad[0], [matmul])
+
+      matmul_sharding = ipu.sharding.get_sharding(matmul.op)
+      self.assertEqual(matmul_sharding, [1])
+
+      first_grad_sharding = ipu.sharding.get_sharding(first_grad[0].op)
+      second_grad_sharding = ipu.sharding.get_sharding(second_grad[0].op)
+      self.assertEqual(first_grad_sharding, matmul_sharding)
+      self.assertEqual(second_grad_sharding, first_grad_sharding)
+
+
+@test_util.deprecated_graph_mode_only
+class TestShardedGradient(CommonShardedGradient.Tests):
+  def compile(self, body, input_shape):
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      placholder = array_ops.placeholder(np.float32, input_shape)
+      ipu.ipu_compiler.compile(lambda input_value: body(self, input_value),
+                               [placholder])
+
+  def gradients(self, target, sources):
+    return gradients_impl.gradients(target, sources)
 
   @test_util.run_v2_only
   @compilation_test(input_shape=[16, 512])
@@ -527,7 +540,7 @@ class TestShardedGradient(test_util.TensorFlowTestCase):
       # This is a TF2 only API.
       matmul.op._gradient_function = mock_grad  # pylint: disable=protected-access
 
-    gradients_impl.gradients(loss, [weights])
+    self.gradients(loss, [weights])
     self.assertTrue(mock_grad.called)
 
     matmul_sharding = ipu.sharding.get_sharding(matmul.op)
@@ -548,11 +561,31 @@ class TestShardedGradient(test_util.TensorFlowTestCase):
         matmul = math_ops.matmul(input_value, weights)
         loss = math_ops.reduce_sum(matmul)
 
-    gradients_impl.gradients(loss, [weights])
+    self.gradients(loss, [weights])
     self.assertTrue(mock_grad.called)
 
     matmul_sharding = ipu.sharding.get_sharding(matmul.op)
     self.assertEqual(matmul_sharding, [1])
+
+
+@test_util.deprecated_graph_mode_only
+class TestShardedGradientTape(CommonShardedGradient.Tests):
+  def compile(self, body, input_shape):
+    def wrapped_body(self, input_value):
+      self._tape = backprop.GradientTape(persistent=True)
+      with self._tape:
+        self._tape.watch(input_value)
+        body(self, input_value)
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      placholder = array_ops.placeholder(np.float32, input_shape)
+      ipu.ipu_compiler.compile(
+          lambda input_value: wrapped_body(self, input_value), [placholder])
+
+  def gradients(self, target, sources):
+    # Note that this will be called from within the the gradient tape
+    # scope.
+    return self._tape.gradient(target, sources)
 
 
 if __name__ == "__main__":

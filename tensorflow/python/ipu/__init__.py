@@ -85,3 +85,5 @@ from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.ipu.ops.functional_ops import outlined_function
 
 # pylint: enable=wildcard-import,unused-import
+
+sharding.enable_sharded_gradient_tape()
