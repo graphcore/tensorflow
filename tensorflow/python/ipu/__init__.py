@@ -97,3 +97,5 @@ from tensorflow.python.ipu.ops.functional_ops import outlined_function
 
 from tensorflow.python.ipu import register_keras_extensions
 # pylint: enable=wildcard-import,unused-import
+
+sharding.enable_sharded_gradient_tape()
