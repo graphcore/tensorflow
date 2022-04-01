@@ -66,7 +66,6 @@ from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import serving
 from tensorflow.python.ipu import sharding
-from tensorflow.python.ipu import sharding_utils
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import vertex_edsl
 
@@ -98,5 +97,3 @@ from tensorflow.python.ipu.ops.functional_ops import outlined_function
 
 from tensorflow.python.ipu import register_keras_extensions
 # pylint: enable=wildcard-import,unused-import
-
-sharding_utils.enable_sharded_gradient_tape()
