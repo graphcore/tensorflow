@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <poplar/DeviceManager.hpp>
 #include <poplar/IPUModel.hpp>
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
@@ -104,8 +105,7 @@ std::unique_ptr<CompilerResources> HloPoplarTestBase::GetMockResources(
     const CompilerInformation& info) {
   auto resources = CompilerResources::CreateTestDefault(module, info);
   resources->module_call_graph = CallGraph::Build(module);
-  resources->main_graph = absl::make_unique<poplar::Graph>(
-      device, poplar::replication_factor(replication_factor));
+  resources->CreateMainGraphAndPreamble(device.getTarget(), replication_factor);
   resources->replication_factor = replication_factor;
   resources->partition_replication_factor = replication_factor;
 
@@ -143,8 +143,8 @@ StatusOr<poplar::Engine> HloPoplarTestBase::Compile(
 
   TF_RETURN_IF_ERROR(entry->AcceptOrdered(&visitor, order));
 
-  poplar::program::Sequence main_program;
-  main_program.add(resources.preamble_sequence);
+  DriverProgramSequence main_program(*resources.main_graph);
+  main_program.add(*resources.preamble_sequence);
   main_program.add(visitor.GetSequenceAndInitializeCounters());
 
   return poplar::Engine(*resources.main_graph, main_program);

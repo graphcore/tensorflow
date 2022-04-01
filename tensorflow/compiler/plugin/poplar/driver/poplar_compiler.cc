@@ -44,6 +44,7 @@ limitations under the License.
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/invariant_passes/no_control_deps_checker.h"
 #include "tensorflow/compiler/plugin/poplar/driver/invariant_passes/resource_update_checker.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -536,8 +537,8 @@ HloPrintOptions GetPrintOptions() {
   return opts;
 }
 
-StatusOr<poplar::program::Sequence> InitializeSeed(
-    poplar::Graph& graph, int replication_factor, CompilerResources& resources,
+StatusOr<DriverProgramSequence> InitializeSeed(
+    DriverGraph& graph, int replication_factor, CompilerResources& resources,
     const poplar::DebugContext& debug_context = {"__seed"}) {
   PoplarOpDefDebugInfo debug_info(debug_context, "InitializeSeed");
 
@@ -545,7 +546,7 @@ StatusOr<poplar::program::Sequence> InitializeSeed(
       graph.addVariable(poplar::UNSIGNED_INT, {2}, {debug_info, "seed"});
   graph.setTileMapping(seed, 0);
 
-  poplar::program::Sequence seq({}, {debug_info});
+  DriverProgramSequence seq(*resources.main_graph, {debug_info});
 
   const auto use_synthetic_data =
       UseSyntheticDataFor(SyntheticDataCategory::Seed);
@@ -553,7 +554,7 @@ StatusOr<poplar::program::Sequence> InitializeSeed(
     // Copy the seed from the data stream and set it.
     auto data_stream = graph.addHostToDeviceFIFO(
         GetRandomNumberSeedStream(), seed.elementType(), seed.numElements());
-    seq.add(poplar::program::Copy(data_stream, seed, false, {debug_info}));
+    seq.add(DriverProgramCopy(data_stream, seed, false, {debug_info}));
   } else if (use_synthetic_data && UseSyntheticDataInitializer()) {
     // Initialize the seed on the device.
     auto& initializer = DataInitializer::GetSyntheticDataInitializer();
@@ -566,7 +567,7 @@ StatusOr<poplar::program::Sequence> InitializeSeed(
     // When running a replicated graph we need an additional seed, which is
     // identical for all IPUs. This gets used to ensure determinism when
     // performing stochastic rounding.
-    poplar::Tensor identical_seed =
+    auto identical_seed =
         // Using MEAN to preserve the seed value incase it's been explicitly set
         // to be the same for each replica.
         popops::cast(graph,
@@ -591,8 +592,7 @@ StatusOr<poplar::program::Sequence> InitializeSeed(
   return seq;
 }
 
-bool InitializeCycleCounter(poplar::Graph& graph,
-                            poplar::program::Sequence& seq,
+bool InitializeCycleCounter(DriverGraph& graph, DriverProgramSequence& seq,
                             const poplar::DebugContext& debug_context) {
   PoplarOpDefDebugInfo debug_info(debug_context, "InitializeCycleCounter");
 
@@ -602,12 +602,12 @@ bool InitializeCycleCounter(poplar::Graph& graph,
     return false;
   } else {
     std::string cycleCounterId = PoplarExecutor::GetCycleCounterStream();
-    poplar::Tensor cycleCounter =
+    auto cycleCounter =
         poplar::cycleCount(graph, seq, tile, poplar::SyncType::INTERNAL,
                            {debug_info, cycleCounterId});
-    poplar::DataStream fifo = graph.addDeviceToHostFIFO(
+    auto fifo = graph.addDeviceToHostFIFO(
         cycleCounterId, cycleCounter.elementType(), cycleCounter.numElements());
-    seq.add(poplar::program::Copy(cycleCounter, fifo, false, {debug_info}));
+    seq.add(DriverProgramCopy(cycleCounter, fifo, false, {debug_info}));
     return true;
   }
 }
@@ -660,9 +660,9 @@ bool EnableProgressBar(const HloModule* module) {
   }
 }
 
-void setFpBehaviour(poplar::Graph& graph,
+void setFpBehaviour(DriverGraph& graph,
                     const IpuOptions::FloatingPointBehaviour& fp_control,
-                    poplar::program::Sequence& seq) {
+                    DriverProgramSequence& seq) {
   if (graph.getTarget().getTargetType() == poplar::TargetType::IPU) {
     const auto esr =
         fp_control.esr() != StochasticRoundingBehaviour::StochasticRounding_Off;
@@ -730,7 +730,7 @@ struct Tilesets {
   std::vector<unsigned> io_tiles;
 };
 
-absl::optional<Tilesets> PartitionTiles(const poplar::Graph& main_graph,
+absl::optional<Tilesets> PartitionTiles(const DriverGraph& main_graph,
                                         unsigned num_io_tiles,
                                         unsigned num_tiles_per_ipu) {
   if (num_io_tiles == 0) {
@@ -764,9 +764,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   try {
     const poplar::Target& poplar_target =
         poplar_executor->GetOrCreatePoplarTarget();
-    resources.main_graph = absl::make_unique<poplar::Graph>(
-        poplar_target,
-        poplar::replication_factor(resources.replication_factor));
+    TF_RETURN_IF_ERROR(resources.CreateMainGraphAndPreamble(poplar_target));
   } catch (const std::exception& e) {
     return PoplarExceptionToTensorflowStatus("[Create Graph]", e);
   }
@@ -852,7 +850,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
       bool has_io_instructions =
           shards_with_io_instructions.contains(virtual_graph_idx);
 
-      poplar::Graph ipu_graph = main_graph.createVirtualGraph(
+      DriverGraph ipu_graph = main_graph.createVirtualGraph(
           ipu * tiles_per_ipu, (ipu + 1) * tiles_per_ipu);
 
       if (tilesets.has_value()) {
@@ -866,7 +864,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
         } else {
           // Insert a placeholder I/O graph to preserve indexing by device id.
           resources.shard_io_graphs.emplace_back(
-              ipu_graph.createVirtualGraph(0));
+              ipu_graph.createVirtualGraph({0}));
           resources.shard_compute_graphs.emplace_back(std::move(ipu_graph));
         }
       } else {
@@ -1774,7 +1772,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   resources.module_call_graph = CallGraph::Build(module);
 
   std::unique_ptr<poplar::Engine> engine;
-  std::vector<poplar::program::Program> progs;
+  std::vector<poplar::program::Program>
+      progs;  // TODO(T58443) - Convert to snap API
   bool logging_cycle_count = false;
 
   if (compile) {
@@ -1805,7 +1804,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     TF_RETURN_IF_ERROR(CreatePoplarGraphs(resources, module, poplar_executor));
     auto& main_graph = GetMasterGraph(resources);
 
-    poplar::program::Sequence fp_setup;
+    DriverProgramSequence fp_setup(main_graph);
     // Set up the floating point control register if required. Do this before
     // seed setup so we don't overwrite any FP settings it changes.
     if (poplar_executor->FloatingPointBehaviourFlagsSet()) {
@@ -1863,18 +1862,19 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
                  "and experimentali prng stability is enabled.";
     }
 
-    poplar::program::Sequence main_program({}, {"MainProgram"});
+    DriverProgramSequence main_program(*resources.main_graph, {"MainProgram"});
 
     // Decide whether to synchronise all the replica's starting points.
     if (PoplarXlaFlags::Get().sync_replica_start && replication_factor > 1) {
-      main_program.add(poplar::program::Sync(poplar::SyncType::GLOBAL));
+      main_program.add(
+          DriverProgramSync(*resources.main_graph, poplar::SyncType::GLOBAL));
     }
 
     main_program.add(fp_setup);
     main_program.add(seed_setup);
 
     // Add the preamble sequence.
-    main_program.add(resources.preamble_sequence);
+    main_program.add(*resources.preamble_sequence);
 
     // Add the main program sequence.
     main_program.add(visitor.GetSequenceAndInitializeCounters());
@@ -1887,7 +1887,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     // poplar_executor.h
     // =======================================================================
     progs.push_back(visitor.GetHostToDevice());
-    progs.push_back(main_program);
+    progs.push_back(main_program);  // TODO(T58443) - Convert to snap API
     progs.push_back(visitor.GetDeviceToHost());
 
     std::string map_json = "";
@@ -1922,6 +1922,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       std::string executable_debug_name =
           poplar_executor->GetModuleReportDirectory(module->name());
 
+      // TODO(T58443) - Convert to snap API
       poplar::Executable exec =
           poplar::compileGraph(std::move(main_graph), progs, opt_flags,
                                progress_logging, executable_debug_name);

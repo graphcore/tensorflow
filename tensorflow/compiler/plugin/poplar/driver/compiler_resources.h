@@ -22,7 +22,6 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include <poplar/Graph.hpp>
 #include <poplar/OptionFlags.hpp>
 #include <poplin/Convolution.hpp>
 #include <poplin/MatMul.hpp>
@@ -35,6 +34,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/prng_seed_state.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
@@ -52,15 +52,15 @@ class PartitionedElementwiseClusterVisitor;
 // This structure contains additional information required to lower the graph
 // from an XLA graph to a poplar graph.
 struct CompilerResources {
-  std::unique_ptr<poplar::Graph> main_graph;
+  std::unique_ptr<DriverGraph> main_graph;
 
   // If IO tiles are not in use, these are nullopt (use main_graph instead).
-  absl::optional<poplar::Graph> compute_graph;
-  absl::optional<poplar::Graph> io_graph;
+  absl::optional<DriverGraph> compute_graph;
+  absl::optional<DriverGraph> io_graph;
 
   // If IO tiles are not in use, only shard_compute_graphs is populated.
-  std::vector<poplar::Graph> shard_compute_graphs;
-  std::vector<poplar::Graph> shard_io_graphs;
+  std::vector<DriverGraph> shard_compute_graphs;
+  std::vector<DriverGraph> shard_io_graphs;
 
   std::vector<unsigned> shard_to_ipu_id;
 
@@ -119,7 +119,7 @@ struct CompilerResources {
 
   subcomputation_graph_caching::SubcomputationGraphCache subcomputation_cache;
 
-  poplar::program::Sequence preamble_sequence;
+  std::unique_ptr<DriverProgramSequence> preamble_sequence;
 
   std::stack<std::vector<poplar::program::Sequence>>
       gradient_accumulation_zeroing_remote_buffers;
@@ -228,7 +228,6 @@ struct CompilerResources {
         partition_replication_factor(partition_replication_factor),
         merge_infeed_io_copies(merge_infeed_io_copies),
         always_rearrange_copies_on_host(always_rearrange_copies_on_host),
-        preamble_sequence({}, "Preamble"),
         scheduler_selection(scheduler_selection),
         recomputation_enabled(recomputation_enabled),
         use_stable_norm_statistics(use_stable_norm_statistics),
@@ -277,6 +276,24 @@ struct CompilerResources {
                               floating_point_behaviour, information));
   }
 
+  Status CreateMainGraphAndPreamble(
+      const poplar::Target& target,
+      absl::optional<uint32> replication_factor = {}) {
+    try {
+      uint32 repl_factor =
+          replication_factor ? *replication_factor : this->replication_factor;
+      main_graph = absl::make_unique<DriverGraph>(
+          target, poplar::replication_factor(repl_factor));
+    } catch (const std::exception& e) {
+      return PoplarExceptionToTensorflowStatus("[Create Graph]", e);
+    }
+
+    preamble_sequence =
+        absl::make_unique<DriverProgramSequence>(*main_graph, "Preamble");
+
+    return Status::OK();
+  }
+
  private:
   CompilerResources(
       HloModule* module, bool enable_prng_seed_consistency_checks,
@@ -296,7 +313,6 @@ struct CompilerResources {
         partition_replication_factor(1),
         merge_infeed_io_copies(false),
         always_rearrange_copies_on_host(false),
-        preamble_sequence({}, "Preamble"),
         scheduler_selection(IpuSchedulingAlgorithm::CHOOSE_BEST),
         recomputation_enabled(false),
         use_stable_norm_statistics(false),

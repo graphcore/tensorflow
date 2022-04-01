@@ -162,8 +162,11 @@ TEST_P(PipelineVisitorTestParam, TestPipelineVisitor) {
   ParallelPipelineVisitor visitor(
       params.config, stage_count, params.ipu_assigments, stage_assignments, {},
       bw_stage_count, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
-                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
+      // TODO(T58443) - Remove the cast after conversion from poplar::Tensor
+      // to DriverTensor
+      DeferredArgRBVectors{
+          {TensorOrRemoteBuffer{(poplar::Tensor)placeholder}},
+          {TensorOrRemoteBuffer{(poplar::Tensor)grad_acc_placeholder}}},
       GetInplaceDescription(entry_computation->root_instruction()), "visitor");
 
   auto status = entry_computation->Accept(&visitor);
@@ -174,7 +177,7 @@ TEST_P(PipelineVisitorTestParam, TestPipelineVisitor) {
       visitor
           .VerifyPipelineArguments(
               pipeline_call_computation->GetInstructionWithName("const_2"),
-              grad_acc_placeholder, *(resources->main_graph))
+              grad_acc_placeholder, *resources->main_graph)
           .ValueOrDie();
 
   auto sequence_accumulation_count = [&]() -> PipelineVisitor::IterationsType {
@@ -680,11 +683,14 @@ ENTRY main {
       resources->main_graph->addConstant(poplar::INT, {}, 4);
   resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
+  // TODO(T58443) - Remove the cast after conversion from poplar::Tensor
+  // to DriverTensor
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
-                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
+      DeferredArgRBVectors{
+          {TensorOrRemoteBuffer{(poplar::Tensor)placeholder}},
+          {TensorOrRemoteBuffer{(poplar::Tensor)grad_acc_placeholder}}},
       GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -885,11 +891,14 @@ ENTRY main {
       resources->main_graph->addConstant(poplar::INT, {}, 4);
   resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
+  // TODO(T58443) - Remove the cast after conversion from poplar::Tensor
+  // to DriverTensor
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
-                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
+      DeferredArgRBVectors{
+          {TensorOrRemoteBuffer{(poplar::Tensor)placeholder}},
+          {TensorOrRemoteBuffer{(poplar::Tensor)grad_acc_placeholder}}},
       GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -1276,10 +1285,12 @@ ENTRY e {
   auto p1 = resources->main_graph->addConstant(poplar::FLOAT, {}, 2.f);
   resources->main_graph->setTileMapping(p1, 0);
 
+  // TODO(T58443) - Remove the cast after conversion from poplar::Tensor
+  // to DriverTensor
   ParallelPipelineVisitor visitor(
       pipeline, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{p0}},
-                           {TensorOrRemoteBuffer{p1}}},
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{(poplar::Tensor)p0}},
+                           {TensorOrRemoteBuffer{(poplar::Tensor)p1}}},
       GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(pipeline_comp->Accept(&visitor));
 

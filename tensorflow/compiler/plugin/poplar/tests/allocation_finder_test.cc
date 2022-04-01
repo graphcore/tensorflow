@@ -4460,8 +4460,8 @@ ENTRY c1 {
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   auto resources = CompilerResources::CreateTestDefault(module0);
-  resources->main_graph = absl::make_unique<poplar::Graph>(
-      poplar::Device::createCPUDevice(), poplar::replication_factor(1));
+  TF_ASSERT_OK(resources->CreateMainGraphAndPreamble(
+      poplar::Device::createCPUDevice().getTarget(), 1));
 
   auto& res = *resources;
   auto& annotations = res.annotations;
@@ -4835,10 +4835,10 @@ main {
   auto* module_ptr = module0.ValueOrDie().get();
 
   auto resources = CompilerResources::CreateTestDefault(module_ptr);
-  resources->main_graph = absl::make_unique<poplar::Graph>(
-      poplar::Device::createCPUDevice(), poplar::replication_factor(1));
+  TF_ASSERT_OK(resources->CreateMainGraphAndPreamble(
+      poplar::Device::createCPUDevice().getTarget(), 1));
   auto& annotations = resources->annotations;
-  auto* graph = resources->main_graph.get();
+  auto& graph = resources->main_graph;
 
   EXPECT_TRUE(AllocationFinder(annotations).Run(module_ptr).ValueOrDie());
 
@@ -5093,8 +5093,9 @@ main {
   auto* module_ptr = module0.ValueOrDie().get();
 
   auto resources = CompilerResources::CreateTestDefault(module_ptr);
-  resources->main_graph = absl::make_unique<poplar::Graph>(
-      poplar::Device::createCPUDevice(), poplar::replication_factor(1));
+  TF_ASSERT_OK(resources->CreateMainGraphAndPreamble(
+      poplar::Device::createCPUDevice().getTarget(), 1));
+
   auto& annotations = resources->annotations;
   auto* graph = resources->main_graph.get();
 

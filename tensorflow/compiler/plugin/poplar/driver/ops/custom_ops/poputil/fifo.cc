@@ -160,7 +160,8 @@ std::vector<poplar::Graph*> GetGraphs(poplar::Graph& graph,
     std::vector<poplar::Graph*> result;
 
     for (auto& graph : res.shard_compute_graphs) {
-      result.push_back(&graph);
+      // TODO(T58509) - remove cast
+      result.push_back(&((poplar::Graph&)graph));  // NOLINT
     }
 
     return result;
