@@ -21,7 +21,6 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 
-#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/add_stochastic_rounding_options.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
@@ -65,9 +64,8 @@ struct PrngSeedTest : HloPoplarTestBase {
       TF_ASSERT_OK_AND_ASSIGN(device_,
                               CreateIpuDevice(device_count_, tile_count_));
 
-      graph_ = absl::make_unique<DriverGraph>(
-          device_.getTarget(), poplar::replication_factor(replication_factor_));
-
+      graph_ = absl::make_unique<poplar::Graph>(
+          device_, poplar::replication_factor(replication_factor_));
       poplin::addCodelets(*graph_);
       popnn::addCodelets(*graph_);
       popops::addCodelets(*graph_);
@@ -89,10 +87,10 @@ struct PrngSeedTest : HloPoplarTestBase {
   int32 device_count_ = 2;
   poplar::Device device_;
 
-  std::unique_ptr<DriverGraph> graph_;
+  std::unique_ptr<poplar::Graph> graph_;
 
-  DriverTensor differing_seed_;
-  DriverTensor identical_seed_;
+  poplar::Tensor differing_seed_;
+  poplar::Tensor identical_seed_;
 };
 
 struct PrngSeedStateTest : PrngSeedTest {
@@ -137,8 +135,8 @@ struct PrngSeedStateTest : PrngSeedTest {
 
   poplar::program::Sequence seq_;
 
-  DriverTensor input_;
-  DriverTensor output_;
+  poplar::Tensor input_;
+  poplar::Tensor output_;
 };
 
 TEST_F(PrngSeedStateTest, SetupIdenticalSeed) {
@@ -333,10 +331,6 @@ TEST_P(PrngSeedSRModeTest, SwitchingSROn) {
 }
 
 struct PrngSeedStateShardedTest : PrngSeedTest {
-  PrngSeedStateShardedTest()
-      : left_graph_(poplar::Target::createCPUTarget()),
-        right_graph_(poplar::Target::createCPUTarget()) {}
-
   void SetUp() override {
     // tile_count_ of 0 means use the native number of tiles.
     tile_count_ = 0;
@@ -401,13 +395,13 @@ struct PrngSeedStateShardedTest : PrngSeedTest {
     return {left_result, right_result};
   }
 
-  DriverGraph left_graph_;
-  DriverTensor left_input_;
-  DriverTensor left_output_;
+  poplar::Graph left_graph_;
+  poplar::Tensor left_input_;
+  poplar::Tensor left_output_;
 
-  DriverGraph right_graph_;
-  DriverTensor right_input_;
-  DriverTensor right_output_;
+  poplar::Graph right_graph_;
+  poplar::Tensor right_input_;
+  poplar::Tensor right_output_;
 
   std::size_t tensor_size_ = 1000;
 };
@@ -526,29 +520,19 @@ struct PrngSeedConsistencyTest
       const poplar::Target& target = graph_->getTarget();
       const auto num_ipus = target.getNumIPUs();
       for (unsigned ipu = 0; ipu < num_ipus; ++ipu) {
-        DriverGraph ipu_graph = graph_->createVirtualGraph(
+        poplar::Graph ipu_graph = graph_->createVirtualGraph(
             ipu * tile_count_, (ipu + 1) * tile_count_);
         resources_->shard_io_graphs.emplace_back(
-            ipu_graph.createVirtualGraph({0}));
+            ipu_graph.createVirtualGraph(0));
         resources_->shard_compute_graphs.emplace_back(std::move(ipu_graph));
       }
 
       resources_->main_graph = std::move(graph_);
-
-      resources_->preamble_sequence = absl::make_unique<DriverProgramSequence>(
-          *resources_->main_graph, "Preamble");
-
       graph_ = nullptr;
     }
   }
 
   void TearDown() override {
-    if (resources_ && resources_->main_graph) {
-      // Snap tensors have an internal dependency on the graph backend.
-      // This is to ensure that the graph only gets destroyed after the
-      // tensors.
-      graph_ = std::move(resources_->main_graph);
-    }
     setenv(poplar_flag_name, original_poplar_flags_.c_str(),
            true /*overwrite*/);
   }
@@ -976,7 +960,7 @@ ENTRY entry {
 }
 )"};
 TEST_P(PrngSeedConsistencyTest, Check) {
-  auto& graph = *resources_->main_graph;
+  auto& graph = *(resources_->main_graph);
 
   // This test runs the given module with seed consistency checks (enabled at
   // CompilerResource construction) to make sure that seed value matches the
@@ -986,7 +970,7 @@ TEST_P(PrngSeedConsistencyTest, Check) {
   // replicas then the test will fail. These checks also assert that
   // stochastic rounding is disabled when StochasticRoundingMethod_None is used
   // and enabled otherwise.
-  poplar::program::Sequence& seq = *resources_->preamble_sequence;
+  poplar::program::Sequence& seq = resources_->preamble_sequence;
 
   poplar::setStochasticRounding(graph, seq, true);
 

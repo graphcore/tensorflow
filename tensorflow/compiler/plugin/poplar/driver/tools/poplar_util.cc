@@ -91,7 +91,9 @@ bool AllowSeedChanges(const CompilerResources& res) {
 }
 }  // namespace
 
-DriverGraph& GetMasterGraph(CompilerResources& res) { return *res.main_graph; }
+poplar::Graph& GetMasterGraph(CompilerResources& res) {
+  return *res.main_graph;
+}
 
 int32 GetPID() {
 #ifdef PLATFORM_WINDOWS
@@ -171,9 +173,9 @@ int64 GetShardForOutputIndex(const HloInstruction* inst,
   return 0;
 }
 
-DriverGraph& GetGraphWithOutputIndex(CompilerResources& res,
-                                     const HloInstruction* inst,
-                                     int flattened_output_tuple_index) {
+poplar::Graph& GetGraphWithOutputIndex(CompilerResources& res,
+                                       const HloInstruction* inst,
+                                       int flattened_output_tuple_index) {
   const auto tileset_or_status = GetTileset(inst);
   TF_CHECK_OK(tileset_or_status.status());
   const auto tileset = tileset_or_status.ValueOrDie();
@@ -215,7 +217,7 @@ DriverGraph& GetGraphWithOutputIndex(CompilerResources& res,
   return res.compute_graph.has_value() ? *res.compute_graph : *res.main_graph;
 }
 
-DriverGraph& GetGraph(CompilerResources& res, const HloInstruction* inst) {
+poplar::Graph& GetGraph(CompilerResources& res, const HloInstruction* inst) {
   return GetGraphWithOutputIndex(res, inst, 0);
 }
 
@@ -515,7 +517,7 @@ Status SetPartialsTypeIfPresent(const HloInstruction* inst,
 
 void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t,
                              const poplar::DebugNameAndId& debug_name_and_id) {
-  popops::zero(GetMasterGraph(res), t, *res.preamble_sequence,
+  popops::zero(GetMasterGraph(res), t, res.preamble_sequence,
                {debug_name_and_id, "ZeroVar"});
 }
 

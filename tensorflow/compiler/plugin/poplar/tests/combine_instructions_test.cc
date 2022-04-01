@@ -28,7 +28,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
-#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_fuser.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_barrier_inserter.h"
@@ -998,10 +997,7 @@ ENTRY cluster_1  {
   TF_CHECK_OK(entry->AcceptOrdered(&visitor, order));
 
   poplar::program::Sequence main_program;
-  if (resources->preamble_sequence) {
-    main_program.add(resources->preamble_sequence->getPoplarSequence());
-  }
-
+  main_program.add(resources->preamble_sequence);
   main_program.add(visitor.GetSequenceAndInitializeCounters());
 
   poplar::Engine engine(*resources->main_graph, main_program);
@@ -1545,9 +1541,9 @@ TEST_F(CombineInstructionsInterIpuCopyTest,
   const auto& graph = resources->main_graph;
   const poplar::Target& target = graph->getTarget();
   for (unsigned ipu = 0; ipu < _num_ipus; ++ipu) {
-    DriverGraph ipu_graph = graph->createVirtualGraph(
+    poplar::Graph ipu_graph = graph->createVirtualGraph(
         ipu * _num_tiles_per_ipu, (ipu + 1) * _num_tiles_per_ipu);
-    resources->shard_io_graphs.emplace_back(ipu_graph.createVirtualGraph({0}));
+    resources->shard_io_graphs.emplace_back(ipu_graph.createVirtualGraph(0));
     resources->shard_compute_graphs.emplace_back(std::move(ipu_graph));
   }
 

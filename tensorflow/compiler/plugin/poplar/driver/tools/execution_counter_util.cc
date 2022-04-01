@@ -137,7 +137,7 @@ poplar::program::Sequence ExecutionCounters::SetInitialValuesToZero() {
   poplar::program::Sequence seq({}, dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
-      auto& graph = GetGraphForShard(resources_, shard);
+      poplar::Graph& graph = GetGraphForShard(resources_, shard);
       popops::zero(graph, counters_[shard], seq,
                    {dnai_, absl::StrCat("ZeroExecutionCounter/", shard)});
     }
