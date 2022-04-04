@@ -551,7 +551,6 @@ poplar_cc_library(
     ],
     deps = [
         "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_matcher",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:slice_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:util",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:multi_slice",
     ],
