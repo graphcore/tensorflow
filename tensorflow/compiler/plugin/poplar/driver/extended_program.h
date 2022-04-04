@@ -18,86 +18,32 @@ limitations under the License.
 
 #include <utility>
 
-#include <poplar/Program.hpp>
-#include <poplar/Tensor.hpp>
+#include <snap/Graph.hpp>
+#include <snap/Program.hpp>
+#include <snap/Tensor.hpp>
 
 namespace xla {
 namespace poplarplugin {
 
-class ExtendedProgramCopy;
-class ExtendedProgramSync;
+using ExtendedProgramCopy = snap::program::Copy;
+using ExtendedProgramSync = snap::program::Sync;
 
 // Wrapper class to abstract migration from poplar to snap
-class ExtendedProgramSequence {
+class ExtendedProgramSequence : public snap::program::Sequence {
  public:
-  ExtendedProgramSequence(poplar::Graph&) : sequence_() {}  // NOLINT
-  explicit ExtendedProgramSequence(poplar::Graph&,
+  ExtendedProgramSequence(snap::Graph& graph)  // NOLINT
+      : snap::program::Sequence(graph) {}
+  explicit ExtendedProgramSequence(snap::Graph& graph,
                                    const poplar::DebugContext& debugContext)
-      : sequence_(debugContext) {}
+      : snap::program::Sequence(debugContext, graph) {}
 
   operator poplar::program::Sequence&() { return getPoplarSequence(); }
   operator const poplar::program::Sequence&() const {
     return getPoplarSequence();
   }
 
-  void add(const ExtendedProgramSequence& p) {
-    getPoplarSequence().add((poplar::program::Program&)p);
-  }
-  void add(const ExtendedProgramCopy& p) {
-    getPoplarSequence().add((poplar::program::Program&)p);
-  }
-  void add(const ExtendedProgramSync& p) {
-    getPoplarSequence().add((poplar::program::Program&)p);
-  }
-
+  void add(const snap::program::Program& p) { snap::program::Sequence::add(p); }
   void add(const poplar::program::Program& p) { getPoplarSequence().add(p); }
-
-  poplar::program::Sequence& getPoplarSequence() { return sequence_; }
-  const poplar::program::Sequence& getPoplarSequence() const {
-    return sequence_;
-  }
-
- private:
-  poplar::program::Sequence sequence_;
-};
-
-// Wrapper class to abstract migration from poplar to snap
-class ExtendedProgramCopy {
- public:
-  ExtendedProgramCopy(poplar::Tensor src, const poplar::DataStream& stream,
-                      bool optimiseMemory = false,
-                      const poplar::DebugContext& debugContext = {})
-      : copy_(src, stream, optimiseMemory, debugContext) {}
-
-  ExtendedProgramCopy(const poplar::DataStream& stream, poplar::Tensor dst,
-                      bool optimiseMemory = false,
-                      const poplar::DebugContext& debugContext = {})
-      : copy_(stream, dst, optimiseMemory, debugContext) {}
-
-  ExtendedProgramCopy(poplar::Tensor src, poplar::Tensor dst,
-                      bool dontOutline = false,
-                      const poplar::DebugContext& debugContext = {})
-      : copy_(src, dst, dontOutline, debugContext) {}
-
-  operator poplar::program::Program&() { return copy_; }
-  operator const poplar::program::Program&() const { return copy_; }
-
- private:
-  poplar::program::Copy copy_;
-};
-
-// Wrapper class to abstract migration from poplar to snap
-class ExtendedProgramSync {
- public:
-  ExtendedProgramSync(poplar::Graph&, poplar::SyncType type,
-                      const poplar::DebugContext& debugContext = {})
-      : sync_(type, debugContext) {}
-
-  operator poplar::program::Program&() { return sync_; }
-  operator const poplar::program::Program&() const { return sync_; }
-
- private:
-  poplar::program::Sync sync_;
 };
 
 }  // namespace poplarplugin

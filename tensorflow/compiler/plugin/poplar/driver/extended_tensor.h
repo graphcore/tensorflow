@@ -18,31 +18,20 @@ limitations under the License.
 
 #include <utility>
 
-#include <poplar/Tensor.hpp>
+#include <snap/Tensor.hpp>
 
 namespace xla {
 namespace poplarplugin {
 
 // Wrapper class to abstract migration from poplar to snap
-class ExtendedTensor {
+class ExtendedTensor : public snap::Tensor {
  public:
   ExtendedTensor() = default;
-  ExtendedTensor(poplar::Tensor& tensor, poplar::Graph&) : tensor_(tensor) {}
-  ExtendedTensor(poplar::Tensor&& tensor, poplar::Graph&)
-      : tensor_(std::move(tensor)) {}
+  ExtendedTensor(poplar::Tensor tensor, snap::Graph& graph)
+      : snap::Tensor(tensor, graph) {}
 
   operator poplar::Tensor&() { return getPoplarTensor(); }
   operator const poplar::Tensor&() const { return getPoplarTensor(); }
-
-  poplar::Type elementType() const { return tensor_.elementType(); }
-
-  std::size_t numElements() const { return tensor_.numElements(); }
-
-  poplar::Tensor& getPoplarTensor() { return tensor_; }
-  const poplar::Tensor& getPoplarTensor() const { return tensor_; }
-
- private:
-  poplar::Tensor tensor_;
 };
 
 }  // namespace poplarplugin

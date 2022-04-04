@@ -25,20 +25,20 @@ namespace poplarplugin {
 
 ExtendedGraph::ExtendedGraph(const poplar::Target& target,
                              poplar::replication_factor replication_factor)
-    : graph_(target, replication_factor) {}
+    : snap::Graph(target, replication_factor) {}
 
-ExtendedGraph::ExtendedGraph(poplar::Graph&& graph)
-    : graph_(std::move(graph)) {}
+ExtendedGraph::ExtendedGraph(snap::Graph&& graph)
+    : snap::Graph(std::move(graph)) {}
 
 ExtendedGraph ExtendedGraph::createVirtualGraph(unsigned lowerTile,
                                                 unsigned upperTile) {
-  auto graph = getPoplarGraph().createVirtualGraph(lowerTile, upperTile);
+  auto graph = snap::Graph::createVirtualGraph(lowerTile, upperTile);
   return {std::move(graph)};
 }
 
 ExtendedGraph ExtendedGraph::createVirtualGraph(
     const std::vector<unsigned>& perIpuTiles) {
-  auto graph = getPoplarGraph().createVirtualGraph(perIpuTiles);
+  auto graph = snap::Graph::createVirtualGraph(perIpuTiles);
   return {std::move(graph)};
 }
 

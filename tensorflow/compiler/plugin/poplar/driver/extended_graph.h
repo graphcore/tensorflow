@@ -19,11 +19,13 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include <poplar/Graph.hpp>
+#include <popfloat/experimental/codelets.hpp>
 #include <poplin/codelets.hpp>
 #include <popnn/codelets.hpp>
 #include <popops/codelets.hpp>
 #include <poprand/codelets.hpp>
+#include <popsparse/codelets.hpp>
+#include <snap/Graph.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/extended_tensor.h"
 
@@ -31,16 +33,14 @@ namespace xla {
 namespace poplarplugin {
 
 // Wrapper class to abstract migration from poplar to snap
-class ExtendedGraph {
+class ExtendedGraph : public snap::Graph {
  public:
   ExtendedGraph(const poplar::Target& target,
                 poplar::replication_factor replication_factor);
-  ExtendedGraph(poplar::Graph&& graph);  // NOLINT
+  ExtendedGraph(snap::Graph&& graph);  // NOLINT
 
   operator poplar::Graph&() { return getPoplarGraph(); }
   operator const poplar::Graph&() const { return getPoplarGraph(); }
-
-  const poplar::Target& getTarget() const { return graph_.getTarget(); }
 
   ExtendedGraph createVirtualGraph(unsigned lowerTile, unsigned upperTile);
 
@@ -49,10 +49,12 @@ class ExtendedGraph {
   ExtendedTensor clone(const poplar::Tensor& t);
 
   void addPoplibsCodelets() {
-    poplin::addCodelets(graph_);
-    popnn::addCodelets(graph_);
-    popops::addCodelets(graph_);
-    poprand::addCodelets(graph_);
+    poplin::addCodelets(*this);
+    popnn::addCodelets(*this);
+    popops::addCodelets(*this);
+    poprand::addCodelets(*this);
+    popsparse::addCodelets(*this);
+    popfloat::experimental::addCodelets(*this);
   }
 
   ExtendedTensor addVariable(const poplar::Type& type,
@@ -109,29 +111,6 @@ class ExtendedGraph {
       poplar::StringRef targetName = "");
 
   void setTileMapping(const ExtendedTensor& t, unsigned tileNum);
-
-  poplar::DataStream addHostToDeviceFIFO(
-      poplar::StringRef handle, const poplar::Type& elementType,
-      std::size_t numElements,
-      poplar::ReplicatedStreamMode replicatedMode =
-          poplar::ReplicatedStreamMode::REPLICATE,
-      const poplar::OptionFlags& options = {}) {
-    return graph_.addHostToDeviceFIFO(handle, elementType, numElements,
-                                      replicatedMode, options);
-  }
-
-  poplar::DataStream addDeviceToHostFIFO(
-      poplar::StringRef handle, const poplar::Type& elementType,
-      std::size_t numElements, const poplar::OptionFlags& options = {}) {
-    return graph_.addDeviceToHostFIFO(handle, elementType, numElements,
-                                      options);
-  }
-
-  poplar::Graph& getPoplarGraph() { return graph_; }
-  const poplar::Graph& getPoplarGraph() const { return graph_; }
-
- private:
-  poplar::Graph graph_;
 };
 
 }  // namespace poplarplugin
