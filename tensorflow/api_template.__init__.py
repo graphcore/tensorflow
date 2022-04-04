@@ -84,13 +84,6 @@ if _module_dir:
   _current_module.__path__ = [_module_dir] + _current_module.__path__
 setattr(_current_module, "estimator", estimator)
 
-_keras_module = "keras.api._v2.keras"
-keras = _LazyLoader("keras", globals(), _keras_module)
-_module_dir = _module_util.get_parent_dir_for_name(_keras_module)
-if _module_dir:
-  _current_module.__path__ = [_module_dir] + _current_module.__path__
-setattr(_current_module, "keras", keras)
-
 # Explicitly import lazy-loaded modules to support autocompletion.
 # pylint: disable=g-import-not-at-top
 if not _six.PY2:
@@ -147,6 +140,35 @@ if _running_from_pip_package():
       _ll.load_library(_plugin_dir)
       # Load Pluggable Device Library
       _ll.load_pluggable_device_library(_plugin_dir)
+
+# Begin IPU Specific changes.
+# When lazy loading the Keras module, override the load function to check for
+# correct Keras package being installed.
+class _KerasLazyLoader(_LazyLoader):
+  def _load(self):
+    module = super()._load()
+    # Require the IPU built package when using TF from a pip package. In local
+    # test builds upstream Keras can be used as it's not being tested as part
+    # of this package.
+    if _running_from_pip_package() and not hasattr(module, 'ipu'):
+      message = """Detected a non-IPU optimized installation of the Keras package.
+Please install the Keras package from the Poplar SDK using:
+
+  pip install /path/to/the/poplar_sdk/keras* --force-reinstall --no-deps
+
+Where "/path/to/the/poplar_sdk" is the path to the Poplar SDK which contains the IPU optimized Keras Python wheel file.
+"""
+      raise ImportError(message)
+    return module
+# Note that the lazy loader for Keras below has been changed.
+# End IPU specifc changes.
+
+_keras_module = "keras.api._v2.keras"
+keras = _KerasLazyLoader("keras", globals(), _keras_module)
+_module_dir = _module_util.get_parent_dir_for_name(_keras_module)
+if _module_dir:
+  _current_module.__path__ = [_module_dir] + _current_module.__path__
+setattr(_current_module, "keras", keras)
 
 # Add module aliases
 if hasattr(_current_module, 'keras'):
