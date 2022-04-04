@@ -27,7 +27,6 @@ limitations under the License.
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/types/optional.h"
-#include "absl/types/span.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -426,25 +425,6 @@ StatusOr<HloInstruction*> AddParametersToCall(
 StatusOr<ShapeTree<CloneMethod>> GetCopyCloneMethod(const HloInstruction* inst);
 Status SetCopyCloneMethod(HloInstruction* inst,
                           const ShapeTree<CloneMethod>& clone_method_tree);
-
-// Transpose the shape such that the specified dims are the first dims.
-StatusOr<HloInstruction*> TransposeToFront(HloInstruction* inst,
-                                           absl::Span<const int64> dims);
-
-// Apply the inverse of the transpose specified by the permutation.
-StatusOr<HloInstruction*> InverseTranspose(HloInstruction* inst,
-                                           absl::Span<const int64> permutation);
-
-// Reshape if the shape given is different to the instruction shape.
-StatusOr<HloInstruction*> ReshapeIfDifferent(HloInstruction* inst,
-                                             const Shape& shape);
-
-// Reshape if the shape given is different to the instruction shape.
-StatusOr<HloInstruction*> ReshapeIfDifferent(HloInstruction* inst,
-                                             absl::Span<const int64> shape);
-
-// Reshape to rank 1.
-StatusOr<HloInstruction*> Flatten(HloInstruction* inst);
 
 }  // namespace poplarplugin
 }  // namespace xla

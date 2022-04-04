@@ -18,8 +18,6 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
-#include "absl/types/span.h"
-
 namespace xla {
 
 class HloInstruction;
@@ -47,14 +45,6 @@ struct DynamicSliceHelper {
 };
 
 bool Is1DSliceInFirstDimension(const HloInstruction* slice);
-
-// Reduce multidimensional indices into one-dimensional indices for a
-// flattened version of the shape being indexed.
-//   indices: The index tensor beign flattened.
-//   dim: The dimension of indices to reduce.
-//   sizes: The sizes of the dimensions being indexed into.
-StatusOr<HloInstruction*> ReduceIndices(HloInstruction* indices, int64 dim,
-                                        absl::Span<const int64> sizes);
 
 }  // namespace poplarplugin
 }  // namespace xla

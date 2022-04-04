@@ -326,9 +326,7 @@ ENTRY main {
       start_index_map={0,1},
       index_vector_dim=1,
       slice_sizes={1,1}
-  reshape = s32[6]{0} reshape(gather)
-  valid-indices-mask = s32[6]{0} constant({0, 1, 1, 0, 0, 1})
-  ROOT result = s32[6]{0} multiply(reshape, valid-indices-mask)
+  ROOT result = s32[6]{0} reshape(gather)
 }
 )";
   Literal operand =

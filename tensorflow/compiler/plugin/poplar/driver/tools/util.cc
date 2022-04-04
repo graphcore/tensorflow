@@ -22,7 +22,6 @@ limitations under the License.
 #include <vector>
 
 #include "absl/types/optional.h"
-#include "absl/types/span.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_ipu_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/within_replicas.h"
@@ -1496,52 +1495,6 @@ Status SetCopyCloneMethod(HloInstruction* inst,
   TF_RETURN_IF_ERROR(inst->set_backend_config(backend_config));
 
   return Status::OK();
-}
-
-StatusOr<HloInstruction*> TransposeToFront(HloInstruction* inst,
-                                           absl::Span<const int64> dims) {
-  std::vector<int64> permutations;
-  permutations.reserve(inst->shape().rank());
-  absl::c_copy(dims, std::back_inserter(permutations));
-  for (int64 dim = 0; dim != inst->shape().rank(); ++dim) {
-    if (absl::c_find(dims, dim) == dims.end()) {
-      permutations.push_back(dim);
-    }
-  }
-  return MakeTransposeHlo(inst, permutations);
-}
-
-StatusOr<HloInstruction*> InverseTranspose(
-    HloInstruction* inst, absl::Span<const int64> permutation) {
-  std::vector<int64> inverse_permutation(permutation.size());
-  for (int64 i = 0; i != permutation.size(); ++i) {
-    inverse_permutation[permutation[i]] = i;
-  }
-  return MakeTransposeHlo(inst, inverse_permutation);
-}
-
-StatusOr<HloInstruction*> ReshapeIfDifferent(HloInstruction* inst,
-                                             const Shape& shape) {
-  if (ShapeUtil::Compatible(shape, inst->shape())) {
-    return inst;
-  }
-  return MakeReshapeHlo(shape, inst);
-}
-
-StatusOr<HloInstruction*> ReshapeIfDifferent(HloInstruction* inst,
-                                             absl::Span<const int64> shape) {
-  if (absl::c_equal(shape, inst->shape().dimensions())) {
-    return inst;
-  }
-  return MakeReshapeHlo(shape, inst);
-}
-
-StatusOr<HloInstruction*> Flatten(HloInstruction* inst) {
-  if (inst->shape().rank() == 1) {
-    return inst;
-  }
-  std::vector<int64> shape(1, ShapeUtil::ElementsIn(inst->shape()));
-  return MakeReshapeHlo(shape, inst);
 }
 
 }  // namespace poplarplugin
