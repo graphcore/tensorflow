@@ -30,12 +30,7 @@ limitations under the License.
 #include <poplar/CycleCount.hpp>
 #include <poplar/exceptions.hpp>
 #include <poplar/replication_factor.hpp>
-#include <poplin/codelets.hpp>
-#include <popnn/codelets.hpp>
 #include <popops/Cast.hpp>
-#include <popops/codelets.hpp>
-#include <poprand/codelets.hpp>
-#include <popsparse/codelets.hpp>
 #include <random>
 #include <string>
 
@@ -602,9 +597,11 @@ bool InitializeCycleCounter(DriverGraph& graph, DriverProgramSequence& seq,
     return false;
   } else {
     std::string cycleCounterId = PoplarExecutor::GetCycleCounterStream();
-    auto cycleCounter =
+    // TODO(T59406) - Remove explicit tensor construction.
+    auto cycleCounter = DriverTensor(
         poplar::cycleCount(graph, seq, tile, poplar::SyncType::INTERNAL,
-                           {debug_info, cycleCounterId});
+                           {debug_info, cycleCounterId}),
+        graph);
     auto fifo = graph.addDeviceToHostFIFO(
         cycleCounterId, cycleCounter.elementType(), cycleCounter.numElements());
     seq.add(DriverProgramCopy(cycleCounter, fifo, false, {debug_info}));
@@ -906,12 +903,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     return xla::InternalError("Failed to compile Poplar TF codelets: %s",
                               compile_output.str());
   }
-  poplin::addCodelets(main_graph);
-  popnn::addCodelets(main_graph);
-  popops::addCodelets(main_graph);
-  poprand::addCodelets(main_graph);
-  popsparse::addCodelets(main_graph);
-  popfloat::experimental::addCodelets(main_graph);
+  main_graph.addPoplibsCodelets();
 
   return Status::OK();
 }
