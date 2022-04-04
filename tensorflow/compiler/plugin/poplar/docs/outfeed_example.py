@@ -38,7 +38,7 @@ outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 #
 # A custom training loop
 #
-@tf.function(experimental_compile=True)
+@tf.function(jit_compile=True)
 def training_step(num_iterations, iterator, in_model, optimizer):
 
   for _ in tf.range(num_iterations):

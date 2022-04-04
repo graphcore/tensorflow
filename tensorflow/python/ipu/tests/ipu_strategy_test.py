@@ -612,7 +612,7 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
     with strategy.scope():
       iterator = iter(dataset)
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def step_fn(iterator):
         x = next(iterator)
         for _ in math_ops.range(5):

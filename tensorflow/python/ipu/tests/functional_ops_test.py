@@ -746,7 +746,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     def identity(x):
       return x
 
-    @def_function.function(experimental_compile=True)
+    @def_function.function(jit_compile=True)
     def f(x):
       with backprop.GradientTape() as tape:
         tape.watch(x)

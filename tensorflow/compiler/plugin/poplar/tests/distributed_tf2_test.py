@@ -212,7 +212,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
       w = tf.Variable(initial_w)
 
-      @tf.function(experimental_compile=True)
+      @tf.function(jit_compile=True)
       def step_fn(x):
         with tf.GradientTape() as tape:
           loss = w * x
@@ -220,7 +220,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
         return loss
 
-      @tf.function(experimental_compile=True)
+      @tf.function(jit_compile=True)
       def step_fn_wrapper(x):
         per_replica_loss = strategy.run(step_fn, args=[x])
         loss_reduced = strategy.reduce(tf.distribute.ReduceOp.SUM,
@@ -262,7 +262,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
       ])
       optimizer = gradient_descent.SGD(learning_rate=learning_rate)
 
-      @tf.function(experimental_compile=True)
+      @tf.function(jit_compile=True)
       def loss_fn(_, y_pred):
         return y_pred
 
@@ -322,7 +322,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
       model_keras = initialize_model_with_seed()
       optimizer = gradient_descent.SGD(learning_rate=learning_rate)
 
-      @tf.function(experimental_compile=True)
+      @tf.function(jit_compile=True)
       def step_fn_tf(x, y):
         with tf.GradientTape() as tape:
           output = model_tf(x)
@@ -337,7 +337,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
         return loss
 
-      @tf.function(experimental_compile=True)
+      @tf.function(jit_compile=True)
       def run_training_step_tf(x, y):
         per_replica_loss = strategy.run(step_fn_tf, args=[x, y])
         loss_reduced = strategy.reduce(tf.distribute.ReduceOp.SUM,
@@ -388,7 +388,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
         np.testing.assert_equal(model_tf.trainable_variables[i].numpy(),
                                 model_keras.trainable_variables[i].numpy())
 
-      @tf.function(experimental_compile=True)
+      @tf.function(jit_compile=True)
       def step_fn_eval_tf(x, y):
         output = model_tf(x, training=False)
         loss = keras.losses.sparse_categorical_crossentropy(y_true=y,
@@ -399,7 +399,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
         return loss
 
-      @tf.function(experimental_compile=True)
+      @tf.function(jit_compile=True)
       def run_eval_step_tf(x, y):
         per_replica_loss = strategy.run(step_fn_eval_tf, args=[x, y])
         loss_reduced = strategy.reduce(tf.distribute.ReduceOp.SUM,

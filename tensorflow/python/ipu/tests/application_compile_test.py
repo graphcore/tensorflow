@@ -171,7 +171,7 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
 
     v = variables.Variable([2.0, 2.0])
 
-    @def_function.function(experimental_compile=True)
+    @def_function.function(jit_compile=True)
     def defunc():
       return v * v
 
@@ -205,7 +205,7 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
 
     v = variables.Variable(3.0)
 
-    @def_function.function(experimental_compile=True)
+    @def_function.function(jit_compile=True)
     def defunc():
       (x, p) = infeed._dequeue()  # pylint: disable=protected-access
       y = x * v
@@ -244,7 +244,7 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
 
     v = variables.Variable(3.0)
 
-    @def_function.function(experimental_compile=True)
+    @def_function.function(jit_compile=True)
     def defunc(x):
       res = x * v * 10
       outfeed.enqueue(res)

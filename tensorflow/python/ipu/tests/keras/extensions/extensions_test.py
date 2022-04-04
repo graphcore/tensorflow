@@ -61,7 +61,7 @@ class KerasExtensionsTest(test.TestCase):
 
     strategy = ipu_strategy.IPUStrategyV1()
 
-    @def_function.function(experimental_compile=True)
+    @def_function.function(jit_compile=True)
     def fn(layer):
       return layer(10.)
 

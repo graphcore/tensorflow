@@ -421,7 +421,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
     return keras_util.merge_into_batch_dimension(results, replication_factor)
 
   def _make_single_ipu_train_function(self):
-    @def_function.function(experimental_compile=True)
+    @def_function.function(jit_compile=True)
     def train_function(steps_per_execution, iterator, outfeed):
       for _ in math_ops.range(steps_per_execution):
         outfeed.enqueue(self.train_step(next(iterator)))
@@ -461,7 +461,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
       optimizer.apply_gradients(grads_and_vars)
       return {m.name: m.result() for m in self.metrics}
 
-    @def_function.function(experimental_compile=True)
+    @def_function.function(jit_compile=True)
     def train_function(steps_per_execution, iterator, outfeed):
       for _ in math_ops.range(steps_per_execution):
         outfeed.enqueue(train_step(next(iterator)))
@@ -507,7 +507,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
     training = add_loss and add_optimizer
     self._logged_bn_warning = False
 
-    @def_function.function(experimental_compile=True)
+    @def_function.function(jit_compile=True)
     def pipeline_function(_steps_per_execution, iterator, outfeed):
       # Get the shapes for all the inputs.
       input_dtypes = nest.map_structure(lambda spec: spec.dtype,
@@ -717,7 +717,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
                                add_optimizer=True)
 
   def _make_single_ipu_test_function(self):
-    @def_function.function(experimental_compile=True)
+    @def_function.function(jit_compile=True)
     def test_function(steps_per_execution, iterator, outfeed):
       for _ in math_ops.range(steps_per_execution):
         outfeed.enqueue(self.test_step(next(iterator)))
@@ -731,7 +731,7 @@ class KerasExtensionBase(base_layer.KerasExtension):
                                add_optimizer=False)
 
   def _make_single_ipu_predict_function(self):
-    @def_function.function(experimental_compile=True)
+    @def_function.function(jit_compile=True)
     def predict_function(steps_per_execution, iterator, outfeed):
       for _ in math_ops.range(steps_per_execution):
         outfeed.enqueue(self.predict_step(next(iterator)))

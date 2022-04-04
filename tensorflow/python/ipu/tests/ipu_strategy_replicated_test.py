@@ -45,7 +45,7 @@ class IPUStrategyV1ReplicatedTest(test_util.TensorFlowTestCase):
     strategy = ipu_strategy.IPUStrategyV1()
 
     def make_all_reduce_function(reduce_op):
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def all_reduce_function():
         replica_ctx = distribution_strategy_context.get_replica_context()
         x = math_ops.cast(replication_ops.replication_index(), np.float32)
@@ -85,7 +85,7 @@ class IPUStrategyV1ReplicatedTest(test_util.TensorFlowTestCase):
 
       optimizer = keras.optimizer_v2.gradient_descent.SGD(learning_rate)
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def apply_gradient():
         gradient = infeed._dequeue()  # pylint: disable=protected-access
         optimizer.apply_gradients([(gradient, variable)])

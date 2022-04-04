@@ -10,7 +10,7 @@ a = tf.constant([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
 b = tf.constant([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
 
 
-@tf.function(experimental_compile=True)
+@tf.function(jit_compile=True)
 def matmul_fn(x, y):
   z = tf.matmul(x, y)
   return z

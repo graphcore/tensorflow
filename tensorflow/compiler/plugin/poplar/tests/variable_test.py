@@ -795,7 +795,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       a = variables.Variable(50.0)
       b = variables.Variable(2.0)
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def f(x):
         return array_ops.reshape(
             x,
@@ -814,7 +814,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       a = variables.Variable(50.0)
       b = variables.Variable(2.0)
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def f(x, val1, val2):
         a.assign(math_ops.cast(val1, dtypes.float32))
         b.assign(math_ops.cast(val2, dtypes.float32))
@@ -838,7 +838,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       a = variables.Variable(50.0)
       b = variables.Variable(2.0)
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def f(x, val1, val2):
         out = array_ops.reshape(
             x,

@@ -38,7 +38,7 @@ class DummyInputTest(xla_test.XLATestCase):
   @test_util.run_v2_only
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   def testDummyInputDeduplication(self):
-    @tf.function(experimental_compile=True)
+    @tf.function(jit_compile=True)
     def jsh_f(tensor_count, factor1, factor2):
       def body(x):
         return outfeed_queue.enqueue(x + factor1 + factor2)

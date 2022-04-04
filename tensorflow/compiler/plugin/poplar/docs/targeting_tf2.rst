@@ -58,12 +58,12 @@ constructs into TensorFlow graph operations.
 
 It is best practice to ensure that anything which is intended to be executed on
 the IPU is placed into a Python function which is annotated with
-``@tf.function(experimental_compile=True)``. Note that this does not apply to
+``@tf.function(jit_compile=True)``. Note that this does not apply to
 constructing a Keras model or using the Keras ``Model.fit()`` API. See the
 :any:`Keras with IPUs <keras_tf2>` section for details on Keras.
 
 When calling a function which is marked with a
-``@tf.function(experimental_compile=True)`` annotation from within a
+``@tf.function(jit_compile=True)`` annotation from within a
 distribution strategy such as ``IPUStrategy``, you should not call it directly,
 but instead use the ``run`` method. For example:
 
@@ -75,7 +75,7 @@ but instead use the ``run`` method. For example:
 .. note::
 
   When using the ``@tf.function`` annotation, it is important to set the
-  ``experimental_compile=True`` argument to ensure best performance.
+  ``jit_compile=True`` argument to ensure best performance.
 
 For more information about ``tf.function`` and examples, see the TensorFlow
 documentation at https://www.tensorflow.org/guide/function.

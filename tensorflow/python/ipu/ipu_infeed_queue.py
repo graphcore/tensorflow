@@ -467,7 +467,7 @@ class IPUIterator(iterator_ops.OwnedIterator):
       raise RuntimeError(
           "Accessing dataset elements can not be accessed in eager mode when "
           "inside 'IPUStrategy'. The dataset elements should be accessed "
-          "inside of a 'tf.function' with 'experimental_compile=True' set in "
+          "inside of a 'tf.function' with 'jit_compile=True' set in "
           "order to achieve optimal performance. See documentation for "
           "detailed examples. If this behavior is required please set "
           "'enable_dataset_iterators=False' when creating an 'IPUStrategy'.")
@@ -567,7 +567,7 @@ class _IPUIteratorSpec(type_spec.TypeSpec):
   For instance, `_IPUIteratorSpec` can be used to define a tf.function that
   takes `IPUIterator` as an input argument:
 
-  >>> @tf.function(experimental_compile=True)
+  >>> @tf.function(jit_compile=True)
   ... def square(iterator):
   ...   x = iterator.get_next()
   ...   return x * x
@@ -616,7 +616,7 @@ class _IPUOwnedIteratorSpec(_IPUIteratorSpec):
   For instance, `_IPUOwnedIteratorSpec` can be used to define a tf.function that
   takes `IPUOwnedIterator` as an input argument:
 
-  >>> @tf.function(experimental_compile=True)
+  >>> @tf.function(jit_compile=True)
   ... def square(iterator):
   ...   x = iterator.get_next()
   ...   return x * x

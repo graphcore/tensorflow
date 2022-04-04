@@ -78,7 +78,7 @@ class PoprunPopDistStrategyTest(test_util.TensorFlowTestCase,
       model.set_asynchronous_callbacks(enable_asynchronous_callbacks)
       optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate)
 
-      @tf.function(experimental_compile=True)
+      @tf.function(jit_compile=True)
       def loss_fn(_, y_pred):
         return y_pred
 

@@ -312,7 +312,7 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase,
       optimizer = optimizer_fn()
       loss = keras.losses.MeanSquaredError(reduction="sum")
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def f(a, t, _):
         with GradientTape() as tape:
           z = layer(a)
@@ -324,7 +324,7 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase,
         optimizer.minimize(ll, layer.trainable_variables, tape=tape)
         return a, t, l
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def g(a, t):
         _, _, l = loops.repeat(num_update_steps, f, inputs=[a, t, 0.0])
         return l
@@ -346,7 +346,7 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase,
       optimizer = optimizer_fn()
       loss = keras.losses.MeanSquaredError(reduction="sum")
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def f(a, t, _):
         def l():
           z = layer(a)
@@ -356,7 +356,7 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase,
         optimizer.minimize(l, layer.trainable_variables)
         return a, t, ll
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def g(a, t):
         _, _, l = loops.repeat(num_update_steps, f, inputs=[a, t, 0.0])
         return l

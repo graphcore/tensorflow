@@ -88,7 +88,7 @@ class AutomaticLossScalingOptimizer(IpuOptimizer):
 
       dense = Dense(t.shape[1], activation='relu', dtype=np.float16)
 
-      @tf.function(experimental_compile=True)
+      @tf.function(jit_compile=True)
       def f(x, t):
         with GradientTape() as tape:
           y = dense(x)
@@ -151,7 +151,7 @@ class AutomaticLossScalingOptimizer(IpuOptimizer):
         initial_loss_scaling_factor)
 
   def _assign_var(self, variable, value):
-    @def_function.function(experimental_compile=True)
+    @def_function.function(jit_compile=True)
     def f(var, val):
       return var.assign(val)
 

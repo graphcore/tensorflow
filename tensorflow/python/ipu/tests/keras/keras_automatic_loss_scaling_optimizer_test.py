@@ -229,7 +229,7 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
           dtype=np.float16,
           kernel_initializer=init_ops.constant_initializer(1.0))
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def f(x, t):
         with GradientTape() as tape:
           y = dense(x)
@@ -274,7 +274,7 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
           dtype=np.float32,
           kernel_initializer=init_ops.constant_initializer(1.0))
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def f(x, t):
         with GradientTape() as tape:
           y = dense1(dense0(x))
@@ -284,11 +284,11 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
         opt_wrapper.minimize(l, v, tape=tape)
         return l
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def g():
         return opt_wrapper.loss_scaling_factor
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def h():
         return opt_wrapper.histogram
 
@@ -347,7 +347,7 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
           dtype=np.float32,
           kernel_initializer=init_ops.constant_initializer(1.0))
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def f(x, t):
         with GradientTape() as tape:
           y = dense1(dense0(x))
@@ -357,11 +357,11 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
         opt_wrapper.minimize(l, v, tape=tape)
         return l
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def g():
         return opt_wrapper.loss_scaling_factor
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def h():
         return opt_wrapper.histogram
 
@@ -421,7 +421,7 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
           dtype=np.float32,
           kernel_initializer=init_ops.constant_initializer(1.0))
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def f(x, t):
         with GradientTape() as tape:
           y = dense1(dense0(x))
@@ -431,11 +431,11 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
         opt_wrapper.minimize(l, v, tape=tape)
         return l
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def g():
         return opt_wrapper.loss_scaling_factor
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def h():
         return opt_wrapper.histogram
 
@@ -495,7 +495,7 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
           dtype=np.float32,
           kernel_initializer=init_ops.constant_initializer(1.0))
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def f(x, t):
         with GradientTape() as tape:
           y = dense1(dense0(x))
@@ -505,11 +505,11 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
         opt_wrapper.minimize(l, v, tape=tape)
         return l
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def g():
         return opt_wrapper.loss_scaling_factor
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def h():
         return opt_wrapper.histogram
 
@@ -602,11 +602,11 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
       m = keras.Model(inputs=input_layer, outputs=dense1)
       m.compile(optimizer=opt_wrapper, loss='mse')
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def g():
         return opt_wrapper.loss_scaling_factor
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def h():
         return opt_wrapper.histogram
 
@@ -681,11 +681,11 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
       m = keras.Model(inputs=input_layer, outputs=dense1)
       m.compile(optimizer=opt_wrapper, loss='mse')
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def g():
         return opt_wrapper.loss_scaling_factor
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def h():
         return opt_wrapper.histogram
 
@@ -747,7 +747,7 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
 
       v = variables.Variable(1.0, dtype=np.float16)
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def f():
         with GradientTape() as tape:
           y = 3 * v
@@ -756,11 +756,11 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
         opt_wrapper.minimize(l, [v], tape=tape)
         return l
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def g():
         return opt_wrapper.loss_scaling_factor
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def h():
         return v.assign(1.0)
 
@@ -795,7 +795,7 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
       v_init = np.finfo(np.float16).max
       v = variables.Variable(v_init, dtype=np.float16, shape=())
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def f():
         with GradientTape() as tape:
           y = 3 * v
@@ -804,11 +804,11 @@ class AutomaticLossScalingOptimizerTest(test_util.TensorFlowTestCase,
         opt_wrapper.minimize(l, [v], tape=tape)
         return l
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def g():
         return opt_wrapper.loss_scaling_factor
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def h():
         return v.assign(v_init)
 

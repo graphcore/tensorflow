@@ -42,7 +42,7 @@ class ContribIpuOpsTestWithV2Behaviour(test_util.TensorFlowTestCase):
 
       v = variables.Variable(1, shape=(), dtype=np.float32)
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def fn_with_loop(in_a, n):
         def loop_body(a, c):
           a, c = control_flow_ops.cond(math_ops.less_equal(c, n), lambda:

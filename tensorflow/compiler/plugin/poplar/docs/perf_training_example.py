@@ -24,7 +24,7 @@ def body(counter, x1, x2):
   return counter
 
 
-@tf.function(experimental_compile=True)
+@tf.function(jit_compile=True)
 def my_net():
   count = 0
   count = loops.repeat(10, body, [count], infeed_queue)

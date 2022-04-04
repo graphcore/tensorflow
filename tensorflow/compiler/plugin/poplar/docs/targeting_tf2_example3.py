@@ -48,7 +48,7 @@ def training_step(features, labels, model, optimizer):
 
 # Create a loop which performs ``steps_per_execution`` iterations of
 # ``training_step`` every time this function is executed.
-@tf.function(experimental_compile=True)
+@tf.function(jit_compile=True)
 def training_loop(iterator, steps_per_execution, outfeed, model, optimizer):
   # Create an on device loop.
   for _ in tf.range(steps_per_execution):

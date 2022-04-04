@@ -1496,7 +1496,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           outfeed = outfeed_queue.enqueue(v)
           return (v, outfeed)
 
-        @def_function.function(experimental_compile=True)
+        @def_function.function(jit_compile=True)
         def my_net(v):
 
           r = ipu.loops.repeat(20, body, (v), infeed_queue)
@@ -1550,7 +1550,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with strategy.scope():
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def my_net(num_iterations):
         x = constant_op.constant(1, dtype=np.int32, shape=[2])
         for _ in math_ops.range(num_iterations):
@@ -1574,7 +1574,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with strategy.scope():
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def my_net(num_iterations, iterator):
         x = constant_op.constant(1, dtype=np.int32, shape=[1])
         for _ in math_ops.range(num_iterations):
@@ -1616,7 +1616,7 @@ class IPUOutfeedIteratorTest(test_util.TensorFlowTestCase,
 
     with strategy.scope():
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def my_net(num_iterations):
         x = constant_op.constant(1, dtype=np.int32, shape=[2])
         y = constant_op.constant(2, dtype=np.int32, shape=[])
@@ -1669,7 +1669,7 @@ class IPUOutfeedIteratorTest(test_util.TensorFlowTestCase,
 
     with strategy.scope():
 
-      @def_function.function(experimental_compile=True)
+      @def_function.function(jit_compile=True)
       def my_net(num_iterations):
         x = constant_op.constant(1, dtype=np.int32, shape=[2])
         for _ in math_ops.range(num_iterations):
