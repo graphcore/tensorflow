@@ -18,10 +18,12 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/slice_util.h"
 
+#include "absl/types/span.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
+#include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/shape_util.h"
@@ -191,6 +193,38 @@ bool Is1DSliceInFirstDimension(const HloInstruction* slice) {
   return ShapeUtil::DeleteDimension(0, broadcast->shape()) ==
              ShapeUtil::DeleteDimension(0, slice->shape()) &&
          ShapeUtil::GetDimension(slice->shape(), 0) == 1;
+}
+
+StatusOr<HloInstruction*> ReduceIndices(HloInstruction* indices, int64 dim,
+                                        absl::Span<const int64> sizes) {
+  CHECK(dim < indices->shape().rank());
+  int64 num_index_dims = indices->shape().dimensions(dim);
+  CHECK(sizes.size() == num_index_dims);
+
+  int64 size = 1;
+  std::vector<int64> rhs_values(num_index_dims);
+  // Generate coefficients to multiply the indices with before reducing them.
+  // If the sizes of the dims being indexed are a, b, and c then the
+  // coefficients will be [b*c, c, 1].
+  for (int64 i = num_index_dims - 1; i != -1; --i) {
+    rhs_values[i] = size;
+    size *= sizes[i];
+  }
+  auto type = indices->shape().element_type();
+  TF_ASSIGN_OR_RETURN(
+      HloInstruction * coefficients,
+      MakeR1ConstantHlo<int64>(indices->parent(), type, rhs_values));
+
+  coefficients =
+      MakeBroadcastHlo(coefficients, {dim}, indices->shape().dimensions());
+
+  // Multiply the coefficients into the indices.
+  TF_ASSIGN_OR_RETURN(
+      indices, MakeBinaryHlo(HloOpcode::kMultiply, indices, coefficients));
+
+  // Reduce the index dimension.
+  HloInstruction* zero = MakeR0ConstantHlo<int32>(indices->parent(), 0);
+  return MakeReduceHlo(indices, zero, {dim}, HloOpcode::kAdd);
 }
 
 }  // namespace poplarplugin
