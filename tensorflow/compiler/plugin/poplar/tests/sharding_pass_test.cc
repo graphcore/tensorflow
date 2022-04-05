@@ -2280,6 +2280,132 @@ main {
   EXPECT_EQ(s13->sharding().GetUniqueDevice(), 1);
 }
 
+TEST_F(ShardingPassTest, TestUnusedRepeatBodyInputsMatchesRoot) {
+  // Tests a case where sharding for a repeat body parameter has no users so
+  // initially receives default sharding. This should be ignored and corrected
+  // when body and input shardings are matched.
+  std::string hlo_string = R"(
+HloModule main
+
+repeat_body (s00: f16[4], s01:f16[4]) -> (f16[4], f16[4]) {
+  s00 = f16[4] parameter(0)
+  s01 = f16[4] parameter(1)  // unused so gets default
+  s02 = f16[4] add(s00, s00), sharding={maximal device=0}
+  s03 = f16[4] add(s00, s00), sharding={maximal device=1}
+  ROOT s04 = (f16[4], f16[4]) tuple(s02, s03)
+}
+
+ENTRY main (a0: f16[4], a1:f16[4]) -> (f16[4], f16[4]) {
+  a0 = f16[4] parameter(0)
+  a1 = f16[4] parameter(1)
+  call0 = (f16[4], f16[4]) call(a0,a1), to_apply=repeat_body, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+  gte0 = f16[4] get-tuple-element(call0), index=0
+  gte1 = f16[4] get-tuple-element(call0), index=1
+  ROOT out = (f16[4]) tuple(gte0, gte1)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  ASSERT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  // Check that we've assigned parameter 1, which is unused, to device 1,
+  // to match the root sharding.
+  HloInstruction* repeat_root =
+      module->GetComputationWithName("repeat_body")->root_instruction();
+  ASSERT_TRUE(repeat_root->has_sharding());
+
+  const auto root_sharding = repeat_root->sharding();
+  ASSERT_TRUE(root_sharding.IsTuple());
+  const auto root_sharding_tree =
+      root_sharding.GetAsShapeTree(repeat_root->shape());
+
+  HloInstruction* s00 = FindInstruction(module, "s00");
+  ASSERT_TRUE(s00->has_sharding());
+
+  HloInstruction* s01 = FindInstruction(module, "s01");
+  ASSERT_TRUE(s01->has_sharding());
+
+  ASSERT_EQ(root_sharding_tree.leaf_count(), 2);
+  ASSERT_EQ(root_sharding_tree.element({0}), s00->sharding());
+  ASSERT_EQ(root_sharding_tree.element({1}), s01->sharding());
+  ASSERT_EQ(root_sharding_tree.element({0}).GetUniqueDevice(), 0);
+  ASSERT_EQ(root_sharding_tree.element({1}).GetUniqueDevice(), 1);
+}
+
+TEST_F(ShardingPassTest, TestUnusedWhileBodyInputsMatchesRoot) {
+  // Tests a case where sharding for a while body parameter has no users so
+  // initially receives default sharding. This should be ignored and corrected
+  // when body and input shardings are matched.
+  std::string hlo_string = R"(
+HloModule test
+
+while_body {
+  body_args = (s32[], s32[]) parameter(0) //unused at index=0
+  constant.10 = s32[] constant(1), sharding={maximal device=0}
+  constant.13 = s32[] constant(2), sharding={maximal device=1}
+  get-tuple-element.9 = s32[] get-tuple-element((s32[], s32[]) body_args), index=1
+  constant.14 = s32[] constant(2), sharding={maximal device=1}
+  constant.11 = s32[] constant(1), sharding={maximal device=0}
+  add.12 = s32[] add(s32[] get-tuple-element.9, s32[] constant.11), sharding={maximal device=0}
+  add.15 = s32[] add(s32[] get-tuple-element.9, s32[] constant.14), sharding={maximal device=1}
+  ROOT tuple.16 = (s32[], s32[]) tuple(s32[] add.15, s32[] add.12)
+}
+
+while_cond {
+  cond_args = (s32[], s32[]) parameter(0)
+  get-tuple-element.20 = s32[] get-tuple-element((s32[], s32[]) cond_args), index=1
+  constant.21 = s32[] constant(20), sharding={maximal device=1}
+  get-tuple-element.19 = s32[] get-tuple-element((s32[], s32[]) cond_args), index=0
+  constant.22 = s32[] constant(20), sharding={maximal device=1}
+  compare.23 = pred[] compare(s32[] get-tuple-element.19, s32[] constant.22), direction=LT, sharding={maximal device=1}
+  tuple.24 = (pred[]) tuple(pred[] compare.23)
+  ROOT get-tuple-element.28 = pred[] get-tuple-element((pred[]) tuple.24), index=0
+}
+
+ENTRY main {
+  constant.3 = s32[] constant(1)
+  arg0.1 = s32[] parameter(0), parameter_replication={false}
+  reshape.2 = s32[] reshape(s32[] arg0.1)
+  constant.4 = s32[] constant(1)
+  tuple.5 = (s32[], s32[]) tuple(s32[] reshape.2, s32[] constant.4)
+  ROOT while.29 = (s32[], s32[]) while((s32[], s32[]) tuple.5), condition=while_cond, body=while_body
+}
+  )";
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  ASSERT_TRUE(module_or_status.ok())
+      << module_or_status.status().error_message();
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  auto* root = module->GetComputationWithName("while_body")->root_instruction();
+  ASSERT_TRUE(root->has_sharding());
+  const auto root_sharding = root->sharding();
+  ASSERT_TRUE(root_sharding.IsTuple());
+
+  auto* body_args = FindInstruction(module, "body_args");
+  ASSERT_TRUE(body_args->has_sharding());
+  ASSERT_EQ(root_sharding, body_args->sharding());
+
+  auto root_sharding_tree = root_sharding.GetAsShapeTree(root->shape());
+  ASSERT_EQ(root_sharding_tree.leaf_count(), 2);
+  ASSERT_EQ(root_sharding_tree.element({0}).GetUniqueDevice(), 1);
+  ASSERT_EQ(root_sharding_tree.element({1}).GetUniqueDevice(), 0);
+}
+
 struct WithinReplicaOpSharingPassTest : ParameterizedHloTestFixture<> {
   // Empty override as the default tries to setup the hlo module, which we cant
   // since the hlo string is just a template and needs to be filled in.

@@ -35,6 +35,26 @@ namespace poplarplugin {
 
 namespace {
 
+absl::flat_hash_set<int> FindUsedTupleElements(
+    const HloInstruction* tuple_inst) {
+  absl::flat_hash_set<int> used_inputs;
+
+  for (auto* user : tuple_inst->users()) {
+    if (user->opcode() == HloOpcode::kGetTupleElement) {
+      used_inputs.insert(user->tuple_index());
+    } else {
+      // If used by a non GTE then assuming all elements are used.
+      const auto element_count =
+          ShapeUtil::TupleElementCount(tuple_inst->shape());
+      std::generate_n(std::inserter(used_inputs, used_inputs.end()),
+                      element_count, [&] { return used_inputs.size(); });
+      break;
+    }
+  }
+
+  return used_inputs;
+}
+
 bool CompatibleShapes(const Shape& l, const Shape& r) {
   // Normal tensors are always acceptable for transferring sharding info
   if (l.IsArray() && r.IsArray()) return true;
@@ -116,6 +136,10 @@ void SetSharding(HloInstruction* inst, const HloSharding& sharding) {
       inst->set_sharding(sharding);
     }
   }
+}
+
+void SetDefaultSharding(HloInstruction* inst) {
+  SetSharding(inst, GetDefaultSharding(inst->shape()));
 }
 
 HloSharding ConvertToTupleSharding(const Shape& shape,
@@ -391,7 +415,7 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
             return inst == inst->parent()->root_instruction() &&
                    inst->opcode() == HloOpcode::kTuple;
           })) {
-        SetSharding(inst, GetDefaultSharding(inst->shape()));
+        SetDefaultSharding(inst);
         added_sharding = true;
       }
 
@@ -466,7 +490,7 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
           // properly.
           for (auto* inst : comp->instructions()) {
             if (!inst->has_sharding() && !inst->shape().IsTuple()) {
-              SetSharding(inst, GetDefaultSharding(inst->shape()));
+              SetDefaultSharding(inst);
               break;
             }
           }
@@ -475,7 +499,7 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
           // Tuples which are passed through are now considered too
           for (auto* inst : comp->instructions()) {
             if (!inst->has_sharding()) {
-              SetSharding(inst, GetDefaultSharding(inst->shape()));
+              SetDefaultSharding(inst);
               break;
             }
           }
@@ -811,6 +835,7 @@ static void RemoveSharding(
         }
 
         if (remove_sharding) {
+          VLOG(3) << "Removing sharding from " << inst->name();
           inst->clear_sharding();
         }
       }
@@ -874,6 +899,76 @@ static void SetConditionalSubComputationSharding(
         SetSharding(c->root_instruction(), sharding);
       }
     }
+  }
+}
+
+static void FixUnusedRepeatLoopInputsToMatchRoot(HloComputation* comp) {
+  const auto parameter_count = comp->num_parameters();
+  const auto root = comp->root_instruction();
+  const auto& root_shape = root->shape();
+
+  const auto sharded = root->has_sharding();
+  const auto standard_repeat_loop =
+      root_shape.IsTuple() &&
+      ShapeUtil::TupleElementCount(root_shape) == parameter_count;
+  if (standard_repeat_loop && sharded) {
+    const auto& root_sharding = root->sharding();
+
+    VLOG(3) << "Sharding pass visting comp " << comp->name();
+
+    for (auto i = 0; i < parameter_count; ++i) {
+      auto param = comp->parameter_instruction(i);
+
+      const auto unused = param->user_count() == 0;
+      if (unused) {
+        const auto sharding = root_sharding.GetSubSharding(root->shape(), {i});
+        SetSharding(param, sharding);
+
+        VLOG(3) << "Assigning sharding to " << param->name() << " from root "
+                << "tuple " << i << " with sharding " << sharding;
+      }
+    }
+  }
+}
+
+void FixUnusedWhileLoopInputsToMatchRoot(HloComputation* comp) {
+  const auto parameter_count = comp->num_parameters();
+  CHECK_EQ(parameter_count, 1);
+  auto* parameter = comp->parameter_instruction(0);
+  const auto& parameter_shape = parameter->shape();
+
+  const auto root = comp->root_instruction();
+  const auto& root_shape = root->shape();
+
+  const auto element_count = ShapeUtil::TupleElementCount(root_shape);
+  CHECK_EQ(element_count, ShapeUtil::TupleElementCount(parameter_shape));
+
+  const auto sharded = parameter->has_sharding() && root->has_sharding();
+  const auto standard_while_loop =
+      parameter_shape.IsTuple() && root_shape.IsTuple();
+  if (standard_while_loop && sharded) {
+    VLOG(3) << "Sharding pass visting comp " << comp->name();
+
+    auto parameter_sharding = parameter->sharding();
+    auto root_sharding = root->sharding();
+
+    const auto used_inputs = FindUsedTupleElements(parameter);
+
+    std::vector<HloSharding> param_sharding;
+    param_sharding.reserve(element_count);
+
+    for (auto i = 0u; i < element_count; ++i) {
+      const auto unused = used_inputs.count(i) == 0;
+      const auto shard =
+          unused ? root_sharding.GetSubSharding(root_shape, {i})
+                 : parameter_sharding.GetSubSharding(parameter_shape, {i});
+      param_sharding.push_back(shard);
+
+      VLOG(3) << "Assigning sharding to " << parameter->name() << " index " << i
+              << " from root tuple " << i << " " << shard;
+    }
+
+    SetTupleShardingFromVector(parameter, param_sharding);
   }
 }
 
@@ -961,13 +1056,34 @@ MarkComputationsNotConsideredForSharding(
   return completed;
 }
 
+bool IsRepeatLoopBody(CallGraph& call_graph, HloComputation* comp) {
+  auto callers = call_graph.GetComputationCallers(comp);
+  if (!callers.empty()) {
+    auto caller = callers.front();
+    return IsRepeatLoop(caller);
+  }
+
+  return false;
+}
+
+bool IsWhileLoopBody(CallGraph& call_graph, HloComputation* comp) {
+  auto callers = call_graph.GetComputationCallers(comp);
+  if (!callers.empty()) {
+    auto caller = callers.front();
+    return caller->opcode() == HloOpcode::kWhile &&
+           caller->while_body() == comp;
+  }
+
+  return false;
+}
+
 }  // namespace
 
 StatusOr<bool> ShardingPass::Run(HloModule* module) {
   VLOG(2) << "Before ShardingPass:";
   XLA_VLOG_LINES(2, module->ToString());
 
-  std::unique_ptr<const CallGraph> call_graph = CallGraph::Build(module);
+  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
   if (!call_graph->IsFlattened()) {
     return FailedPrecondition(
         "Expected the call graph of the module to be flat.");
@@ -1030,6 +1146,16 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
             made_progress |= CopyShardingToCalledComputations(site, c);
           }
         }
+      }
+
+      // Change sharding of unused loop body inputs to match the root, so that
+      // we don't lose the root sharding when MatchBodyShardingToInput is
+      // called. This also helps prevent unnecessary inter_ipu_copy from the
+      // unused input shard to the root shard.
+      if (IsRepeatLoopBody(*call_graph, comp)) {
+        FixUnusedRepeatLoopInputsToMatchRoot(comp);
+      } else if (IsWhileLoopBody(*call_graph, comp)) {
+        FixUnusedWhileLoopInputsToMatchRoot(comp);
       }
 
       // Abandoned computation due to application of sharding to a deferred
