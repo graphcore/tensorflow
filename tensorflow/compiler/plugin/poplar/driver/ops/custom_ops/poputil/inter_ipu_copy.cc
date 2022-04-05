@@ -33,7 +33,7 @@ namespace {
 
 class InterIpuCopyOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override;
 };
@@ -125,7 +125,7 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
     // allocation target, or if the tiles available on the src and dst devices
     // do not match. This can happen if one device has I/O tiles allocated,
     // and the other does not.
-    poplar::Graph& dst_graph =
+    auto& dst_graph =
         GetGraphWithOutputIndex(res, inst, output_flat_tuple_index);
     TF_ASSIGN_OR_RETURN(poplar::Tensor output,
                         AddTensor(dst_graph, output_location, output_shape, res,
@@ -138,7 +138,7 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
 
   // No tensor target and src and dst graphs have equivalent tiles available so
   // reuse the src tensor preserving aliasing.
-  poplar::Graph& master_graph = GetMasterGraph(res);
+  auto& master_graph = GetMasterGraph(res);
 
   poplar::Tensor output;
   // When the destination is all the compute tiles, we can directly clone it.
@@ -171,7 +171,7 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
 }  // namespace
 
 StatusOr<poplar::program::Sequence> InterIpuCopyOp::Creator(
-    poplar::Graph&, CompilerResources& res, const HloInstruction* inst,
+    DriverGraph&, CompilerResources& res, const HloInstruction* inst,
     const Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugContext& debug_context) {
   PoplarOpDefDebugInfo debug_info(debug_context, "InterIpuCopyOp");

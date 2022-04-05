@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <utility>
 
+#include <snap/DataStream.hpp>
 #include <snap/Tensor.hpp>
 
 namespace xla {
@@ -27,11 +28,24 @@ namespace poplarplugin {
 class ExtendedTensor : public snap::Tensor {
  public:
   ExtendedTensor() = default;
+  ExtendedTensor(snap::Tensor&& tensor)  // NOLINT
+      : snap::Tensor(std::move(tensor)) {}
   ExtendedTensor(poplar::Tensor tensor, snap::Graph& graph)
       : snap::Tensor(tensor, graph) {}
 
   operator poplar::Tensor&() { return getPoplarTensor(); }
   operator const poplar::Tensor&() const { return getPoplarTensor(); }
+};
+
+// Wrapper class to abstract migration from poplar to snap
+class ExtendedDataStream : public snap::DataStream {
+ public:
+  ExtendedDataStream() = default;
+  ExtendedDataStream(snap::DataStream&& data_stream)  // NOLINT
+      : snap::DataStream(std::move(data_stream)) {}
+
+  operator poplar::DataStream&() { return getPoplarDataStream(); }
+  operator const poplar::DataStream&() const { return getPoplarDataStream(); }
 };
 
 }  // namespace poplarplugin

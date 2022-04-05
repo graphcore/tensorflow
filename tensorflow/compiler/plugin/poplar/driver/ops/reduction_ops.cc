@@ -314,7 +314,7 @@ StatusOr<poplar::program::Sequence> CreateSimpleReduction(
   poplar::program::Sequence seq({}, debug_name_and_id);
   poplar::Tensor out;
 
-  poplar::Graph& graph = GetGraph(res, inst);
+  auto& graph = GetGraph(res, inst);
 
   if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
     TF_ASSIGN_OR_RETURN(out, FindInstructionInput(tensor_map, res, inst, 1, seq,
@@ -424,7 +424,7 @@ StatusOr<poplar::program::Sequence> CreateSimpleWindowReduction(
   poplar::program::Sequence seq({}, debug_name_and_id);
   poplar::Tensor out;
 
-  poplar::Graph& graph = GetGraph(res, inst);
+  auto& graph = GetGraph(res, inst);
 
   if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
     TF_ASSIGN_OR_RETURN(out, FindInstructionInput(tensor_map, res, inst, 1, seq,
@@ -620,7 +620,7 @@ StatusOr<poplar::program::Sequence> CreatePoplibsPooling(
     popnn::PoolingType pooling_type, const Window& window,
     const poplar::DebugNameAndId& debug_name_and_id,
     absl::optional<const HloInstruction*> optional_reduction_op) {
-  poplar::Graph& graph = GetGraph(res, inst);
+  auto& graph = GetGraph(res, inst);
   poplar::program::Sequence prog({}, debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(
@@ -703,7 +703,7 @@ StatusOr<poplar::program::Sequence> CreatePoplibsMaxPoolGrad(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     const Window& window, const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
-  poplar::Graph& graph = GetGraph(res, inst);
+  auto& graph = GetGraph(res, inst);
 
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor input,
@@ -747,7 +747,7 @@ StatusOr<poplar::program::Sequence> CreatePoplibsPoolingGrad(
   }
 
   poplar::program::Sequence prog({}, debug_name_and_id);
-  poplar::Graph& graph = GetGraph(res, inst);
+  auto& graph = GetGraph(res, inst);
 
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor output_grad,
@@ -810,7 +810,7 @@ StatusOr<poplar::program::Sequence> CreateSimpleSelectAndScatter(
   poplar::Tensor out;
   poplar::program::Sequence prog({}, debug_name_and_id);
 
-  poplar::Graph& graph = GetGraph(res, inst);
+  auto& graph = GetGraph(res, inst);
 
   // Find the input tensors
   TF_ASSIGN_OR_RETURN(
@@ -985,7 +985,7 @@ StatusOr<poplar::program::Sequence> CreateReplicatedAllReduce(
     const gcl::CollectiveOperator op,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
-  poplar::Graph& graph = GetGraph(res, inst);
+  auto& graph = GetGraph(res, inst);
 
   TF_ASSIGN_OR_RETURN(
       auto tensors,
@@ -1025,7 +1025,7 @@ StatusOr<poplar::program::Sequence> CreateReplicatedAllToAll(
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
-  poplar::Graph& graph = GetGraph(res, inst);
+  auto& graph = GetGraph(res, inst);
 
   CHECK_EQ(inst->operand_count(), 1);
 

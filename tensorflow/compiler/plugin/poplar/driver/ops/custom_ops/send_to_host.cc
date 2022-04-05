@@ -29,7 +29,7 @@ namespace {
 
 class SendToHostOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SendToHostOp");
@@ -49,7 +49,7 @@ class SendToHostOp : public PoplarOpDef {
       const std::string& rendezvous_key = send->RendezvousKeys()[i];
 
       // Use the rendezvous key also for the Poplar stream handle.
-      const poplar::DataStream stream = graph.addDeviceToHostFIFO(
+      const auto stream = graph.addDeviceToHostFIFO(
           rendezvous_key, tensor.elementType(), tensor.numElements());
 
       seq.add(poplar::program::Copy(
@@ -64,7 +64,7 @@ class SendToHostOp : public PoplarOpDef {
   }
 
   StatusOr<poplar::Tensor> Allocator(
-      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SendToHostOp");

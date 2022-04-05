@@ -42,7 +42,7 @@ namespace xla {
 namespace poplarplugin {
 
 StatusOr<poplar::Tensor> AllocatePoplarOpTensor(
-    poplar::Graph& graph, CompilerResources& res,
+    DriverGraph& graph, CompilerResources& res,
     const poplar::DebugNameAndId& parent_debug_name_and_id,
     const TensorTarget& tensor_target, const xla::Shape& shape,
     const TensorMap& tensor_map) {
@@ -61,7 +61,7 @@ StatusOr<poplar::Tensor> AllocatePoplarOpTensor(
 }
 
 StatusOr<poplar::program::Sequence> CreatePoplarOp(
-    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+    DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::DebugContext debug_context(debug_name_and_id);
@@ -75,7 +75,7 @@ StatusOr<poplar::program::Sequence> CreatePoplarOp(
 }
 
 StatusOr<poplar::Tensor> AllocateHloOpTensor(
-    poplar::Graph& graph, CompilerResources& res,
+    DriverGraph& graph, CompilerResources& res,
     const poplar::DebugNameAndId& parent_debug_name_and_id,
     const TensorTarget& tensor_target, const xla::Shape& shape,
     const TensorMap& tensor_map) {
@@ -104,7 +104,7 @@ StatusOr<poplar::Tensor> AllocateHloOpTensor(
   return out;
 }
 
-StatusOr<poplar::program::Sequence> CreateHloOp(poplar::Graph& graph,
+StatusOr<poplar::program::Sequence> CreateHloOp(DriverGraph& graph,
                                                 CompilerResources& res,
                                                 const HloInstruction* inst,
                                                 const xla::Shape& output_shape,

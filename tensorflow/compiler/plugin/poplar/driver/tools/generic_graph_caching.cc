@@ -100,7 +100,7 @@ bool GenericGraphCache::HloInstructionEquals::operator()(
 }
 
 Status GenericGraphCache::ExecuteCached(
-    const HloInstruction* inst, poplar::Graph& graph,
+    const HloInstruction* inst, DriverGraph& graph,
     CompilerResources& resources, poplar::program::Sequence& seq,
     PoplarFunction func, poputil::graphfn::Signature signature,
     std::vector<poplar::Tensor>& args,

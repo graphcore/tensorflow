@@ -148,7 +148,7 @@ StatusOr<poplar::program::Sequence> CreateCustomCallOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  poplar::Graph& graph = GetGraph(res, inst);
+  auto& graph = GetGraph(res, inst);
   if (IsPoplibsHloCustomOp(inst)) {
     VLOG(1) << "Processing " << inst->custom_call_target()
             << " as Poplibs call";

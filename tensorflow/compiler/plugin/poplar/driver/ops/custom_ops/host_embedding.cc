@@ -99,9 +99,8 @@ StatusOr<RemoteBufferHolder*> GetOrCreateRemoteBuffer(
 class HostEmbeddingLookupOp : public PoplarOpDef {
   // Synthetic embedding lookup.
   StatusOr<poplar::program::Sequence> SyntheticImpl(
-      poplar::Graph& graph, poplar::Tensor indices,
-      poplar::program::Sequence seq, CompilerResources& res,
-      const HloHostEmbeddingLookupInstruction* inst,
+      DriverGraph& graph, poplar::Tensor indices, poplar::program::Sequence seq,
+      CompilerResources& res, const HloHostEmbeddingLookupInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugNameAndId& debug_name_and_id) {
     TF_ASSIGN_OR_RETURN(
@@ -116,9 +115,8 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
 
   // Host embedding using a poplar callback.
   StatusOr<poplar::program::Sequence> CallbackImpl(
-      poplar::Graph& graph, poplar::Tensor indices,
-      poplar::program::Sequence seq, CompilerResources& res,
-      const HloHostEmbeddingLookupInstruction* inst,
+      DriverGraph& graph, poplar::Tensor indices, poplar::program::Sequence seq,
+      CompilerResources& res, const HloHostEmbeddingLookupInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugNameAndId& debug_name_and_id) {
     TF_ASSIGN_OR_RETURN(
@@ -145,7 +143,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
 
   // Single replica remote buffer implementation.
   StatusOr<poplar::program::Sequence> RemoteBufferImpl(
-      poplar::Graph& graph, poplar::RemoteBuffer& remote_buffer,
+      DriverGraph& graph, poplar::RemoteBuffer& remote_buffer,
       poplar::Tensor indices, poplar::program::Sequence seq,
       CompilerResources& res, const HloHostEmbeddingLookupInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
@@ -180,7 +178,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
   // Replicated remote buffer embedding lookup using the token splitting
   // strategy.
   StatusOr<poplar::program::Sequence> RemoteBufferSplitTokensImpl(
-      poplar::Graph& graph, poplar::RemoteBuffer& remote_buffer,
+      DriverGraph& graph, poplar::RemoteBuffer& remote_buffer,
       poplar::Tensor indices, poplar::program::Sequence seq,
       CompilerResources& res, const HloHostEmbeddingLookupInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
@@ -273,7 +271,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
   // Replicated remote buffer embedding lookup using the encoding splitting
   // strategy.
   StatusOr<poplar::program::Sequence> RemoteBufferSplitEncodingImpl(
-      poplar::Graph& graph, poplar::RemoteBuffer& remote_buffer,
+      DriverGraph& graph, poplar::RemoteBuffer& remote_buffer,
       poplar::Tensor indices, poplar::program::Sequence seq,
       CompilerResources& res, const HloHostEmbeddingLookupInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
@@ -328,7 +326,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
   }
 
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "HostEmbeddingLookupOp");
@@ -601,7 +599,7 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
   }
 
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "HostEmbeddingUpdateOp");
@@ -666,7 +664,7 @@ REGISTER_POPLAR_OP(HostEmbeddingUpdate, HostEmbeddingUpdateOp);
 
 class HostEmbeddingNotifyOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     const HloHostEmbeddingNotifyInstruction* host_embedding_inst =

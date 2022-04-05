@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_GENERIC_GRAPH_CACHING_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_GENERIC_GRAPH_CACHING_H_
 
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/xla/status.h"
 
@@ -44,7 +45,7 @@ class GenericGraphCache {
   // dependency. Note that the dependent allocation cannot be an Allocating
   // index or another layout dependency.
   Status ExecuteCached(
-      const HloInstruction* inst, poplar::Graph& graph,
+      const HloInstruction* inst, DriverGraph& graph,
       CompilerResources& resources, poplar::program::Sequence& seq,
       PoplarFunction func, poputil::graphfn::Signature signature,
       std::vector<poplar::Tensor>& args,

@@ -46,7 +46,7 @@ namespace {
 
 class StatefulGradientAccumulateOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
@@ -137,7 +137,7 @@ REGISTER_POPLAR_OP(StatefulGradientAccumulateAndAllReduce,
 
 class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
   StatusOr<poplar::Tensor> Allocator(
-      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
@@ -161,11 +161,12 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
       return xla::FailedPrecondition("Could not find layout input for %s",
                                      GetDebugName(inst));
     }
-    return graph.clone(outputs[0], {debug_info});
+    // TODO(T58874) - Remove cast
+    return (poplar::Tensor)graph.clone(outputs[0], {debug_info});
   }
 
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
@@ -310,7 +311,7 @@ REGISTER_POPLAR_OP(StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm,
 // It is however handeled by the deferred allocation visitor.
 class GradientAccumulatorCreateOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     return InternalErrorStrCat(
@@ -326,7 +327,7 @@ REGISTER_POPLAR_OP(GradientAccumulatorCreate, GradientAccumulatorCreateOp);
 // stages on the same IPU into a single buffer.
 class GradientAccumulatorSinkOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "GradientAccumulatorSinkOp");
@@ -362,7 +363,7 @@ REGISTER_POPLAR_OP(GradientAccumulatorSink, GradientAccumulatorSinkOp);
 // in compilation. Doesn't produce calls to poplar/poplibs
 class GradientAccumulationCountOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     return poplar::program::Sequence(

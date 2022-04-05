@@ -125,7 +125,7 @@ const Shape& BaseVisitor::GetOutputShape(HloInstruction* inst) const {
 
 Status BaseVisitor::HandleHloOp(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->ToString();
-  poplar::Graph& graph = GetGraph(resources_, inst);
+  auto& graph = GetGraph(resources_, inst);
 
   TF_ASSIGN_OR_RETURN(
       poplar::program::Sequence prog,
@@ -201,7 +201,7 @@ Status BaseVisitor::HandleConstant(HloInstruction* inst) {
   poplar::DebugContext debug_context(debug_name_and_id);
   PoplarOpDefDebugInfo debug_info(debug_context, "HandleConstant");
 
-  poplar::Graph& graph = GetGraph(resources_, inst);
+  auto& graph = GetGraph(resources_, inst);
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor t,
       AddConstantTensor(graph, TensorLocation{inst, 0}, GetOutputShape(inst),
@@ -253,7 +253,7 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
 
   if (IsPopOpsFusion(inst)) {
     // Fusions are handle as Poplar custom ops.
-    poplar::Graph& graph = GetGraph(resources_, inst);
+    auto& graph = GetGraph(resources_, inst);
     const bool is_poplar_custom_op = GetPoplarCustomOp(inst).has_value();
     if (is_poplar_custom_op) {
       TF_ASSIGN_OR_RETURN(

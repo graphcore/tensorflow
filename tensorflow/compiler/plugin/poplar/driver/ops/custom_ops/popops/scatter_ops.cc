@@ -42,9 +42,8 @@ StatusOr<poplar::Tensor> AddIndicesTensor(
 
 class ScatterOp : public PoplarOpDef {
   StatusOr<poplar::Tensor> Allocator(
-      poplar::Graph& graph, CompilerResources& resources,
-      const std::string& name, const TensorTarget& tensor_target,
-      const TensorMap& tensor_map,
+      DriverGraph& graph, CompilerResources& resources, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ScatterOp");
     const auto* target = tensor_target.tgt;
@@ -95,7 +94,7 @@ class ScatterOp : public PoplarOpDef {
   }
 
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ScatterOp");
@@ -130,9 +129,11 @@ class ScatterOp : public PoplarOpDef {
 
     auto tmp = graph.addVariable(operand.elementType(), {});
     graph.setTileMapping(tmp, 0);
+    // TODO(T58874) - Remove cast
     TensorOrRemoteBufferVectors args = {
-        TensorOrRemoteBufferVector{TensorOrRemoteBuffer{tmp}},
-        TensorOrRemoteBufferVector{TensorOrRemoteBuffer{graph.clone(tmp)}}};
+        TensorOrRemoteBufferVector{TensorOrRemoteBuffer{(poplar::Tensor)tmp}},
+        TensorOrRemoteBufferVector{
+            TensorOrRemoteBuffer{(poplar::Tensor)graph.clone(tmp)}}};
 
     std::shared_ptr<DeferredVisitor> update_comp_visitor;
     // Fast path the gradient accumulation case

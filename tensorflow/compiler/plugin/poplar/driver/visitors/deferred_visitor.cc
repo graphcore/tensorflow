@@ -360,7 +360,7 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
     CHECK_EQ(shapes.size(), 1);
     CHECK(shapes[0].IsArray());
 
-    poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
+    auto& graph = GetGraphWithOutputIndex(resources_, inst, 0);
     TF_ASSIGN_OR_RETURN(poplar::Type element_type, PoplarDataType(shapes[0]));
     const int64 element_count = ShapeUtil::ElementsIn(shapes[0]);
 
@@ -757,7 +757,7 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
   const HloInstruction* op = inst->operand(0);
 
   auto dnai = GetDebugNameAndId(inst);
-  poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
+  auto& graph = GetGraphWithOutputIndex(resources_, inst, 0);
   poplar::program::Sequence seq({}, dnai);
 
   TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
@@ -819,7 +819,8 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
         poplar::Tensor input = inputs[0].AsTensor();
         switch (clone_method) {
           case CloneMethod_DeduceNewOrderOrPreserveAliases:
-            return graph.clone(
+            // TODO(T58874) - Remove cast
+            return (poplar::Tensor)graph.clone(
                 input.elementType(), input,
                 {dnai, absl::StrCat(std::to_string(tuple_idx),
                                     op_dnai.getPathName())},
@@ -1063,7 +1064,7 @@ Status AddGradientAccumulationZeroing(
 
 Status DeferredVisitor::HandleDeferredWideConst(HloInstruction* inst) {
   auto dnai = GetDebugNameAndId(inst);
-  poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
+  auto& graph = GetGraphWithOutputIndex(resources_, inst, 0);
 
   const HloInstruction* root = inst->fused_expression_root();
   const HloInstruction* constant = root->operand(0);
@@ -1146,7 +1147,7 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
 
     poplar::program::Sequence zeroing_seq({}, {debug_name_and_id, "zeroing"});
 
-    poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
+    auto& graph = GetGraphWithOutputIndex(resources_, inst, 0);
     const int64 element_count = ShapeUtil::ElementsIn(inst->shape());
 
     auto info = create->RemoteBufferInfo();
@@ -1372,8 +1373,7 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
     DeferredPostProcessFunction post_process_fn =
         [this, load_inst, i, shape,
          debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
-      poplar::Graph& shard_graph =
-          GetGraphWithOutputIndex(resources_, load_inst, i);
+      auto& shard_graph = GetGraphWithOutputIndex(resources_, load_inst, i);
 
       poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
       poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
@@ -1465,8 +1465,7 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
     DeferredPostProcessFunction post_process_fn =
         [this, load_inst, i, num_outputs, shape,
          debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
-      poplar::Graph& shard_graph =
-          GetGraphWithOutputIndex(resources_, load_inst, i);
+      auto& shard_graph = GetGraphWithOutputIndex(resources_, load_inst, i);
 
       poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
       poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
@@ -1603,8 +1602,7 @@ Status DeferredVisitor::PropagateDeferredAllocationsOperand(
       // Depending on the visitor inplace usage, the tensor might need to be
       // cloned so that it is not clobbered unexpectedly.
       if (add_clone) {
-        poplar::Graph& graph =
-            GetGraphWithOutputIndex(resources_, input_inst, i);
+        auto& graph = GetGraphWithOutputIndex(resources_, input_inst, i);
 
         t = graph.clone(t, {debug_name_and_id, std::to_string(i)},
                         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
@@ -1659,7 +1657,7 @@ StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
     TensorLocation allocation_location, const Shape& shape,
     absl::optional<poplar::Tensor> tensor_like,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  poplar::Graph& graph =
+  auto& graph =
       GetGraphWithOutputIndex(resources_, allocation_location.instruction,
                               allocation_location.flattened_output_tuple_index);
 

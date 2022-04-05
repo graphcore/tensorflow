@@ -65,7 +65,7 @@ poplar::Tensor CreateInputFromSlice(
 // All the slice apply ops allocate on the first two operands.
 class SliceApplyAllocatorOp : public PoplarOpDef {
   StatusOr<poplar::Tensor> Allocator(
-      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyAllocatorOp");
@@ -97,7 +97,7 @@ class SliceApplyAllocatorOp : public PoplarOpDef {
 
 class SliceApplyaXbYOp : public SliceApplyAllocatorOp {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyaXbYOp");
@@ -136,7 +136,7 @@ REGISTER_POPLAR_OP(SliceApplyaXbY, SliceApplyaXbYOp);
 
 class SliceApplyabYOp : public SliceApplyAllocatorOp {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyabYOp");
@@ -172,7 +172,7 @@ REGISTER_POPLAR_OP(SliceApplyabY, SliceApplyabYOp);
 
 class SliceApplyaXbOp : public SliceApplyAllocatorOp {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyaXbOp");
@@ -215,7 +215,7 @@ REGISTER_POPLAR_OP(SliceApplyaXb, SliceApplyaXbOp);
 
 class SliceApplyOp : public SliceApplyAllocatorOp {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyOp");
