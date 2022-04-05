@@ -38,7 +38,7 @@ namespace {
 template <popnn::NonLinearityType NLType>
 class NonLinearityOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "NonLinearityOp");
@@ -77,7 +77,7 @@ REGISTER_POPLAR_OP(Swish, NonLinearityOp<popnn::NonLinearityType::SWISH>);
 template <popnn::NonLinearityType NLType>
 class NonLinearityGradOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "NonLinearityGradOp");

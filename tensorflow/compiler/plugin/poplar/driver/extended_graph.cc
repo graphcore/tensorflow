@@ -42,16 +42,32 @@ ExtendedGraph ExtendedGraph::createVirtualGraph(
   return {std::move(graph)};
 }
 
-ExtendedTensor ExtendedGraph::clone(const poplar::Tensor& t) {
-  auto clone = getPoplarGraph().clone(t);
-  return {std::move(clone), *this};
+ExtendedTensor ExtendedGraph::addReplicationIndexConstant(
+    const poplar::DebugContext& debugContext) {
+  auto tensor = getPoplarGraph().addReplicationIndexConstant(debugContext);
+  return {tensor, *this};
+}
+
+ExtendedTensor ExtendedGraph::clone(const poplar::Type& type,
+                                    const poplar::Tensor& t,
+                                    const poplar::DebugContext& debugContext,
+                                    poplar::TensorCloneMethod method) {
+  auto clone = getPoplarGraph().clone(type, t, debugContext, method);
+  return {clone, *this};
+}
+
+ExtendedTensor ExtendedGraph::clone(const poplar::Tensor& t,
+                                    const poplar::DebugContext& debugContext,
+                                    poplar::TensorCloneMethod method) {
+  auto clone = getPoplarGraph().clone(t, debugContext, method);
+  return {clone, *this};
 }
 
 ExtendedTensor ExtendedGraph::addVariable(
     const poplar::Type& type, poplar::ArrayRef<std::size_t> shape,
     const poplar::DebugContext& debugContext) {
-  auto tensor = getPoplarGraph().addVariable(type, shape, debugContext);
-  return {std::move(tensor), *this};
+  auto tensor = snap::Graph::addVariable(type, shape, debugContext);
+  return {std::move(tensor)};
 }
 
 ExtendedTensor ExtendedGraph::addVariable(
@@ -59,8 +75,20 @@ ExtendedTensor ExtendedGraph::addVariable(
     poplar::VariableMappingMethod mappingMethod,
     const poplar::DebugContext& debugContext) {
   auto tensor =
-      getPoplarGraph().addVariable(type, shape, mappingMethod, debugContext);
-  return {std::move(tensor), *this};
+      snap::Graph::addVariable(type, shape, mappingMethod, debugContext);
+  return {std::move(tensor)};
+}
+
+void ExtendedGraph::setTileMapping(poplar::VertexRef v, unsigned tileNum) {
+  getPoplarGraph().setTileMapping(v, tileNum);
+}
+
+void ExtendedGraph::setTileMapping(const ExtendedTensor& t, unsigned tileNum) {
+  getPoplarGraph().setTileMapping(t.getPoplarTensor(), tileNum);
+}
+
+void ExtendedGraph::setTileMapping(const poplar::Tensor& t, unsigned tileNum) {
+  getPoplarGraph().setTileMapping(t, tileNum);
 }
 
 poplar::Graph::TileToTensorMapping ExtendedGraph::getTileMapping(
@@ -71,6 +99,30 @@ poplar::Graph::TileToTensorMapping ExtendedGraph::getTileMapping(
 poplar::Function ExtendedGraph::addFunction(
     const poplar::program::Program& program) {
   return getPoplarGraph().addFunction(program);
+}
+
+poplar::HostFunction ExtendedGraph::addHostFunction(
+    poplar::StringRef handle,
+    poplar::ArrayRef<poplar::Graph::HostFunctionArgument> inputs,
+    poplar::ArrayRef<poplar::Graph::HostFunctionArgument> outputs) {
+  return getPoplarGraph().addHostFunction(handle, inputs, outputs);
+}
+
+ExtendedDataStream ExtendedGraph::addHostToDeviceFIFO(
+    poplar::StringRef handle, const poplar::Type& elementType,
+    std::size_t numElements, poplar::ReplicatedStreamMode replicatedMode,
+    const poplar::OptionFlags& options) {
+  auto data_stream = snap::Graph::addHostToDeviceFIFO(
+      handle, elementType, numElements, replicatedMode, options);
+  return {std::move(data_stream)};
+}
+
+ExtendedDataStream ExtendedGraph::addDeviceToHostFIFO(
+    poplar::StringRef handle, const poplar::Type& elementType,
+    std::size_t numElements, const poplar::OptionFlags& options) {
+  auto data_stream = snap::Graph::addDeviceToHostFIFO(handle, elementType,
+                                                      numElements, options);
+  return {std::move(data_stream)};
 }
 
 void ExtendedGraph::createHostWrite(poplar::StringRef handle,
@@ -90,6 +142,20 @@ void ExtendedGraph::setInitialValueHalf(const poplar::Tensor& t,
   getPoplarGraph().setInitialValueHalf(t, values);
 }
 
+bool ExtendedGraph::addCodelets(poplar::StringRef src,
+                                poplar::CodeletFileType type,
+                                poplar::StringRef compileFlags,
+                                poplar::StringRef targetName) {
+  return getPoplarGraph().addCodelets(src, type, compileFlags, targetName);
+}
+
+void ExtendedGraph::addCodelets(std::stringstream& stream,
+                                poplar::StringRef compileFlags,
+                                poplar::CodeletFileType type,
+                                poplar::StringRef targetName) {
+  getPoplarGraph().addCodelets(stream, compileFlags, type, targetName);
+}
+
 void ExtendedGraph::addCodelets(std::stringstream& stream,
                                 poplar::StringRef compileFlags,
                                 std::ostream& compileOutput,
@@ -99,8 +165,33 @@ void ExtendedGraph::addCodelets(std::stringstream& stream,
                                targetName);
 }
 
-void ExtendedGraph::setTileMapping(const ExtendedTensor& t, unsigned tileNum) {
-  getPoplarGraph().setTileMapping(t.getPoplarTensor(), tileNum);
+poplar::VertexRef ExtendedGraph::addVertex(poplar::ComputeSet cs,
+                                           poplar::StringRef vertexType) {
+  return getPoplarGraph().addVertex(cs, vertexType);
+}
+
+poplar::VertexRef ExtendedGraph::addVertex(
+    poplar::ComputeSet cs, poplar::StringRef vertexType,
+    poplar::ArrayRef<poplar::Graph::ConnectionDesc> connections) {
+  return getPoplarGraph().addVertex(cs, vertexType, connections);
+}
+
+void ExtendedGraph::connect(poplar::FieldRef field,
+                            const poplar::Tensor& tensor) {
+  getPoplarGraph().connect(field, tensor);
+}
+
+std::vector<std::vector<poplar::Interval>>
+ExtendedGraph::getSortedContiguousRegions(
+    const poplar::Tensor& t, poplar::ArrayRef<poplar::Interval> regions,
+    bool removeAliasedIntervals, std::vector<std::size_t>* aliases) const {
+  return getPoplarGraph().getSortedContiguousRegions(
+      t, regions, removeAliasedIntervals, aliases);
+}
+
+void ExtendedGraph::setPerfEstimate(const poplar::VertexRef& v,
+                                    std::uint64_t cycles, std::uint64_t flops) {
+  getPoplarGraph().setPerfEstimate(v, cycles, flops);
 }
 
 }  // namespace poplarplugin

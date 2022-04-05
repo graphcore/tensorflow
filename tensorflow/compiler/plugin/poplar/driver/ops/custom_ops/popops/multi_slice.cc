@@ -134,7 +134,7 @@ StatusOr<poplar::Tensor> CreateUpdatesTensor(
 
 class MultiSliceOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiSliceOp");
@@ -189,7 +189,7 @@ class MultiSliceOp : public PoplarOpDef {
   }
 
   StatusOr<poplar::Tensor> Allocator(
-      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiSliceOp");
@@ -218,7 +218,7 @@ REGISTER_POPLAR_OP(MultiSlice, MultiSliceOp);
 
 class StaticMultiSliceOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "StaticMultiSliceOp");
@@ -307,7 +307,7 @@ Status MultiUpdateInternal(
 
 class MultiUpdateOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiUpdateOp");
@@ -359,7 +359,7 @@ class MultiUpdateOp : public PoplarOpDef {
   }
 
   StatusOr<poplar::Tensor> Allocator(
-      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiUpdateOp");
@@ -393,7 +393,7 @@ REGISTER_POPLAR_OP(MultiUpdate, MultiUpdateOp);
 
 class MultiUpdateAddOp : public MultiUpdateOp {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiUpdateAddOp");

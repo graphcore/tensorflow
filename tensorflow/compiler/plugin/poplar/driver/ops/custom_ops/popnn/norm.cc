@@ -249,7 +249,7 @@ poplin::DistributedNormReduceCallback GetDistributedNormReduceCallback(
 
 class NormInferenceAndTrainingOp : public PoplarOpDef {
   StatusOr<poplar::Tensor> Allocator(
-      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
@@ -283,7 +283,7 @@ class NormInferenceAndTrainingOp : public PoplarOpDef {
 
 class NormInferenceOp : public NormInferenceAndTrainingOp {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "NormInferenceOp");
@@ -391,7 +391,7 @@ REGISTER_HLO_OP(kBatchNormInference, NormInferenceOp);
 
 class NormTrainingOp : public NormInferenceAndTrainingOp {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {
     PoplarOpDefDebugInfo debug_info(debug_context, "NormTrainingOp");
@@ -528,7 +528,7 @@ REGISTER_HLO_OP(kBatchNormTraining, NormTrainingOp);
 
 class NormGradOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
@@ -681,7 +681,7 @@ REGISTER_HLO_OP(kBatchNormGrad, NormGradOp);
 
 class NormStatisticsOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));

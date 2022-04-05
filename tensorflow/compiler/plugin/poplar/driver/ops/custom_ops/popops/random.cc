@@ -34,7 +34,7 @@ inline const HloInstruction* LookThroughBroadcast(const HloInstruction* inst) {
 }
 
 static StatusOr<poplar::program::Sequence> RandomNormal(
-    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+    DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
     double mean_val, double sd_val, const xla::Shape& output_shape,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
@@ -53,7 +53,7 @@ static StatusOr<poplar::program::Sequence> RandomNormal(
 
 class RandomNormalScaleOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "RandomNormalScaleOp");
@@ -87,7 +87,7 @@ class RandomNormalScaleOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Norm_scale_add, RandomNormalScaleOp);
 
 static StatusOr<poplar::program::Sequence> RandomUniform(
-    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+    DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
     double lower_val, double upper_val, const xla::Shape& output_shape,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
@@ -106,7 +106,7 @@ static StatusOr<poplar::program::Sequence> RandomUniform(
 
 class RandomUniformScaleOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "RandomUniformScaleOp");
@@ -142,7 +142,7 @@ REGISTER_POPLAR_OP(Uniform_scale_add, RandomUniformScaleOp);
 
 class RngOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "RngOp");

@@ -39,7 +39,7 @@ namespace {
 class SequenceSliceOp : public PoplarOpDef {
  public:
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SequenceSliceOp");
@@ -81,7 +81,7 @@ class SequenceSliceOp : public PoplarOpDef {
 
  protected:
   virtual StatusOr<poplar::Tensor> GetOutputTensor(
-      poplar::Graph& graph, TensorMap& tensor_map, CompilerResources& res,
+      DriverGraph& graph, TensorMap& tensor_map, CompilerResources& res,
       const HloInstruction* inst, poplar::program::Sequence& seq,
       PoplarOpDefDebugInfo& debug_info) {
     TF_ASSIGN_OR_RETURN(
@@ -121,7 +121,7 @@ REGISTER_POPLAR_OP(SequenceSlice, SequenceSliceOp);
 class SequenceSliceUnpackOp : public SequenceSliceOp {
  protected:
   StatusOr<poplar::Tensor> GetOutputTensor(
-      poplar::Graph& graph, TensorMap& tensor_map, CompilerResources& res,
+      DriverGraph& graph, TensorMap& tensor_map, CompilerResources& res,
       const HloInstruction* inst, poplar::program::Sequence& seq,
       PoplarOpDefDebugInfo& debug_info) override {
     return AddTensor(graph, TensorLocation{inst, 0}, inst->shape(), res,

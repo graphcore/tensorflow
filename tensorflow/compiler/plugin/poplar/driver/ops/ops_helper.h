@@ -43,23 +43,23 @@ struct CompilerResources;
 struct TensorTarget;
 
 StatusOr<poplar::Tensor> AllocatePoplarOpTensor(
-    poplar::Graph& graph, CompilerResources& res,
+    DriverGraph& graph, CompilerResources& res,
     const poplar::DebugNameAndId& debug_name_and_id,
     const TensorTarget& tensor_target, const xla::Shape& shape,
     const TensorMap& tensor_map);
 
 StatusOr<poplar::program::Sequence> CreatePoplarOp(
-    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+    DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 StatusOr<poplar::Tensor> AllocateHloOpTensor(
-    poplar::Graph& graph, CompilerResources& res,
+    DriverGraph& graph, CompilerResources& res,
     const poplar::DebugNameAndId& debug_name_and_id,
     const TensorTarget& tensor_target, const xla::Shape& shape,
     const TensorMap& tensor_map);
 
-StatusOr<poplar::program::Sequence> CreateHloOp(poplar::Graph& graph,
+StatusOr<poplar::program::Sequence> CreateHloOp(DriverGraph& graph,
                                                 CompilerResources& res,
                                                 const HloInstruction* inst,
                                                 const xla::Shape& output,

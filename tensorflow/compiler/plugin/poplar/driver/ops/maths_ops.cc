@@ -372,7 +372,7 @@ StatusOr<poplar::program::Sequence> CreateMatMulForDotOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  poplar::Graph& graph = GetGraph(res, inst);
+  auto& graph = GetGraph(res, inst);
 
   poplar::program::Sequence seq({}, debug_name_and_id);
 

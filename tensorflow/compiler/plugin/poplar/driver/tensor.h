@@ -21,6 +21,7 @@ limitations under the License.
 #include <poplar/TensorCloneMethod.hpp>
 #include <popops/DynamicSlice.hpp>
 
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/literal_util.h"
@@ -132,11 +133,11 @@ bool HasTensorAllocationTarget(const TensorLocation& src,
                                const CompilerResources& resources);
 
 StatusOr<poplar::Tensor> AddTensorForTarget(
-    poplar::Graph& graph, const TensorLocation& source,
+    DriverGraph& graph, const TensorLocation& source,
     const TensorTarget& tensor_target, CompilerResources& resources,
     const TensorMap& tensor_map, const poplar::DebugContext& debug_context);
 
-StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
+StatusOr<poplar::Tensor> AddTensor(DriverGraph& graph,
                                    const TensorLocation& src,
                                    const xla::Shape& shape,
                                    CompilerResources& resources,
@@ -144,7 +145,7 @@ StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
                                    const poplar::DebugContext& debug_context);
 
 StatusOr<poplar::Tensor> AddConstantTensor(
-    poplar::Graph& graph, const TensorLocation& src, const xla::Shape& shape,
+    DriverGraph& graph, const TensorLocation& src, const xla::Shape& shape,
     const xla::Literal& literal, CompilerResources& resources,
     const TensorMap& tensor_map, const poplar::DebugContext& debug_context);
 

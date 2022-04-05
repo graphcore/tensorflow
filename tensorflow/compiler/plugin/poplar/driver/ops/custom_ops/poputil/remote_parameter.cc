@@ -39,7 +39,7 @@ namespace {
 // host.
 std::pair<poplar::program::Sequence, poplar::program::Sequence>
 AddRemoteBufferStoreCopy(
-    poplar::Graph& graph, CompilerResources& res, poplar::Tensor source,
+    DriverGraph& graph, CompilerResources& res, poplar::Tensor source,
     poplar::RemoteBuffer remote_buffer,
     const poplar::DebugNameAndId& debug_name_and_id,
     absl::optional<poplar::Tensor> offset = absl::nullopt) {
@@ -72,7 +72,7 @@ AddRemoteBufferStoreCopy(
 
 class RemoteParameterLoadOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     // Should have been handled by the deferred visitor.
@@ -83,7 +83,7 @@ REGISTER_POPLAR_OP(RemoteParameterLoad, RemoteParameterLoadOp);
 
 class RemoteParameterStoreOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "RemoteParameterStoreOp");
@@ -104,7 +104,7 @@ class RemoteParameterStoreOp : public PoplarOpDef {
     poplar::program::Sequence temporary_copies_seq;
     poplar::program::Sequence stream_copies_seq;
     for (int64 i = 0; i < num_outputs; ++i) {
-      poplar::Graph& shard_graph = GetGraphWithOutputIndex(res, inst, i);
+      auto& shard_graph = GetGraphWithOutputIndex(res, inst, i);
       CHECK_EQ(outputs[i].size(), 1);
       TensorOrRemoteBuffer& output = outputs[i][0];
 
@@ -144,7 +144,7 @@ REGISTER_POPLAR_OP(RemoteParameterStore, RemoteParameterStoreOp);
 
 class BufferLoadSliceOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     // Should have been handled by the deferred visitor.
@@ -155,7 +155,7 @@ REGISTER_POPLAR_OP(BufferLoadSlice, BufferLoadSliceOp);
 
 class BufferStoreSliceOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "BufferStoreSliceOp");
@@ -174,7 +174,7 @@ class BufferStoreSliceOp : public PoplarOpDef {
     poplar::program::Sequence temporary_copies_seq;
     poplar::program::Sequence stream_copies_seq;
     for (int64 i = 0; i < num_outputs; ++i) {
-      poplar::Graph& shard_graph = GetGraphWithOutputIndex(res, inst, i);
+      auto& shard_graph = GetGraphWithOutputIndex(res, inst, i);
       CHECK_EQ(outputs[i].size(), 1);
       TensorOrRemoteBuffer& output = outputs[i][0];
 

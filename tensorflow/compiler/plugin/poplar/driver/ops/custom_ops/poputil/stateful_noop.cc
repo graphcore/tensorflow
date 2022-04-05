@@ -35,7 +35,7 @@ namespace {
 
 class StatefulNoopOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph&, CompilerResources&, const HloInstruction*,
+      DriverGraph&, CompilerResources&, const HloInstruction*,
       const xla::Shape&, TensorMap&,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "StatefulNoopOp");

@@ -805,7 +805,7 @@ bool HasTensorAllocationTarget(const TensorLocation& src,
 }
 
 StatusOr<poplar::Tensor> AddTensorForTarget(
-    poplar::Graph& graph, const TensorLocation& source,
+    DriverGraph& graph, const TensorLocation& source,
     const TensorTarget& tensor_target, CompilerResources& resources,
     const TensorMap& tensor_map, const poplar::DebugContext& debug_context) {
   PoplarOpDefDebugInfo debug_info(debug_context, "AddTensorForTarget");
@@ -909,13 +909,14 @@ StatusOr<poplar::Tensor> AddTensorForTarget(
       PoplarDataType(shapes[source.flattened_output_tuple_index]));
 
   if (src_type != out.elementType()) {
-    return graph.clone(src_type, out, {debug_info});
+    // TODO(T58874) - Remove cast
+    return (poplar::Tensor)graph.clone(src_type, out, {debug_info});
   }
 
   return out;
 }
 
-StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
+StatusOr<poplar::Tensor> AddTensor(DriverGraph& graph,
                                    const TensorLocation& src,
                                    const xla::Shape& shape,
                                    CompilerResources& resources,
@@ -1197,7 +1198,7 @@ StatusOr<poplar::Tensor> CreateConstantTensor(
 }
 
 StatusOr<poplar::Tensor> AddConstantTensor(
-    poplar::Graph& graph, const TensorLocation& src, const xla::Shape& shape,
+    DriverGraph& graph, const TensorLocation& src, const xla::Shape& shape,
     const xla::Literal& literal, CompilerResources& resources,
     const TensorMap& tensor_map, const poplar::DebugContext& debug_context) {
   PoplarOpDefDebugInfo debug_info(debug_context, "AddConstantTensor");

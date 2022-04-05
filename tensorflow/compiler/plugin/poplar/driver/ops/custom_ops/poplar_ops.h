@@ -22,6 +22,7 @@ limitations under the License.
 
 #include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
@@ -43,7 +44,7 @@ class PoplarOpDef {
   PoplarOpDef() = default;
   // By default the op is not allocating.
   virtual StatusOr<poplar::Tensor> Allocator(
-      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {
     return xla::FailedPrecondition(
@@ -51,7 +52,7 @@ class PoplarOpDef {
   }
 
   virtual StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) = 0;
 };

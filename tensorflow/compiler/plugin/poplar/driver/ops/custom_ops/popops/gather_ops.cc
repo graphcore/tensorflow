@@ -50,9 +50,8 @@ StatusOr<poplar::Tensor> AddIndicesTensor(
 
 class GatherOp : public PoplarOpDef {
   StatusOr<poplar::Tensor> Allocator(
-      poplar::Graph& graph, CompilerResources& resources,
-      const std::string& name, const TensorTarget& tensor_target,
-      const TensorMap& tensor_map,
+      DriverGraph& graph, CompilerResources& resources, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "GatherOp");
     const auto* target = tensor_target.tgt;
@@ -87,7 +86,7 @@ class GatherOp : public PoplarOpDef {
   }
 
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "GatherOp");

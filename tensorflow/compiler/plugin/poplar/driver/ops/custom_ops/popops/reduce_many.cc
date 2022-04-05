@@ -29,7 +29,7 @@ namespace poplarplugin {
 namespace {
 
 StatusOr<poplar::Tensor> GetOutputTensor(
-    poplar::Graph& graph, TensorMap& tensor_map, CompilerResources& res,
+    DriverGraph& graph, TensorMap& tensor_map, CompilerResources& res,
     const HloInstruction* inst, int64 output_index,
     const poplar::DebugNameAndId& debug_name_and_id) {
   // If output is scalar, map it linearly with res.linear_mapping_state.
@@ -46,7 +46,7 @@ StatusOr<poplar::Tensor> GetOutputTensor(
 
 class ReduceManyOp : public PoplarOpDef {
   StatusOr<poplar::program::Sequence> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ReduceManyOp");

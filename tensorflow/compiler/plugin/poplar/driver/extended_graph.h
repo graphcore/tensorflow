@@ -46,7 +46,18 @@ class ExtendedGraph : public snap::Graph {
 
   ExtendedGraph createVirtualGraph(const std::vector<unsigned>& perIpuTiles);
 
-  ExtendedTensor clone(const poplar::Tensor& t);
+  ExtendedTensor addReplicationIndexConstant(
+      const poplar::DebugContext& debugContext = {});
+
+  ExtendedTensor clone(
+      const poplar::Type& type, const poplar::Tensor& t,
+      const poplar::DebugContext& debugContext = {},
+      poplar::TensorCloneMethod method =
+          poplar::TensorCloneMethod::PRESERVE_ORDER_UNLESS_ALIASES);
+  ExtendedTensor clone(
+      const poplar::Tensor& t, const poplar::DebugContext& debugContext = {},
+      poplar::TensorCloneMethod method =
+          poplar::TensorCloneMethod::PRESERVE_ORDER_UNLESS_ALIASES);
 
   void addPoplibsCodelets() {
     poplin::addCodelets(*this);
@@ -72,9 +83,8 @@ class ExtendedGraph : public snap::Graph {
                              poplar::ArrayRef<T> values,
                              const poplar::DebugContext& debugContext = {
                                  "<const>"}) {  // NOLINT
-    auto tensor =
-        getPoplarGraph().addConstant(type, shape, values, debugContext);
-    return {std::move(tensor), *this};
+    auto tensor = snap::Graph::addConstant(type, shape, values, debugContext);
+    return {std::move(tensor)};
   }
 
   template <typename T>
@@ -83,12 +93,34 @@ class ExtendedGraph : public snap::Graph {
                              const poplar::DebugContext& debugContext = {
                                  "<const>"}) {  // NOLINT
     auto tensor = getPoplarGraph().addConstant(type, shape, val, debugContext);
-    return {std::move(tensor), *this};
+    return {tensor, *this};
   }
+
+  void setTileMapping(poplar::VertexRef v, unsigned tileNum);
+
+  void setTileMapping(const ExtendedTensor& t, unsigned tileNum);
+
+  void setTileMapping(const poplar::Tensor& t, unsigned tileNum);
 
   poplar::Graph::TileToTensorMapping getTileMapping(poplar::Tensor t);
 
   poplar::Function addFunction(const poplar::program::Program& program);
+
+  poplar::HostFunction addHostFunction(
+      poplar::StringRef handle,
+      poplar::ArrayRef<poplar::Graph::HostFunctionArgument> inputs,
+      poplar::ArrayRef<poplar::Graph::HostFunctionArgument> outputs);
+
+  ExtendedDataStream addHostToDeviceFIFO(
+      poplar::StringRef handle, const poplar::Type& elementType,
+      std::size_t numElements,
+      poplar::ReplicatedStreamMode replicatedMode =
+          poplar::ReplicatedStreamMode::REPLICATE,
+      const poplar::OptionFlags& options = {});
+
+  ExtendedDataStream addDeviceToHostFIFO(
+      poplar::StringRef handle, const poplar::Type& elementType,
+      std::size_t numElements, const poplar::OptionFlags& options = {});
 
   void createHostWrite(poplar::StringRef handle, const ExtendedTensor& t,
                        bool rearrangeOnHost = false);
@@ -104,13 +136,43 @@ class ExtendedGraph : public snap::Graph {
   void setInitialValueHalf(const poplar::Tensor& t,
                            poplar::ArrayRef<uint16_t> values);
 
+  bool addCodelets(poplar::StringRef src,
+                   poplar::CodeletFileType type = poplar::CodeletFileType::Auto,
+                   poplar::StringRef compileFlags = "",
+                   poplar::StringRef targetName = "");
+
+  void addCodelets(
+      std::stringstream& stream, poplar::StringRef compileFlags = "",
+      poplar::CodeletFileType type = poplar::CodeletFileType::CppSource,
+      poplar::StringRef targetName = "");
+
   void addCodelets(
       std::stringstream& stream, poplar::StringRef compileFlags,
       std::ostream& compileOutput,
       poplar::CodeletFileType type = poplar::CodeletFileType::CppSource,
       poplar::StringRef targetName = "");
 
-  void setTileMapping(const ExtendedTensor& t, unsigned tileNum);
+  poplar::ComputeSet addComputeSet(
+      const poplar::DebugContext& debugContext = {}) {
+    return getPoplarGraph().addComputeSet(debugContext);
+  }
+
+  poplar::VertexRef addVertex(poplar::ComputeSet cs,
+                              poplar::StringRef vertexType);
+
+  poplar::VertexRef addVertex(
+      poplar::ComputeSet cs, poplar::StringRef vertexType,
+      poplar::ArrayRef<poplar::Graph::ConnectionDesc> connections);
+
+  void connect(poplar::FieldRef field, const poplar::Tensor& tensor);
+
+  std::vector<std::vector<poplar::Interval>> getSortedContiguousRegions(
+      const poplar::Tensor& t, poplar::ArrayRef<poplar::Interval> regions,
+      bool removeAliasedIntervals = false,
+      std::vector<std::size_t>* aliases = nullptr) const;
+
+  void setPerfEstimate(const poplar::VertexRef& v, std::uint64_t cycles,
+                       std::uint64_t flops = 0);
 };
 
 }  // namespace poplarplugin

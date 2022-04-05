@@ -28,6 +28,7 @@ namespace poplarplugin {
 
 using DriverGraph = ExtendedGraph;
 using DriverTensor = ExtendedTensor;
+using DriverDataStream = ExtendedDataStream;
 
 using DriverProgramSequence = ExtendedProgramSequence;
 using DriverProgramCopy = ExtendedProgramCopy;
