@@ -477,7 +477,10 @@ void AllocationFinder::FindConsumers(
           FindConsumersExtensionParams{src, tgt, index, op_index, permutation});
       switch (result.do_find_consumers) {
         case DoFindConsumers::UNSPECIFIED: {
-          if (ShapeUtil::Compatible(tgt->shape(), user->shape())) {
+          auto shapes = FlattenedXlaShape(src.instruction->shape());
+          // Ignore the element type (paths can contain casts).
+          if (shapes[src.flattened_output_tuple_index].dimensions() ==
+              user->shape().dimensions()) {
             FindConsumers(src, user, index, permutation, path, explored);
           }
           break;
