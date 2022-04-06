@@ -179,6 +179,7 @@ py_library(
         "optimizers/ipu_optimizer.py",
         "optimizers/map_gradient_optimizer.py",
         "optimizers/sharded_optimizer.py",
+        "register_keras_extensions.py",
         "scopes.py",
         "serving.py",
         "sharding.py",

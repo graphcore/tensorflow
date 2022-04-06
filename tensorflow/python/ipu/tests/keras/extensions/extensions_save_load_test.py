@@ -21,6 +21,7 @@ from tensorflow.python import ipu
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu.keras import extensions
 from tensorflow.python.keras import models
+from tensorflow.python.keras.engine import base_layer
 from tensorflow.python.keras.engine import sequential
 from tensorflow.python.keras.saving import save
 from tensorflow.python.keras.engine import functional
@@ -71,7 +72,9 @@ class KerasExtensionsSaveLoadTest(test.TestCase, parameterized.TestCase):
 
     with strategy.scope():
       # Replace the extension with the test version.
-      strategy._register_keras_extension(functional.Functional, TestExtension)  # pylint: disable=protected-access
+      strategy._register_keras_extension(functional.Functional,
+                                         base_layer.TFKerasExtension,
+                                         TestExtension)  # pylint: disable=protected-access
 
       inputs = {
           'x1': layers.Input(shape=(10,)),
@@ -136,7 +139,9 @@ class KerasExtensionsSaveLoadTest(test.TestCase, parameterized.TestCase):
 
     with strategy.scope():
       # Replace the extension with the test version.
-      strategy._register_keras_extension(sequential.Sequential, TestExtension)  # pylint: disable=protected-access
+      strategy._register_keras_extension(sequential.Sequential,
+                                         base_layer.TFKerasExtension,
+                                         TestExtension)  # pylint: disable=protected-access
 
       model = sequential.Sequential([layers.Dense(1, activation='relu')])
       self.assertFalse(model.test_option)
@@ -241,7 +246,9 @@ class KerasExtensionsSaveLoadTest(test.TestCase, parameterized.TestCase):
     with strategy.scope():
       # Replace the extension with the test version.
       # pylint: disable=protected-access
-      strategy._register_keras_extension(training_module.Model, TestExtension)
+      strategy._register_keras_extension(training_module.Model,
+                                         base_layer.TFKerasExtension,
+                                         TestExtension)
 
       dataset = create_dataset(IN_SHAPE, NUM_SAMPLES, BATCH_SIZE)
 

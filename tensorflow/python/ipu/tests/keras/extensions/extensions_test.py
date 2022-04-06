@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Test for KerasExtension interface."""
+"""Test for TFKerasExtension interface."""
 
 import numpy as np
 
@@ -47,7 +47,7 @@ def get_imdb_dataset(num_words, maxlen):
   return ds
 
 
-class KerasExtensionsTest(test.TestCase):
+class TFKerasExtensionsTest(test.TestCase):
   @test_util.run_v2_only
   def testExtension(self):
     cfg = config.IPUConfig()
@@ -66,15 +66,17 @@ class KerasExtensionsTest(test.TestCase):
       return layer(10.)
 
     def inner_test(expected_value, extension):
-      strategy._register_keras_extension(TestLayer, extension)  # pylint: disable=protected-access
+      strategy._register_keras_extension(TestLayer,
+                                         base_layer.TFKerasExtension,
+                                         extension)  # pylint: disable=protected-access
       with strategy.scope():
         l = TestLayer()
         result = strategy.run(fn, args=[l])
         self.assertAllClose(result, expected_value)
-      strategy._delete_keras_extension(TestLayer)  # pylint: disable=protected-access
+      strategy._delete_keras_extension(TestLayer, base_layer.TFKerasExtension)  # pylint: disable=protected-access
 
     # Test replacement.
-    class TestExtension1(base_layer.KerasExtension):
+    class TestExtension1(base_layer.TFKerasExtension):
       def _call_supported(self, *args, **kwargs):  # pylint: disable=unused-argument
         return True
 
@@ -84,7 +86,7 @@ class KerasExtensionsTest(test.TestCase):
     inner_test(100., TestExtension1)
 
     # Test replacement fails - not supported.
-    class TestExtension2(base_layer.KerasExtension):
+    class TestExtension2(base_layer.TFKerasExtension):
       def _call_supported(self, *args, **kwargs):  # pylint: disable=unused-argument
         return False
 
@@ -94,14 +96,14 @@ class KerasExtensionsTest(test.TestCase):
     inner_test(11., TestExtension2)
 
     # Test replacement fails - not implemented.
-    class TestExtension3(base_layer.KerasExtension):
+    class TestExtension3(base_layer.TFKerasExtension):
       def _call_supported(self, *args, **kwargs):  # pylint: disable=unused-argument
         return False
 
     inner_test(11., TestExtension3)
 
     # Test replacement fails - mismatch in spec.
-    class TestExtension4(base_layer.KerasExtension):
+    class TestExtension4(base_layer.TFKerasExtension):
       def _call_supported(self, *args, **kwargs):  # pylint: disable=unused-argument
         return False
 
@@ -111,7 +113,7 @@ class KerasExtensionsTest(test.TestCase):
     inner_test(11., TestExtension4)
 
     # Test replacement and calling through.
-    class TestExtension5(base_layer.KerasExtension):
+    class TestExtension5(base_layer.TFKerasExtension):
       def _call_supported(self, *args, **kwargs):  # pylint: disable=unused-argument
         return True
 
@@ -141,7 +143,7 @@ class KerasExtensionsTest(test.TestCase):
         x = cls.__base__.my_classmethod(x)
         return x * 2
 
-    class TestExtension(base_layer.KerasExtension):
+    class TestExtension(base_layer.TFKerasExtension):
       @classmethod
       def _my_classmethod_supported(cls, *args, **kwargs):  # pylint: disable=unused-argument
         return True
@@ -157,7 +159,8 @@ class KerasExtensionsTest(test.TestCase):
       TestExtension.method_was_called_times = 0
 
     strategy = ipu_strategy.IPUStrategyV1()
-    strategy._register_keras_extension(TestLayer, TestExtension)  # pylint: disable=protected-access
+    strategy._register_keras_extension(TestLayer, base_layer.TFKerasExtension,
+                                       TestExtension)  # pylint: disable=protected-access
     with strategy.scope():
       reset_spies()
       output = TestLayer.my_classmethod(2)

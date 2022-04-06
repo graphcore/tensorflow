@@ -84,7 +84,7 @@ class _Mode(enum.Enum):
   PREDICT = 3
 
 
-class KerasExtensionBase(base_layer.KerasExtension):
+class KerasExtensionBase(base_layer.TFKerasExtension):
   @trackable.no_automatic_dependency_tracking
   def __init__(self):
     # Following values need to be serializable.

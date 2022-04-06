@@ -16,13 +16,24 @@ from collections import OrderedDict
 
 from tensorflow.python.eager import context
 from tensorflow.python.ipu import ipu_infeed_queue
-from tensorflow.python.keras.engine import base_layer
-from tensorflow.python.ipu.keras.extensions import functional_extensions
-from tensorflow.python.ipu.keras.extensions import sequential_extensions
-from tensorflow.python.ipu.keras.extensions import model_extensions
-from tensorflow.python.keras.engine import functional
-from tensorflow.python.keras.engine import sequential
-from tensorflow.python.keras.engine import training
+
+
+class _ExtensionsManager:
+  def __init__(self):
+    self._extensions = OrderedDict()
+
+  def _register_extension(self, class_type, extension_type, extension):
+    self._extensions[(class_type, extension_type)] = extension
+
+  def _delete_extension(self, class_type, extension_type):
+    self._extensions.pop((class_type, extension_type), None)
+
+  def __iter__(self):
+    for key, value in self._extensions.items():
+      yield key, value
+
+
+_extensions_manager = _ExtensionsManager()
 
 
 class KerasExtensions:
@@ -35,14 +46,8 @@ class KerasExtensions:
     self._enable_keras_extensions = enable_keras_extensions
     self._keras_extensions = OrderedDict()
 
-    # Insert Sequential before Functional as Sequential models inherit from
-    # Functional models.
-    self._register_keras_extension(sequential.Sequential,
-                                   sequential_extensions.SequentialExtension)
-    self._register_keras_extension(functional.Functional,
-                                   functional_extensions.FunctionalExtension)
-    self._register_keras_extension(training.Model,
-                                   model_extensions.ModelExtension)
+    for (class_type, extension_type), extension in _extensions_manager:
+      self._register_keras_extension(class_type, extension_type, extension)
 
   def _enable_dataset_iterators(self):
     return context.executing_eagerly() and self._enable_iterators
@@ -51,25 +56,26 @@ class KerasExtensions:
     assert self._enable_dataset_iterators()
     return ipu_infeed_queue.IPUOwnedIterator(dataset=dataset)  # pylint: disable=protected-access
 
-  def _register_keras_extension(self, class_type, extension):
-    self._keras_extensions[class_type] = extension
+  def _register_keras_extension(self, class_type, extension_type, extension):
+    self._keras_extensions[(class_type, extension_type)] = extension
 
-  def _get_keras_extension(self, class_type):
+  def _get_keras_extension(self, class_type, extension_type):
     try:
-      return self._keras_extensions[class_type]
+      return self._keras_extensions[(class_type, extension_type)]
     except KeyError:
       return None
 
-  def _delete_keras_extension(self, class_type):
-    self._keras_extensions.pop(class_type, None)
+  def _delete_keras_extension(self, class_type, extension_type):
+    self._keras_extensions.pop((class_type, extension_type), None)
 
   def _patch_keras_extension(self, instance):
     if not self._enable_keras_extensions:
       return
 
-    for class_type, extension_cls in self._keras_extensions.items():
+    for (class_type,
+         extension_type), extension_cls in self._keras_extensions.items():
       if isinstance(instance, class_type):
-        if isinstance(instance, base_layer.KerasExtension):
+        if isinstance(instance, extension_type):
           if not isinstance(instance, extension_cls):
             raise RuntimeError(
                 "KerasExtension patching failed - already patched with a "

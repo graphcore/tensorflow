@@ -3285,7 +3285,7 @@ def _convert_numpy_or_python_types(x):
 InputSpec = input_spec.InputSpec  # pylint:disable=invalid-name
 
 # Begin IPU specific changes.
-class KerasExtension:
+class TFKerasExtension:
   """Base class for Keras extensions which allow the Keras API to be
   extended/overridden based on the strategy.
   """
@@ -3298,11 +3298,11 @@ def _patch_keras_extension(instance):
 
 def extension_delegate(func):
   """Function annotation which allows a function to be delegated to a
-  KerasExtension implementation of that function.
+  TFKerasExtension implementation of that function.
 
   An annotator which allows the function to be delegated at runtime to a
   different extension function if the Keras `Layer` derives from a
-  `KerasExtension`. If a function with name `x` is annotated, then this tries to
+  `TFKerasExtension`. If a function with name `x` is annotated, then this tries to
   find functions `_x_supported` and `_x_delegate`, and it will return
   `_x_delegate` if `_x_supported` evaluates to `True`, otherwise it will return
   `func`.
@@ -3335,14 +3335,14 @@ def extension_delegate(func):
         except KeyError:
           pass
 
-    obj_is_patched = isinstance(obj, KerasExtension)
+    obj_is_patched = isinstance(obj, TFKerasExtension)
     extension = None
     if func_is_classmethod:
       strategy = ds_context.get_strategy()
       if hasattr(strategy, "_get_keras_extension"):
         # Find the extension for this class.
         for cls in inspect.getmro(obj):
-          extension = strategy._get_keras_extension(cls)
+          extension = strategy._get_keras_extension(cls, TFKerasExtension)
           if extension is not None:
             break
         obj_is_patched = bool(extension)
@@ -3380,11 +3380,11 @@ def extension_delegate(func):
 
 def extension_delegate_if_exists(func_name, instance, *args, **kwargs):
   """Function wrapper which allows a function `func_name` to be delegated to a
-  KerasExtension implementation of that function if it exists.
+  TFKerasExtension implementation of that function if it exists.
 
   An annotator which allows the function to be delegated at runtime to a
   different extension function if the Keras `Layer` derives from a
-  `KerasExtension`. If a function with name `x` is annotated, then this tries to
+  `TFKerasExtension`. If a function with name `x` is annotated, then this tries to
   find functions `_x_supported` and `_x_delegate`, and it will return
   `_x_delegate` if `_x_supported` evaluates to `True`, otherwise it will return
   `func`.
@@ -3399,7 +3399,7 @@ def extension_delegate_if_exists(func_name, instance, *args, **kwargs):
       A wrapped function which can delegate to an extension.
   """
   prefix = "" if func_name.startswith("_") else "_"
-  if isinstance(instance, KerasExtension):
+  if isinstance(instance, TFKerasExtension):
     supported_func_name = prefix + func_name + "_supported"
     delegate_func_name = prefix + func_name + "_delegate"
 
