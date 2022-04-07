@@ -845,6 +845,102 @@ main {
   EXPECT_EQ(shardings[1].GetUniqueDevice(), 1);
 }
 
+TEST_F(ShardingPassTest, TestInfeedsWithPartiallySpecifiedSharding) {
+  // This tests that we can infer a sharding for an infeed when not
+  // all of the tuple elements returned by the infeed have been sharded.
+  // In this case we're feeding in two values (f16[4,64,64,3], s32[4])
+  // but are only sharding the first one. We expect s32[4]
+  // (get-tuple-element.34) to be assigned default sharding which will let
+  // the infeed sharding be resolved.
+  const std::string hlo_string = R"(
+HloModule top
+
+ main {
+  after-all.4 = token[] after-all()
+  inf1 = ((f16[4,64,64,3], s32[4]), token[]) infeed(after-all.4), infeed_config="\022\0011\"\002\023\003(\003"
+  get-tuple-element.30 = (f16[4,64,64,3], s32[4]) get-tuple-element(inf1), index=0
+  get-tuple-element.31 = f16[4,64,64,3] get-tuple-element(get-tuple-element.30), index=0
+  arg_1 = f16[3,64] parameter(0)
+  dot.4 = f16[4,64,64,64] dot(get-tuple-element.31, arg_1), lhs_contracting_dims={3}, rhs_contracting_dims={0}, sharding={maximal device=1}
+  arg_2 = f16[64,64] parameter(1)
+  dot.5 = f16[4,64,64,64] dot(dot.4, arg_2), lhs_contracting_dims={3}, rhs_contracting_dims={0}, sharding={maximal device=1}
+  get-tuple-element.34 = s32[4] get-tuple-element(get-tuple-element.30), index=1
+  ROOT tuple.8 = (f16[4,64,64,64], s32[4]) tuple(dot.5, get-tuple-element.34)
+ }
+)";
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+  auto* comp = module->entry_computation();
+
+  ShardingPass shardingPass;
+  ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  auto* inf1 = comp->GetInstructionWithName("inf1");
+  ASSERT_TRUE(inf1->has_sharding());
+  ASSERT_TRUE(inf1->sharding().IsTuple());
+  auto shardings = inf1->sharding().tuple_elements();
+  ASSERT_TRUE(shardings[0].HasUniqueDevice());
+  ASSERT_EQ(shardings[0].GetUniqueDevice(), 1);
+  ASSERT_TRUE(shardings[1].HasUniqueDevice());
+  ASSERT_EQ(shardings[1].GetUniqueDevice(), 0);
+}
+
+TEST_F(ShardingPassTest, TestOutfeedsDontTakeTokenSharding) {
+  // This tests that outfeeds take sharding from their outfed data
+  // input, not from their token.
+  const std::string hlo_string = R"(
+HloModule top
+
+main {
+  arg_1 = f16[3,64] parameter(1)
+  arg_2 = f16[4,64,64,3] parameter(2)
+  dot.4 = f16[4,64,64,64] dot(arg_2, arg_1), lhs_contracting_dims={3}, rhs_contracting_dims={0}, sharding={maximal device=0}
+  arg_3 = f16[64,64] parameter(3)
+  dot.5 = f16[4,64,64,64] dot(dot.4, arg_3), lhs_contracting_dims={3}, rhs_contracting_dims={0}, sharding={maximal device=1}
+  arg_4 = s32[4] parameter(4)
+  outfed_tuple = (f16[4,64,64,64], s32[4]) tuple(dot.5, arg_4)
+  after-all.5 = token[] after-all()
+  outfeed = token[] outfeed(outfed_tuple, after-all.5), outfeed_config="\022\0012\"\002\023\003(\003"
+  arg_0 = s32[] parameter(0)
+  ROOT tuple.10 = (s32[], f16[3,64], f16[64,64]) tuple(arg_0, arg_1, arg_3)
+}
+)";
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+  auto* comp = module->entry_computation();
+
+  ShardingPass shardingPass;
+  ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  auto* outfed_tuple = comp->GetInstructionWithName("outfed_tuple");
+  ASSERT_TRUE(outfed_tuple->has_sharding());
+  const auto outfed_tuple_sharding = outfed_tuple->sharding();
+
+  auto* outfeed = comp->GetInstructionWithName("outfeed");
+  ASSERT_TRUE(outfeed->has_sharding());
+
+  ASSERT_EQ(outfeed->sharding(), outfed_tuple_sharding);
+
+  ASSERT_TRUE(outfed_tuple_sharding.IsTuple());
+  auto shardings = outfed_tuple_sharding.tuple_elements();
+
+  ASSERT_EQ(shardings.size(), 2);
+  ASSERT_TRUE(shardings[0].HasUniqueDevice());
+  ASSERT_EQ(shardings[0].GetUniqueDevice(), 1);
+  ASSERT_TRUE(shardings[1].HasUniqueDevice());
+  ASSERT_EQ(shardings[1].GetUniqueDevice(), 0);
+}
+
 TEST_F(ShardingPassTest, TestGteOpsMatchTheirOperands) {
   std::string hlo_string = R"(
 HloModule top

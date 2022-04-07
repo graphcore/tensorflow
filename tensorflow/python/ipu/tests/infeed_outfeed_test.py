@@ -1475,6 +1475,64 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertAllEqual(np.full([1, 10, 10], 0), out[6])
       self.assertAllEqual(np.full([1, 10, 10], 0), out[7])
 
+  @test_util.deprecated_graph_mode_only
+  def testValidSharding(self):
+    # Reproducer from T59245
+    ipu_options = ipu.config.IPUConfig()
+    ipu_options.auto_select_ipus = 2
+
+    ipu_options.configure_ipu_system()
+    ipu.utils.move_variable_initialization_to_cpu()
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+
+    images = dataset_ops.Dataset.from_tensors(
+        np.ones((64, 64, 3), dtype=np.float16))
+    labels = dataset_ops.Dataset.from_tensors(np.ones((), dtype=np.int32))
+    tf_dataset = dataset_ops.Dataset.zip(
+        (images, labels)).repeat(4).batch(4, drop_remainder=True).repeat()
+
+    with ops.device('cpu'):
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(tf_dataset)
+
+    def retinanet_validating_loop():
+      def body(images, imgIds):
+        with variable_scope.variable_scope("MainGraph"):
+          with ipu.scopes.ipu_shard(0):
+            w1 = variable_scope.get_variable(
+                "w1",
+                shape=[3, 64],
+                dtype=np.float16,
+                initializer=init_ops.glorot_uniform_initializer(
+                    dtype=np.float16))
+            y = math_ops.matmul(images, w1)
+
+          with ipu.scopes.ipu_shard(1):
+            w2 = variable_scope.get_variable(
+                "w2",
+                shape=[64, 64],
+                dtype=np.float16,
+                initializer=init_ops.glorot_uniform_initializer(
+                    dtype=np.float16))
+            scores = math_ops.matmul(y, w2)
+
+        out = outfeed_queue.enqueue([scores, imgIds])
+        return out
+
+      return ipu.loops.repeat(128, body, inputs=[], infeed_queue=infeed_queue)
+
+    with ipu.scopes.ipu_scope('/device:IPU:0'):
+      retinanet_validation_step = ipu.ipu_compiler.compile(
+          retinanet_validating_loop, inputs=[])
+
+    session = session_lib.Session()
+    session.run(infeed_queue.initializer)
+    session.run(variables.global_variables_initializer())
+    try:
+      # This can throw if the sharding of body is incorrect.
+      session.run(retinanet_validation_step)
+    except Exception as e:  # pylint: disable=broad-except
+      self.fail(f"Unexpected exception thrown: {e}")
+
   @test_util.run_v2_only
   def testDeduceDevice(self):
     cfg = ipu.config.IPUConfig()
