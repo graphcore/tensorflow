@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import os
 import tempfile
 
 import numpy as np
@@ -182,6 +183,22 @@ class TestServingExport(TestServingExportBase):
       ref_result = (x1_data + x2_data) * var_value
       self.assertEqual(list(result), list(ref_result))
 
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
+  @test_util.run_v2_only
+  def test_export_single_step_fails_for_non_empty_dir(self):
+    input_signature = (tensor_spec.TensorSpec(shape=(4,),
+                                              dtype=np.float32,
+                                              name='x'),)
+
+    @def_function.function
+    def my_net(x):
+      return x * x
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      open(os.path.join(tmp_folder, 'dummy_file'), 'w').close()
+      with self.assertRaisesRegex(ValueError, "is not empty"):
+        serving.export_single_step(my_net, tmp_folder, 16, input_signature)
+
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.run_v2_only
   def test_export_pipeline(self):
@@ -281,6 +298,24 @@ class TestServingExport(TestServingExportBase):
       result = self._load_and_run(tmp_folder, {'x2': x2_data, 'x3': x3_data})
       ref_result = 42.0 * x2_data + x3_data + 2
       self.assertEqual(list(result), list(ref_result))
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
+  @test_util.run_v2_only
+  def test_export_pipeline_fails_for_non_empty_dir(self):
+    input_signature = (tensor_spec.TensorSpec(shape=(4,), dtype=np.float32))
+
+    def stage(x):
+      return x + 2
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      open(os.path.join(tmp_folder, 'dummy_file'), 'w').close()
+      with self.assertRaisesRegex(ValueError, "is not empty"):
+        serving.export_pipeline([stage, stage],
+                                tmp_folder,
+                                pipeline_depth=2,
+                                iterations=16,
+                                device_mapping=[0, 0],
+                                input_signature=input_signature)
 
 
 class KerasExportForServingTest(TestServingExportBase):
@@ -410,6 +445,24 @@ class KerasExportForServingTest(TestServingExportBase):
     with tempfile.TemporaryDirectory() as tmp_folder:
       with self.assertRaisesRegex(ValueError, "IPU strategy"):
         serving.export_keras(model, tmp_folder)
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
+  @test_util.run_v2_only
+  def test_export_keras_fails_for_non_empty_dir(self):
+    input_shape = (1,)
+    strategy = ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      model = keras.models.Sequential()
+      model.add(keras.layers.Activation('relu'))
+      model.build(input_shape)
+      model.compile(steps_per_execution=16)
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      open(os.path.join(tmp_folder, 'dummy_file'), 'w').close()
+      with self.assertRaisesRegex(ValueError, "is not empty"):
+        serving.export_keras(model, tmp_folder)
+      with self.assertRaisesRegex(ValueError, "is not empty"):
+        model.export_for_ipu_serving(tmp_folder)
 
   @tu.test_uses_ipus(num_ipus=2, allow_ipu_model=False)
   @test_util.run_v2_only

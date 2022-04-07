@@ -19,6 +19,7 @@ IPU specific Keras Model extensions
 import copy
 import enum
 import math
+import os
 import sys
 import six
 import libpvti
@@ -1898,7 +1899,14 @@ class KerasExtensionBase(base_layer.TFKerasExtension):
       using the SavedModel format. This function uses the embedded runtime op to
       run the executable that was included in the SavedModel's ``assets``
       subfolder.
+
+    Raises:
+      ValueError: If ``export_dir`` is not an empty directory.
     """
+    if os.path.isdir(export_dir) and os.listdir(export_dir):
+      raise ValueError(
+          "Directory is not empty. Please specify an empty directory.")
+
     input_signature = self._get_call_signature()
     defunc = self._wrap_model_call_for_serving(input_signature)
     return serving._export_saved_model(defunc, export_dir, input_signature)  # pylint: disable=protected-access

@@ -222,9 +222,14 @@ def export_single_step(predict_step,
 
   Raises:
     ValueError: If both `input_signature` and `input_dataset` are provided.
+    ValueError: If ``export_dir`` is not an empty directory.
     TypeError: If `input_dataset` was provided and is not an instance of
       `tf.Dataset`.
   """
+  if os.path.isdir(export_dir) and os.listdir(export_dir):
+    raise ValueError(
+        "Directory is not empty. Please specify an empty directory.")
+
   if input_signature is not None and input_dataset is not None:
     raise ValueError('Both input_signature and input_dataset cannot be '
                      'provided to export_single_step. Please pass only '
@@ -305,9 +310,14 @@ def export_pipeline(computational_stages,
     ValueError: If both `input_signature` and `input_dataset` are provided.
     ValueError: If `pipeline_depth` is not a multiple of the number of
       computational stages.
+    ValueError: If ``export_dir`` is not an empty directory.
     TypeError: If `input_dataset` was provided and is not an instance of
       `tf.Dataset`.
   """
+  if os.path.isdir(export_dir) and os.listdir(export_dir):
+    raise ValueError(
+        "Directory is not empty. Please specify an empty directory.")
+
   if input_signature is not None and input_dataset is not None:
     raise ValueError('Both input_signature and input_dataset cannot be '
                      'provided to export_pipeline. Please pass only '
@@ -366,7 +376,12 @@ def export_keras(model, export_dir):
 
   Raises:
     ValueError: If model was not created inside IPU strategy.
+    ValueError: If ``export_dir`` is not an empty directory.
   """
+  if os.path.isdir(export_dir) and os.listdir(export_dir):
+    raise ValueError(
+        "Directory is not empty. Please specify an empty directory.")
+
   if not isinstance(
       model, ipu_keras.extensions.keras_extension_base.KerasExtensionBase):
     raise ValueError(
