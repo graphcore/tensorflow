@@ -250,7 +250,6 @@ def export_single_step(predict_step,
 
 def export_pipeline(computational_stages,
                     export_dir,
-                    pipeline_depth,
                     iterations,
                     inputs=None,
                     device_mapping=None,
@@ -273,10 +272,9 @@ def export_pipeline(computational_stages,
       its inputs.
     export_dir (str): Path to the directory where the SavedModel will be
       written.
-    pipeline_depth (int): The number of times each computational stage
-      will be executed. It should be a multiple of the number of computational
-      stages.
-    iterations (int): The number of times the pipeline will be executed.
+    iterations (int): The number of times each computational stage
+      will be executed during the execution of the pipeline. It can also be
+      considered as the pipeline depth.
     inputs (list, optional): Arguments passed to the first computational stage
       without usage of infeed queue.
     device_mapping (list, optional): If provided, a list of length equal to the
@@ -309,8 +307,6 @@ def export_pipeline(computational_stages,
 
   Raises:
     ValueError: If both `input_signature` and `input_dataset` are provided.
-    ValueError: If `pipeline_depth` is not a multiple of the number of
-      computational stages.
     ValueError: If ``export_dir`` is not an empty directory.
     TypeError: If `input_dataset` was provided and is not an instance of
       `tf.Dataset`.
@@ -329,11 +325,6 @@ def export_pipeline(computational_stages,
     raise TypeError('If input_dataset is provided, it should be an instance '
                     'of tf.Dataset.')
 
-  if pipeline_depth % len(computational_stages) != 0:
-    raise ValueError(f'pipeline_depth ({pipeline_depth}) should be a multiple '
-                     f'of the number of computational stages '
-                     f'({len(computational_stages)}).')
-
   first_stage = computational_stages[0]
   input_signature = _validate_signature(first_stage, input_signature,
                                         input_dataset, inputs)
@@ -343,8 +334,7 @@ def export_pipeline(computational_stages,
   def defunc():
     pipelining_ops.pipeline(
         computational_stages=computational_stages,
-        gradient_accumulation_count=pipeline_depth,
-        repeat_count=iterations,
+        gradient_accumulation_count=iterations,
         inputs=inputs,
         infeed_queue=infeed,
         outfeed_queue=outfeed,
