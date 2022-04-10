@@ -17,18 +17,15 @@ import os
 import signal
 
 import absl.testing
-from absl.testing import parameterized
 import numpy as np
 import pva
 import test_utils as tu
 
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
 # FIXME: This import isn't used but prevents an absl.flags UnrecognizedFlagError that otherwise gets thrown
 from tensorflow.compiler.tests import xla_test  # pylint: disable=W0611
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu import functional_ops
 from tensorflow.keras import layers
 from tensorflow.python.ops import init_ops
@@ -53,18 +50,15 @@ from tensorflow.compat.v1 import disable_v2_behavior
 disable_v2_behavior()
 
 
-def run_graph(worker, reduction_method, *args, **kwargs):
+def run_graph(worker, *args, **kwargs):
   # FIXME: We need to use the multiprocessing module to run the tests
   # because the flags which we're using in the tests are stored
   # statically and so can't be changed between test runs w/o a new process.
-  def wrapper(result, reduction_method, *args, **kwargs):
-    if reduction_method is None:
-      result.value = worker(*args, **kwargs)
-    else:
-      result.value = worker(reduction_method, *args, **kwargs)
+  def wrapper(result, *args, **kwargs):
+    result.value = worker(*args, **kwargs)
 
   result = multiprocessing.Value('L', 0)
-  args = (result, reduction_method) + args
+  args = (result,) + args
   process = multiprocessing.Process(target=wrapper, args=args, kwargs=kwargs)
   process.start()
 
@@ -138,7 +132,7 @@ def hostembedding_test_graph(flags):
              for tile in report.compilation.tiles)
 
 
-def memory_test_graph(reduction_method, flags=""):
+def memory_test_graph(flags=""):
   poplar_flags = os.environ.get("TF_POPLAR_FLAGS", "")
   poplar_flags += flags
 
@@ -178,7 +172,7 @@ def memory_test_graph(reduction_method, flags=""):
           kernel_initializer=init_ops.constant_initializer(0.0125),
           bias_initializer=init_ops.constant_initializer(0.0125))(y)
       loss = math_ops.reduce_mean(
-          nn.sparse_softmax_cross_entropy_with_logits(logits=y, labels=label))
+          nn.sparse_softmax_cross_entropy_with_logits(logits=y, labels=label))  # pylint: disable=unexpected-keyword-arg,no-value-for-parameter
       return loss
 
     def inputs_fn():
@@ -201,13 +195,8 @@ def memory_test_graph(reduction_method, flags=""):
         def model(*args):
           loss = fwd_fn(*functional_ops._convert_to_list(args))  # pylint: disable=W0212, E1120
           enqueue_op = outfeed_queue.enqueue(loss)
-          opt = ga.GradientAccumulationOptimizerV2(
-              optimizer,
-              num_batches_to_accumulate,
-              reduction_method=reduction_method)
           outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
           outs.append(enqueue_op)
-          outs.append(opt.minimize(loss))
           return outs
 
         def my_net(*args):
@@ -238,75 +227,57 @@ class SyntheticDataMemoryUsage(absl.testing.parameterized.TestCase):
 
   @classmethod
   def setUpClass(cls):
-    cls.reference_usage = {
-        reduction_method: run_graph(memory_test_graph, reduction_method)
-        for reduction_method in ga.GradientAccumulationReductionMethod
-    }
+    cls.reference_usage = run_graph(memory_test_graph)
 
-  @parameterized.named_parameters(
-      *test_util.generate_combinations_with_testcase_name(
-          category=list(
-              filter(
-                  lambda category:
-                  (category != "hostembedding" and category != "seed"),
-                  categories)),
-          reduction_method=list(ga.GradientAccumulationReductionMethod)))
-  def testCategories(self, category, reduction_method):
-    self.assertIsNotNone(
-        SyntheticDataMemoryUsage.reference_usage[reduction_method])
+  @absl.testing.parameterized.parameters(*filter(
+      lambda category: not category in ["hostembedding", "seed"], categories))
+  def testCategories(self, category):
+    self.assertIsNotNone(SyntheticDataMemoryUsage.reference_usage)
 
     flag = f" --synthetic_data_categories='{category}'"
-    new_usage = run_graph(memory_test_graph, reduction_method, flag)
+    new_usage = run_graph(memory_test_graph, flag)
 
-    self.assertLess(new_usage,
-                    SyntheticDataMemoryUsage.reference_usage[reduction_method])
+    self.assertLess(new_usage, SyntheticDataMemoryUsage.reference_usage)
 
   def testHostEmbedding(self):
     # FIXME: memory_test_graph doesnt work with
     # embeddings as it introduces a pickling error with multiprocessing.Pool
-    reference_usage = run_graph(hostembedding_test_graph, None, "")
+    reference_usage = run_graph(hostembedding_test_graph, "")
 
     flags = " --synthetic_data_categories='hostembedding'"
-    new_usage = run_graph(hostembedding_test_graph, None, flags)
+    new_usage = run_graph(hostembedding_test_graph, flags)
 
     self.assertLess(new_usage, reference_usage)
 
-  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
-  def testUseSyntheticDataFlagIsEquivalentToAllCategories(
-      self, reduction_method):
+  def testUseSyntheticDataFlagIsEquivalentToAllCategories(self):
     flags = " --use_synthetic_data=true"
-    synthetic_data_usage = run_graph(memory_test_graph, reduction_method,
-                                     flags)
+    synthetic_data_usage = run_graph(memory_test_graph, flags)
 
     flag_separator = ","
     flags = f" --synthetic_data_categories='{flag_separator.join(self.categories)}'"  # pylint: disable=C0301
-    categories_usage = run_graph(memory_test_graph, reduction_method, flags)
+    categories_usage = run_graph(memory_test_graph, flags)
 
     self.assertEqual(categories_usage, synthetic_data_usage)
 
-  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
-  def testUsingInvalidCategoryTerminates(self, reduction_method):
+  def testUsingInvalidCategoryTerminates(self):
     flag = " --synthetic_data_categories=FOO"
     self.assertRaises(multiprocessing.ProcessError, run_graph,
-                      memory_test_graph, reduction_method, flag)
+                      memory_test_graph, flag)
 
-  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
-  def testUsingFlagsWithWhitespace(self, reduction_method):
+  def testUsingFlagsWithWhitespace(self):
     flags = " --synthetic_data_categories=infeed,outfeed,seed"
-    expected_output = run_graph(memory_test_graph, reduction_method, flags)
+    expected_output = run_graph(memory_test_graph, flags)
 
     flags = " --synthetic_data_categories='infeed,   outfeed , seed'"
-    output = run_graph(memory_test_graph, reduction_method, flags)
+    output = run_graph(memory_test_graph, flags)
 
     self.assertEqual(output, expected_output)
 
-  @parameterized.parameters(list(ga.GradientAccumulationReductionMethod))
-  def testFlagsCanBeUsedWithSyntheticDataInitializer(self, reduction_method):
+  def testFlagsCanBeUsedWithSyntheticDataInitializer(self):
     flags = " --synthetic_data_categories=infeed --synthetic_data_initializer=2"
-    output = run_graph(memory_test_graph, reduction_method, flags)
+    output = run_graph(memory_test_graph, flags)
 
-    self.assertLess(output,
-                    SyntheticDataMemoryUsage.reference_usage[reduction_method])
+    self.assertLess(output, SyntheticDataMemoryUsage.reference_usage)
 
 
 if __name__ == "__main__":
