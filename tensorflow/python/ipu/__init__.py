@@ -61,20 +61,28 @@ from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_multi_worker_strategy
 from tensorflow.python.ipu import ipu_outfeed_queue
-from tensorflow.python.ipu import ipu_run_config
-from tensorflow.python.ipu import ipu_session_run_hooks
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import serving
 from tensorflow.python.ipu import sharding
 from tensorflow.python.ipu import utils
-from tensorflow.python.ipu import ipu_estimator
-from tensorflow.python.ipu import ipu_pipeline_estimator
 from tensorflow.python.ipu import vertex_edsl
 
-from tensorflow.python.ipu.keras import layers
+# Lazy load estimator API to prevent dependency problems with Keras.
+from tensorflow.python.util import lazy_loader
+ipu_run_config = lazy_loader.LazyLoader(
+    "ipu_run_config", globals(), "tensorflow.python.ipu.ipu_run_config")
+ipu_session_run_hooks = lazy_loader.LazyLoader(
+    "ipu_session_run_hooks", globals(),
+    "tensorflow.python.ipu.ipu_session_run_hooks")
+ipu_estimator = lazy_loader.LazyLoader("ipu_estimator", globals(),
+                                       "tensorflow.python.ipu.ipu_estimator")
+ipu_pipeline_estimator = lazy_loader.LazyLoader(
+    "ipu_pipeline_estimator", globals(),
+    "tensorflow.python.ipu.ipu_pipeline_estimator")
 
+from tensorflow.python.ipu.keras import layers
 from tensorflow.python.ipu.keras import losses
 
 from tensorflow.python.ipu.optimizers import automatic_loss_scaling_optimizer

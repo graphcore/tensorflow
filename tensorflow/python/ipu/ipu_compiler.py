@@ -20,12 +20,17 @@ Compiler interface
 import collections
 import inspect
 
-from tensorflow_estimator.python.estimator import model_fn as estilib
 from tensorflow.python.compiler.xla import xla
 from tensorflow.python.framework import device as tf_device
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import scopes as ipu_scope
-from tensorflow.python.ipu import ipu_estimator
+
+# Lazy load estimator API to prevent dependency problems with Keras.
+from tensorflow.python.util import lazy_loader
+ipu_estimator = lazy_loader.LazyLoader("ipu_estimator", globals(),
+                                       "tensorflow.python.ipu.ipu_estimator")
+estilib = lazy_loader.LazyLoader(
+    "estilib", globals(), "tensorflow_estimator.python.estimator.model_fn")
 
 
 def compile(computation, inputs=None):
