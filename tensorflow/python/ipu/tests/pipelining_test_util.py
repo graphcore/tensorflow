@@ -34,7 +34,8 @@ from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import cross_replica_optimizer
 from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as gao
 from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour
 from tensorflow.compat.v1 import data as compat_v1_data
 
@@ -229,14 +230,14 @@ class PipelineTester(object):
         if optimizer:
           if replication_factor > 1:
             opt = \
-              ga.CrossReplicaGradientAccumulationOptimizerV2(# pylint: disable=line-too-long
+              gao.CrossReplicaGradientAccumulationOptimizerV2(# pylint: disable=line-too-long
                   optimizer,
                   num_batches_to_accumulate,
                   replicated_optimizer_state_sharding=replicated_optimizer_state_sharding, # pylint: disable=line-too-long
                   reduction_method=reduction_method)
           else:
             opt = \
-              ga.GradientAccumulationOptimizerV2(
+              gao.GradientAccumulationOptimizerV2(
                   optimizer,
                   num_batches_to_accumulate,
                   replicated_optimizer_state_sharding=replicated_optimizer_state_sharding, # pylint: disable=line-too-long

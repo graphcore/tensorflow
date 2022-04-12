@@ -316,7 +316,7 @@ In addition to the `tensorflow.python.ipu.optimizers` namespace, it is also poss
 .. note:: The `ipu.optimizers` optimizer classes can only be used with subclasses of `tensorflow.compat.v1.train.Optimizer`.
 
 You can configure :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2` and :class:`~tensorflow.python.ipu.optimizers.CrossReplicaGradientAccumulationOptimizerV2`
-with an optional reduction method (see :numref:`table_gradient_reduction_options`) defining how to accumulate gradients (see enumerated class :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`).
+with an optional reduction method (see :numref:`table_gradient_reduction_options`) defining how to accumulate gradients (see enumerated class :class:`~tensorflow.python.ipu.gradient_accumulation.GradientAccumulationReductionMethod`).
 
 .. table:: Gradient reduction options
   :name: table_gradient_reduction_options
@@ -334,9 +334,13 @@ with an optional reduction method (see :numref:`table_gradient_reduction_options
   |                           | within the mini-batch.                                                        |
   +---------------------------+-------------------------------------------------------------------------------+
 
+.. automodule:: tensorflow.python.ipu.gradient_accumulation
+  :members: GradientAccumulationReductionMethod
+  :imported-members: GradientAccumulationReductionMethod
+
 .. automodule:: tensorflow.python.ipu.optimizers
-  :members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, GradientAccumulationReductionMethod, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
-  :imported-members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, GradientAccumulationReductionMethod, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
+  :members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
+  :imported-members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
   :special-members: __init__
 
 .. _sharding-api:

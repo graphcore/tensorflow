@@ -37,7 +37,7 @@ from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import internal_ops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
 

@@ -49,7 +49,7 @@ from tensorflow.python.ipu import normalization_ops
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
 from tensorflow.python.ipu.optimizers import map_gradient_optimizer
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
@@ -2854,8 +2854,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with ops.device("/device:IPU:0"):
       with self.assertRaisesRegex(
-          ValueError, 'reduction_method must be set to one '
-          'of GradientAccumulationReductionMethod'):
+          ValueError,
+          'Cannot parse None as one of GradientAccumulationReductionMethod.'):
         ipu_compiler.compile(my_net, inputs=[])
 
   @parameterized.parameters([
@@ -2878,8 +2878,8 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with ops.device("/device:IPU:0"):
       with self.assertRaisesRegex(
-          ValueError, 'reduction_method must be set to one '
-          'of GradientAccumulationReductionMethod'):
+          ValueError, f"Cannot parse {reduction_method} as one of "
+          "GradientAccumulationReductionMethod."):
         ipu_compiler.compile(my_net, inputs=[])
 
 

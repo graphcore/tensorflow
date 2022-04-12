@@ -30,7 +30,8 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent as gd
 from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import loops
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as gao
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 
@@ -250,7 +251,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase,
         optimizer_spec=embedding_ops.HostEmbeddingSGDGAOptimizerSpec(
             lr, acc_factor))
 
-    optimizer = ga.GradientAccumulationOptimizerV2(
+    optimizer = gao.GradientAccumulationOptimizerV2(
         gd.GradientDescentOptimizer(lr),
         acc_factor,
         reduction_method=reduction_method)

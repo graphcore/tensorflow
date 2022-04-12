@@ -24,7 +24,7 @@ from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import dtypes
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import loops
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.util import function_utils
@@ -112,7 +112,7 @@ class IPUPipelineEstimatorSpec(
         when using float16, but gives smaller gradients and might require
         adjusting the learning-rate accordingly.
         Defaults to `GradientAccumulationReductionMethod.SUM`
-        (see :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
+        (see :class:`~tensorflow.python.ipu.gradient_accumulation.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
       pipeline_op_kwargs: All remaining keyword arguments are forwarded to
         :func:`~tensorflow.python.ipu.pipelining_ops.pipeline`.
 

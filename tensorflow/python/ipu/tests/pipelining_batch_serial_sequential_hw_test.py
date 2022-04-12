@@ -28,7 +28,7 @@ from tensorflow.python.platform import test
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import momentum
 from tensorflow.python.ipu import pipelining_ops
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour
 

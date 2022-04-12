@@ -44,7 +44,8 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as gao
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
 
@@ -82,14 +83,14 @@ def _gradient_accumulation_loop(test_wrapper,
         loss = fwd_fn(*functional_ops._convert_to_list(args))  # pylint: disable=W0212
         enqueue_op = outfeed_queue.enqueue(loss)
         if replication_factor > 1:
-          opt = ga.CrossReplicaGradientAccumulationOptimizerV2(  # pylint: disable=line-too-long
+          opt = gao.CrossReplicaGradientAccumulationOptimizerV2(  # pylint: disable=line-too-long
               optimizer,
               num_batches_to_accumulate,
               reduction_method=reduction_method,
               offload_weight_update_variables=replicated_optimizer_state_sharding or None,  # pylint: disable=line-too-long
               replicated_optimizer_state_sharding=replicated_optimizer_state_sharding)  # pylint: disable=line-too-long
         else:
-          opt = ga.GradientAccumulationOptimizerV2(
+          opt = gao.GradientAccumulationOptimizerV2(
               optimizer,
               num_batches_to_accumulate,
               reduction_method=reduction_method)
@@ -687,7 +688,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
         self.assertEqual(var, w)
         return gradient_accumulation_dtype
 
-      opt = ga.GradientAccumulationOptimizerV2(
+      opt = gao.GradientAccumulationOptimizerV2(
           CastingGradientDescent(self),
           gradient_accumulation_count,
           dtype=dtype_getter,
@@ -801,7 +802,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
         def model(*args):
           loss = fwd_fn(*functional_ops._convert_to_list(args))  # pylint: disable=W0212,E1120
           enqueue_op = outfeed_queue.enqueue(loss)
-          opt = ga.GradientAccumulationOptimizerV2(
+          opt = gao.GradientAccumulationOptimizerV2(
               optimizer,
               num_batches_to_accumulate,
               reduction_method=reduction_method)
@@ -819,31 +820,36 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase,
       with ops.device("/device:IPU:0"):
         ipu_compiler.compile(my_net, inputs=inputs)
 
-  @test_util.deprecated_graph_mode_only
-  def testGAReduceMethodNone(self):
-    with self.assertRaisesRegex(
-        ValueError, 'reduction_method must be set to one '
-        'of GradientAccumulationReductionMethod'):
-      self.__makeGATestNetwork(None)
-
   @parameterized.parameters([
-      'SUM', 'sum', 'MEAN', 'mean', 'RUNNING_MEAN', 'running_mean',
-      ga.GradientAccumulationReductionMethod.SUM,
-      ga.GradientAccumulationReductionMethod.MEAN,
-      ga.GradientAccumulationReductionMethod.RUNNING_MEAN
+      ('SUM', ga.GradientAccumulationReductionMethod.SUM),
+      ('sum', ga.GradientAccumulationReductionMethod.SUM),
+      ('MEAN', ga.GradientAccumulationReductionMethod.MEAN),
+      ('mean', ga.GradientAccumulationReductionMethod.MEAN),
+      ('RUNNING_MEAN', ga.GradientAccumulationReductionMethod.RUNNING_MEAN),
+      ('running_mean', ga.GradientAccumulationReductionMethod.RUNNING_MEAN),
+      (ga.GradientAccumulationReductionMethod.SUM,
+       ga.GradientAccumulationReductionMethod.SUM),
+      (ga.GradientAccumulationReductionMethod.MEAN,
+       ga.GradientAccumulationReductionMethod.MEAN),
+      (ga.GradientAccumulationReductionMethod.RUNNING_MEAN,
+       ga.GradientAccumulationReductionMethod.RUNNING_MEAN)
   ])
   @test_util.deprecated_graph_mode_only
-  def testGAReduceMethodSupported(self, reduction_method):
+  def testGAReduceMethodSupported(self, reduction_method,
+                                  expected_reduction_method):
     with ops.device("/device:IPU:0"):
-      self.__makeGATestNetwork(reduction_method)
+      reduction_method = ga.GradientAccumulationReductionMethod.parse(
+          reduction_method)
+      self.assertEqual(reduction_method, expected_reduction_method)
 
-  @parameterized.parameters(['Exp', 10])
+  @parameterized.parameters(['Exp', 10, None])
   @test_util.deprecated_graph_mode_only
   def testGAReduceMethodInvalid(self, reduction_method):
     with self.assertRaisesRegex(
-        ValueError, 'reduction_method must be set to one '
-        'of GradientAccumulationReductionMethod'):
-      self.__makeGATestNetwork(reduction_method)
+        ValueError, f"Cannot parse {reduction_method} as one of "
+        "GradientAccumulationReductionMethod."):
+      reduction_method = ga.GradientAccumulationReductionMethod.parse(
+          reduction_method)
 
 
 if __name__ == "__main__":

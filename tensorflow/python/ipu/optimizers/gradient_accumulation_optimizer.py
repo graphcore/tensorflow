@@ -17,7 +17,6 @@ Optimizer wrappers which perform local gradient accumulation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
-from enum import Enum
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
@@ -26,35 +25,8 @@ from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.ipu.optimizers import IpuOptimizer
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
 from tensorflow.python.ipu import internal_ops
+from tensorflow.python.ipu.gradient_accumulation import GradientAccumulationReductionMethod
 from tensorflow.python.ops import math_ops
-
-
-class GradientAccumulationReductionMethod(Enum):
-  """Reduction method to use when accumulating gradients. We perform
-  `gradient_accumulation_count` iterations (forward & backward passes)
-  in each optimizer step, at the
-  end of which we update the optimizer with gradients accumulated during
-  the optimizer step. For each iteration within the optimizer
-  step, the computed gradients can either be directly summed up or scaled
-  such that we compute a mean of all gradients for each variable. Computing
-  a mean avoids potential issues with overflow during accumulation,
-  especially when using float16, but gives smaller gradients and might
-  require adjusting the learning-rate accordingly.
-
-  Note: The term `gradient_accumulation_count` is from the pipeline API
-  and is referred to as `num_mini_batches` in
-  :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2`
-  and
-  :class:`~tensorflow.python.ipu.optimizers.CrossReplicaGradientAccumulationOptimizerV2`  # pylint: disable=line-too-long
-
-  SUM: Performs a sum of gradients.
-  MEAN: Performs a sum of gradients scaled by (1/num_mini_batches)
-  RUNNING_MEAN: Performs a running mean of gradients
-    (`acc*n/(n+1) + grad/(n+1)` for the nth iteration)
-  """
-  SUM = 0
-  MEAN = 1
-  RUNNING_MEAN = 2
 
 
 class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract-method
@@ -126,7 +98,7 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
         when using float16, but gives smaller gradients and might require
         adjusting the learning-rate accordingly.
         Defaults to `GradientAccumulationReductionMethod.SUM`
-        (see :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
+        (see :class:`~tensorflow.python.ipu.gradient_accumulation.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "GradientAccumulationOptimizerV2".
     """
@@ -143,7 +115,7 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
 
     self._dtype = dtype
 
-    self._reduction_method = op_util.parse_gradient_accumulation_method(
+    self._reduction_method = GradientAccumulationReductionMethod.parse(
         reduction_method)
 
   def apply_gradients(self, grads_and_vars, global_step=None, name=None):
@@ -264,7 +236,7 @@ class CrossReplicaGradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disa
         when using float16, but gives smaller gradients and might require
         adjusting the learning-rate accordingly.
         Defaults to `GradientAccumulationReductionMethod.SUM`
-        (see :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
+        (see :class:`~tensorflow.python.ipu.gradient_accumulation.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "CrossReplicaGradientAccumulationOptimizerV2".
     """
