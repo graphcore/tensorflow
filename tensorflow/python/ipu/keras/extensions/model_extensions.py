@@ -123,6 +123,9 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
     # pylint: enable=protected-access
 
   def _is_pipelined(self):
+    assert self._graph_network_initialized, \
+      "`Model` subclasses cannot determine if they have pipeline stage " \
+      "assignments until they have been built."
     return bool(self._pipeline_stage_assignment)
 
   def _get_config_supported(self):
