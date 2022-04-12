@@ -3081,6 +3081,7 @@ tf_xla_py_test(
         num_instances = N,
         num_replicas = M,
         deps = [
+            ":test_utils_py",
             "//tensorflow/python/ipu:ipu_lib",
         ],
     )

@@ -16,6 +16,7 @@ import numpy as np
 
 import popdist
 
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
@@ -27,6 +28,7 @@ from tensorflow.python.platform import test
 
 
 class PoprunBasicTest(test_util.TensorFlowTestCase):  # pylint: disable=abstract-method
+  @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
   def test_cross_replica_sum(self):
     num_local_replicas = popdist.getNumLocalReplicas()
