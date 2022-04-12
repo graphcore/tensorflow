@@ -49,7 +49,7 @@ class TruncatedNormalOp : public PoplarOpDef {
     auto out = poprand::truncatedNormal(graph, nullptr, 0, ref, dtype, 0.0, 1.0,
                                         1.0, seq, {debug_info});
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
     return seq;
   }
 };
@@ -101,7 +101,7 @@ class StatelessRandomUniformOp : public PoplarOpDef {
       out = new_out;
     }
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
     return seq;
   }
 };
@@ -155,7 +155,7 @@ class StatelessRandomUniformIntOp : public PoplarOpDef {
       out = new_out;
     }
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
     return seq;
   }
 };
@@ -198,7 +198,7 @@ class StatelessRandomNormalOp : public PoplarOpDef {
       out = new_out;
     }
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
     return seq;
   }
 };
@@ -242,7 +242,7 @@ class StatelessTruncatedNormalOp : public PoplarOpDef {
       out = new_out;
     }
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
     return seq;
   }
 };
@@ -271,7 +271,8 @@ class SeedOp : public PoplarOpDef {
         graph, nullptr, 1U, seed_ref, dtype, std::numeric_limits<int32>::min(),
         std::numeric_limits<int32>::max(), seq, {debug_info, "GenerateSeed"});
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, seed));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(seed, graph)));
     return seq;
   }
 };

@@ -126,12 +126,12 @@ ENTRY cluster (arg0.1: (f32[1,4,4,2], f32[2], f32[1,1,2,2])) -> f32[1,4,4,2] {
   auto gte1 = root->operand(1);
   auto arg = gte1->operand(0);
   auto seq = visitor.GetRawSequence();
-  poplar::Tensor root_tensor =
+  DriverTensor root_tensor =
       FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
-  poplar::Tensor gte1_tensor =
+  DriverTensor gte1_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
-  poplar::Tensor arg_tensor =
+  DriverTensor arg_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), arg)[1];
   EXPECT_EQ(root_tensor, gte1_tensor);
   EXPECT_EQ(gte1_tensor, arg_tensor);
@@ -176,14 +176,14 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], f32[2], f32[1,1,2,2]))) -> f32[1,4,4,2] {
   auto gte = gte1->operand(0);
   auto arg = gte->operand(0);
   auto seq = visitor.GetRawSequence();
-  poplar::Tensor root_tensor =
+  DriverTensor root_tensor =
       FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
-  poplar::Tensor gte1_tensor =
+  DriverTensor gte1_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
-  poplar::Tensor gte_tensor =
+  DriverTensor gte_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte)[1];
-  poplar::Tensor arg_tensor =
+  DriverTensor arg_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), arg)[1];
   EXPECT_EQ(root_tensor, gte1_tensor);
   EXPECT_EQ(gte1_tensor, gte_tensor);
@@ -231,16 +231,16 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], (f32[2], f32[1,1,2,2])))) -> f32[1,4,4,2]
   auto gte = gte1->operand(0);
   auto arg = gte->operand(0);
   auto seq = visitor.GetRawSequence();
-  poplar::Tensor root_tensor =
+  DriverTensor root_tensor =
       FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
-  poplar::Tensor gte1_0_tensor =
+  DriverTensor gte1_0_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1_0)[0];
-  poplar::Tensor gte1_tensor =
+  DriverTensor gte1_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
-  poplar::Tensor gte_tensor =
+  DriverTensor gte_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte)[1];
-  poplar::Tensor arg_tensor =
+  DriverTensor arg_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), arg)[1];
   EXPECT_EQ(root_tensor, gte1_0_tensor);
   EXPECT_EQ(gte1_0_tensor, gte1_tensor);
@@ -307,17 +307,17 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
   auto gte = gte1->operand(0);
   auto arg = gte->operand(0);
   auto seq = visitor.GetRawSequence();
-  poplar::Tensor fusion_0_input_one_tensor =
+  DriverTensor fusion_0_input_one_tensor =
       FindInstructionInput(tensor_map, *resources.get(), fusion_0, 1, seq,
                            false)
           .ValueOrDie();
-  poplar::Tensor gte1_0_tensor =
+  DriverTensor gte1_0_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1_0)[0];
-  poplar::Tensor gte1_tensor_zero =
+  DriverTensor gte1_tensor_zero =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
-  poplar::Tensor gte_tensor_two =
+  DriverTensor gte_tensor_two =
       FindInstructionOutputs(tensor_map, *resources.get(), gte)[2];
-  poplar::Tensor arg_tensor_two =
+  DriverTensor arg_tensor_two =
       FindInstructionOutputs(tensor_map, *resources.get(), arg)[2];
   EXPECT_EQ(fusion_0_input_one_tensor, gte1_0_tensor);
   EXPECT_EQ(gte1_0_tensor, gte1_tensor_zero);
@@ -330,17 +330,17 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
   auto gte1_2 = fusion_1->operand(1);
   EXPECT_EQ(gte1, gte1_2->operand(0));
 
-  poplar::Tensor fusion_1_input_one_tensor =
+  DriverTensor fusion_1_input_one_tensor =
       FindInstructionInput(tensor_map, *resources.get(), fusion_1, 1, seq,
                            false)
           .ValueOrDie();
-  poplar::Tensor gte1_2_tensor =
+  DriverTensor gte1_2_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1_2)[0];
-  poplar::Tensor gte1_tensor_two =
+  DriverTensor gte1_tensor_two =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1)[2];
-  poplar::Tensor gte_tensor_four =
+  DriverTensor gte_tensor_four =
       FindInstructionOutputs(tensor_map, *resources.get(), gte)[4];
-  poplar::Tensor arg_tensor_four =
+  DriverTensor arg_tensor_four =
       FindInstructionOutputs(tensor_map, *resources.get(), arg)[4];
   EXPECT_EQ(fusion_1_input_one_tensor, gte1_2_tensor);
   EXPECT_EQ(gte1_2_tensor, gte1_tensor_two);
@@ -388,14 +388,14 @@ ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
   auto gte = gte1->operand(0);
   auto infeed = gte->operand(0);
   auto seq = visitor.GetRawSequence();
-  poplar::Tensor root_tensor =
+  DriverTensor root_tensor =
       FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
-  poplar::Tensor gte1_tensor =
+  DriverTensor gte1_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
-  poplar::Tensor gte_tensor =
+  DriverTensor gte_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte)[1];
-  poplar::Tensor infeed_tensor =
+  DriverTensor infeed_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), infeed)[1];
   EXPECT_EQ(root_tensor, gte1_tensor);
   EXPECT_EQ(gte1_tensor, gte_tensor);
@@ -1015,11 +1015,11 @@ ENTRY main (arg0.1: f32[2,2], arg1.2: f32[2,2], arg2.3: f32[2,2], arg3.4: pred[]
   HloInstruction* arg1_2 = FindInstruction(module.get(), "arg1.2");
   HloInstruction* arg2_3 = FindInstruction(module.get(), "arg2.3");
 
-  poplar::Tensor gte0_1_tensor =
+  DriverTensor gte0_1_tensor =
       FindInstructionOutputs(entry_tensor_map, *resources.get(), arg0_1)[0];
-  poplar::Tensor gte1_2_tensor =
+  DriverTensor gte1_2_tensor =
       FindInstructionOutputs(entry_tensor_map, *resources.get(), arg1_2)[0];
-  poplar::Tensor gte2_3_tensor =
+  DriverTensor gte2_3_tensor =
       FindInstructionOutputs(entry_tensor_map, *resources.get(), arg2_3)[0];
 
   HloInstruction* get_tuple_element_12 =
@@ -1027,9 +1027,9 @@ ENTRY main (arg0.1: f32[2,2], arg1.2: f32[2,2], arg2.3: f32[2,2], arg3.4: pred[]
   HloInstruction* get_tuple_element_13 =
       FindInstruction(module.get(), "get-tuple-element.13");
 
-  poplar::Tensor get_tuple_element_12_tensor = FindInstructionOutputs(
+  DriverTensor get_tuple_element_12_tensor = FindInstructionOutputs(
       true_tensor_map, *resources.get(), get_tuple_element_12)[0];
-  poplar::Tensor get_tuple_element_13_tensor = FindInstructionOutputs(
+  DriverTensor get_tuple_element_13_tensor = FindInstructionOutputs(
       true_tensor_map, *resources.get(), get_tuple_element_13)[0];
 
   HloInstruction* get_tuple_element_19 =
@@ -1037,9 +1037,9 @@ ENTRY main (arg0.1: f32[2,2], arg1.2: f32[2,2], arg2.3: f32[2,2], arg3.4: pred[]
   HloInstruction* get_tuple_element_21 =
       FindInstruction(module.get(), "get-tuple-element.21");
 
-  poplar::Tensor get_tuple_element_19_tensor = FindInstructionOutputs(
+  DriverTensor get_tuple_element_19_tensor = FindInstructionOutputs(
       false_tensor_map, *resources.get(), get_tuple_element_19)[0];
-  poplar::Tensor get_tuple_element_21_tensor = FindInstructionOutputs(
+  DriverTensor get_tuple_element_21_tensor = FindInstructionOutputs(
       false_tensor_map, *resources.get(), get_tuple_element_21)[0];
 
   // Check the common input is the same in both branches.
@@ -1096,11 +1096,11 @@ ENTRY cluster {
   auto copy1 = root->operand(0);
   auto copy2 = root->operand(1);
   auto copy3 = root->operand(2);
-  poplar::Tensor copy1_output =
+  DriverTensor copy1_output =
       FindInstructionOutputs(tensor_map, *resources.get(), copy1)[0];
-  poplar::Tensor copy2_output =
+  DriverTensor copy2_output =
       FindInstructionOutputs(tensor_map, *resources.get(), copy2)[0];
-  poplar::Tensor copy3_output =
+  DriverTensor copy3_output =
       FindInstructionOutputs(tensor_map, *resources.get(), copy3)[0];
 
   EXPECT_TRUE(copy1_output.isParallelWriteable());
@@ -1142,15 +1142,15 @@ ENTRY cluster {
   auto tensor_map = resources->tensor_maps.GetTensorMapForComputation(
       entry_computation->name());
   auto root = entry_computation->root_instruction();
-  poplar::Tensor copy1_output =
+  DriverTensor copy1_output =
       FindInstructionOutputs(tensor_map, *resources.get(), root)[0];
-  poplar::Tensor copy2_output =
+  DriverTensor copy2_output =
       FindInstructionOutputs(tensor_map, *resources.get(), root)[1];
-  poplar::Tensor copy3_output =
+  DriverTensor copy3_output =
       FindInstructionOutputs(tensor_map, *resources.get(), root)[2];
-  poplar::Tensor copy4_output =
+  DriverTensor copy4_output =
       FindInstructionOutputs(tensor_map, *resources.get(), root)[3];
-  poplar::Tensor copy4_input = FindInstructionOutputs(
+  DriverTensor copy4_input = FindInstructionOutputs(
       tensor_map, *resources.get(), root->operand(0)->operand(3))[0];
 
   EXPECT_TRUE(copy1_output.isParallelWriteable());
@@ -1270,14 +1270,14 @@ ENTRY entry {
       entry_computation->name());
   auto root = entry_computation->root_instruction();
   auto root_outputs = FindInstructionOutputs(tensor_map, *resources, root);
-  poplar::Tensor gte_0 = root_outputs[0];
-  poplar::Tensor gte_1 = root_outputs[1];
-  poplar::Tensor gte_2 = root_outputs[2];
-  poplar::Tensor copy_0 =
+  DriverTensor gte_0 = root_outputs[0];
+  DriverTensor gte_1 = root_outputs[1];
+  DriverTensor gte_2 = root_outputs[2];
+  DriverTensor copy_0 =
       FindInstructionOutputs(tensor_map, *resources, p0_copy)[0];
-  poplar::Tensor copy_1 =
+  DriverTensor copy_1 =
       FindInstructionOutputs(tensor_map, *resources, p1_copy)[0];
-  poplar::Tensor copy_2 = FindInstructionOutputs(tensor_map, *resources, p2)[0];
+  DriverTensor copy_2 = FindInstructionOutputs(tensor_map, *resources, p2)[0];
   EXPECT_EQ(gte_0, copy_0);
   EXPECT_EQ(gte_1, copy_1);
   EXPECT_EQ(gte_2, copy_2);

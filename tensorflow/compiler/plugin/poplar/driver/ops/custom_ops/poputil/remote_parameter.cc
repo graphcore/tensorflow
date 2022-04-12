@@ -52,7 +52,7 @@ AddRemoteBufferStoreCopy(
     layout_tensor = res.remote_buffer_layouts.at(handle);
   } else {
     layout_tensor = source;
-    res.remote_buffer_layouts[handle] = layout_tensor;
+    res.remote_buffer_layouts[handle] = DriverTensor(layout_tensor, graph);
   }
 
   poplar::Tensor copy_tensor = graph.clone(layout_tensor, {debug_name_and_id});

@@ -95,12 +95,14 @@ class LstmLayerBaseOp : public PoplarOpDef {
     return signature;
   }
 
-  virtual void SetOutputTensor(std::vector<poplar::Tensor>& args,
+  virtual void SetOutputTensor(DriverGraph& graph,
+                               std::vector<poplar::Tensor>& args,
                                const HloInstruction* inst,
                                TensorMap& tensor_map, bool training) {
     for (int64 j = 0; j < OutputTensorCount(); ++j) {
       TF_CHECK_OK(
-          AddOutputTensor(tensor_map, inst, j, args[j + InputTensorCount()]));
+          AddOutputTensor(tensor_map, inst, j,
+                          DriverTensor(args[j + InputTensorCount()], graph)));
     }
   }
 
@@ -205,7 +207,7 @@ class LstmLayerBaseOp : public PoplarOpDef {
         inst, graph, res, seq, func, signature, args,
         lstm_inst->AllocatingIndices(), lstm_inst->LayoutDependencies()));
 
-    SetOutputTensor(args, inst, tensor_map, training);
+    SetOutputTensor(graph, args, inst, tensor_map, training);
     return seq;
   }
 
@@ -263,14 +265,15 @@ class LstmLayerFwdOp : public LstmLayerBaseOp {
     return signature;
   }
 
-  void SetOutputTensor(std::vector<poplar::Tensor>& args,
+  void SetOutputTensor(DriverGraph& graph, std::vector<poplar::Tensor>& args,
                        const HloInstruction* inst, TensorMap& tensor_map,
                        bool training) override {
     const int64 total_param_count = InputTensorCount() + OutputTensorCount();
-    LstmLayerBaseOp::SetOutputTensor(args, inst, tensor_map, training);
+    LstmLayerBaseOp::SetOutputTensor(graph, args, inst, tensor_map, training);
     if (training) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, OutputTensorCount(),
-                                  args[total_param_count]));
+      TF_CHECK_OK(
+          AddOutputTensor(tensor_map, inst, OutputTensorCount(),
+                          DriverTensor(args[total_param_count], graph)));
     }
   }
 

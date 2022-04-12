@@ -245,7 +245,7 @@ StatusOr<poplar::program::Sequence> CreateTupleSelectOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  poplar::Graph& graph = GetGraph(res, inst);
+  auto& graph = GetGraph(res, inst);
 
   poplar::program::Sequence seq({}, debug_name_and_id);
 
@@ -276,10 +276,10 @@ StatusOr<poplar::program::Sequence> CreateTupleSelectOp(
       p = p.reshape(i0.shape());
     }
 
-    poplar::Tensor out = popops::map(graph, popops::expr::TernaryOpType::SELECT,
-                                     i0, i1, p, seq, {debug_name_and_id});
+    auto out = popops::map(graph, popops::expr::TernaryOpType::SELECT, i0, i1,
+                           p, seq, {debug_name_and_id});
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, out));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, DriverTensor(out, graph)));
   }
 
   return seq;
@@ -456,7 +456,8 @@ StatusOr<poplar::program::Sequence> CreateMatMulForDotOp(
 
   output = args[2];
 
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
+  TF_CHECK_OK(
+      AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
 
   return seq;
 }
@@ -465,7 +466,7 @@ StatusOr<poplar::program::Sequence> CreateCastOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  poplar::Graph& graph = GetGraph(res, inst);
+  auto& graph = GetGraph(res, inst);
 
   poplar::program::Sequence seq({}, debug_name_and_id);
 
@@ -479,7 +480,7 @@ StatusOr<poplar::program::Sequence> CreateCastOp(
   poplar::Tensor out =
       popops::cast(graph, in, poplar_type, seq, {debug_name_and_id});
 
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
 
   return seq;
 }

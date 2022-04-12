@@ -23,6 +23,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_util.h"
@@ -39,10 +40,10 @@ namespace helper {
 // Helper struct for generating the popops expression for elementwise operation.
 struct ExpressionInput {
   std::unique_ptr<popops::expr::Expr> expr;
-  absl::optional<poplar::Tensor> tensor;
+  absl::optional<DriverTensor> tensor;
   ExpressionInput() = delete;
 
-  explicit ExpressionInput(poplar::Tensor& tensor) : tensor(tensor) {}
+  explicit ExpressionInput(DriverTensor& tensor) : tensor(tensor) {}
   explicit ExpressionInput(std::unique_ptr<popops::expr::Expr> expr)
       : expr(std::move(expr)), tensor(absl::nullopt) {}
 
