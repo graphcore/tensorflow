@@ -450,6 +450,101 @@ class MultiUpdateAddOp : public MultiUpdateOp {
 };
 REGISTER_POPLAR_OP(MultiUpdateAdd, MultiUpdateAddOp);
 
+class StaticMultiUpdateAddOp : public PoplarOpDef {
+  StatusOr<poplar::program::Sequence> Creator(
+      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
+      const Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "StaticMultiUpdateAddOp");
+    poplar::program::Sequence seq({}, debug_info);
+
+    auto* update_inst = Cast<HloStaticMultiUpdateAddInstruction>(inst);
+
+    TF_ASSIGN_OR_RETURN(
+        TensorVectors inputs,
+        FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor updates,
+        FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor scale,
+        FindInstructionInput(tensor_map, res, inst, 2, seq, {debug_info}));
+
+    const auto indices = update_inst->GetIndices();
+    const auto unsigned_indices = convert_array<std::vector<unsigned>>(indices);
+    if (!unsigned_indices) {
+      return xla::FailedPrecondition(
+          "StaticMultiUpdateAddOp::Creator - cannot cast update indices.");
+    }
+
+    popops::multiUpdateAdd(graph, inputs[0][0], updates.expand({1}),
+                           unsigned_indices.value(), scale, 0, seq,
+                           {debug_info});
+
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, inputs[0][0]));
+
+    return seq;
+  }
+
+  StatusOr<poplar::Tensor> Allocator(
+      DriverGraph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "StaticMultiUpdateAddOp");
+    const int64 allocation_index = tensor_target.input_index;
+    const auto inst =
+        Cast<HloStaticMultiUpdateAddInstruction>(tensor_target.tgt);
+
+    if (allocation_index != 0 && allocation_index != 1) {
+      return InternalError("Invalid allocation index %d for instruction %s.",
+                           allocation_index, inst->ToShortString());
+    }
+
+    const HloInstruction* layout = *tensor_target.layout;
+    const int64 layout_output_idx = *tensor_target.layout_output_idx;
+    const auto outputs = FindInstructionOutputs(tensor_map, res, layout);
+    const poplar::Tensor layout_tensor = outputs[layout_output_idx];
+
+    switch (allocation_index) {
+      case 0: {
+        return CreateInputsTensorFromUpdates(graph, layout_tensor, inst, res,
+                                             {debug_info});
+      }
+      case 1: {
+        return CreateUpdatesTensorFromInputs(graph, layout_tensor, inst, res,
+                                             {debug_info});
+      }
+      default: { CHECK(false); }
+    }
+  }
+
+  static StatusOr<poplar::Tensor> CreateInputsTensorFromUpdates(
+      poplar::Graph& graph, const poplar::Tensor& updates,
+      const HloStaticMultiUpdateAddInstruction* inst, CompilerResources& res,
+      const poplar::DebugNameAndId& debug_context) {
+    const auto& shape = inst->shape();
+    return CreateTensorFromSlice(graph, updates, 0, shape.dimensions(0), res,
+                                 {debug_context});
+  }
+
+  static StatusOr<poplar::Tensor> CreateUpdatesTensorFromInputs(
+      poplar::Graph& graph, const poplar::Tensor& inputs,
+      const HloStaticMultiUpdateAddInstruction* inst, CompilerResources& res,
+      const poplar::DebugNameAndId& debug_context) {
+    const auto indices = inst->GetIndices();
+    const auto unsigned_indices = convert_array<std::vector<unsigned>>(indices);
+    if (!unsigned_indices) {
+      return xla::FailedPrecondition(
+          "StaticMultiUpdateAddOp::Creator - cannot cast update indices.");
+    }
+    poplar::Tensor inputs_slices =
+        poplar::concat(inputs.slices(unsigned_indices.value(), 0), 0);
+    return TensorCloneAndRebalanceAliasing(graph, res, inputs_slices,
+                                           {debug_context});
+  }
+};
+REGISTER_POPLAR_OP(StaticMultiUpdateAdd, StaticMultiUpdateAddOp);
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

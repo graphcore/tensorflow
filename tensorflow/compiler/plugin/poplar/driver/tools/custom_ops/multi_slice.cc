@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 
+#include <memory>
 #include <string>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
@@ -256,6 +257,86 @@ std::unique_ptr<HloInstruction> CreateMultiUpdateAdd(
                                                          indices_are_sorted);
 }
 
+// StaticMultiUpdateAdd
+HloStaticMultiUpdateAddInstruction::HloStaticMultiUpdateAddInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    absl::Span<const int64> indices)
+    : HloPoplarInstruction(shape, operands, PoplarOp::StaticMultiUpdateAdd,
+                           indices),
+      indices_(indices.begin(), indices.end()) {
+  CHECK_EQ(operands[0]->shape().rank(), 2);
+  CHECK_EQ(operands[1]->shape().rank(), 2);
+  CHECK_EQ(operands[2]->shape().rank(), 0);
+  CHECK_EQ(operands[0]->shape().dimensions()[1],
+           operands[1]->shape().dimensions()[1]);
+  CHECK_EQ(operands[1]->shape().dimensions()[0], indices_.size());
+  CHECK_EQ(shape, operands[0]->shape());
+  for (const auto& index : indices_) {
+    CHECK_LT(index, operands[0]->shape().dimensions()[0]);
+  }
+}
+
+absl::flat_hash_set<int64>
+HloStaticMultiUpdateAddInstruction::AllocatingIndices() const {
+  return {};
+}
+
+bool HloStaticMultiUpdateAddInstruction::AllocatingOutput() const {
+  return false;
+}
+
+absl::flat_hash_map<int64, int64>
+HloStaticMultiUpdateAddInstruction::LayoutDependencies() const {
+  return {{0, 1}, {1, 0}};
+}
+
+HloPoplarUseDescriptions
+HloStaticMultiUpdateAddInstruction::GetUseDescriptions() const {
+  return UseDescriptionsSimpleNoTuple0thOperandAliasing(this);
+}
+
+HloPoplarBufferDescriptions
+HloStaticMultiUpdateAddInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsNoAllocations();
+}
+
+const FindConsumersExtensionResults
+HloStaticMultiUpdateAddInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  if (params.op_index == 0) {
+    return {true, this, params.index, params.permutation};
+  }
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
+bool HloStaticMultiUpdateAddInstruction::AllowNonInplaceLowering() const {
+  return false;
+}
+
+bool HloStaticMultiUpdateAddInstruction::IsPopOpsElementwise() const {
+  return false;
+}
+
+std::vector<std::string>
+HloStaticMultiUpdateAddInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {absl::StrCat("indices={", absl::StrJoin(GetIndices(), ","), "}")};
+}
+
+std::unique_ptr<HloInstruction>
+HloStaticMultiUpdateAddInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return CreateStaticMultiUpdateAdd(shape, new_operands, indices_);
+}
+
+std::unique_ptr<HloInstruction> CreateStaticMultiUpdateAdd(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    absl::Span<const int64> indices) {
+  return absl::make_unique<HloStaticMultiUpdateAddInstruction>(shape, operands,
+                                                               indices);
+}
+
 namespace {
 StatusOr<std::unique_ptr<HloInstruction>> HloMultiSliceInstructionFactoryFunc(
     HloCustomCallInstruction* call) {
@@ -292,6 +373,14 @@ HloMultiUpdateAddInstructionFactoryFunc(HloCustomCallInstruction* call) {
                               indices_are_sorted);
 }
 
+StatusOr<std::unique_ptr<HloInstruction>>
+HloStaticMultiUpdateAddInstructionFactoryFunc(HloCustomCallInstruction* call) {
+  auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+  TF_ASSIGN_OR_RETURN(std::vector<int64> indices,
+                      attribute_map.GetAttributeInt64Vector("indices"));
+  return CreateStaticMultiUpdateAdd(call->shape(), call->operands(), indices);
+}
+
 static HloPoplarInstructionFactory multi_slice_factory(
     PoplarOp::MultiSlice, HloMultiSliceInstructionFactoryFunc);
 
@@ -303,6 +392,10 @@ static HloPoplarInstructionFactory multi_update_factory(
 
 static HloPoplarInstructionFactory multi_update_add_factory(
     PoplarOp::MultiUpdateAdd, HloMultiUpdateAddInstructionFactoryFunc);
+
+static HloPoplarInstructionFactory static_multi_update_add_factory(
+    PoplarOp::StaticMultiUpdateAdd,
+    HloStaticMultiUpdateAddInstructionFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin
