@@ -909,7 +909,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
 }
 
 StatusOr<std::vector<NamedIpuSchedulerAlgorithm>> GetSchedulerList(
-    CompilerResources& res) {
+    HloResources& res) {
   std::vector<NamedIpuSchedulerAlgorithm> schedulers;
 
   const bool all =
@@ -1101,6 +1101,340 @@ struct ExecutableCacheLock {
 
   TF_DISALLOW_COPY_AND_ASSIGN(ExecutableCacheLock);
 };
+
+Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
+                    HloResources& resources, const poplar::Target& target,
+                    const int64 ipu_link_domain_replication_factor) {
+  Tracepoint tracepoint("HloOptimizerPipeline");
+  std::unique_ptr<PVTICompilerStats> pipeline_compiler_stats =
+      absl::make_unique<PVTICompilerStats>();
+  HloPassPipeline optimizer_pipeline("OptimizerPipeline",
+                                     pipeline_compiler_stats.get());
+
+  if (PoplarXlaFlags::Get().enable_hlo_verifier) {
+    optimizer_pipeline.AddInvariantChecker<HloVerifier>(
+        /*layout_sensitive=*/false, /*allow_mixed_precision=*/false);
+  }
+
+  {
+    auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
+        "before control dependencies", pipeline_compiler_stats.get());
+    // Make sure there are no control dependencies for the passes in this
+    // pipeline.
+    pipeline.AddInvariantChecker<NoControlDepsChecker>();
+
+    if (!poplar_executor->RetainControlDependencies()) {
+      pipeline.AddPass<DependencyReplacer>(false);
+    }
+    pipeline.AddPass<FlattenCallGraph>();
+    pipeline.AddPass<HloGetDimensionSizeRewriter>();
+    pipeline.AddPass<CustomOpReplacer>();
+    pipeline.AddPass<ParsePoplarBackendConfig>();
+    pipeline.AddPass<PipelineFixer>();
+    pipeline.AddPass<ResourceUpdateMerger>();
+    pipeline.AddPass<PipelineTupleRemover>();
+    pipeline.AddPass<ReplicationFactorToConstant>(resources.replication_factor);
+    pipeline.AddPass<GradientAccumulationFuser>(resources.annotations);
+    pipeline.AddPass<HloComputationNameUniquify>();
+    pipeline.AddPass<FlattenCallGraph>();
+    pipeline.AddPass<NotSupportedGatherExpander>();
+    pipeline.AddPass<NotSupportedScatterExpander>();
+    pipeline.AddPass<DynamicIndexSplitter>();
+    pipeline.AddPass<HloPassFix<ConstantSliceFolding>>();
+    pipeline.AddPass<HloPassFix<FuseOpsEarly>>(resources.annotations);
+    pipeline.AddPass<MultiConvFixer>();
+    pipeline.AddPass<HloCSE>(false);
+
+    AddAlgebraicOptimizerPass(pipeline, pipeline_compiler_stats.get(),
+                              poplar_executor);
+    {
+      auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+          "pipeline-gradient-accumulation-optimizer-wrapper",
+          pipeline_compiler_stats.get());
+      pass.AddPass<PipelineGradientAccumulationOptimizer>();
+      pass.AddPass<CallOptimizer>();
+      pass.AddPass<PipelineOptimizer>();
+      pass.AddPass<HloDCE>();
+      pass.AddPass<HloCSE>(true);
+    }
+    pipeline.AddPass<SortSimplifier>();
+    pipeline.AddPass<RootTokenReplacer>();
+    pipeline.AddPass<ReshapeMover>();
+    pipeline.AddPass<MapInliner>();
+    AddAlgebraicOptimizerPass(pipeline, pipeline_compiler_stats.get(),
+                              poplar_executor);
+    pipeline.AddPass<ZeroSizedHloElimination>();
+    pipeline.AddPass<FlattenCallGraph>();
+    pipeline.AddPass<DistributedBatchNormDecomposer>(
+        resources.recomputation_enabled,
+        resources.experimental_distributed_batch_norm_replica_group_size);
+    pipeline.AddPass<HloPassFix<SeedHoisting>>();
+    pipeline.AddPass<PipelineRecomputation>(resources.recomputation_enabled);
+    pipeline.AddPass<RecomputationCheckpointRemover>();
+    pipeline.AddPass<FlattenCallGraph>();
+    pipeline.AddPass<PipelineTupleRemover>();
+    pipeline.AddPass<ComputationFlattener>();
+    pipeline.AddPass<TupleSimplifier>(true);
+    pipeline.AddPass<HloDCE>();
+    // pass.AddPass<ConditionalSimplifier>();
+    pipeline.AddPass<F16ConstantFolding>();
+    pipeline.AddPass<HloConstantFolding>();
+    {
+      auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+          "while-loop-optimisations", pipeline_compiler_stats.get());
+      pass.AddPass<PoplarAlgebraicSimplifier>(
+          poplar_executor->GetIpuOptions().algebraic_simplifier_config());
+      pass.AddPass<HloConstantFolding>();
+      pass.AddPass<HloPassFix<WhileLoopSimplifier>>();
+      pass.AddPass<HloPassFix<WhileLoopInvariantCodeMotion>>(
+          /*hoist_constants=*/false, /*hoist_size_inflating_ops=*/false);
+      pass.AddPass<TupleSimplifier>(true);
+      pass.AddPass<HloCSE>(true);
+      pass.AddPass<HloDCE>();
+      pass.AddPass<PoplarWhileLoopOptimiser>();
+    }
+    pipeline.AddPass<WideConstFinder>();
+    pipeline.AddPass<CommutativeInstructionReorderOperands>();
+    {
+      auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+          "repeated-fusing", pipeline_compiler_stats.get());
+      pass.AddPass<CastsElimination>(resources.annotations);
+      pass.AddPass<HloCSE>(true);
+      pass.AddPass<HloDCE>();
+      pass.AddPass<WhileLoopConstantSinking>();
+      AddAlgebraicOptimizerPass(pass, pipeline_compiler_stats.get(),
+                                poplar_executor);
+      pass.AddPass<ReshapeMover>();
+      pass.AddPass<SortSimplifier>();
+      pass.AddPass<FunctionOptimizer>();
+      pass.AddPass<HloDCE>();
+      pass.AddPass<WhileLoopConditionSimplify>();
+      pass.AddPass<CallOptimizer>();
+      pass.AddPass<PipelineOptimizer>();
+      pass.AddPass<HloPassFix<WhileLoopToRepeatSimplify>>();
+      if (poplar_executor->EnableGatherSimplifier()) {
+        pass.AddPass<GatherSimplifier>();
+      }
+      pass.AddPass<ScatterSimplifier>();
+      pass.AddPass<EmbeddingsGradientOptimizer>();
+      pass.AddPass<MultiUpdateCombiner>(resources.annotations);
+      if (poplar_executor->EnableMultiSliceCombiner()) {
+        pass.AddPass<MultiSliceCombiner>(resources.annotations);
+      }
+    }
+    AddPipelineOptimizerPass(pipeline, pipeline_compiler_stats.get());
+    pipeline.AddPass<CommutativeInstructionReorderOperands>();
+    pipeline.AddPass<AllToAllFinder>(resources.annotations,
+                                     resources.replication_factor);
+
+    if (poplar_executor->EnableDynamicSliceReplacement()) {
+      pipeline.AddPass<DynamicSliceReplacer>();
+    }
+
+    {
+      auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+          "multi-update-optimizer", pipeline_compiler_stats.get());
+      pass.AddPass<MultiUpdateScaleApply>(resources.annotations);
+      pass.AddPass<MultiUpdateApply>(resources.annotations);
+      AddAlgebraicOptimizerPass(pass, pipeline_compiler_stats.get(),
+                                poplar_executor);
+      pass.AddPass<HloCSE>(true);
+      pass.AddPass<HloDCE>();
+    }
+    if (poplar_executor->EnableMatmulCombiner()) {
+      pipeline.AddPass<MatmulCombiner>(resources.annotations);
+    }
+    pipeline.AddPass<AllReduceSimplifier>(
+        resources.replication_factor);  // This must be after all calls to
+                                        // PoplarAlgebraicSimplifier
+    pipeline.AddPass<SerializeGradientAccumulation>();
+    pipeline.AddPass<SliceOptimizer>(resources.annotations);
+    pipeline.AddPass<MultiSliceSimplifier>(resources.annotations);
+    pipeline.AddPass<RedundantTriangularMaskRemover>(resources.annotations);
+    pipeline.AddPass<FuseOpsLate>(resources.annotations);
+    pipeline.AddPass<HloPassFix<FuseOpsIntoPoplarOps>>(resources.annotations);
+    pipeline.AddPass<CommutativeInstructionReorderOperands>();
+    pipeline.AddPass<ExpressionOutliner>(/*maximum_num_elements=*/8);
+    pipeline.AddPass<ElementwiseSimplifier>();
+    pipeline.AddPass<ElementwiseBroadcastConverter>();
+    pipeline.AddPass<FuseWideConst>(resources.annotations);
+    pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<HloCSE>(true);
+    pipeline.AddPass<GradientAccumulationBuffersOffload>(
+        resources.remote_memory_supported,
+        resources.information.minimum_remote_tensor_size);
+    pipeline.AddPass<PipelineStageMerger>();
+    pipeline.AddPass<PipelineCommunicationOptimizer>(
+        resources.remote_memory_supported);
+    AddPipelineOptimizerPass(pipeline, pipeline_compiler_stats.get());
+    {
+      auto& batch_serialization_pass = pipeline.AddPass<HloPassPipeline>(
+          "pipeline-batch-serialization-fixer-wrapper",
+          pipeline_compiler_stats.get());
+      batch_serialization_pass
+          .AddPass<PipelineBatchSerializationBufferInserter>(
+              resources.remote_memory_supported);
+      AddPipelineOptimizerPass(batch_serialization_pass,
+                               pipeline_compiler_stats.get());
+      batch_serialization_pass
+          .AddPass<PipelineBatchSerializationLoopInserter>();
+    }
+    pipeline.AddPass<ResourceUpdateFixer>();
+    pipeline.AddPass<VariablesOffloadAndPartition>(
+        resources.annotations, resources.remote_memory_supported,
+        resources.information.minimum_remote_tensor_size,
+        resources.partition_replication_factor);
+    pipeline.AddPass<PipelineFeedHoisting>();
+    pipeline.AddPass<PipelineFIFOInserter>(resources.remote_memory_supported);
+    pipeline.AddPass<ReplicatedResourceUpdateElementwiseClustering>(
+        resources.annotations, resources.partition_replication_factor,
+        resources.replication_factor, ipu_link_domain_replication_factor);
+    {
+      auto inline_fusion = [](const HloInstruction* inst) {
+        return IsReplicatedParameterLoadFusion(inst) ||
+               IsReplicatedParameterStoreFusion(inst);
+      };
+      pipeline.AddPass<FusionInliner>(inline_fusion);
+    }
+    pipeline.AddPass<RemoteBufferCanonicalizer>(resources.annotations);
+    pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<HloCSE>(true);
+    pipeline.AddPass<OutlineRemoteBuffers>();
+    pipeline.AddPass<ResourceUpdateCopyInserter>();
+    pipeline.AddPass<ResourceUpdateFixer>();
+    pipeline.AddPass<PoplarWhileLoopRemapper>();
+  }
+
+  // Passes below this point need to respect control dependencies.
+  {
+    auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
+        "with control dependencies", pipeline_compiler_stats.get());
+    pipeline.AddInvariantChecker<ResourceUpdateChecker>();
+
+    pipeline.AddPass<HostEmbeddingNotification>();
+    pipeline.AddPass<RecomputationInputRemover>();
+    pipeline.AddPass<RecomputeInstructions>(resources.recomputation_enabled);
+
+    if (resources.recomputation_enabled) {
+      if (UsesRecomputationSuggestions(module)) {
+        LOG(INFO) << "Detected SuggestRecompute operation - this will be "
+                     "removed in release 2.2";
+
+        pipeline.AddPass<SuggestRecompute>();
+        pipeline.AddPass<AddBlockRecompute>();
+        {
+          auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+              "resolve-recompute-suggestions", pipeline_compiler_stats.get());
+
+          pass.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
+          pass.AddPass<HloPassFix<LiftRecomputeSuggestion>>();
+          pass.AddPass<ApplyRecomputeSuggestion>();
+        }
+        pipeline.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
+        pipeline.AddPass<HloPassFix<RemoveRecomputeSuggestions>>();
+      } else {
+        pipeline.AddPass<RecomputeCasts>();
+      }
+    }
+
+    pipeline.AddPass<DependencyReplacer>(true);
+    pipeline.AddPass<HostComputeBarrierInserter>();
+    pipeline.AddPass<FlattenCallGraph>();
+    pipeline.AddPass<ShardingPass>();
+    pipeline.AddPass<HostComputeScheduleOptimizer>();
+    pipeline.AddPass<InterIpuCopyInserter>();
+    pipeline.AddPass<PipelineControlDependencyInserter>();
+    pipeline.AddPass<IoTilesPlacer>(
+        poplar_executor->ShouldPlaceOpsOnIoTiles(), resources.num_io_tiles,
+        target.getBytesPerTile(),
+        poplar_executor->GetIoTileAvailableMemoryProportion(),
+        resources.num_io_tiles);
+    pipeline.AddPass<InterTilesetCopyInserter>();
+    pipeline.AddPass<TupleSimplifier>(true);
+    pipeline.AddPass<FixRootInstructionsPass>();
+    pipeline.AddPass<DeadControlDependenciesElimination>();
+    pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<PostSerializeGradientAccumulation>();
+    pipeline.AddPass<CopyInserter>();
+    pipeline.AddPass<FunctionCombiner>();
+  }
+
+  // Passes below this point need to respect the inplace information.
+  {
+    auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
+        "with inplace information", pipeline_compiler_stats.get());
+    pipeline.AddInvariantChecker<ResourceUpdateChecker>();
+
+    pipeline.AddPass<InplaceFinder>(resources.annotations);
+    pipeline.AddPass<ExpressionOutliner>();
+    pipeline.AddPass<PipelineCopyInserter>();
+    pipeline.AddPass<RepeatLoopCopyInserter>();
+    pipeline.AddPass<ModuleFlatten>(resources.annotations);
+    pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
+    pipeline.AddPass<ConvBwdInputToFwdWeightsTranspose>();
+    pipeline.AddPass<PipelineRecomputationStageInserter>(
+        resources.recomputation_enabled, resources.remote_memory_supported);
+    if (resources.recomputation_enabled) {
+      pipeline.AddPass<FlattenCallGraph>();
+    }
+    {
+      auto& dce_pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+          "dead-code-and-control-deps-elimination",
+          pipeline_compiler_stats.get());
+      dce_pass.AddPass<DeadControlDependenciesElimination>();
+      dce_pass.AddPass<HloDCE>();
+    }
+    // Beyond this point non of the passes in the pipeline are allowed to
+    // modify the instructions in the HloModule.
+
+    // TODO(T10195) re-enable.
+    // if (!PoplarXlaFlags::Get().allow_nans) {
+    //   pipeline.AddPass<ConstantNaN>();
+    // }
+
+    pipeline.AddPass<PipelineVerifier>(resources.recomputation_enabled);
+    pipeline.AddPass<GradientAccumulationVerifier>(
+        resources.replication_factor);
+    if (resources.information.max_all_reduce_buffer_size > 0 ||
+        resources.information.max_inter_ipu_copies_buffer_size > 0 ||
+        resources.information.max_send_recv_cluster_size > 0 ||
+        resources.information.max_reduce_many_buffer_size > 0 ||
+        resources.information.max_all_gather_buffer_size > 0) {
+      pipeline.AddPass<IpuScheduler>(
+          SizeFunction, CreateClusteringMemoryScheduler(resources.information));
+      pipeline.AddPass<CombineInstructions>();
+      pipeline.AddPass<HloDescheduler>();
+    }
+    pipeline.AddPass<RemoteBufferMerger>(
+        resources.annotations, poplar_executor->RemoteBufferMergingMode());
+    pipeline.AddPass<RemoteParameterParallelCombiner>();
+    pipeline.AddPass<AllocationFinder>(
+        resources.annotations, resources.always_rearrange_copies_on_host);
+    pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);
+
+    TF_ASSIGN_OR_RETURN(auto schedulers, GetSchedulerList(resources));
+
+    TF_ASSIGN_OR_RETURN(auto scheduler, BestIpuSchedule(schedulers));
+
+    pipeline.AddPass<ResourceUpdateScheduleOptimizer>();
+    pipeline.AddPass<IpuScheduler>(SizeFunction, std::move(scheduler));
+    pipeline.AddPass<ModuleFlatten>(resources.annotations);
+    pipeline.AddPass<LowerFrontendAttributes>();
+    pipeline.AddPass<MarkReplicaIdenticalInstructions>();
+    pipeline.AddPass<AddStochasticRoundingOptions>(
+        resources.global_floating_point_behaviour.esr(),
+        resources.enable_experimental_prng_stability);
+    pipeline.AddPass<MultiUseFeedsFinder>();
+  }
+
+  return optimizer_pipeline.Run(module).status();
+}
+
+std::string GetTargetArch(const poplar::Target& target) {
+  return target.getTargetType() == poplar::TargetType::IPU
+             ? target.getTargetArchString()
+             : "";
+}
 
 StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     HloModule* module, PoplarExecutor* poplar_executor,
@@ -1348,344 +1682,10 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
   }
 
-  const int64 num_IPUs = target.getNumIPUs();
-  const std::string target_type = poplar::toString(target.getTargetType());
-  const std::string target_arch =
-      target.getTargetType() == poplar::TargetType::IPU
-          ? target.getTargetArchString()
-          : "";
-  const bool gateway_mode = target.getGatewayMode();
-  const bool supports_remote_buffers = poplar_executor->SupportsRemoteBuffers();
-
   resources.progress_bar->Start();
 
-  {
-    Tracepoint tracepoint("HloOptimizerPipeline");
-    std::unique_ptr<PVTICompilerStats> pipeline_compiler_stats =
-        absl::make_unique<PVTICompilerStats>();
-    HloPassPipeline optimizer_pipeline("OptimizerPipeline",
-                                       pipeline_compiler_stats.get());
-
-    if (PoplarXlaFlags::Get().enable_hlo_verifier) {
-      optimizer_pipeline.AddInvariantChecker<HloVerifier>(
-          /*layout_sensitive=*/false, /*allow_mixed_precision=*/false);
-    }
-
-    {
-      auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
-          "before control dependencies", pipeline_compiler_stats.get());
-      // Make sure there are no control dependencies for the passes in this
-      // pipeline.
-      pipeline.AddInvariantChecker<NoControlDepsChecker>();
-
-      if (!poplar_executor->RetainControlDependencies()) {
-        pipeline.AddPass<DependencyReplacer>(false);
-      }
-      pipeline.AddPass<FlattenCallGraph>();
-      pipeline.AddPass<HloGetDimensionSizeRewriter>();
-      pipeline.AddPass<CustomOpReplacer>();
-      pipeline.AddPass<ParsePoplarBackendConfig>();
-      pipeline.AddPass<PipelineFixer>();
-      pipeline.AddPass<ResourceUpdateMerger>();
-      pipeline.AddPass<PipelineTupleRemover>();
-      pipeline.AddPass<ReplicationFactorToConstant>(
-          resources.replication_factor);
-      pipeline.AddPass<GradientAccumulationFuser>(resources.annotations);
-      pipeline.AddPass<HloComputationNameUniquify>();
-      pipeline.AddPass<FlattenCallGraph>();
-      pipeline.AddPass<NotSupportedGatherExpander>();
-      pipeline.AddPass<NotSupportedScatterExpander>();
-      pipeline.AddPass<DynamicIndexSplitter>();
-      pipeline.AddPass<HloPassFix<ConstantSliceFolding>>();
-      pipeline.AddPass<HloPassFix<FuseOpsEarly>>(resources.annotations);
-      pipeline.AddPass<MultiConvFixer>();
-      pipeline.AddPass<HloCSE>(false);
-
-      AddAlgebraicOptimizerPass(pipeline, pipeline_compiler_stats.get(),
-                                poplar_executor);
-      {
-        auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-            "pipeline-gradient-accumulation-optimizer-wrapper",
-            pipeline_compiler_stats.get());
-        pass.AddPass<PipelineGradientAccumulationOptimizer>();
-        pass.AddPass<CallOptimizer>();
-        pass.AddPass<PipelineOptimizer>();
-        pass.AddPass<HloDCE>();
-        pass.AddPass<HloCSE>(true);
-      }
-      pipeline.AddPass<SortSimplifier>();
-      pipeline.AddPass<RootTokenReplacer>();
-      pipeline.AddPass<ReshapeMover>();
-      pipeline.AddPass<MapInliner>();
-      AddAlgebraicOptimizerPass(pipeline, pipeline_compiler_stats.get(),
-                                poplar_executor);
-      pipeline.AddPass<ZeroSizedHloElimination>();
-      pipeline.AddPass<FlattenCallGraph>();
-      pipeline.AddPass<DistributedBatchNormDecomposer>(
-          resources.recomputation_enabled,
-          resources.experimental_distributed_batch_norm_replica_group_size);
-      pipeline.AddPass<HloPassFix<SeedHoisting>>();
-      pipeline.AddPass<PipelineRecomputation>(resources.recomputation_enabled);
-      pipeline.AddPass<RecomputationCheckpointRemover>();
-      pipeline.AddPass<FlattenCallGraph>();
-      pipeline.AddPass<PipelineTupleRemover>();
-      pipeline.AddPass<ComputationFlattener>();
-      pipeline.AddPass<TupleSimplifier>(true);
-      pipeline.AddPass<HloDCE>();
-      // pass.AddPass<ConditionalSimplifier>();
-      pipeline.AddPass<F16ConstantFolding>();
-      pipeline.AddPass<HloConstantFolding>();
-      {
-        auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-            "while-loop-optimisations", pipeline_compiler_stats.get());
-        pass.AddPass<PoplarAlgebraicSimplifier>(
-            poplar_executor->GetIpuOptions().algebraic_simplifier_config());
-        pass.AddPass<HloConstantFolding>();
-        pass.AddPass<HloPassFix<WhileLoopSimplifier>>();
-        pass.AddPass<HloPassFix<WhileLoopInvariantCodeMotion>>(
-            /*hoist_constants=*/false, /*hoist_size_inflating_ops=*/false);
-        pass.AddPass<TupleSimplifier>(true);
-        pass.AddPass<HloCSE>(true);
-        pass.AddPass<HloDCE>();
-        pass.AddPass<PoplarWhileLoopOptimiser>();
-      }
-      pipeline.AddPass<WideConstFinder>();
-      pipeline.AddPass<CommutativeInstructionReorderOperands>();
-      {
-        auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-            "repeated-fusing", pipeline_compiler_stats.get());
-        pass.AddPass<CastsElimination>(resources.annotations);
-        pass.AddPass<HloCSE>(true);
-        pass.AddPass<HloDCE>();
-        pass.AddPass<WhileLoopConstantSinking>();
-        AddAlgebraicOptimizerPass(pass, pipeline_compiler_stats.get(),
-                                  poplar_executor);
-        pass.AddPass<ReshapeMover>();
-        pass.AddPass<SortSimplifier>();
-        pass.AddPass<FunctionOptimizer>();
-        pass.AddPass<HloDCE>();
-        pass.AddPass<WhileLoopConditionSimplify>();
-        pass.AddPass<CallOptimizer>();
-        pass.AddPass<PipelineOptimizer>();
-        pass.AddPass<HloPassFix<WhileLoopToRepeatSimplify>>();
-        if (poplar_executor->EnableGatherSimplifier()) {
-          pass.AddPass<GatherSimplifier>();
-        }
-        pass.AddPass<ScatterSimplifier>();
-        pass.AddPass<EmbeddingsGradientOptimizer>();
-        pass.AddPass<MultiUpdateCombiner>(resources.annotations);
-        if (poplar_executor->EnableMultiSliceCombiner()) {
-          pass.AddPass<MultiSliceCombiner>(resources.annotations);
-        }
-      }
-      AddPipelineOptimizerPass(pipeline, pipeline_compiler_stats.get());
-      pipeline.AddPass<CommutativeInstructionReorderOperands>();
-      pipeline.AddPass<AllToAllFinder>(resources.annotations,
-                                       resources.replication_factor);
-
-      if (poplar_executor->EnableDynamicSliceReplacement()) {
-        pipeline.AddPass<DynamicSliceReplacer>();
-      }
-
-      {
-        auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-            "multi-update-optimizer", pipeline_compiler_stats.get());
-        pass.AddPass<MultiUpdateScaleApply>(resources.annotations);
-        pass.AddPass<MultiUpdateApply>(resources.annotations);
-        AddAlgebraicOptimizerPass(pass, pipeline_compiler_stats.get(),
-                                  poplar_executor);
-        pass.AddPass<HloCSE>(true);
-        pass.AddPass<HloDCE>();
-      }
-      if (poplar_executor->EnableMatmulCombiner()) {
-        pipeline.AddPass<MatmulCombiner>(resources.annotations);
-      }
-      pipeline.AddPass<AllReduceSimplifier>(
-          resources.replication_factor);  // This must be after all calls to
-                                          // PoplarAlgebraicSimplifier
-      pipeline.AddPass<SerializeGradientAccumulation>();
-      pipeline.AddPass<SliceOptimizer>(resources.annotations);
-      pipeline.AddPass<MultiSliceSimplifier>(resources.annotations);
-      pipeline.AddPass<RedundantTriangularMaskRemover>(resources.annotations);
-      pipeline.AddPass<FuseOpsLate>(resources.annotations);
-      pipeline.AddPass<HloPassFix<FuseOpsIntoPoplarOps>>(resources.annotations);
-      pipeline.AddPass<CommutativeInstructionReorderOperands>();
-      pipeline.AddPass<ExpressionOutliner>(/*maximum_num_elements=*/8);
-      pipeline.AddPass<ElementwiseSimplifier>();
-      pipeline.AddPass<ElementwiseBroadcastConverter>();
-      pipeline.AddPass<FuseWideConst>(resources.annotations);
-      pipeline.AddPass<HloDCE>();
-      pipeline.AddPass<HloCSE>(true);
-      pipeline.AddPass<GradientAccumulationBuffersOffload>(
-          resources.remote_memory_supported,
-          resources.information.minimum_remote_tensor_size);
-      pipeline.AddPass<PipelineStageMerger>();
-      pipeline.AddPass<PipelineCommunicationOptimizer>(
-          resources.remote_memory_supported);
-      AddPipelineOptimizerPass(pipeline, pipeline_compiler_stats.get());
-      {
-        auto& batch_serialization_pass = pipeline.AddPass<HloPassPipeline>(
-            "pipeline-batch-serialization-fixer-wrapper",
-            pipeline_compiler_stats.get());
-        batch_serialization_pass
-            .AddPass<PipelineBatchSerializationBufferInserter>(
-                resources.remote_memory_supported);
-        AddPipelineOptimizerPass(batch_serialization_pass,
-                                 pipeline_compiler_stats.get());
-        batch_serialization_pass
-            .AddPass<PipelineBatchSerializationLoopInserter>();
-      }
-      pipeline.AddPass<ResourceUpdateFixer>();
-      pipeline.AddPass<VariablesOffloadAndPartition>(
-          resources.annotations, resources.remote_memory_supported,
-          resources.information.minimum_remote_tensor_size,
-          resources.partition_replication_factor);
-      pipeline.AddPass<PipelineFeedHoisting>();
-      pipeline.AddPass<PipelineFIFOInserter>(resources.remote_memory_supported);
-      pipeline.AddPass<ReplicatedResourceUpdateElementwiseClustering>(
-          resources.annotations, resources.partition_replication_factor,
-          resources.replication_factor, ipu_link_domain_replication_factor);
-      {
-        auto inline_fusion = [](const HloInstruction* inst) {
-          return IsReplicatedParameterLoadFusion(inst) ||
-                 IsReplicatedParameterStoreFusion(inst);
-        };
-        pipeline.AddPass<FusionInliner>(inline_fusion);
-      }
-      pipeline.AddPass<RemoteBufferCanonicalizer>(resources.annotations);
-      pipeline.AddPass<HloDCE>();
-      pipeline.AddPass<HloCSE>(true);
-      pipeline.AddPass<OutlineRemoteBuffers>();
-      pipeline.AddPass<ResourceUpdateCopyInserter>();
-      pipeline.AddPass<ResourceUpdateFixer>();
-      pipeline.AddPass<PoplarWhileLoopRemapper>();
-    }
-
-    // Passes below this point need to respect control dependencies.
-    {
-      auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
-          "with control dependencies", pipeline_compiler_stats.get());
-      pipeline.AddInvariantChecker<ResourceUpdateChecker>();
-
-      pipeline.AddPass<HostEmbeddingNotification>();
-      pipeline.AddPass<RecomputationInputRemover>();
-      pipeline.AddPass<RecomputeInstructions>(resources.recomputation_enabled);
-
-      if (resources.recomputation_enabled) {
-        if (UsesRecomputationSuggestions(module)) {
-          LOG(INFO) << "Detected SuggestRecompute operation - this will be "
-                       "removed in release 2.2";
-
-          pipeline.AddPass<SuggestRecompute>();
-          pipeline.AddPass<AddBlockRecompute>();
-          {
-            auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-                "resolve-recompute-suggestions", pipeline_compiler_stats.get());
-
-            pass.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
-            pass.AddPass<HloPassFix<LiftRecomputeSuggestion>>();
-            pass.AddPass<ApplyRecomputeSuggestion>();
-          }
-          pipeline.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
-          pipeline.AddPass<HloPassFix<RemoveRecomputeSuggestions>>();
-        } else {
-          pipeline.AddPass<RecomputeCasts>();
-        }
-      }
-
-      pipeline.AddPass<DependencyReplacer>(true);
-      pipeline.AddPass<HostComputeBarrierInserter>();
-      pipeline.AddPass<FlattenCallGraph>();
-      pipeline.AddPass<ShardingPass>();
-      pipeline.AddPass<HostComputeScheduleOptimizer>();
-      pipeline.AddPass<InterIpuCopyInserter>();
-      pipeline.AddPass<PipelineControlDependencyInserter>();
-      pipeline.AddPass<IoTilesPlacer>(
-          poplar_executor->ShouldPlaceOpsOnIoTiles(), resources.num_io_tiles,
-          target.getBytesPerTile(),
-          poplar_executor->GetIoTileAvailableMemoryProportion(),
-          resources.num_io_tiles);
-      pipeline.AddPass<InterTilesetCopyInserter>();
-      pipeline.AddPass<TupleSimplifier>(true);
-      pipeline.AddPass<FixRootInstructionsPass>();
-      pipeline.AddPass<DeadControlDependenciesElimination>();
-      pipeline.AddPass<HloDCE>();
-      pipeline.AddPass<PostSerializeGradientAccumulation>();
-      pipeline.AddPass<CopyInserter>();
-      pipeline.AddPass<FunctionCombiner>();
-    }
-
-    // Passes below this point need to respect the inplace information.
-    {
-      auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
-          "with inplace information", pipeline_compiler_stats.get());
-      pipeline.AddInvariantChecker<ResourceUpdateChecker>();
-
-      pipeline.AddPass<InplaceFinder>(resources.annotations);
-      pipeline.AddPass<ExpressionOutliner>();
-      pipeline.AddPass<PipelineCopyInserter>();
-      pipeline.AddPass<RepeatLoopCopyInserter>();
-      pipeline.AddPass<ModuleFlatten>(resources.annotations);
-      pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
-      pipeline.AddPass<ConvBwdInputToFwdWeightsTranspose>();
-      pipeline.AddPass<PipelineRecomputationStageInserter>(
-          resources.recomputation_enabled, resources.remote_memory_supported);
-      if (resources.recomputation_enabled) {
-        pipeline.AddPass<FlattenCallGraph>();
-      }
-      {
-        auto& dce_pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-            "dead-code-and-control-deps-elimination",
-            pipeline_compiler_stats.get());
-        dce_pass.AddPass<DeadControlDependenciesElimination>();
-        dce_pass.AddPass<HloDCE>();
-      }
-      // Beyond this point non of the passes in the pipeline are allowed to
-      // modify the instructions in the HloModule.
-
-      // TODO(T10195) re-enable.
-      // if (!PoplarXlaFlags::Get().allow_nans) {
-      //   pipeline.AddPass<ConstantNaN>();
-      // }
-
-      pipeline.AddPass<PipelineVerifier>(resources.recomputation_enabled);
-      pipeline.AddPass<GradientAccumulationVerifier>(
-          resources.replication_factor);
-      if (resources.information.max_all_reduce_buffer_size > 0 ||
-          resources.information.max_inter_ipu_copies_buffer_size > 0 ||
-          resources.information.max_send_recv_cluster_size > 0 ||
-          resources.information.max_reduce_many_buffer_size > 0 ||
-          resources.information.max_all_gather_buffer_size > 0) {
-        pipeline.AddPass<IpuScheduler>(
-            SizeFunction,
-            CreateClusteringMemoryScheduler(resources.information));
-        pipeline.AddPass<CombineInstructions>();
-        pipeline.AddPass<HloDescheduler>();
-      }
-      pipeline.AddPass<RemoteBufferMerger>(
-          resources.annotations, poplar_executor->RemoteBufferMergingMode());
-      pipeline.AddPass<RemoteParameterParallelCombiner>();
-      pipeline.AddPass<AllocationFinder>(
-          resources.annotations, resources.always_rearrange_copies_on_host);
-      pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);
-
-      TF_ASSIGN_OR_RETURN(auto schedulers, GetSchedulerList(resources));
-
-      TF_ASSIGN_OR_RETURN(auto scheduler, BestIpuSchedule(schedulers));
-
-      pipeline.AddPass<ResourceUpdateScheduleOptimizer>();
-      pipeline.AddPass<IpuScheduler>(SizeFunction, std::move(scheduler));
-      pipeline.AddPass<ModuleFlatten>(resources.annotations);
-      pipeline.AddPass<LowerFrontendAttributes>();
-      pipeline.AddPass<MarkReplicaIdenticalInstructions>();
-      pipeline.AddPass<AddStochasticRoundingOptions>(
-          resources.global_floating_point_behaviour.esr(),
-          resources.enable_experimental_prng_stability);
-      pipeline.AddPass<MultiUseFeedsFinder>();
-    }
-
-    TF_RETURN_IF_ERROR(optimizer_pipeline.Run(module).status());
-  }
+  TF_RETURN_IF_ERROR(TransformHlo(module, poplar_executor, resources, target,
+                                  ipu_link_domain_replication_factor));
 
   // Indicates whether the binary generated for this module can stall without
   // more data arriving.
@@ -1933,11 +1933,11 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           TF_RETURN_IF_ERROR(PoplarExecutableCore::Serialize(
               filenames, exec, options_to_serialize,
               PoplarExecutableInfo{
-                  num_IPUs,
-                  target_type,
-                  target_arch,
-                  gateway_mode,
-                  supports_remote_buffers,
+                  target.getNumIPUs(),
+                  poplar::toString(target.getTargetType()),
+                  GetTargetArch(target),
+                  target.getGatewayMode(),
+                  poplar_executor->SupportsRemoteBuffers(),
                   is_module_which_can_stall,
                   TF_MAJOR_VERSION,
                   TF_MINOR_VERSION,
@@ -2024,11 +2024,11 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           std::move(resources.annotations.stream_infos),
           std::move(resources.annotations.host_function_infos),
           PoplarExecutableInfo{
-              num_IPUs,
-              target_type,
-              target_arch,
-              gateway_mode,
-              supports_remote_buffers,
+              target.getNumIPUs(),
+              poplar::toString(target.getTargetType()),
+              GetTargetArch(target),
+              target.getGatewayMode(),
+              poplar_executor->SupportsRemoteBuffers(),
               is_module_which_can_stall,
               TF_MAJOR_VERSION,
               TF_MINOR_VERSION,
