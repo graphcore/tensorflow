@@ -52,7 +52,7 @@ from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMirroredVariable
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategyV1
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUSyncOnReadVariable
 from tensorflow.python.ipu.ops import pipelining_ops
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.layers import normalization
 from tensorflow.python.ops import array_ops

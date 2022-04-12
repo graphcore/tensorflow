@@ -24,6 +24,7 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import test
 from tensorflow.python.platform import googletest
@@ -158,8 +159,8 @@ class PoprunReplicaPartitioningTest(test.TestCase):
         x = math_ops.reduce_mean(x, axis=[1, 2])
         x = fc(x, 10)
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                            labels=label))
         return loss
 
     return stage1, stage2, repeat_count, \

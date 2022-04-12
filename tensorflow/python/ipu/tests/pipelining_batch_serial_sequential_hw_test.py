@@ -23,12 +23,13 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import test
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import momentum
 from tensorflow.python.ipu import pipelining_ops
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour
 
@@ -133,8 +134,8 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
         x = nn.relu(x)
         x = fc(x, 7)
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                            labels=label))
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
@@ -224,8 +225,8 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
         x = math_ops.matmul(x, weight)
         logits = math_ops.reduce_mean(x, axis=[1])
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                            labels=label))
         return loss
 
     def inputs_fn():

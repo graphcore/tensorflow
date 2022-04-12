@@ -111,6 +111,7 @@ py_library(
         "__init__.py",
         "config.py",
         "dataset_benchmark.py",
+        "gradient_accumulation.py",
         "ipu_compiler.py",
         "ipu_estimator.py",
         "ipu_infeed_queue.py",

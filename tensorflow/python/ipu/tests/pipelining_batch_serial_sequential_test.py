@@ -24,6 +24,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
@@ -32,7 +33,7 @@ from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import pipelining_ops
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
 
@@ -265,8 +266,8 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase,
         x = math_ops.reduce_mean(x, axis=[1, 2])
         x = fc(x, 50)
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                            labels=label))
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
@@ -324,8 +325,8 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase,
       with variable_scope.variable_scope("stage4", use_resource=True):
         logits = math_ops.reduce_sum(x, axis=[-1])
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                            labels=label))
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
@@ -411,8 +412,8 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase,
         x = math_ops.matmul(x, weight)
         logits = math_ops.reduce_mean(x, axis=[1])
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                            labels=label))
         return loss
 
     def inputs_fn():
@@ -482,8 +483,8 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase,
         x = math_ops.matmul(x, weight)
         logits = math_ops.reduce_mean(x, axis=[1])
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                            labels=label))
         return loss
 
     def inputs_fn():
@@ -563,8 +564,8 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase,
         x = math_ops.matmul(x, weight)
         logits = math_ops.reduce_mean(x, axis=[1])
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                            labels=label))
         return loss
 
     def inputs_fn():

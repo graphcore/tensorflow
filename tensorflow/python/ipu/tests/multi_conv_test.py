@@ -33,6 +33,7 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
@@ -144,7 +145,8 @@ class MultiConvTest(test_util.TensorFlowTestCase):
       a = math_ops.reduce_mean(a, axis=[2, 3]) + math_ops.reduce_mean(
           b, axis=[2, 3])
       loss = math_ops.reduce_mean(
-          nn.sparse_softmax_cross_entropy_with_logits(logits=a, labels=labels))
+          nn_ops.sparse_softmax_cross_entropy_with_logits(logits=a,
+                                                          labels=labels))
       train_op = gradient_descent.GradientDescentOptimizer(0.001).minimize(
           loss)
       return a, train_op
@@ -202,7 +204,8 @@ class MultiConvTest(test_util.TensorFlowTestCase):
       a = math_ops.reduce_mean(a, axis=[1, 2]) + math_ops.reduce_mean(
           b, axis=[1, 2])
       loss = math_ops.reduce_mean(
-          nn.sparse_softmax_cross_entropy_with_logits(logits=a, labels=labels))
+          nn_ops.sparse_softmax_cross_entropy_with_logits(logits=a,
+                                                          labels=labels))
       train_op = gradient_descent.GradientDescentOptimizer(0.001).minimize(
           loss)
       return a, train_op

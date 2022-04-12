@@ -30,7 +30,8 @@ from tensorflow.python.ipu import ipu_session_run_hooks
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.ops import replication_ops
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as gao
 from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
@@ -147,7 +148,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
       if use_gradient_accumulation:
         cross_replica_optimizer_obj = \
-          ga.CrossReplicaGradientAccumulationOptimizerV2(
+          gao.CrossReplicaGradientAccumulationOptimizerV2(
               sharded_optimizer_obj, iterations_per_loop,
               reduction_method=reduction_method)
       else:

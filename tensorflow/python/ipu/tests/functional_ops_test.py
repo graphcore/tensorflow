@@ -36,6 +36,7 @@ from tensorflow.python.ops import gradients_impl
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
@@ -146,8 +147,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         a = func(a, w0, b)
         a = a - func(a, w1, c)
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=a,
-                                                        labels=labels))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=a,
+                                                            labels=labels))
         train_op = gradient_descent.GradientDescentOptimizer(0.001).minimize(
             loss)
         return a, train_op
@@ -237,8 +238,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         x = cached_func(x, "1")
         x = cached_func(x, "2")
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
-                                                        labels=labels))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                            labels=labels))
         train_op = gradient_descent.GradientDescentOptimizer(0.001).minimize(
             loss)
         return x, train_op
@@ -505,8 +506,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         a = func(a, w0, b)
         a = a - func(a, w1, c)
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=a,
-                                                        labels=labels))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=a,
+                                                            labels=labels))
         train_op = gradient_descent.GradientDescentOptimizer(0.001).minimize(
             loss)
         return a, train_op

@@ -36,7 +36,7 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu.ops import op_util
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
@@ -701,7 +701,7 @@ def pipeline(computational_stages,
       float16, but gives smaller gradients and might require adjusting
       the learning-rate accordingly.
       Defaults to `GradientAccumulationReductionMethod.SUM`
-      (see :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
+      (see :class:`~tensorflow.python.ipu.gradient_accumulation.GradientAccumulationReductionMethod`)  # pylint: disable=line-too-long
     name: name of this pipeline.
 
   Returns:
@@ -724,14 +724,11 @@ def pipeline(computational_stages,
       ops.convert_to_tensor(gradient_accumulation_count,
                             dtype_hint=dtypes.int32), dtypes.int32)
 
-  if optimizer_function is not None and reduction_method is None:
-    raise ValueError('reduction_method must be set to one '
-                     'of GradientAccumulationReductionMethod')
+  if optimizer_function is not None:
+    reduction_method = ga.GradientAccumulationReductionMethod.parse(
+        reduction_method)
 
-  reduction_method = op_util.parse_gradient_accumulation_method(
-      reduction_method)
-
-  if reduction_method != ga.GradientAccumulationReductionMethod.SUM and\
+  if reduction_method != ga.GradientAccumulationReductionMethod.SUM and \
     batch_serialization_iterations != 1:
     raise ValueError('batch_serialization_iterations != 1 is only '
                      'supported when reduction_method is '

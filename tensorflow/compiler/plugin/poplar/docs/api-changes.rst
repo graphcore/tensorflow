@@ -158,7 +158,7 @@ Deprecated pipeline and gradient_accumulation options
 The `experimental_normalize_gradients` parameter when setting gradient accumulation options
 (`Model.set_gradient_accumulation_options()`) and pipeline options (`Model.set_pipelining_options()`)
 has been deprecated and will be removed in future. This feature is now provided
-by new mean reduction methods (see:py:class:`~tensorflow.python.ipu.optimizers.GradientAccumulationReductionMethod`)
+by new mean reduction methods (see:py:class:`~tensorflow.python.ipu.gradient_accumulation.GradientAccumulationReductionMethod`)
 that are selected using the `reduction_method` parameter in `Model.set_gradient_accumulation_options()` and the `gradient_accumulation_reduction_method` parameter in `Model.set_pipelining_options()`.
 
 RNN available_memory_proportion_fwd/available_memory_proportion_bwd deprecated

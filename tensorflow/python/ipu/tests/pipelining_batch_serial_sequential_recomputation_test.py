@@ -23,6 +23,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
@@ -188,8 +189,8 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         x = math_ops.reduce_mean(x, axis=[1, 2])
         x = fc(x, 50)
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                            labels=label))
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
@@ -239,8 +240,8 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
       with variable_scope.variable_scope("stage4", use_resource=True):
         logits = math_ops.reduce_sum(x, axis=[-1])
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                            labels=label))
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(

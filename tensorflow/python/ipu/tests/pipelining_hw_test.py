@@ -32,6 +32,7 @@ from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import linalg_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
@@ -170,8 +171,8 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
         x = math_ops.reduce_mean(x, axis=[1, 2])
         x = fc(x, 100)
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                            labels=label))
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
@@ -310,8 +311,8 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
         x = math_ops.matmul(x, weight)
         logits = math_ops.reduce_mean(x, axis=[1])
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                            labels=label))
         return lr, loss
 
     cfg = ipu.config.IPUConfig()
@@ -476,8 +477,8 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
         x = math_ops.matmul(x, weight)
         logits = math_ops.reduce_mean(x, axis=[1])
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                            labels=label))
         return loss
 
     def inputs_fn():

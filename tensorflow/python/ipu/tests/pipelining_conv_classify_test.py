@@ -24,6 +24,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
@@ -120,8 +121,8 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       with variable_scope.variable_scope("stage3", use_resource=True):
         x = math_ops.reduce_mean(x, axis=[1, 2])
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                            labels=label))
         return loss
 
     def optimizer_function(loss):
@@ -189,8 +190,8 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
         x = math_ops.reduce_mean(x, axis=[1, 2])
         x = fc(x, 100)
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                            labels=label))
         return loss
 
     def optimizer_function(loss):
@@ -260,8 +261,8 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     def stage3(x, label):
       with variable_scope.variable_scope("stage3", use_resource=True):
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                            labels=label))
         return loss
 
     def optimizer_function(loss):
@@ -330,8 +331,8 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     def stage3(x, label):
       with variable_scope.variable_scope("stage3", use_resource=True):
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                            labels=label))
         return loss
 
     def optimizer_function(loss):
@@ -406,8 +407,8 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     def stage3(x, label):
       with variable_scope.variable_scope("stage3", use_resource=True):
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
-                                                        labels=label))
+            nn_ops.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                            labels=label))
         return loss
 
     def optimizer_function(loss):

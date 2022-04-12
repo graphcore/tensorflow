@@ -39,7 +39,8 @@ from tensorflow.python.ipu.keras.extensions import keras_polling_thread
 from tensorflow.python.ipu.keras.extensions import keras_util
 from tensorflow.python.ipu.keras.extensions import keras_data_feed_manager
 from tensorflow.python.ipu.keras import optimizers as ipu_optimizers
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
+from tensorflow.python.ipu import gradient_accumulation as ga
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as gao
 from tensorflow.python.keras import callbacks as callbacks_module
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine import base_layer
@@ -100,7 +101,7 @@ class KerasExtensionBase(base_layer.TFKerasExtension):
     self._gradient_accumulation_steps_per_replica = None
     self._gradient_accumulation_optimizer_kwargs = dict()
     self._gradient_accumulation_reduction_method = \
-      gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
+      ga.GradientAccumulationReductionMethod.SUM
     self._experimental_gradient_accumulation_normalize_gradients = None
 
     # Asynchronous callbacks.
@@ -440,7 +441,7 @@ class KerasExtensionBase(base_layer.TFKerasExtension):
         (gradient_accumulation_steps_per_replica), self, self.optimizer)
 
     optimizer = \
-      gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
+      gao.GradientAccumulationOptimizerV2(
           optimizer,
           gradient_accumulation_steps_per_replica,
           reduction_method=self._gradient_accumulation_reduction_method,
@@ -889,9 +890,13 @@ class KerasExtensionBase(base_layer.TFKerasExtension):
     # The extension might need to be reset if any of the values are set.
     reset_extension = False
 
+    gradient_accumulation_reduction_method = \
+      ga.GradientAccumulationReductionMethod.parse(
+        gradient_accumulation_reduction_method)
+
     if experimental_normalize_gradients and \
         gradient_accumulation_reduction_method != \
-          gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM: # pylint: disable=line-too-long
+          ga.GradientAccumulationReductionMethod.SUM: # pylint: disable=line-too-long
       raise ValueError(
           "Setting `experimental_normalize_gradients` to True is only "
           "supported when setting gradient_accumulation_reduction_method "
@@ -951,11 +956,15 @@ class KerasExtensionBase(base_layer.TFKerasExtension):
     # The extension might need to be reset if any of the values are set.
     reset_extension = False
 
+    gradient_accumulation_reduction_method = \
+      ga.GradientAccumulationReductionMethod.parse(
+        gradient_accumulation_reduction_method)
+
     if experimental_normalize_gradients:
       # TODO(T46014) - Change experimental_normalize_gradients to False
       # and set gradient_accumulation_reduction_method to MEAN?
       gradient_accumulation_reduction_method = \
-        gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM
+        ga.GradientAccumulationReductionMethod.SUM
 
     self._gradient_accumulation_reduction_method = \
       gradient_accumulation_reduction_method
@@ -1134,9 +1143,9 @@ class KerasExtensionBase(base_layer.TFKerasExtension):
 
     reduction_method_int = \
       config.get("gradient_accumulation_reduction_method",
-                 gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM.value)  # pylint: disable=line-too-long
+                 ga.GradientAccumulationReductionMethod.SUM.value)  # pylint: disable=line-too-long
     self._gradient_accumulation_reduction_method = \
-      gradient_accumulation_optimizer.GradientAccumulationReductionMethod(reduction_method_int)  # pylint: disable=line-too-long
+      ga.GradientAccumulationReductionMethod(reduction_method_int)  # pylint: disable=line-too-long
 
     self._pipelining_accumulate_outfeed = config.get(
         "pipelining_accumulate_outfeed", None)

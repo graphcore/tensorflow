@@ -25,7 +25,6 @@ from tensorflow.python.keras.engine import functional
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import deprecation
 from tensorflow.python.util import nest
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 
 
 class PipelineStage(object):
@@ -238,8 +237,7 @@ class FunctionalExtension(keras_extension_base.KerasExtensionBase):  # pylint: d
       self,
       gradient_accumulation_steps_per_replica=None,
       experimental_normalize_gradients=None,
-      gradient_accumulation_reduction_method=gradient_accumulation_optimizer.
-      GradientAccumulationReductionMethod.SUM,
+      gradient_accumulation_reduction_method='sum',
       **gradient_accumulation_optimizer_kwargs):
     # pylint:disable=line-too-long
     """Sets the gradient accumulation options for non-pipelined models which are
@@ -310,13 +308,12 @@ class FunctionalExtension(keras_extension_base.KerasExtensionBase):  # pylint: d
       'Please update your pipeline settings.',
       'experimental_normalize_gradients')
   def set_pipelining_options(
-      self,
+      self,  #pylint: disable=missing-type-doc
       gradient_accumulation_steps_per_replica=None,
       device_mapping=None,
       accumulate_outfeed=None,
       experimental_normalize_gradients=None,
-      gradient_accumulation_reduction_method=gradient_accumulation_optimizer.
-      GradientAccumulationReductionMethod.SUM,
+      gradient_accumulation_reduction_method='sum',
       **pipelining_kwargs):
     """Sets the pipelining options, including gradient accumulation options,
     for pipelined models.

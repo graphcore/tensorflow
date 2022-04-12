@@ -20,7 +20,6 @@ import copy
 import types
 
 from tensorflow.python.ipu.keras.extensions import keras_extension_base
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine import functional
 from tensorflow.python.keras.engine import input_layer
@@ -347,8 +346,7 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
       self,
       gradient_accumulation_steps_per_replica=None,
       experimental_normalize_gradients=None,
-      gradient_accumulation_reduction_method=gradient_accumulation_optimizer.
-      GradientAccumulationReductionMethod.SUM,
+      gradient_accumulation_reduction_method='sum',
       **gradient_accumulation_optimizer_kwargs):
     # pylint:disable=line-too-long
     """Sets the gradient accumulation options for non-pipelined models which are
@@ -419,13 +417,12 @@ class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disabl
       'Please update your pipeline settings.',
       'experimental_normalize_gradients')
   def set_pipelining_options(
-      self,
+      self,  #pylint: disable=missing-type-doc
       gradient_accumulation_steps_per_replica=None,
       device_mapping=None,
       accumulate_outfeed=None,
       experimental_normalize_gradients=None,
-      gradient_accumulation_reduction_method=gradient_accumulation_optimizer.
-      GradientAccumulationReductionMethod.SUM,
+      gradient_accumulation_reduction_method='sum',
       **pipelining_kwargs):
     """Sets the pipelining options, including gradient accumulation options,
     for pipelined models.

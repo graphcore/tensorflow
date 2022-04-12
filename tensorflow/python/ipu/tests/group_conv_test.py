@@ -31,6 +31,7 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.training import gradient_descent
@@ -138,7 +139,8 @@ class GroupedConvTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
       a = math_ops.reduce_mean(a, axis=[2, 3])
       loss = math_ops.reduce_mean(
-          nn.sparse_softmax_cross_entropy_with_logits(logits=a, labels=lab))
+          nn_ops.sparse_softmax_cross_entropy_with_logits(logits=a,
+                                                          labels=lab))
 
       return gradient_descent.GradientDescentOptimizer(0.001).minimize(loss)
 

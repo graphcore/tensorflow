@@ -29,7 +29,7 @@ from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.ipu_pipeline_estimator import IPUPipelineEstimator
 from tensorflow.python.ipu.ipu_pipeline_estimator import IPUPipelineEstimatorSpec
 from tensorflow.python.ipu.ops import pipelining_ops
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import metrics_impl

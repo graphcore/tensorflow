@@ -32,7 +32,7 @@ from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.horovod.ipu_horovod_strategy import IPUHorovodStrategyV1
 from tensorflow.python.ipu.ops import pipelining_ops
-from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
+from tensorflow.python.ipu import gradient_accumulation as ga
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops

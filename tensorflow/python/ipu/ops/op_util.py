@@ -295,23 +295,6 @@ def bool_to_three_state(value, default=None):
   return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_OFF)
 
 
-def parse_gradient_accumulation_method(reduction_method):
-  if isinstance(
-      reduction_method,
-      gradient_accumulation_optimizer.GradientAccumulationReductionMethod):
-    return reduction_method
-  elif isinstance(reduction_method, str):
-    if reduction_method.upper() == 'SUM':
-      return gradient_accumulation_optimizer.GradientAccumulationReductionMethod.SUM  # pylint: disable=line-too-long
-    elif reduction_method.upper() == 'MEAN':
-      return gradient_accumulation_optimizer.GradientAccumulationReductionMethod.MEAN  # pylint: disable=line-too-long
-    elif reduction_method.upper() == 'RUNNING_MEAN':
-      return gradient_accumulation_optimizer.GradientAccumulationReductionMethod.RUNNING_MEAN  # pylint: disable=line-too-long
-
-  raise ValueError('reduction_method must be set to one '
-                   'of GradientAccumulationReductionMethod')
-
-
 def accumulate_gradients(grads_and_vars,
                          gradient_accumulation_dtype,
                          accum_scale=1.0,
