@@ -761,7 +761,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   try {
     const poplar::Target& poplar_target =
         poplar_executor->GetOrCreatePoplarTarget();
-    TF_RETURN_IF_ERROR(resources.CreateMainGraphAndPreamble(poplar_target));
+    TF_RETURN_IF_ERROR(resources.CreateMainGraph(poplar_target));
   } catch (const std::exception& e) {
     return PoplarExceptionToTensorflowStatus("[Create Graph]", e);
   }
@@ -1434,6 +1434,45 @@ std::string GetTargetArch(const poplar::Target& target) {
              : "";
 }
 
+StatusOr<poplar::program::Program> ConstructGraphAndMainProgram(
+    HloModule* module, CompilerResources& resources, EntryVisitor& visitor) {
+  Tracepoint tracepoint("PoplarGraphConstruction");
+  auto& main_graph = GetMasterGraph(resources);
+  try {
+    resources.progress_bar->MoveToNextStage();
+    // Run a compile only Poplar specific pipeline - these passes do not
+    // modify the module in a functional way.
+    VLOG(1) << "Begin Poplar Pipeline.";
+    std::unique_ptr<PVTICompilerStats> poplar_pipline_compiler_stats =
+        absl::make_unique<PVTICompilerStats>();
+    HloPassPipeline pipeline("PoplarPipeline",
+                             poplar_pipline_compiler_stats.get());
+    pipeline.AddPass<EmbeddingPlansPreplanning>(resources);
+    pipeline.AddPass<ConvolutionPreplanning>(resources);
+    pipeline.AddPass<MatMulPreplanning>(resources);
+    pipeline.AddPass<CTCPreplanning>(resources);
+    pipeline.AddPass<MapHloInstructionToDebugIdPass>(
+        resources.hlo_instruction_to_debug_id_mapping);
+
+    TF_RETURN_IF_ERROR(pipeline.Run(module).status());
+    VLOG(1) << "End Poplar Pipeline.";
+
+    resources.progress_bar->MoveToNextStage();
+
+    auto* entry = module->entry_computation();
+    auto order = module->schedule().sequence(entry).instructions();
+
+    // The following line starts the lowering in poplar.
+    VLOG(1) << "Begin Poplar graph construction.";
+    TF_RETURN_IF_ERROR(entry->AcceptOrdered(&visitor, order));
+    VLOG(1) << "End Poplar graph construction.";
+    resources.progress_bar->MoveToNextStage();
+  } catch (const std::exception& e) {
+    return PoplarExceptionToTensorflowStatus("[Build graph]", e);
+  }
+  return visitor.GetSequenceAndInitializeCounters();
+}
+
 StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     HloModule* module, PoplarExecutor* poplar_executor,
     uint64 executable_hash) {
@@ -1792,6 +1831,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
     // Only create the graphs if we are compiling.
     TF_RETURN_IF_ERROR(CreatePoplarGraphs(resources, module, poplar_executor));
+    resources.CreatePreambleSequence();
     auto& main_graph = GetMasterGraph(resources);
 
     DriverProgramSequence fp_setup(main_graph);
@@ -1808,38 +1848,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         InitializeSeed(main_graph, replication_factor, resources));
 
     EntryVisitor visitor(resources, entry);
-    try {
-      Tracepoint tracepoint("PoplarGraphConstruction");
-      resources.progress_bar->MoveToNextStage();
-      // Run a compile only Poplar specific pipeline - these passes do not
-      // modify the module in a functional way.
-      VLOG(1) << "Begin Poplar Pipeline.";
-      std::unique_ptr<PVTICompilerStats> poplar_pipline_compiler_stats =
-          absl::make_unique<PVTICompilerStats>();
-      HloPassPipeline pipeline("PoplarPipeline",
-                               poplar_pipline_compiler_stats.get());
-      pipeline.AddPass<EmbeddingPlansPreplanning>(resources);
-      pipeline.AddPass<ConvolutionPreplanning>(resources);
-      pipeline.AddPass<MatMulPreplanning>(resources);
-      pipeline.AddPass<CTCPreplanning>(resources);
-      pipeline.AddPass<MapHloInstructionToDebugIdPass>(
-          resources.hlo_instruction_to_debug_id_mapping);
-
-      TF_RETURN_IF_ERROR(pipeline.Run(module).status());
-      VLOG(1) << "End Poplar Pipeline.";
-
-      resources.progress_bar->MoveToNextStage();
-
-      auto order = module->schedule().sequence(entry).instructions();
-
-      // The following line starts the lowering in poplar.
-      VLOG(1) << "Begin Poplar graph construction.";
-      TF_RETURN_IF_ERROR(entry->AcceptOrdered(&visitor, order));
-      VLOG(1) << "End Poplar graph construction.";
-      resources.progress_bar->MoveToNextStage();
-    } catch (const std::exception& e) {
-      return PoplarExceptionToTensorflowStatus("[Build graph]", e);
-    }
+    TF_ASSIGN_OR_RETURN(auto module_prog, ConstructGraphAndMainProgram(
+                                              module, resources, visitor));
 
     // If we're using SR then enable deterministic workers to make sure
     // seeds remain identical when running ops with identical inputs.
@@ -1867,7 +1877,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     main_program.add(*resources.preamble_sequence);
 
     // Add the main program sequence.
-    main_program.add(visitor.GetSequenceAndInitializeCounters());
+    main_program.add(module_prog);
 
     logging_cycle_count = InitializeCycleCounter(main_graph, main_program,
                                                  "InitializeCycleCounter");

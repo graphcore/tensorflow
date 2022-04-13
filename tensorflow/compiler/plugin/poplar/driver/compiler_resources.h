@@ -295,9 +295,8 @@ struct CompilerResources : public HloResources {
                               floating_point_behaviour, information));
   }
 
-  Status CreateMainGraphAndPreamble(
-      const poplar::Target& target,
-      absl::optional<uint32> replication_factor = {}) {
+  Status CreateMainGraph(const poplar::Target& target,
+                         absl::optional<uint32> replication_factor = {}) {
     try {
       uint32 repl_factor =
           replication_factor ? *replication_factor : this->replication_factor;
@@ -306,10 +305,19 @@ struct CompilerResources : public HloResources {
     } catch (const std::exception& e) {
       return PoplarExceptionToTensorflowStatus("[Create Graph]", e);
     }
+    return Status::OK();
+  }
 
+  void CreatePreambleSequence() {
     preamble_sequence =
         absl::make_unique<DriverProgramSequence>(*main_graph, "Preamble");
+  }
 
+  Status CreateMainGraphAndPreamble(
+      const poplar::Target& target,
+      absl::optional<uint32> replication_factor = {}) {
+    TF_RETURN_IF_ERROR(CreateMainGraph(target, replication_factor));
+    CreatePreambleSequence();
     return Status::OK();
   }
 
