@@ -20,6 +20,7 @@ import popdist
 import popdist.tensorflow
 
 import tensorflow as tf
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import constant_op
@@ -62,6 +63,7 @@ class PoprunPopDistStrategyTest(test_util.TensorFlowTestCase,
   }]
 
   @parameterized.named_parameters(*TESTCASES)
+  @tu.test_uses_ipus(num_ipus=2)
   def test_single_multi_replica_training_step_keras(
       self, enable_asynchronous_callbacks):
     config = ipu.config.IPUConfig()

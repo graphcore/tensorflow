@@ -166,6 +166,7 @@ class PoprunReplicaPartitioningTest(test.TestCase):
     return stage1, stage2, repeat_count, \
       pipeline_depth, dataset_fn, optimizer_fn
 
+  @tu.test_uses_ipus(num_ipus=16)
   @test_util.deprecated_graph_mode_only
   def test_compare_partitioned_to_non_partitioned(self):
     stage1, stage2, repeat_count, \
@@ -175,6 +176,7 @@ class PoprunReplicaPartitioningTest(test.TestCase):
                                                  repeat_count, pipeline_depth,
                                                  dataset_fn, optimizer_fn)
 
+  @tu.test_uses_ipus(num_ipus=16)
   @test_util.deprecated_graph_mode_only
   def test_partitioned_cross_replica_mean(self):
     stage1, stage2, repeat_count, \

@@ -19,6 +19,7 @@ from absl.testing import parameterized
 import popdist
 import popdist.tensorflow
 
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import backprop
@@ -332,6 +333,7 @@ class KerasPoprunTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertAllClose(result_1, result_2)
 
   @parameterized.named_parameters(*TESTCASES)
+  @tu.test_uses_ipus(num_ipus=2)
   def test_popdist_horovod_are_equal(self, callback, did_weights_change):
     """Tests whether the results of using keras from `keras_extensions_base`
     yields the same results as the upstream version after running a callback.
@@ -350,6 +352,7 @@ class KerasPoprunTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                          did_weights_change)
     self.assert_result_is_equal(popdist_result, horovod_result)
 
+  @tu.test_uses_ipus(num_ipus=2)
   def test_popdist_dataset_truncation(self):
     class StepCounterCallback(Callback):
       def __init__(self):

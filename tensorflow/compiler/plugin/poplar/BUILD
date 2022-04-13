@@ -2693,6 +2693,7 @@ poprun_py_test(
     num_instances = 2,
     num_replicas = 8,
     deps = [
+        ":test_utils_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
@@ -3265,6 +3266,7 @@ tf_xla_py_test(
         num_instances = N,
         num_replicas = M,
         deps = [
+            ":test_utils_py",
             "//tensorflow/python/ipu:ipu_lib",
         ],
     )

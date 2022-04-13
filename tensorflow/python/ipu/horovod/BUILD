@@ -124,6 +124,7 @@ poprun_py_test(
     num_instances = 2,
     num_replicas = 2,
     deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )

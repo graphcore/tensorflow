@@ -24,9 +24,11 @@ from tensorflow.python.ipu.ops.cross_replica_ops import cross_replica_sum
 from tensorflow.python.ipu.ops.replication_ops import replication_index
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
+import test_utils as tu
 
 
 class PoprunBasicTest(test_util.TensorFlowTestCase):  # pylint: disable=abstract-method
+  @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
   def test_cross_replica_sum(self):
     num_local_replicas = popdist.getNumLocalReplicas()

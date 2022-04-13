@@ -34,6 +34,7 @@ from tensorflow.python.keras import Model, Input
 from tensorflow.python.keras import layers
 from tensorflow.python.keras.engine import data_adapter
 from tensorflow.python.ops import control_flow_v2_toggles
+import test_utils as tu
 
 
 def simple_model():
@@ -116,6 +117,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
     return dataset
 
+  @tu.test_uses_ipus(num_ipus=8)
   def test_tf2_distributed_ipu_strategy(self):
     config = ipu.config.IPUConfig()
     popdist.tensorflow.set_ipu_config(config, ipus_per_replica=1)
@@ -153,6 +155,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
       self.assert_all_instances_not_equal(history.history['loss'])
       self.assert_all_instances_not_equal(layer.get_weights()[1])
 
+  @tu.test_uses_ipus(num_ipus=8)
   def test_tf2_distributed_popdist_strategy(self):
     config = ipu.config.IPUConfig()
     popdist.tensorflow.set_ipu_config(config, ipus_per_replica=1)
@@ -196,6 +199,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
       for v in model.trainable_variables:
         self.assert_all_instances_equal(v)
 
+  @tu.test_uses_ipus(num_ipus=8)
   def test_single_multi_replica_training_step(self):
     config = ipu.config.IPUConfig()
     popdist.tensorflow.set_ipu_config(config, ipus_per_replica=1)
@@ -242,6 +246,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
         # w := w - learning_rate * num_replicas * x
         reference_w -= learning_rate * num_replicas * x
 
+  @tu.test_uses_ipus(num_ipus=8)
   def test_single_multi_replica_training_step_keras(self):
     config = ipu.config.IPUConfig()
     popdist.tensorflow.set_ipu_config(config, ipus_per_replica=1)
@@ -287,6 +292,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
         # w := w - learning_rate * x
         reference_w -= learning_rate * x
 
+  @tu.test_uses_ipus(num_ipus=8)
   def test_single_training_step_equal_in_tf_and_keras(self):
     # This test verifies that a training loop in raw TensorFlow and Keras yield
     # the same losses, gradients and weight updates.
@@ -626,6 +632,7 @@ class DistributedTF2Test(test_util.TensorFlowTestCase):
 
     return loss, gradients, losses, weights
 
+  @tu.test_uses_ipus(num_ipus=8)
   def test_single_training_step_equal_tf1_and_keras(self):
     loss_tf1, gradients_tf1, losses_tf1, weights_tf1 =\
         self.single_training_step_equal_tf1()
