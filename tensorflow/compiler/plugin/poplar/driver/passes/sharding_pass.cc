@@ -308,7 +308,10 @@ bool CopyTupleShardingFromOperands(HloInstruction* inst) {
 bool CopyShardingFromOperands(HloInstruction* inst) {
   for (int o = 0; o < inst->operand_count(); o++) {
     auto* operand = inst->operand(o);
-    if (operand->has_sharding()) {
+    // We don't want to propagate the sharding of AfterAll tokens. The
+    // sharding of in/outfeeds should come from their users/outfed data
+    // respectively.
+    if (operand->has_sharding() && operand->opcode() != HloOpcode::kAfterAll) {
       if (CompatibleShapes(inst->shape(), operand->shape())) {
         auto s = GetShardingOfOutputTensor(operand);
         SetSharding(inst, s);
@@ -405,8 +408,14 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
     done = true;
     bool made_progress = false;
     for (auto* inst : comp->MakeInstructionPostOrder()) {
-      VLOG(3) << "Sharding pass visting instruction " << inst->name();
+      VLOG(3) << "Attempt " << attempt << ": sharding pass visting instruction "
+              << inst->name();
       bool added_sharding = false;
+
+      if (!inst->has_sharding() && inst->opcode() == HloOpcode::kAfterAll) {
+        SetSharding(inst, GetDefaultSharding(inst->shape()));
+        added_sharding = true;
+      }
 
       // If an instruction has no operands, and no users but the root Tuple,
       // then assign default sharding
