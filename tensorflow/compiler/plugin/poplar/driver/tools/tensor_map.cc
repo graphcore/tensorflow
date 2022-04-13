@@ -46,7 +46,7 @@ Status RemoteBufferHolder::SetNumElements(std::size_t num_elements) {
   return Status::OK();
 }
 
-poplar::RemoteBuffer RemoteBufferHolder::Get() {
+DriverRemoteBuffer RemoteBufferHolder::Get() {
   if (!remote_buffer_) {
     VLOG(3) << "Creating remote buffer (" << handle_ << ", " << num_elements_
             << ", " << repeats_ << ")";
@@ -67,7 +67,7 @@ void TensorMaps::AddTensorMapForComputation(const std::string& computation_name,
 }
 
 Status TensorMap::AddOutputTensor(const HloInstruction* inst,
-                                  int64 output_index, poplar::Tensor tensor) {
+                                  int64 output_index, DriverTensor tensor) {
   VLOG(2) << "Adding output tensor for instruction " << inst->name()
           << " at output index " << output_index;
 
@@ -125,11 +125,11 @@ Status TensorMap::AddOutput(const HloInstruction* inst, int64 output_index,
   return Status::OK();
 }
 
-poplar::Tensor TensorMap::GetTensor(TensorLocation location) const {
+DriverTensor TensorMap::GetTensor(TensorLocation location) const {
   return _map.at(location).tensor;
 }
 
-Status TensorMap::UpdateTensor(TensorLocation location, poplar::Tensor tensor) {
+Status TensorMap::UpdateTensor(TensorLocation location, DriverTensor tensor) {
   auto it = _map.find(location);
   if (it == _map.end()) {
     return tensorflow::errors::Unknown(
@@ -192,8 +192,8 @@ TensorMap::FindInstructionNamedTensorLocations(
 
   return outputs;
 }
-poplar::Tensor TensorMap::FindTensorByName(const std::string& name,
-                                           int64 output_index) const {
+DriverTensor TensorMap::FindTensorByName(const std::string& name,
+                                         int64 output_index) const {
   for (auto it : _map) {
     if (it.first.instruction->name() == name &
         it.first.flattened_output_tuple_index == output_index) {
@@ -201,7 +201,7 @@ poplar::Tensor TensorMap::FindTensorByName(const std::string& name,
     }
   }
 
-  return poplar::Tensor();
+  return DriverTensor();
 }
 
 TensorOrRemoteBufferVectors CastTensorVectors(

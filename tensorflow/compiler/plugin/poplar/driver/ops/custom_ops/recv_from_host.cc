@@ -41,7 +41,7 @@ std::vector<xla::Shape> GetOutputShapes(const xla::Shape& output_shape,
 }
 
 StatusOr<TensorVector> GetOutputTensors(
-    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+    DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
     const std::vector<xla::Shape>& output_shapes, int64 num_outputs,
     TensorMap& tensor_map, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -113,7 +113,8 @@ class RecvFromHostOp : public PoplarOpDef {
       seq.add(poplar::program::Copy(
           stream, tensor, res.always_rearrange_copies_on_host, {debug_info}));
 
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, tensor));
+      TF_CHECK_OK(
+          AddOutputTensor(tensor_map, inst, i, DriverTensor(tensor, graph)));
       res.annotations.recv_infos.emplace_back(stream.handle(), rendezvous_key,
                                               shape);
     }

@@ -80,7 +80,7 @@ Status DeferredAllocations::AddDeferredAllocation(
   }
   if (allocate_now) {
     // Call the allocation functions immediately.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor tensor, allocate_fn(location));
+    TF_ASSIGN_OR_RETURN(DriverTensor tensor, allocate_fn(location));
     TF_ASSIGN_OR_RETURN(tensor, post_process_fn(tensor));
     TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map_, location.instruction,
                                        location.flattened_output_tuple_index,
@@ -207,7 +207,7 @@ Status DeferredAllocations::MakeAllocation(TensorLocation input_location,
 }
 
 Status DeferredAllocations::PostProcessAllocation(
-    TensorLocation allocation_location, poplar::Tensor tensor) {
+    TensorLocation allocation_location, DriverTensor tensor) {
   TensorLocation input_location =
       location_lookup_table_.at(allocation_location);
   // Call the post process function.
@@ -408,7 +408,7 @@ DeferredAllocateFunction DeferredVisitor::MakeParameterAllocationFunction(
     absl::optional<TensorOrRemoteBuffer> tensor_like,
     const poplar::DebugNameAndId& debug_name_and_id) {
   return [this, shape, tensor_like, debug_name_and_id](
-             TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+             TensorLocation allocation_location) -> StatusOr<DriverTensor> {
     TF_ASSIGN_OR_RETURN(auto tensor,
                         AllocateInput(allocation_location, shape, tensor_like,
                                       debug_name_and_id));
@@ -419,8 +419,8 @@ DeferredAllocateFunction DeferredVisitor::MakeParameterAllocationFunction(
 DeferredPostProcessFunction DeferredVisitor::MakeParameterPostProcessFunction(
     TensorLocation input_location, int64 param_num, const Shape& shape,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  return [this, input_location, shape, param_num, debug_name_and_id](
-             poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+  return [this, input_location, shape, param_num,
+          debug_name_and_id](DriverTensor tensor) -> StatusOr<DriverTensor> {
     // Call the post process for this location.
     TF_ASSIGN_OR_RETURN(tensor,
                         PostProcessInputTensor(tensor, input_location, shape,
@@ -477,7 +477,7 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
     // for this location, then just forward the tensor.
 
     // Do not call the post process for tensors which are not allocated.
-    poplar::Tensor output = *callsite_tensor;
+    DriverTensor output = *callsite_tensor;
     TF_CHECK_OK(AddOutputTensor(tensor_map, input_location.instruction,
                                 input_location.flattened_output_tuple_index,
                                 output));
@@ -494,7 +494,7 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
     auto& graph =
         GetGraphWithOutputIndex(resources_, input_location.instruction,
                                 input_location.flattened_output_tuple_index);
-    poplar::Tensor output = TensorCloneAndRebalanceAliasing(
+    DriverTensor output = TensorCloneAndRebalanceAliasing(
         graph, resources_, *callsite_tensor, debug_name_and_id);
 
     TF_RETURN_IF_ERROR(post_process_fn(output).status());
@@ -551,7 +551,7 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
     // Function which is called when this input is allocated.
     DeferredAllocateFunction allocate_fn =
         [this, shape, debug_name_and_id](
-            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+            TensorLocation allocation_location) -> StatusOr<DriverTensor> {
       TF_ASSIGN_OR_RETURN(auto tensor, AllocateInput(allocation_location, shape,
                                                      debug_name_and_id));
       return tensor;
@@ -561,7 +561,7 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
     // input.
     DeferredPostProcessFunction post_process_fn =
         [this, input_location, shape,
-         debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+         debug_name_and_id](DriverTensor tensor) -> StatusOr<DriverTensor> {
       // Call the post process for this location.
       TF_ASSIGN_OR_RETURN(tensor,
                           PostProcessInputTensor(tensor, input_location, shape,
@@ -730,7 +730,7 @@ Status DeferredVisitor::HandleDeferredAllocationTuple(HloInstruction* inst) {
       TensorLocation input_location(input_inst, i);
       if (inputs[operand_idx][i] && inputs[operand_idx][i]->IsTensor()) {
         // If a tensor exists then just forward it.
-        poplar::Tensor output = *inputs[operand_idx][i];
+        DriverTensor output = *inputs[operand_idx][i];
         TF_RETURN_IF_ERROR(
             AddOutputTensor(tensor_map, inst, output_tuple_index, output));
       } else if (inputs[operand_idx][i] &&
@@ -808,7 +808,7 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
       // fallback).
       DeferredAllocateFunction allocate_fn =
           [this, &graph, inst, op, clone_method, tuple_idx, dnai, op_dnai](
-              TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+              TensorLocation allocation_location) -> StatusOr<DriverTensor> {
         poplar::program::Sequence seq(dnai);
         auto inputs = FindInstructionInputsInRange(
             tensor_map, resources_, inst, /*input=*/0,
@@ -816,11 +816,10 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
             /*expand_aliasing=*/false);
         CHECK_EQ(inputs.size(), 1);
         CHECK(inputs[0].IsTensor());
-        poplar::Tensor input = inputs[0].AsTensor();
+        DriverTensor input = inputs[0].AsTensor();
         switch (clone_method) {
           case CloneMethod_DeduceNewOrderOrPreserveAliases:
-            // TODO(T58874) - Remove cast
-            return (poplar::Tensor)graph.clone(
+            return graph.clone(
                 input.elementType(), input,
                 {dnai, absl::StrCat(std::to_string(tuple_idx),
                                     op_dnai.getPathName())},
@@ -842,7 +841,7 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
       // In case of bypass, just return input tensor.
       DeferredPostProcessFunction postprocess_fn =
           [this, inst, op, tuple_idx, clone_method, dnai,
-           op_dnai](const poplar::Tensor& tensor) -> StatusOr<poplar::Tensor> {
+           op_dnai](const DriverTensor& tensor) -> StatusOr<DriverTensor> {
         if (clone_method == CloneMethod_Bypass) {
           return tensor;
         }
@@ -853,7 +852,7 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
             /*expand_aliasing=*/false);
         CHECK_EQ(inputs.size(), 1);
         CHECK(inputs[0].IsTensor());
-        poplar::Tensor input = inputs[0].AsTensor();
+        DriverTensor input = inputs[0].AsTensor();
         if (input != tensor) {
           seq.add(poplar::program::Copy(input, tensor, false,
                                         {absl::StrCat(std::to_string(tuple_idx),
@@ -881,12 +880,14 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
 
     if (input->IsTensor()) {
       auto tensor_input = input->AsTensor();
-      poplar::Tensor out;
+      DriverTensor out;
       switch (clone_method) {
         case CloneMethod_PreserveOrderAndAliases: {
-          out = poputil::duplicate(
-              graph, tensor_input, seq, {dnai, std::to_string(tuple_idx)},
-              poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+          out = DriverTensor(
+              poputil::duplicate(
+                  graph, tensor_input, seq, {dnai, std::to_string(tuple_idx)},
+                  poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES),
+              graph);
           break;
         }
         case CloneMethod_PreserveOrderUnlessAliases: {
@@ -917,9 +918,11 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
           } else {
             CHECK_EQ(clone_method, CloneMethod_DeduceNewOrderOrPreserveAliases);
             // Fall back to default copy
-            out = poputil::duplicate(
-                graph, tensor_input, seq, {dnai, std::to_string(tuple_idx)},
-                poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+            out = DriverTensor(
+                poputil::duplicate(
+                    graph, tensor_input, seq, {dnai, std::to_string(tuple_idx)},
+                    poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES),
+                graph);
           }
           break;
         }
@@ -1042,7 +1045,7 @@ Status DeferredVisitor::HandleNonDeferredFusion(HloInstruction* inst) {
 
 namespace {
 Status AddGradientAccumulationZeroing(CompilerResources& res,
-                                      const poplar::Tensor& tensor) {
+                                      const DriverTensor& tensor) {
   if (res.gradient_accumulation_zeroing_tensors.empty()) {
     return FailedPrecondition("Cannot zero gradient accumulation buffer.");
   }
@@ -1076,11 +1079,11 @@ Status DeferredVisitor::HandleDeferredWideConst(HloInstruction* inst) {
 
   // Allocate the constant first.
   TF_ASSIGN_OR_RETURN(
-      poplar::Tensor constant_tensor,
+      DriverTensor constant_tensor,
       AddConstantTensor(graph, TensorLocation{constant, 0}, constant->shape(),
                         constant_literal, resources_, tensor_map, dnai));
   // Broadcast the tensor to the right shape.
-  TF_ASSIGN_OR_RETURN(poplar::Tensor broadcasted_tensor,
+  TF_ASSIGN_OR_RETURN(DriverTensor broadcasted_tensor,
                       BroadcastTensor(constant_tensor, output_shape, {}));
 
   const bool allocate_now =
@@ -1092,7 +1095,7 @@ Status DeferredVisitor::HandleDeferredWideConst(HloInstruction* inst) {
     // Doing this copy rather than allocating a big constant and calling
     // setInitialValue is a trade off between having a large tensor always
     // live and a copy + a scalar constant always being live.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor layout,
+    TF_ASSIGN_OR_RETURN(DriverTensor layout,
                         AddTensor(graph, output_location, output_shape,
                                   resources_, tensor_map, {dnai, "layout"}));
     poplar::program::Sequence seq(dnai);
@@ -1106,13 +1109,13 @@ Status DeferredVisitor::HandleDeferredWideConst(HloInstruction* inst) {
     // value.
     DeferredAllocateFunction allocate_fn =
         [broadcasted_tensor](
-            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+            TensorLocation allocation_location) -> StatusOr<DriverTensor> {
       return broadcasted_tensor;
     };
 
     DeferredPostProcessFunction postprocess_fn =
         [inst, this, broadcasted_tensor,
-         dnai](const poplar::Tensor& tensor) -> StatusOr<poplar::Tensor> {
+         dnai](const DriverTensor& tensor) -> StatusOr<DriverTensor> {
       if (tensor == broadcasted_tensor) {
         // This is the original tensor we allocated, do not fill it.
         return tensor;
@@ -1180,8 +1183,8 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
   if (inst->operand_count() > 0) {
     allocate_fn =
         [this, inst, debug_name_and_id, output_type](
-            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-      poplar::Graph& graph = GetGraph(resources_, inst);
+            TensorLocation allocation_location) -> StatusOr<DriverTensor> {
+      auto& graph = GetGraph(resources_, inst);
 
       // Get the layout of the variable passed into the gradient accumulator -
       // if it is a tensor it can be used as a guide for how to allocate the
@@ -1190,12 +1193,12 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
           FindInstructionOutputs(tensor_map, resources_, inst->operand(0));
       CHECK_EQ(outputs.size(), 1);
       const auto& variable_tensor = outputs[0];
-      absl::optional<poplar::Tensor> tensor_like;
+      absl::optional<DriverTensor> tensor_like;
       if (variable_tensor.IsTensor()) {
         tensor_like = variable_tensor.AsTensor();
       }
 
-      poplar::Tensor tensor;
+      DriverTensor tensor;
       if (tensor_like && inst->user_count() > 1) {
         // Use the tensor-like layout as the layout for the accumulator.
         tensor = TensorCloneAndRebalanceAliasing(
@@ -1218,9 +1221,9 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
   } else {
     allocate_fn =
         [this, inst, debug_name_and_id](
-            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+            TensorLocation allocation_location) -> StatusOr<DriverTensor> {
       TF_ASSIGN_OR_RETURN(
-          poplar::Tensor tensor,
+          DriverTensor tensor,
           AllocateInput(allocation_location, inst->shape(), debug_name_and_id));
       return tensor;
     };
@@ -1228,7 +1231,7 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
 
   // Function which is called after the tensor has been created.
   DeferredPostProcessFunction post_process_fn =
-      [this, inst](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+      [this, inst](DriverTensor tensor) -> StatusOr<DriverTensor> {
     // Add the tensor to the zeroing stack.
     TF_RETURN_IF_ERROR(AddGradientAccumulationZeroing(resources_, tensor));
     return tensor;
@@ -1253,7 +1256,7 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
 
   TensorLocation output_location(inst, 0);
   if (create_buffer->IsRemoteBuffer()) {
-    poplar::Graph& graph = GetGraph(resources_, inst);
+    auto& graph = GetGraph(resources_, inst);
     TF_ASSIGN_OR_RETURN(poplar::Type element_type, PoplarDataType(shape));
     std::size_t num_repeats = ShapeUtil::GetDimension(shape, 0);
     std::size_t element_count =
@@ -1277,16 +1280,16 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
     // Function which is called when allocating this tensor.
     DeferredAllocateFunction allocate_fn =
         [this, shape, debug_name_and_id](
-            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+            TensorLocation allocation_location) -> StatusOr<DriverTensor> {
       TF_ASSIGN_OR_RETURN(
-          poplar::Tensor tensor,
+          DriverTensor tensor,
           AllocateInput(allocation_location, shape, debug_name_and_id));
       return tensor;
     };
 
     // Function which is called after the tensor has been created.
     DeferredPostProcessFunction post_process_fn =
-        [this, inst](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+        [this, inst](DriverTensor tensor) -> StatusOr<DriverTensor> {
       if (IsInPipeline(inst, resources_)) {
         // The create buffer is inside of the pipeline which means it's used
         // as a stash.
@@ -1310,16 +1313,16 @@ namespace {
 // TODO(T28772): Work around to make sure remote buffers can be rearranged on
 // host.
 std::pair<poplar::program::Sequence, poplar::program::Sequence>
-AddRemoteBufferLoadCopy(poplar::Graph& graph, CompilerResources& res,
+AddRemoteBufferLoadCopy(DriverGraph& graph, CompilerResources& res,
                         poplar::RemoteBuffer remote_buffer,
-                        poplar::Tensor destination,
+                        DriverTensor destination,
                         const poplar::DebugNameAndId& debug_name_and_id,
-                        absl::optional<poplar::Tensor> offset = absl::nullopt) {
+                        absl::optional<DriverTensor> offset = absl::nullopt) {
   poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
   poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
 
   const auto& handle = remote_buffer.handle();
-  poplar::Tensor layout_tensor;
+  DriverTensor layout_tensor;
   if (res.remote_buffer_layouts.contains(handle)) {
     layout_tensor = res.remote_buffer_layouts.at(handle);
   } else {
@@ -1327,7 +1330,7 @@ AddRemoteBufferLoadCopy(poplar::Graph& graph, CompilerResources& res,
     res.remote_buffer_layouts[handle] = layout_tensor;
   }
 
-  poplar::Tensor copy_tensor = graph.clone(layout_tensor, {debug_name_and_id});
+  DriverTensor copy_tensor = graph.clone(layout_tensor, {debug_name_and_id});
 
   if (offset) {
     stream_copy_seq.add(poplar::program::Copy(remote_buffer, copy_tensor,
@@ -1361,9 +1364,9 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
     // Function which is called when allocating this tensor.
     DeferredAllocateFunction allocate_fn =
         [this, shape, debug_name_and_id](
-            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+            TensorLocation allocation_location) -> StatusOr<DriverTensor> {
       TF_ASSIGN_OR_RETURN(
-          poplar::Tensor tensor,
+          DriverTensor tensor,
           AllocateInput(allocation_location, shape, debug_name_and_id));
       return tensor;
     };
@@ -1372,7 +1375,7 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
     // function copies the values from the buffer into the tensor.
     DeferredPostProcessFunction post_process_fn =
         [this, load_inst, i, shape,
-         debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+         debug_name_and_id](DriverTensor tensor) -> StatusOr<DriverTensor> {
       auto& shard_graph = GetGraphWithOutputIndex(resources_, load_inst, i);
 
       poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
@@ -1453,9 +1456,9 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
     // Function which is called when allocating this tensor.
     DeferredAllocateFunction allocate_fn =
         [this, shape, debug_name_and_id](
-            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+            TensorLocation allocation_location) -> StatusOr<DriverTensor> {
       TF_ASSIGN_OR_RETURN(
-          poplar::Tensor tensor,
+          DriverTensor tensor,
           AllocateInput(allocation_location, shape, debug_name_and_id));
       return tensor;
     };
@@ -1464,7 +1467,7 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
     // function copies the values from the buffer into the tensor.
     DeferredPostProcessFunction post_process_fn =
         [this, load_inst, i, num_outputs, shape,
-         debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+         debug_name_and_id](DriverTensor tensor) -> StatusOr<DriverTensor> {
       auto& shard_graph = GetGraphWithOutputIndex(resources_, load_inst, i);
 
       poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
@@ -1496,7 +1499,7 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
         poplar::RemoteBuffer remote_buffer = input.AsRemoteBuffer();
 
         TF_ASSIGN_OR_RETURN(
-            poplar::Tensor offset,
+            DriverTensor offset,
             FindInstructionInput(tensor_map, resources_, load_inst,
                                  num_outputs + i, stream_copy_seq,
                                  debug_name_and_id));
@@ -1597,7 +1600,7 @@ Status DeferredVisitor::PropagateDeferredAllocationsOperand(
       VLOG(3) << "Propagating allocated tensor at callsite "
               << callsite_inst->name() << " for input (" << input_inst->name()
               << ", " << i << ").";
-      poplar::Tensor t = computation_inputs_[parameter_idx][i];
+      DriverTensor t = computation_inputs_[parameter_idx][i];
 
       // Depending on the visitor inplace usage, the tensor might need to be
       // cloned so that it is not clobbered unexpectedly.
@@ -1629,15 +1632,15 @@ Status DeferredVisitor::PropagateDeferredAllocations(
   return Status::OK();
 }
 
-StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
+StatusOr<DriverTensor> DeferredVisitor::AllocateInput(
     TensorLocation allocation_location, const Shape& shape,
     const poplar::DebugNameAndId& debug_name_and_id) {
   return AllocateInput(allocation_location, shape,
-                       absl::optional<poplar::Tensor>(absl::nullopt),
+                       absl::optional<DriverTensor>(absl::nullopt),
                        debug_name_and_id);
 }
 
-StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
+StatusOr<DriverTensor> DeferredVisitor::AllocateInput(
     TensorLocation allocation_location, const Shape& shape,
     absl::optional<TensorOrRemoteBuffer> tensor_like,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -1648,14 +1651,14 @@ StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
                          debug_name_and_id);
   } else {
     return AllocateInput(allocation_location, shape,
-                         absl::optional<poplar::Tensor>(absl::nullopt),
+                         absl::optional<DriverTensor>(absl::nullopt),
                          debug_name_and_id);
   }
 }
 
-StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
+StatusOr<DriverTensor> DeferredVisitor::AllocateInput(
     TensorLocation allocation_location, const Shape& shape,
-    absl::optional<poplar::Tensor> tensor_like,
+    absl::optional<DriverTensor> tensor_like,
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph =
       GetGraphWithOutputIndex(resources_, allocation_location.instruction,
@@ -1669,7 +1672,7 @@ StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
                  allocation_location.instruction,
                  allocation_location.flattened_output_tuple_index);
 
-  poplar::Tensor out;
+  DriverTensor out;
   // Allocate the tensor if:
   // * It has an allocation target so that it is allocated with the right
   //   layout, or
@@ -1690,8 +1693,8 @@ StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
   return out;
 }
 
-StatusOr<poplar::Tensor> DeferredVisitor::PostProcessInputTensor(
-    poplar::Tensor tensor, TensorLocation input_location, const Shape& shape,
+StatusOr<DriverTensor> DeferredVisitor::PostProcessInputTensor(
+    DriverTensor tensor, TensorLocation input_location, const Shape& shape,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
 
@@ -1725,9 +1728,9 @@ StatusOr<poplar::Tensor> DeferredVisitor::PostProcessInputTensor(
   return tensor;
 }
 
-StatusOr<poplar::Tensor> DeferredVisitor::PostProcessInfeedAllocation(
+StatusOr<DriverTensor> DeferredVisitor::PostProcessInfeedAllocation(
     TensorLocation location, const Shape& shape,
-    poplar::program::Sequence& sequence, poplar::Tensor tensor,
+    poplar::program::Sequence& sequence, DriverTensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
   TF_ASSIGN_OR_RETURN(auto progs,
                       CreateInfeed(resources_, location.instruction,
@@ -1932,7 +1935,7 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
   if (callsite_tensor && !reallocate_input) {
     // If a tensor is passed as an input and we are not reallocating inputs then
     // use it and post process it immediately.
-    poplar::Tensor output = *callsite_tensor;
+    DriverTensor output = *callsite_tensor;
     TF_RETURN_IF_ERROR(post_process_fn(output).status());
     TF_CHECK_OK(AddOutputTensor(tensor_map, input_location.instruction,
                                 input_location.flattened_output_tuple_index,
@@ -1949,7 +1952,7 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
 
 StatusOr<TensorOrRemoteBufferVector>
 InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
-    poplar::Graph& graph, const HloComputation* computation,
+    DriverGraph& graph, const HloComputation* computation,
     const poplar::DebugNameAndId& debug_name_and_id) {
   enum class AliasType {
     NO_ALIAS_NOT_USED,
@@ -2058,9 +2061,10 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
         }
         VLOG(3) << "Adding a partial copy in "
                 << debug_name_and_id.getPathName() << " for tuple index " << i;
-        unaliased_loop_outputs[i] = graph.clone(
-            loop_outputs[i], {debug_name_and_id, std::string("bodyout_temp_") +
-                                                     std::to_string(i)});
+        unaliased_loop_outputs[i] =
+            graph.clone(loop_outputs[i].AsTensor(),
+                        {debug_name_and_id,
+                         std::string("bodyout_temp_") + std::to_string(i)});
         AddSequenceForAliasingCopy(
             computation->root_instruction(),
             poplar::program::Sequence(

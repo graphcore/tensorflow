@@ -71,7 +71,8 @@ class AllGatherOp : public PoplarOpDef {
             graph, input, seq, {debug_info},
             poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
 
-        TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output_tensor));
+        TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
+                                    DriverTensor(output_tensor, graph)));
       }
 
       return seq;
@@ -101,7 +102,8 @@ class AllGatherOp : public PoplarOpDef {
 
     // Add output tensors.
     for (int64 i = 0; i != outputs.size(); ++i) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
+                                  DriverTensor(outputs[i], graph)));
     }
 
     // Return the sequence.

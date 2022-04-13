@@ -88,8 +88,10 @@ class CTCLossOpBase : public PoplarOpDef {
         label_lengths.reinterpret(poplar::UNSIGNED_INT), seq, blank_index,
         *plan, debug_info);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, loss));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, grad));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(loss, graph)));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 1, DriverTensor(grad, graph)));
 
     return seq;
   }
@@ -231,10 +233,12 @@ class CTCBeamSearchOpBase : public PoplarOpDef {
         PerformBeamSearch(graph, data, data_lengths, seq, blank_index,
                           beam_width, top_paths, *plan, debug_info);
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, outputs.label_probabilities));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, outputs.label_lengths));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, outputs.decoded_labels));
+    TF_CHECK_OK(AddOutputTensor(
+        tensor_map, inst, 0, DriverTensor(outputs.label_probabilities, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1,
+                                DriverTensor(outputs.label_lengths, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2,
+                                DriverTensor(outputs.decoded_labels, graph)));
     return seq;
   }
 

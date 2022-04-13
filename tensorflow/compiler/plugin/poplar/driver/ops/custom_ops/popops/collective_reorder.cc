@@ -93,7 +93,8 @@ class CollectiveReorderOp : public PoplarOpDef {
     seq.add(poplar::program::Copy(input.flatten(), ref.flatten(), false,
                                   debug_info));
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output.flatten()));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0,
+                                DriverTensor(output.flatten(), graph)));
 
     return seq;
   }
@@ -128,7 +129,8 @@ class UndoCollectiveReorderOp : public PoplarOpDef {
 
     output = output.reshape(PoplarShapeFromXlaShape(inst->shape()));
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
 
     return seq;
   }

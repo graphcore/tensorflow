@@ -179,14 +179,15 @@ Status ArithmeticExprVisitor::HandleParameter(HloInstruction* inst) {
 
 Status ArithmeticExprVisitor::FinishScopedVisit(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  poplar::Graph& graph = GetGraph(resources_, caller_);
+  auto& graph = GetGraph(resources_, caller_);
   poplar::program::Sequence seq({}, debug_name_and_id);
 
   // get the expression
   TF_ASSIGN_OR_RETURN(auto expr, FindExpressionInput(inst));
   // map expression with the tensors
-  poplar::Tensor out =
-      popops::map(graph, *expr, ts_, seq, {debug_name_and_id, "expression"});
+  auto out = DriverTensor(
+      popops::map(graph, *expr, ts_, seq, {debug_name_and_id, "expression"}),
+      graph);
   outputs_.push_back(out);
 
   resources_.tensor_maps.AddTensorMapForComputation(inst->parent()->name(),

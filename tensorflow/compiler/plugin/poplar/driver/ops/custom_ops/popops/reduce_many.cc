@@ -102,7 +102,7 @@ class ReduceManyOp : public PoplarOpDef {
       // Apply initial value.
       const ReductionInfo& info = reduce_many_inst->ReductionsInfo()[i];
       const bool with_scale = info.with_scale;
-      poplar::Tensor out = output_tensors[i];
+      auto out = output_tensors[i];
 
       auto* init_inst = inst->operand(reduction_dims_id);
       if (!(init_inst->IsConstant() &&
@@ -110,7 +110,7 @@ class ReduceManyOp : public PoplarOpDef {
         // Get input reduction_dims_id as each reduction has 2 or 3 inputs
         // (tensor_to_reduce and init_value).
         TF_ASSIGN_OR_RETURN(
-            poplar::Tensor init_val,
+            auto init_val,
             FindInstructionInput(tensor_map, res, inst, reduction_dims_id, seq,
                                  debug_info));
         TF_ASSIGN_OR_RETURN(
@@ -121,7 +121,8 @@ class ReduceManyOp : public PoplarOpDef {
                            {debug_info, "initval"});
         reduction_dims_id += with_scale ? 3 : 2;
       }
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, out));
+      TF_CHECK_OK(
+          AddOutputTensor(tensor_map, inst, i, DriverTensor(out, graph)));
     }
 
     // Return the sequence.

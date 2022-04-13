@@ -115,7 +115,7 @@ class ConvBiasAddOp : public PoplarOpDef {
         FindInplaceOutputTensors(tensor_map, res, inst, prog, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    poplar::Tensor in = inputs[0][0];
+    auto in = inputs[0][0];
 
     TF_ASSIGN_OR_RETURN(poplar::Tensor bias,
                         FindInstructionInput(tensor_map, res, inst, 1, prog,
@@ -183,17 +183,17 @@ class MatMulBiasAddOp : public PoplarOpDef {
                                                  debug_info, false));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    poplar::Tensor in = inputs[0][0];
+    auto in = inputs[0][0];
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor bias,
+    TF_ASSIGN_OR_RETURN(auto bias,
                         FindInstructionInput(tensor_map, res, inst, 1, prog,
                                              {debug_info}, false));
 
     TF_ASSIGN_OR_RETURN(bias, BroadcastTensor(bias, broadcast->shape(),
                                               broadcast->dimensions()));
-    popops::addInPlace(graph, in, bias, prog, {debug_info});
+    popops::addInPlace(graph, in, bias.getPoplarTensor(), prog, {debug_info});
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, in));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(in, graph)));
     return prog;
   }
 
@@ -293,7 +293,8 @@ class BiasApplyOp : public PoplarOpDef {
     TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq,
                                                      func, signature, args));
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, args[0]));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(args[0], graph)));
 
     return seq;
   }
@@ -330,7 +331,7 @@ class ZeroPadOp : public PoplarOpDef {
     poplar::Tensor out =
         popops::pad(graph, in, paddingLower, paddingUpper, zero);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
     return seq;
   }
 };
@@ -367,7 +368,7 @@ class PaddingReduceWindowOp : public PoplarOpDef {
     poplar::Tensor out =
         popops::pad(graph, in, paddingLower, paddingUpper, init_val);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
     return seq;
   }
 };

@@ -80,7 +80,7 @@ class SequenceSliceOp : public PoplarOpDef {
   }
 
  protected:
-  virtual StatusOr<poplar::Tensor> GetOutputTensor(
+  virtual StatusOr<DriverTensor> GetOutputTensor(
       DriverGraph& graph, TensorMap& tensor_map, CompilerResources& res,
       const HloInstruction* inst, poplar::program::Sequence& seq,
       PoplarOpDefDebugInfo& debug_info) {
@@ -120,7 +120,7 @@ REGISTER_POPLAR_OP(SequenceSlice, SequenceSliceOp);
 
 class SequenceSliceUnpackOp : public SequenceSliceOp {
  protected:
-  StatusOr<poplar::Tensor> GetOutputTensor(
+  StatusOr<DriverTensor> GetOutputTensor(
       DriverGraph& graph, TensorMap& tensor_map, CompilerResources& res,
       const HloInstruction* inst, poplar::program::Sequence& seq,
       PoplarOpDefDebugInfo& debug_info) override {

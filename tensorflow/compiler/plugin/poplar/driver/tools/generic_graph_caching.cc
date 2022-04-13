@@ -145,7 +145,7 @@ Status GenericGraphCache::ExecuteCached(
     for (int64 arg_idx : alloc_order) {
       const HloInstruction* operand = inst->operand(arg_idx);
       poputil::graphfn::ArgSig& sig = signature[arg_idx];
-      poplar::Tensor input = sig.similarTensor;
+      DriverTensor input = DriverTensor(sig.similarTensor, graph);
       bool needs_reallocating = always_allocate;
       if (!needs_reallocating) {
         switch (sig.type) {
@@ -166,7 +166,7 @@ Status GenericGraphCache::ExecuteCached(
         VLOG(3) << "Reallocating argument " << arg_idx
                 << " for cached Poplar Function generated for "
                 << inst->ToString();
-        poplar::Tensor new_arg;
+        DriverTensor new_arg;
         if (allocating_indices.contains(arg_idx)) {
           // Just allocate the tensor.
           TF_ASSIGN_OR_RETURN(

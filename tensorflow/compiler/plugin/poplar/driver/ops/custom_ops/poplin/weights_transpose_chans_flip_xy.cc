@@ -121,7 +121,8 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
     out_weights = ShuffleConvolutionWeightsToTensorflow(
         conv_dimension_numbers, out_weights, /* swap_features = */ true);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out_weights));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(out_weights, graph)));
 
     return seq;
   }

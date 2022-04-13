@@ -315,8 +315,8 @@ class NormInferenceOp : public NormInferenceAndTrainingOp {
 
     // Special case - zero sized array
     if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
-      poplar::Tensor out = graph.addConstant(arg_operand.elementType(), {1}, 0,
-                                             {debug_info, "out"});
+      auto out = graph.addConstant(arg_operand.elementType(), {1}, 0,
+                                   {debug_info, "out"});
       graph.setTileMapping(out, 0);
       TF_ASSIGN_OR_RETURN(out,
                           BroadcastTensor(out, inst->operand(0)->shape(), {}));
@@ -381,7 +381,8 @@ class NormInferenceOp : public NormInferenceAndTrainingOp {
 
     output = args[5];
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
 
     return seq;
   }
@@ -415,17 +416,17 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
 
     // Special case - zero sized array
     if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
-      poplar::Tensor out = graph.addConstant(arg_operand.elementType(), {1}, 0,
-                                             {debug_info, "out"});
+      auto out = graph.addConstant(arg_operand.elementType(), {1}, 0,
+                                   {debug_info, "out"});
       graph.setTileMapping(out, 0);
       TF_ASSIGN_OR_RETURN(out,
                           BroadcastTensor(out, inst->operand(0)->shape(), {}));
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
-      poplar::Tensor mean = graph.addConstant(arg_operand.elementType(), {1},
-                                              NAN, {debug_info, "mean"});
+      auto mean = graph.addConstant(arg_operand.elementType(), {1}, NAN,
+                                    {debug_info, "mean"});
       graph.setTileMapping(mean, 0);
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, mean));
-      poplar::Tensor variance_or_inv_std_dev =
+      auto variance_or_inv_std_dev =
           graph.addConstant(arg_operand.elementType(), {1}, NAN,
                             {debug_info, "varianceOrInvStdDev"});
       graph.setTileMapping(variance_or_inv_std_dev, 0);
@@ -516,9 +517,12 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
     mean = args[4];
     variance_or_inv_std_dev = args[5];
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, mean));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, variance_or_inv_std_dev));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 1, DriverTensor(mean, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2,
+                                DriverTensor(variance_or_inv_std_dev, graph)));
 
     return seq;
   }
@@ -559,19 +563,19 @@ class NormGradOp : public PoplarOpDef {
                              /*expand_aliasing*/ false));
     // Special case - zero sized array
     if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
-      poplar::Tensor operand_grad = graph.addConstant(
-          arg_operand.elementType(), {1}, 0, {debug_info, "operandGrad"});
+      auto operand_grad = graph.addConstant(arg_operand.elementType(), {1}, 0,
+                                            {debug_info, "operandGrad"});
       graph.setTileMapping(operand_grad, 0);
       TF_ASSIGN_OR_RETURN(
           operand_grad,
           BroadcastTensor(operand_grad, inst->operand(0)->shape(), {}));
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand_grad));
-      poplar::Tensor scale_grad = graph.addConstant(
-          arg_operand.elementType(), {1}, 0, {debug_info, "scaleGrad"});
+      auto scale_grad = graph.addConstant(arg_operand.elementType(), {1}, 0,
+                                          {debug_info, "scaleGrad"});
       graph.setTileMapping(scale_grad, 0);
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, scale_grad));
-      poplar::Tensor offset_grad = graph.addConstant(
-          arg_operand.elementType(), {1}, 0, {debug_info, "offsetGrad"});
+      auto offset_grad = graph.addConstant(arg_operand.elementType(), {1}, 0,
+                                           {debug_info, "offsetGrad"});
       graph.setTileMapping(offset_grad, 0);
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, offset_grad));
       return seq;
@@ -670,9 +674,12 @@ class NormGradOp : public PoplarOpDef {
     operand_grad = args[5];
     scale_grad = args[6];
     offset_grad = args[7];
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand_grad));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, scale_grad));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, offset_grad));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0,
+                                DriverTensor(operand_grad, graph)));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 1, DriverTensor(scale_grad, graph)));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 2, DriverTensor(offset_grad, graph)));
     return seq;
   }
 };
@@ -697,13 +704,13 @@ class NormStatisticsOp : public PoplarOpDef {
 
     // Special case - zero sized array
     if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
-      poplar::Tensor mean = graph.addConstant(arg_operand.elementType(), {1}, 0,
-                                              {debug_info, "mean"});
+      auto mean = graph.addConstant(arg_operand.elementType(), {1}, 0,
+                                    {debug_info, "mean"});
       graph.setTileMapping(mean, 0);
       TF_ASSIGN_OR_RETURN(mean,
                           BroadcastTensor(mean, inst->operand(0)->shape(), {}));
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, mean));
-      poplar::Tensor variance_or_inv_std_dev =
+      auto variance_or_inv_std_dev =
           graph.addConstant(arg_operand.elementType(), {1}, 0,
                             {debug_info, "varianceOrInvStdDev"});
       graph.setTileMapping(variance_or_inv_std_dev, 0);
@@ -776,8 +783,10 @@ class NormStatisticsOp : public PoplarOpDef {
     mean = args[1];
     variance_or_inv_std_dev = args[2];
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, mean));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, variance_or_inv_std_dev));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(mean, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1,
+                                DriverTensor(variance_or_inv_std_dev, graph)));
     return seq;
   }
 };
