@@ -24,7 +24,7 @@ from tensorflow.python.ipu.ops.cross_replica_ops import cross_replica_sum
 from tensorflow.python.ipu.ops.replication_ops import replication_index
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
-import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 
 
 class PoprunBasicTest(test_util.TensorFlowTestCase):  # pylint: disable=abstract-method

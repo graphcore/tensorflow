@@ -21,7 +21,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework.errors_impl import InternalError
-from tensorflow.compat.v1 import assert_none_equal
+from tensorflow.python.ops import check_ops
 
 
 class AssertTest(xla_test.XLATestCase):
@@ -40,7 +40,7 @@ class AssertTest(xla_test.XLATestCase):
 
         def model(x):
           zero = array_ops.constant(0, np.float32)
-          c = assert_none_equal(x, zero, [x])
+          c = check_ops.assert_none_equal(x, zero, [x])
           with ops.control_dependencies([c]):
             return array_ops.identity(x)
 

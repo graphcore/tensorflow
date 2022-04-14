@@ -20,7 +20,7 @@ from __future__ import print_function
 from absl.testing import parameterized
 import os
 import numpy as np
-import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 import pva
 
 from tensorflow.compiler.tests import xla_test

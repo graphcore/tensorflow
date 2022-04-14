@@ -18,12 +18,12 @@ import os
 from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python import keras
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import test
+from tensorflow.python.ipu import test_utils as tu
 
 
 def dataset_with_labels():

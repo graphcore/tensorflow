@@ -16,7 +16,7 @@ import unittest
 import numpy as np
 
 from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import googletest

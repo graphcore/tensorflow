@@ -18,7 +18,7 @@ from absl.testing import parameterized
 import pva
 
 from tensorflow.keras import layers
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops

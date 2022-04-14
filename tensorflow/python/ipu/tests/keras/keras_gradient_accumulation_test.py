@@ -16,7 +16,7 @@ import tempfile
 import os
 from absl.testing import parameterized
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python import keras
 from tensorflow.python.keras.datasets import mnist

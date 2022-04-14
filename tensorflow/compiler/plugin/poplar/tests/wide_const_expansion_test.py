@@ -21,7 +21,7 @@ import os
 import numpy as np
 import pva
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.compiler.xla import xla

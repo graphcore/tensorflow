@@ -20,7 +20,7 @@ from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python.platform import googletest
 
 # This test rounds a 1000 element float32 by casting to a float16. Stochastic

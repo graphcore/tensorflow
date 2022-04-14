@@ -24,7 +24,7 @@ from tensorflow.compiler.plugin.poplar.driver.config_pb2 import \
     IpuDeviceConnectionType, IpuSelectionOrder, IpuExecutionProfileType, \
     IpuSchedulingAlgorithm
 from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import googletest

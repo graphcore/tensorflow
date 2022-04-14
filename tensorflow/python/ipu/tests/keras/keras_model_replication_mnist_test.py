@@ -16,12 +16,12 @@ from tempfile import TemporaryDirectory
 from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.data.ops.dataset_ops import DatasetV2
 from tensorflow.python import keras
 from tensorflow.python.keras.datasets import mnist
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import googletest
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import keras as ipu_keras
 

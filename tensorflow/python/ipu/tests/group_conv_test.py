@@ -23,7 +23,7 @@ import pva
 
 from absl.testing import parameterized
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops

@@ -14,7 +14,7 @@
 # ==============================================================================
 
 import threading
-import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent

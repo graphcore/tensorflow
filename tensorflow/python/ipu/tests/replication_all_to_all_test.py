@@ -14,7 +14,7 @@
 # =============================================================================
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python import ipu

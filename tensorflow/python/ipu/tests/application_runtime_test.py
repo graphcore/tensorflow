@@ -20,7 +20,6 @@ import threading
 from absl.testing import parameterized
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import versions
@@ -37,7 +36,7 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops, dtypes
 from tensorflow.compiler.plugin.poplar.ops import gen_application_runtime
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python.ipu import ipu_compiler, scopes, loops, ipu_infeed_queue, ipu_outfeed_queue
 from tensorflow.python.ipu import dataset_benchmark
 from tensorflow.python.ipu import rand_ops

@@ -21,7 +21,7 @@ import numpy as np
 import pva
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.ops import array_ops

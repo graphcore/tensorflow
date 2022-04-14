@@ -18,7 +18,7 @@ import numpy as np
 import pva
 
 from tensorflow.compat.v1.nn.rnn_cell import DropoutWrapper
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.keras.layers import SimpleRNN, Conv1D, MaxPooling1D, Dense, Dropout, Flatten
 from tensorflow import keras
 from tensorflow.python.framework import test_util
@@ -248,15 +248,13 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           'cycles': 9892094 if TF1 else 12969762,
           'total_memory': 18308926 if TF1 else 18661282,
           'max_memory': 19416 if TF1 else 20280
-      },
-      {
+      }, {
           'testcase_name': 'tf_rnn2',
           'build': build_tf_rnn2,
           'cycles': 18478591 if TF1 else 21954915,
           'total_memory': 17702776 if TF1 else 17767924,
           'max_memory': 22016 if TF1 else 22644
-      },
-      {
+      }, {
           'testcase_name': 'tf_lstm1',
           'build': build_tf_lstm1,
           'cycles': 25246207 if TF1 else 27353594,
@@ -266,29 +264,25 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
               'dims': 64,
               'steps': 3
           }
-      },
-      {
+      }, {
           'testcase_name': 'tf_gru1',
           'build': build_tf_gru1,
           'cycles': 47908969 if TF1 else 52940411,
           'total_memory': 35142802 if TF1 else 35349686,
           'max_memory': 36824 if TF1 else 37552
-      },
-      {
+      }, {
           'testcase_name': 'model_rnn1',
           'build': build_model_rnn1,
           'cycles': 15720790 if TF1 else 15785499,
           'total_memory': 29223581 if TF1 else 19511535,
           'max_memory': 23178 if TF1 else 23055
-      },
-      {
+      }, {
           'testcase_name': 'model_rnn2',
           'build': build_model_rnn2,
           'cycles': 31392149 if TF1 else 31226960,
           'total_memory': 23736413 if TF1 else 24970739,
           'max_memory': 31879 if TF1 else 30424
-      },
-      {
+      }, {
           'testcase_name': 'model_cnn1',
           'build': build_model_cnn1,
           'cycles': 9979900 if TF1 else 10219500,
@@ -298,8 +292,7 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
               'batch_size': 1,
               'steps': 32
           }
-      },
-      {
+      }, {
           'testcase_name': 'trivial_multiply',
           'build': build_trivial_while,
           'cycles': 61735537 if TF1 else 60961863,

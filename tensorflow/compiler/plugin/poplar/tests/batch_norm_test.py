@@ -19,8 +19,8 @@ from __future__ import print_function
 
 import pva
 import numpy as np
-import test_utils as tu
 
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
@@ -35,8 +35,6 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.layers import normalization as layers_norm
-
-from test_utils import ReportJSON
 
 
 class IpuXlaBatchNormTest(xla_test.XLATestCase):
@@ -72,7 +70,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
                                             1e-3)
             return normed
 
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       out = ipu.ipu_compiler.compile(my_graph, [a])
       sess.run(variables.global_variables_initializer())
 
@@ -121,7 +119,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
                                             1e-3)
             return normed
 
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       out = ipu.ipu_compiler.compile(my_graph, [a])
       sess.run(variables.global_variables_initializer())
 
@@ -174,7 +172,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
                                          is_training=False)
             return normed
 
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       out = ipu.ipu_compiler.compile(my_graph, [a])
       sess.run(variables.global_variables_initializer())
 
@@ -225,7 +223,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
                                          is_training=False)
             return normed
 
-        report_json = ReportJSON(self, sess)
+        report_json = tu.ReportJSON(self, sess)
         out = ipu.ipu_compiler.compile(my_graph, [a])
         sess.run(variables.global_variables_initializer())
 
@@ -257,7 +255,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
 
           normed = layers_norm.batch_normalization(a, fused=False)
 
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
 
       report_json.reset()
@@ -314,7 +312,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
 
           normed = layers_norm.batch_normalization(a, fused=True)
 
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
 
       report_json.reset()
@@ -348,7 +346,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
 
           normed = layers_norm.batch_normalization(a, fused=False)
 
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
 
       report_json.reset()
@@ -379,7 +377,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
 
           normed = layers_norm.batch_normalization(a, fused=True)
 
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
 
       report_json.reset()

@@ -22,7 +22,7 @@ from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions, IpuD
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import test_util

@@ -19,7 +19,7 @@ from absl.testing import parameterized
 import popdist
 import popdist.tensorflow
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import backprop

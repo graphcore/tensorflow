@@ -24,7 +24,7 @@ import json
 from absl.testing import parameterized
 import numpy as np
 import pva
-import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 
 # pylint: disable=unused-import
 from tensorflow.compiler.tests import xla_test

@@ -34,7 +34,7 @@ from tensorflow.python.keras import Model, Input
 from tensorflow.python.keras import layers
 from tensorflow.python.keras.engine import data_adapter
 from tensorflow.python.ops import control_flow_v2_toggles
-import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 
 
 def simple_model():

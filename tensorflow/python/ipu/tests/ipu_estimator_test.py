@@ -19,7 +19,7 @@ import numpy as np
 
 from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.keras import layers
 from tensorflow.python import feature_column
 from tensorflow.python.data.ops import dataset_ops

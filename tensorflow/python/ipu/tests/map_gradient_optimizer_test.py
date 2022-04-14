@@ -15,7 +15,6 @@
 
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -25,12 +24,10 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops as nn
+from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import gradient_descent as gd
-
-from tensorflow.python.ops import variables
-from tensorflow.python.framework import constant_op
 from tensorflow.python.ipu.optimizers import map_gradient_optimizer
 
 WEIGHT_DECAY = 0.01

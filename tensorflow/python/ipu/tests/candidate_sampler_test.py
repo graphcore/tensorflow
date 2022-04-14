@@ -17,7 +17,7 @@ from functools import partial
 from collections import Counter
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.keras.datasets import cifar100
 from tensorflow.python.client import session as session_lib

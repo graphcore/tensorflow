@@ -22,7 +22,7 @@ from tensorflow.python.ops import gen_nn_ops
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.ops import nn
 from tensorflow.python.platform import test
-import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 
 
 # pylint: disable=abstract-method

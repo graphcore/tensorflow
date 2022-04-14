@@ -28,7 +28,7 @@ from tensorflow.python.platform import test
 from tensorflow.python import keras
 from tensorflow.python import ipu
 from tensorflow.python.ipu import loops
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ipu.keras.optimizers import AutomaticLossScalingOptimizer
