@@ -20,6 +20,7 @@ Serving utilities
 import inspect
 import os
 import tempfile
+import uuid
 
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import def_function
@@ -138,8 +139,9 @@ def _export_saved_model(defunc, export_dir, input_signature):
     run the executable that was included in the SavedModel's `assets` subfolder.
   """
   with tempfile.TemporaryDirectory() as tmp_folder:
+    unique_name = str(uuid.uuid4())
     # Compile poplar_exec
-    exec_filename = "application.poplar_exec"
+    exec_filename = f'application_{unique_name}.poplar_exec'
     poplar_exec_filepath = os.path.join(tmp_folder, exec_filename)
     application_compile_op.experimental_application_compile_op(
         defunc, output_path=poplar_exec_filepath, freeze_variables=True)
@@ -148,7 +150,7 @@ def _export_saved_model(defunc, export_dir, input_signature):
       def __init__(self, filepath):
         super(EmbeddedModel, self).__init__()
         self.filename = tracking.Asset(filepath)
-        self.engine_name = f'engine_{self.filename}'
+        self.engine_name = f'engine_{unique_name}'
         self.predict = self.predict_wrapper()
 
       def predict_wrapper(self):
