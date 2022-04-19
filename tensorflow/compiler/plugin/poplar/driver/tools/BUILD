@@ -1000,6 +1000,20 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "hlo_poplar_liveness",
+    srcs = [
+        "hlo_poplar_liveness.cc",
+    ],
+    hdrs = [
+        "hlo_poplar_liveness.h",
+    ],
+    deps = [
+        ":hlo_poplar_buffer",
+        ":util",
+    ],
+)
+
+poplar_cc_library(
     name = "find_all_users",
     srcs = [
         "find_all_users.cc",
@@ -1215,6 +1229,7 @@ poplar_cc_library(
         ":hlo_poplar_buffer",
         ":hlo_poplar_buffer_util",
         ":hlo_poplar_dataflow_analysis",
+        ":hlo_poplar_liveness",
         ":infeed_allocator",
         ":infeed_iterator",
         ":inplace_util",

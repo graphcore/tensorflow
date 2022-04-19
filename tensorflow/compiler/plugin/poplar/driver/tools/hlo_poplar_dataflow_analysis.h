@@ -102,6 +102,10 @@ class HloPoplarDataflowAnalysis {
   InstructionPoplarBufferSet& GetInstructionBufferSet(
       const HloInstruction* instruction);
 
+  const InstructionBufferSets& GetInstructionBufferSets() const {
+    return buffer_sets_;
+  }
+
   // Return the HloPoplarBufferSet for the given instruction at the given index
   // or the given position.
   const HloPoplarBufferSet& GetBufferSet(const HloInstruction* instruction,

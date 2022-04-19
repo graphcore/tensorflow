@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "absl/types/span.h"
@@ -232,6 +233,10 @@ class HloPoplarBuffer {
     return defining_position().instruction;
   }
 
+  bool DefinedBy(const HloInstruction* inst) const {
+    return instruction() == inst;
+  }
+
   // Returns aggregated use kind
   BufferUseKind use_kind() const { return use_kind_; }
 
@@ -248,14 +253,16 @@ class HloPoplarBuffer {
   std::string ToString() const;
 
  private:
-  const Id id_;
-  const HloPoplarPosition defining_position_;
-  const BufferLocality locality_;
+  Id id_;
+  HloPoplarPosition defining_position_;
+  BufferLocality locality_;
 
   BufferUseKind use_kind_ = BufferUseKind::USE_NO_ALIAS;
 };
 
 std::ostream& operator<<(std::ostream& out, const HloPoplarBuffer& buffer);
+
+using HloPoplarBufferIdSet = absl::flat_hash_set<HloPoplarBuffer::Id>;
 
 // A class representing the possible set of HloPoplarBuffer at a particular
 // position in the XLA graph.
@@ -348,6 +355,9 @@ class InstructionPoplarBufferSet {
 std::ostream& operator<<(
     std::ostream& out,
     const InstructionPoplarBufferSet& instruction_buffer_set);
+
+using InstructionBufferSets =
+    std::unordered_map<const HloInstruction*, InstructionPoplarBufferSet>;
 
 // Utilities for checking whether all the buffers in a HloPoplarBufferSet meet
 // some criteria.

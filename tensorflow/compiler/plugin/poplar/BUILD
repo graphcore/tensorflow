@@ -2872,6 +2872,20 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "hlo_poplar_liveness_test",
+    srcs = ["tests/hlo_poplar_liveness_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":poplar_test_base",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
 tf_xla_py_test(
     name = "fuse_ops_test",
     size = "medium",
@@ -4118,6 +4132,7 @@ test_suite(
         "hlo_poplar_buffer_test",
         "hlo_poplar_buffer_util_test",
         "hlo_poplar_dataflow_analysis_test",
+        "hlo_poplar_liveness_test",
         "host_compute_barrier_inserter_test",
         "host_compute_schedule_optimizer_test",
         "inplace_test",
