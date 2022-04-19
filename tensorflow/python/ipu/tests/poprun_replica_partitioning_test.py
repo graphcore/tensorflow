@@ -18,7 +18,7 @@ import numpy as np
 
 import popdist
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.keras import layers
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import init_ops

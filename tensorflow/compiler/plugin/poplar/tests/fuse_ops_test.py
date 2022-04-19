@@ -20,7 +20,7 @@ from __future__ import print_function
 import os
 import numpy as np
 import pva
-import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest

@@ -16,7 +16,7 @@
 import numpy as np
 import pva
 
-import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.ops import array_ops

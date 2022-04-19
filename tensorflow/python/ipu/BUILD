@@ -108,6 +108,20 @@ py_library(
 )
 
 py_library(
+    name = "config_lib",
+    srcs = ["config.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:poputil_ops_py",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:session",
+        "//tensorflow/python/eager:context",
+    ],
+)
+
+py_library(
     name = "ipu_lib",
     srcs = [
         "__init__.py",
@@ -165,10 +179,12 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
+        ":config_lib",
         ":data",
         ":dataset_extractor",
         ":ipu_ops_lib",
         ":ipu_grad_ops_lib",
+        "//tensorflow/python/ipu/test_utils:test_utils",
         "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:sendrecv_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",
@@ -187,10 +203,10 @@ tf_py_test(
     tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -200,10 +216,10 @@ tf_py_test(
     srcs = ["tests/config_test.py"],
     additional_deps = [
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/compiler/xla:compiler_py",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/keras:layers",
     ],
 )
@@ -212,14 +228,14 @@ tf_py_test(
     name = "reduce_scatter_test",
     size = "small",
     srcs = ["tests/reduce_scatter_test.py"],
-    tags = ["hw_poplar_test_4_ipus"],
-    deps = [
+    additional_deps = [
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
+    tags = ["hw_poplar_test_4_ipus"],
 )
 
 tf_py_test(
@@ -228,11 +244,11 @@ tf_py_test(
     srcs = ["tests/reconfigure_ipu_test.py"],
     additional_deps = [
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 7,
 )
@@ -242,7 +258,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/gcl_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -259,10 +275,10 @@ tf_py_test(
     tags = ["hw_poplar_test_4_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -271,7 +287,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/io_tiles_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -285,7 +301,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/io_tiles_hw_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -300,7 +316,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/map_gradient_optimizer_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -313,7 +329,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/expression_op_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -326,7 +342,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/dropout_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -344,9 +360,10 @@ tf_py_test(
     size = "large",
     srcs = ["tests/application_compile_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -355,9 +372,10 @@ tf_py_test(
     size = "large",
     srcs = ["tests/application_compile_and_run_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
     tags = ["hw_poplar_test_2_ipus"],
 )
@@ -367,9 +385,10 @@ tf_py_test(
     size = "large",
     srcs = ["tests/exception_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
     tags = ["hw_poplar_test_1_ipus"],
 )
@@ -379,7 +398,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/application_runtime_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/ipu:ipu_ops_lib",
@@ -398,7 +417,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/nn_ops_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -415,7 +434,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/gelu_erf_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -433,7 +452,6 @@ tf_py_test(
     srcs = ["tests/embedding_lookup_test.py"],
     additional_deps = [
         ":ipu_grad_ops_lib",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
@@ -448,7 +466,7 @@ tf_py_test(
     srcs = ["tests/math_ops_test.py"],
     additional_deps = [
         ":ipu_grad_ops_lib",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
@@ -463,7 +481,6 @@ py_test(
     srcs = ["tests/estimator_test.py"],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -476,6 +493,7 @@ py_test(
         "//tensorflow/python/estimator:model_fn",
         "//tensorflow/python/estimator:run_config",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/keras:layers",
     ],
 )
@@ -485,7 +503,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/fifo_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -502,7 +520,7 @@ tf_py_test(
     size = "small",
     srcs = ["tests/op_util_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:control_flow_ops",
         "//tensorflow/python:framework",
@@ -517,7 +535,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/iteration_counter_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -534,7 +552,7 @@ tf_py_test(
     srcs = ["tests/host_embedding_lookup_test.py"],
     additional_deps = [
         ":ipu_grad_ops_lib",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
@@ -548,7 +566,7 @@ tf_py_test(
     srcs = ["tests/host_embedding_lookup_ga_test.py"],
     additional_deps = [
         ":ipu_grad_ops_lib",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
@@ -560,7 +578,8 @@ tf_py_test(
     size = "large",
     srcs = ["tests/random_constant_matmul_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
+        "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:control_flow_ops",
@@ -575,7 +594,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/infeed_outfeed_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -591,7 +610,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/infeed_outfeed_overlap_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -607,7 +626,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/outfeed_ordinal_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -622,7 +641,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/dataset_benchmark_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -647,7 +666,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/ipu_estimator_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/contrib/compiler:xla",
@@ -666,7 +685,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/ipu_estimator_replicated_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/contrib/compiler:xla",
@@ -685,7 +704,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/ipu_pipeline_estimator_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/compiler/xla:compiler_py",
@@ -704,7 +723,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/ipu_multi_worker_strategy_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
@@ -720,7 +739,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/ipu_session_run_hooks_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/contrib/compiler:xla",
@@ -738,7 +757,6 @@ py_test(
     srcs = ["tests/pop_datastream_test.py"],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
@@ -746,6 +764,7 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -754,7 +773,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/frontend_attributes_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
@@ -768,7 +787,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/popnn_normalization_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/keras:layers",
@@ -781,7 +800,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/popops_cross_replica_sum_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -797,13 +816,13 @@ py_test(
     srcs = ["tests/popops_cross_replica_mean_test.py"],
     tags = ["hw_poplar_test_4_ipus"],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -814,12 +833,13 @@ py_test(
     srcs_version = "PY2AND3",
     tags = ["hw_poplar_test_2_ipus"],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/keras:layers",
     ],
 )
@@ -879,7 +899,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/user_ops_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -904,7 +924,6 @@ tf_py_test(
     srcs = ["tests/utils_test.py"],
     additional_deps = [
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -919,7 +938,7 @@ tf_py_test(
     additional_deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -936,9 +955,9 @@ tf_py_test(
     srcs = ["tests/utils_get_config_test.py"],
     additional_deps = [
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 4,
 )
@@ -950,12 +969,12 @@ py_library(
     deps = [
         ":ipu_lib",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -967,12 +986,12 @@ tf_py_test(
         ":ipu_lib",
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     # Shard count needs to match the number of tests.
     shard_count = 37,
@@ -986,12 +1005,12 @@ tf_py_test(
         ":ipu_lib",
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     data = [
         ":libpipelining_stateful_op.so",
@@ -1007,12 +1026,12 @@ tf_py_test(
         ":ipu_lib",
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 16,
 )
@@ -1025,12 +1044,12 @@ tf_py_test(
         ":ipu_lib",
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 16,
 )
@@ -1053,13 +1072,14 @@ tf_py_test(
         ":ipu_lib",
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/contrib/compiler:xla",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     data = [
         ":libpipelining_stateful_op.so",
@@ -1075,12 +1095,12 @@ tf_py_test(
         ":ipu_lib",
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 16,
     tags = ["hw_poplar_test_2_ipus"],
@@ -1094,12 +1114,12 @@ tf_py_test(
         ":ipu_lib",
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 16,
 )
@@ -1112,12 +1132,12 @@ tf_py_test(
         ":ipu_lib",
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 16,
 )
@@ -1130,12 +1150,12 @@ tf_py_test(
         ":ipu_lib",
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 16,
 )
@@ -1147,13 +1167,14 @@ tf_py_test(
     additional_deps = [
         ":ipu_lib",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/contrib/compiler:xla",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 4,
 )
@@ -1165,13 +1186,14 @@ tf_py_test(
     additional_deps = [
         ":ipu_lib",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/contrib/compiler:xla",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 2,
 )
@@ -1181,11 +1203,12 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/dataset_ops_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -1232,12 +1255,12 @@ tf_py_test(
     additional_deps = [
         ":ipu_lib",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 4,
 )
@@ -1250,12 +1273,12 @@ tf_py_test(
         ":ipu_lib",
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     # Shard count needs to match the number of tests.
     shard_count = 11,
@@ -1267,7 +1290,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/image_ops_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1282,12 +1305,12 @@ tf_py_test(
     additional_deps = [
         ":ipu_lib",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 5,
 )
@@ -1299,7 +1322,6 @@ tf_py_test(
     additional_deps = [
         ":ipu_lib",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:constant_op",
         "//tensorflow/python:framework",
@@ -1307,6 +1329,7 @@ tf_py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -1315,7 +1338,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/candidate_sampler_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1330,7 +1353,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/seed_control_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1344,7 +1367,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/reductions_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1358,7 +1381,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/random_number_generation_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1374,7 +1397,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/assume_equal_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1388,7 +1411,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/replicated_graph_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1404,7 +1427,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/replicated_index_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1418,7 +1441,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/replicated_reduce_scatter_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1432,7 +1455,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/replicated_seed_control_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1448,7 +1471,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/replicated_stateful_gradient_accumulate_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1464,7 +1487,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/replication_all_to_all_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1479,7 +1502,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/replication_grouped_collectives_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1494,7 +1517,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/sharded_and_replicated_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1510,7 +1533,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/floating_point_control_bits_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1527,7 +1550,7 @@ tf_py_test(
     srcs = ["tests/dropout_hw_test.py"],
     additional_deps = [
         ":pipelining_test_util",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1544,7 +1567,7 @@ tf_py_test(
     srcs = ["tests/pipelining_batch_serial_sequential_hw_test.py"],
     additional_deps = [
         ":pipelining_test_util",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1561,7 +1584,7 @@ tf_py_test(
     srcs = ["tests/pipelining_hw_test.py"],
     additional_deps = [
         ":pipelining_test_util",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework",
@@ -1583,10 +1606,10 @@ poprun_py_test(
     deps = [
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -1597,9 +1620,10 @@ tf_py_test(
         "tests/prng_stability_models_test.py",
     ],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/keras",
         "//third_party/py/numpy",
     ],
@@ -1612,7 +1636,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/sequence_slice_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -1629,7 +1653,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/histogram_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:control_flow_ops",
@@ -1637,6 +1661,7 @@ tf_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 8,
 )
@@ -1649,12 +1674,12 @@ tf_py_test(
         ":ipu_lib",
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu/test_utils",
     ],
     shard_count = 7,
 )
@@ -1666,9 +1691,10 @@ tf_py_test(
         "tests/control_flow_ops_test.py",
     ],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/keras",
         "//third_party/py/numpy",
     ],
@@ -1679,7 +1705,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/serving_export_test.py"],
     additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu/test_utils",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",

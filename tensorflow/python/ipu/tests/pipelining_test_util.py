@@ -17,13 +17,13 @@ import math
 import numpy as np
 import pva
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import standard_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue

@@ -17,7 +17,7 @@ import os
 import pva
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors_impl

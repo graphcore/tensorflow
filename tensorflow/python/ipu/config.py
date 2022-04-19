@@ -27,7 +27,6 @@ import json
 import os
 import pydoc
 import typing
-import numpy as np
 
 from tensorflow.python.eager.context import executing_eagerly
 from tensorflow.compiler.plugin.poplar.driver import config_pb2

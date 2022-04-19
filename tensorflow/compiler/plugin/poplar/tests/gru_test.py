@@ -23,7 +23,6 @@ import json
 import numpy as np
 from absl.testing import parameterized
 import pva
-from test_utils import ReportHelper
 
 # pylint: disable=unused-import
 from tensorflow.compiler.tests import xla_test
@@ -33,6 +32,7 @@ from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -570,7 +570,7 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
 
   def testGRUCached(self):
     cfg = IPUConfig()
-    report_helper = ReportHelper()
+    report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
@@ -631,7 +631,7 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
 
   def testGRUNotCached(self):
     cfg = IPUConfig()
-    report_helper = ReportHelper()
+    report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
@@ -694,7 +694,7 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
   @parameterized.parameters((True,), (False,))
   def testGRUWithAvailableMemoryProportionFwd(self, valid_value):
     cfg = IPUConfig()
-    report_helper = ReportHelper()
+    report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
@@ -738,7 +738,7 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
   def testGRUGreaterAvailableMemoryProportionFwdMeansGreaterTotalTileMemory(
       self):
     cfg = IPUConfig()
-    report_helper = ReportHelper()
+    report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg, output_execution_profile=True)
     cfg.ipu_model.compile_ipu_code = True
     cfg.ipu_model.tiles_per_ipu = 32
@@ -818,7 +818,7 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
   @parameterized.parameters((True), (False))
   def testGRUWithAvailableMemoryProportionBwd(self, valid_value):
     cfg = IPUConfig()
-    report_helper = ReportHelper()
+    report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
@@ -835,7 +835,7 @@ class GRUTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=
   def testGRUGreaterAvailableMemoryProportionBwdMeansGreaterTotalTileMemory(
       self):
     cfg = IPUConfig()
-    report_helper = ReportHelper()
+    report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg, output_execution_profile=True)
     cfg.ipu_model.compile_ipu_code = True
     cfg.ipu_model.tiles_per_ipu = 32

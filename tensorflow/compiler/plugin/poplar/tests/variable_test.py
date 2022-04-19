@@ -16,7 +16,7 @@
 import os
 import numpy as np
 import pva
-import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
@@ -469,9 +469,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       o = sess.run(z)
       self.assertAllClose(o, 0.0, 2.0, 2.0)
 
-      ok = [
-          'vs/z1/Initializer/random_uniform/RandomUniform/fusion/uniform'
-      ]
+      ok = ['vs/z1/Initializer/random_uniform/RandomUniform/fusion/uniform']
       self.assert_all_compute_sets_and_list(report, ok)
 
   def testUniformRandomNonScalarInitalizer(self):
@@ -496,9 +494,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       o = sess.run(z)
       self.assertAllClose(o, [0.0, 0.0], 2.0, 2.0)
 
-      ok = [
-          'vs/z1/Initializer/random_uniform/RandomUniform/fusion/uniform'
-      ]
+      ok = ['vs/z1/Initializer/random_uniform/RandomUniform/fusion/uniform']
       self.assert_all_compute_sets_and_list(report, ok)
 
   def testDefaultUniformRandomInitalizer(self):

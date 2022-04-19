@@ -16,7 +16,6 @@
 import numpy as np
 import pva
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
@@ -35,6 +34,7 @@ from tensorflow.python.ops import control_flow_util_v2 as control_util
 from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.python.ipu import functional_ops
+from tensorflow.python.ipu import test_utils as tu
 
 
 class FunctionalOpsTest(test_util.TensorFlowTestCase):

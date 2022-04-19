@@ -20,7 +20,7 @@ import os
 import numpy as np
 from absl.testing import parameterized
 import pva
-import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 
 from tensorflow.python import ipu
 from tensorflow.compiler.tests import xla_test

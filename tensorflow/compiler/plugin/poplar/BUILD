@@ -1045,12 +1045,10 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     tags = ["hw_poplar_test_1_ipus"],
     deps = [
-        ":test_utils_py",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
+        "@absl_py//absl/testing:parameterized",
     ],
 )
 
@@ -2258,18 +2256,6 @@ xla_test(
     ],
 )
 
-py_library(
-    name = "test_utils_py",
-    testonly = True,
-    srcs = ["tests/test_utils.py"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/compiler/tf2xla/python:xla",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
 tf_xla_py_test(
     name = "arg_min_max_test",
     size = "medium",
@@ -2277,7 +2263,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 2,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2288,7 +2276,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 2,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2299,7 +2289,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 4,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2309,7 +2301,9 @@ tf_xla_py_test(
     srcs = ["tests/topk_onehot_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2319,7 +2313,9 @@ tf_xla_py_test(
     srcs = ["tests/topk_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2329,7 +2325,9 @@ tf_xla_py_test(
     srcs = ["tests/simple_network_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2339,7 +2337,9 @@ tf_xla_py_test(
     srcs = ["tests/matmul_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2349,7 +2349,9 @@ tf_xla_py_test(
     srcs = ["tests/matmul_option_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2360,7 +2362,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 8,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2374,7 +2378,9 @@ tf_xla_py_test(
     ],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2384,7 +2390,9 @@ tf_xla_py_test(
     srcs = ["tests/serialization_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2395,7 +2403,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 2,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2406,7 +2416,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 4,  # Run all tests in parallel to improve performance
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2416,7 +2428,9 @@ tf_xla_py_test(
     srcs = ["tests/cholesky_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2426,7 +2440,9 @@ tf_xla_py_test(
     srcs = ["tests/constant_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2436,7 +2452,9 @@ tf_xla_py_test(
     srcs = ["tests/var_handle_name_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2446,7 +2464,9 @@ tf_xla_py_test(
     srcs = ["tests/variable_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2456,7 +2476,9 @@ tf_xla_py_test(
     srcs = ["tests/synthetic_data_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2467,7 +2489,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 3,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2477,7 +2501,9 @@ tf_xla_py_test(
     srcs = ["tests/synthetic_data_categories_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -2490,7 +2516,9 @@ tf_xla_py_test(
     shard_count = 3,
     tags = ["hw_poplar_test_1_ipus"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2500,7 +2528,9 @@ tf_xla_py_test(
     srcs = ["tests/reduce_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2510,7 +2540,9 @@ tf_xla_py_test(
     srcs = ["tests/f16_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2520,7 +2552,9 @@ tf_xla_py_test(
     srcs = ["tests/64_bit_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2530,7 +2564,9 @@ tf_xla_py_test(
     srcs = ["tests/batch_norm_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2542,7 +2578,9 @@ tf_xla_py_test(
     shard_count = 2,
     tags = ["hw_poplar_test_8_ipus"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2693,7 +2731,9 @@ tf_xla_py_test(
     srcs = ["tests/fuse_ops_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2703,7 +2743,9 @@ tf_xla_py_test(
     srcs = ["tests/assert_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2714,7 +2756,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 5,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2724,7 +2768,9 @@ tf_xla_py_test(
     srcs = ["tests/tensor_array_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2734,7 +2780,9 @@ tf_xla_py_test(
     srcs = ["tests/monitored_session_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2744,7 +2792,9 @@ tf_xla_py_test(
     srcs = ["tests/casts_elimination_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2754,7 +2804,9 @@ tf_xla_py_test(
     srcs = ["tests/sendrecv_ops_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2766,7 +2818,9 @@ tf_xla_py_test(
     shard_count = 8,
     tags = ["isolated_poplar_tests"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2776,7 +2830,9 @@ tf_xla_py_test(
     srcs = ["tests/update_op_dependencies_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2786,7 +2842,9 @@ tf_xla_py_test(
     srcs = ["tests/norm_graph_caching_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2796,7 +2854,9 @@ tf_xla_py_test(
     srcs = ["tests/norm_graph_caching_sharded_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2806,7 +2866,9 @@ tf_xla_py_test(
     srcs = ["tests/conv_graph_caching_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2816,7 +2878,9 @@ tf_xla_py_test(
     srcs = ["tests/conv_graph_caching_sharded_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2827,7 +2891,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 8,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2838,7 +2904,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 6,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -2849,7 +2917,9 @@ tf_xla_py_test(
     srcs = ["tests/wide_const_expansion_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2860,7 +2930,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 4,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2870,7 +2942,9 @@ tf_xla_py_test(
     srcs = ["tests/stateful_gradient_accumulate_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2880,7 +2954,9 @@ tf_xla_py_test(
     srcs = ["tests/case_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2890,7 +2966,9 @@ tf_xla_py_test(
     srcs = ["tests/while_loop_perf_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2900,7 +2978,9 @@ tf_xla_py_test(
     srcs = ["tests/mapping_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2910,7 +2990,9 @@ tf_xla_py_test(
     srcs = ["tests/remapping_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2920,7 +3002,9 @@ tf_xla_py_test(
     srcs = ["tests/candidate_sampler_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2930,7 +3014,9 @@ tf_xla_py_test(
     srcs = ["tests/conditional_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2940,7 +3026,9 @@ tf_xla_py_test(
     srcs = ["tests/size_speed_tests/combined_weights_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2951,7 +3039,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 8,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2962,7 +3052,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 4,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2972,7 +3064,9 @@ tf_xla_py_test(
     srcs = ["tests/while_loop_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2982,7 +3076,9 @@ tf_xla_py_test(
     srcs = ["tests/while_loop_sharded_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -2992,7 +3088,9 @@ tf_xla_py_test(
     srcs = ["tests/subcomputation_graph_caching_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3003,7 +3101,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     tags = ["isolated_poplar_tests"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3013,7 +3113,9 @@ tf_xla_py_test(
     srcs = ["tests/scalar_elementwise_graph_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3023,7 +3125,9 @@ tf_xla_py_test(
     srcs = ["tests/sort_op_py_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3033,7 +3137,9 @@ tf_xla_py_test(
     srcs = ["tests/sharded_inplace_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3053,7 +3159,9 @@ tf_xla_py_test(
     srcs = ["tests/clear_xla_cache_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3068,7 +3176,9 @@ tf_xla_py_test(
     shard_count = 8,
     tags = ["hw_poplar_test_1_ipus"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3081,8 +3191,8 @@ tf_xla_py_test(
         num_instances = N,
         num_replicas = M,
         deps = [
-            ":test_utils_py",
             "//tensorflow/python/ipu:ipu_lib",
+            "//tensorflow/python/ipu/test_utils",
         ],
     )
     for N, M in [
@@ -3107,7 +3217,9 @@ tf_xla_py_test(
     srcs = ["tests/device_connection_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3157,7 +3269,9 @@ tf_xla_py_test(
     srcs = ["tests/tensor_path_transform_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3272,7 +3386,9 @@ tf_xla_py_test(
     srcs = ["tests/bias_apply_graph_caching_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3282,7 +3398,9 @@ tf_xla_py_test(
     srcs = ["tests/matmul_graph_caching_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3293,7 +3411,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     tags = ["exclusive"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3349,7 +3469,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 6,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3371,7 +3493,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 2,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3465,7 +3589,9 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     shard_count = 4,
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3479,9 +3605,9 @@ tf_xla_py_test(
         "hw_poplar_test_1_ipus",
     ],
     deps = [
-        ":test_utils_py",
-        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3491,7 +3617,9 @@ tf_xla_py_test(
     srcs = ["tests/compile_cache_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 
@@ -3513,7 +3641,9 @@ tf_xla_py_test(
     srcs = ["tests/dummy_input_test.py"],
     enabled_backends = ["poplar"],
     deps = [
-        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 

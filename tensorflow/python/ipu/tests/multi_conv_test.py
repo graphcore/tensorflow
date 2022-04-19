@@ -21,7 +21,7 @@ import pva
 
 from google.protobuf import json_format
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.compiler.plugin.poplar.driver import option_flag_pb2
 from tensorflow.python import ipu
 from tensorflow.python.keras import layers

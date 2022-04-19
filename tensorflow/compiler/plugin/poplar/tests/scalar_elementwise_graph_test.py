@@ -18,7 +18,6 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
@@ -33,7 +32,7 @@ from tensorflow.python.ops import state_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
-import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 
 
 class ScalarElementWiseGraphTest(xla_test.XLATestCase):

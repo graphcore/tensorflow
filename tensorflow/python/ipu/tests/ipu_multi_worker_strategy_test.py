@@ -21,7 +21,7 @@ import os
 
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.compat.v1 import disable_v2_behavior
 from tensorflow.core.protobuf import config_pb2
 from tensorflow.python import keras

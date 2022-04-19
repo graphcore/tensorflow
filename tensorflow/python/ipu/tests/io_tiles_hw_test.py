@@ -19,7 +19,7 @@ from absl.testing import parameterized
 import pva
 from tensorflow.python.ipu.config import IPUConfig
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import ops

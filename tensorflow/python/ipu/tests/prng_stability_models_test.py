@@ -35,7 +35,7 @@ from tensorflow.python.ops.losses import losses
 from tensorflow.python.training.optimizer import Optimizer
 from tensorflow.python.training import gradient_descent
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 
 
 # Optimizer wrapper that captures intermedite kernel/weight values into the given

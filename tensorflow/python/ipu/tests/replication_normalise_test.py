@@ -18,7 +18,7 @@ import numpy as np
 import pva
 
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util

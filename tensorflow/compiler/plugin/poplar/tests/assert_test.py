@@ -21,7 +21,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework.errors_impl import InternalError
-from tensorflow.compat.v1 import assert_none_equal
+from tensorflow.python.ops import check_ops
 
 
 class AssertTest(xla_test.XLATestCase):
@@ -39,7 +39,7 @@ class AssertTest(xla_test.XLATestCase):
         with ops.device("/device:IPU:0"):
           zero = array_ops.constant(0, np.float32)
           pa = array_ops.placeholder(np.float32, [])
-          c = assert_none_equal(pa, zero, [pa])
+          c = check_ops.assert_none_equal(pa, zero, [pa])
           with ops.control_dependencies([c]):
             graph = array_ops.identity(pa)
 

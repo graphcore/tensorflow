@@ -20,9 +20,8 @@ from __future__ import print_function
 import os
 from absl.testing import parameterized
 import numpy as np
-from test_utils import ReportJSON
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import dtypes
@@ -58,7 +57,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       return math_ops.argmax(a, output_type=dtypes.int32)
 
     with self.session() as sess:
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       report_json.reset()
 
       with ops.device('cpu'):
@@ -132,7 +131,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       return math_ops.argmin(a, output_type=dtypes.int32)
 
     with self.session() as sess:
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
 
       with ops.device('cpu'):
         pa = array_ops.placeholder(dtype, [3, 5, 2])
@@ -207,7 +206,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       return math_ops.argmax(a, axis=-1, output_type=dtypes.int32)
 
     with self.session() as sess:
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       report_json.reset()
 
       with ops.device('cpu'):
@@ -235,7 +234,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       return math_ops.argmax(a, axis=0, output_type=dtypes.int32)
 
     with self.session() as sess:
-      report_json = ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       report_json.reset()
 
       with ops.device('cpu'):

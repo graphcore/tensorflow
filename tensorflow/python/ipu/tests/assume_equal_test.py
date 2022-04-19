@@ -20,7 +20,7 @@ from absl.testing import parameterized
 
 from tensorflow.python.ipu.config import IPUConfig
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import test_util
