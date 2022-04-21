@@ -250,6 +250,8 @@ class HloPoplarBuffer {
   bool operator==(const HloPoplarBuffer& other) const;
   bool operator!=(const HloPoplarBuffer& other) const;
 
+  int64 SizeInBytes() const;
+
   std::string ToString() const;
 
  private:
@@ -358,6 +360,13 @@ std::ostream& operator<<(
 
 using InstructionBufferSets =
     std::unordered_map<const HloInstruction*, InstructionPoplarBufferSet>;
+
+// Return the sizes of the device memory buffers in the given
+// HloPoplarBufferSet.
+absl::flat_hash_map<HloPoplarBuffer::Id, int64> DeviceMemoryBufferSizesInBytes(
+    const HloPoplarBufferSet& buffers);
+absl::flat_hash_map<HloPoplarBuffer::Id, int64> DeviceMemoryBufferSizesInBytes(
+    const InstructionPoplarBufferSet& buffers);
 
 // Utilities for checking whether all the buffers in a HloPoplarBufferSet meet
 // some criteria.

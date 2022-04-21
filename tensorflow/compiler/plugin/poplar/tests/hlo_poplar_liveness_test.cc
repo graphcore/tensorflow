@@ -392,8 +392,8 @@ const char* multiply_add_hlo = R"(
   arg1 = f32[2] parameter(1)
   mul1 = f32[2] multiply(arg1, arg1)
   add = f32[2] add(mul0, mul1)
-  arg2 = f32[] parameter(2)
-  ROOT result = (f32[2], f32[]) tuple(add, arg2)
+  arg2 = f32[100] parameter(2)
+  ROOT result = (f32[2], f32[100]) tuple(add, arg2)
 }
 )";
 TEST_F(LivenessTest, DataflowAnalysisIntegration) {
@@ -434,6 +434,108 @@ TEST_F(LivenessTest, DataflowAnalysisIntegration) {
   ASSERT_THAT(program_liveness[add], UnorderedElementsAre(buffer0, buffer1));
   ASSERT_THAT(program_liveness[arg2], UnorderedElementsAre(buffer0));
   ASSERT_THAT(program_liveness[result], UnorderedElementsAre(buffer0, buffer2));
+}
+
+using MemoryUsageTest = HloTestFixture;
+
+const char* stub_hlo = R"(
+ HloModule top
+
+ ENTRY cluster_1 {
+  inst0 = f32[] parameter(0)
+  inst1 = f32[] parameter(1)
+  inst2 = f32[] parameter(2)
+  ROOT inst3 = f32[2] constant(1)
+}
+)";
+TEST_F(MemoryUsageTest, SumOfLiveBuffers) {
+  ASSERT_TRUE(SetUpHloModule(stub_hlo));
+
+  auto* inst = FindInstruction(hlo_module_, "inst3");
+
+  HloInstructionMap<HloPoplarBufferIdSet> program_liveness;
+  program_liveness[inst] = {0, 1, 2, 3, 5};
+
+  absl::flat_hash_map<HloPoplarBuffer::Id, int64> buffer_sizes_in_bytes;
+  buffer_sizes_in_bytes[0] = 100;
+  buffer_sizes_in_bytes[1] = 100;
+  buffer_sizes_in_bytes[2] = 300;
+  buffer_sizes_in_bytes[3] = 10;
+  buffer_sizes_in_bytes[5] = 5000;
+  buffer_sizes_in_bytes[6] = 99999;
+
+  const auto memory_estimate =
+      EstimateMinimumLiveMemory(program_liveness, buffer_sizes_in_bytes);
+  // 5510, since we're only using buffer 0,1,2,3,5.
+  ASSERT_EQ(memory_estimate, 5510);
+}
+
+TEST_F(MemoryUsageTest, MaxOfInstructionUsage) {
+  ASSERT_TRUE(SetUpHloModule(stub_hlo));
+
+  auto* inst0 = FindInstruction(hlo_module_, "inst0");
+  auto* inst1 = FindInstruction(hlo_module_, "inst1");
+  auto* inst2 = FindInstruction(hlo_module_, "inst2");
+  auto* inst3 = FindInstruction(hlo_module_, "inst3");
+
+  HloInstructionMap<HloPoplarBufferIdSet> program_liveness;
+  program_liveness[inst0] = {0};
+  program_liveness[inst1] = {2};
+  program_liveness[inst2] = {1};
+  program_liveness[inst3] = {4};
+
+  absl::flat_hash_map<HloPoplarBuffer::Id, int64> buffer_sizes_in_bytes;
+  buffer_sizes_in_bytes[0] = 5451;
+  buffer_sizes_in_bytes[1] = 230;
+  buffer_sizes_in_bytes[2] = 7500;
+  buffer_sizes_in_bytes[3] = 999999;
+  buffer_sizes_in_bytes[4] = 499;
+
+  const auto memory_estimate =
+      EstimateMinimumLiveMemory(program_liveness, buffer_sizes_in_bytes);
+  // 7500, since this is the max of 5451, 230, 7, 500, 499.
+  ASSERT_EQ(memory_estimate, 7500);
+}
+
+TEST_F(MemoryUsageTest, DataflowAnalysisIntegration) {
+  ASSERT_TRUE(SetUpHloModule(multiply_add_hlo));
+
+  auto* arg0 = FindInstruction(hlo_module_, "arg0");
+  auto* mul0 = FindInstruction(hlo_module_, "mul0");
+  auto* arg1 = FindInstruction(hlo_module_, "arg1");
+  auto* mul1 = FindInstruction(hlo_module_, "mul1");
+  auto* add = FindInstruction(hlo_module_, "add");
+  auto* arg2 = FindInstruction(hlo_module_, "arg2");
+  auto* result = FindInstruction(hlo_module_, "result");
+
+  auto annotations = CompilerAnnotations(hlo_module_);
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto analysis, HloPoplarDataflowAnalysis::Run(hlo_module_, annotations));
+
+  auto instruction_buffer_sets = analysis->GetInstructionBufferSets();
+  auto buffer_uses = FindUsedBuffers(hlo_module_, instruction_buffer_sets);
+
+  absl::flat_hash_map<HloPoplarBuffer::Id, int64> buffer_sizes;
+  for (auto& item : buffer_uses) {
+    buffer_sizes.merge(DeviceMemoryBufferSizesInBytes(item.second));
+  }
+
+  std::vector<HloInstruction*> schedule;
+
+  schedule = {arg0, mul0, arg1, mul1, add, arg2, result};
+  auto program_liveness = GenerateProgramLiveness(schedule, buffer_uses);
+  auto memory_estimate =
+      EstimateMinimumLiveMemory(program_liveness, buffer_sizes);
+  // The root instruction depends on f32[2] add and f32[100] arg2, so this
+  // schedule uses at least 4*2 + 4*100 = 408 bytes of device memory.
+  ASSERT_EQ(memory_estimate, 408);
+
+  // By moving arg2 to the front of the schedule we extend its life time, so at
+  // mul1 we have arg2 and mul0 and arg1 alive, and 4*100 + 4*2 + 4*2 = 416.
+  schedule = {arg2, arg0, mul0, arg1, mul1, add, result};
+  program_liveness = GenerateProgramLiveness(schedule, buffer_uses);
+  memory_estimate = EstimateMinimumLiveMemory(program_liveness, buffer_sizes);
+  ASSERT_EQ(memory_estimate, 416);
 }
 
 }  // namespace

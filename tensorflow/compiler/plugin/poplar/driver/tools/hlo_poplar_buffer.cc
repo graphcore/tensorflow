@@ -239,6 +239,10 @@ bool HloPoplarBuffer::operator!=(const HloPoplarBuffer& other) const {
   return !(*this == other);
 }
 
+int64 HloPoplarBuffer::SizeInBytes() const {
+  return ShapeUtil::ByteSizeOf(shape());
+}
+
 string HloPoplarBuffer::ToString() const {
   return absl::StrCat("Id ", id_, " ", defining_position().ToString(),
                       ", locality ", BufferLocalityToString(locality()));
@@ -405,6 +409,33 @@ std::ostream& operator<<(
     const InstructionPoplarBufferSet& instruction_buffer_set) {
   out << instruction_buffer_set.ToString();
   return out;
+}
+
+absl::flat_hash_map<HloPoplarBuffer::Id, int64> DeviceMemoryBufferSizesInBytes(
+    const HloPoplarBufferSet& buffers) {
+  absl::flat_hash_map<HloPoplarBuffer::Id, int64> buffer_sizes;
+
+  for (auto* buffer : buffers.buffers()) {
+    if (buffer->locality() == BufferLocality::kDeviceMemory) {
+      buffer_sizes[buffer->id()] = buffer->SizeInBytes();
+    } else {
+      buffer_sizes[buffer->id()] = 0;
+    }
+  }
+
+  return buffer_sizes;
+}
+
+absl::flat_hash_map<HloPoplarBuffer::Id, int64> DeviceMemoryBufferSizesInBytes(
+    const InstructionPoplarBufferSet& buffers) {
+  absl::flat_hash_map<HloPoplarBuffer::Id, int64> buffer_sizes;
+
+  for (auto& item : buffers.GetBufferSets()) {
+    auto& buffer_set = item.second;
+    buffer_sizes.merge(DeviceMemoryBufferSizesInBytes(buffer_set));
+  }
+
+  return buffer_sizes;
 }
 
 bool AllOfBufferSet(

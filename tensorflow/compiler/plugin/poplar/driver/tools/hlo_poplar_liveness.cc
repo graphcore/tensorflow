@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_liveness.h"
 
+#include <algorithm>
+
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 
@@ -142,6 +144,39 @@ HloInstructionMap<HloPoplarBufferIdSet> GenerateProgramLiveness(
   }
 
   return program_liveness;
+}
+
+namespace {
+int64 MemoryUsageOfBufferSet(
+    const HloPoplarBufferIdSet& buffers,
+    const absl::flat_hash_map<HloPoplarBuffer::Id, int64>&
+        buffer_sizes_in_bytes) {
+  const int64 memory_usage = absl::c_accumulate(
+      buffers, 0l,
+      [&buffer_sizes_in_bytes](int64 sum, HloPoplarBuffer::Id buffer_id) {
+        return sum + buffer_sizes_in_bytes.at(buffer_id);
+      });
+  return memory_usage;
+}
+}  // namespace
+
+int64 EstimateMinimumLiveMemory(
+    const HloInstructionMap<HloPoplarBufferIdSet>& program_liveness,
+    const absl::flat_hash_map<HloPoplarBuffer::Id, int64>&
+        buffer_sizes_in_bytes) {
+  // Max buffer usage is the minimum live memory since we don't know what other
+  // memory the Poplar ops of our program will use.
+  int64 max_buffer_set_memory_usage = 0;
+
+  for (auto& item : program_liveness) {
+    auto& live_buffers = item.second;
+
+    max_buffer_set_memory_usage =
+        std::max(max_buffer_set_memory_usage,
+                 MemoryUsageOfBufferSet(live_buffers, buffer_sizes_in_bytes));
+  }
+
+  return max_buffer_set_memory_usage;
 }
 
 }  // namespace poplarplugin
