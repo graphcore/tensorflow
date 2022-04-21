@@ -57,10 +57,6 @@ bool IsMultiUpdate(const HloInstruction* inst) {
   return IsPoplarInstruction(PoplarOp::MultiUpdate)(inst);
 }
 
-bool IsMultiUpdateAdd(const HloInstruction* inst) {
-  return IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst);
-}
-
 bool IsSliceOnlyPlan(const std::vector<const HloInstruction*> insts) {
   return absl::c_all_of(insts, IsMultiSlice);
 }

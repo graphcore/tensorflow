@@ -61,10 +61,6 @@ tensor * replication factor.
 namespace xla {
 namespace poplarplugin {
 
-bool IsMultiUpdateAdd(const HloInstruction* inst) {
-  return IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst);
-}
-
 bool IsMultiUpdate(const HloInstruction* inst) {
   return IsPoplarInstruction(PoplarOp::MultiUpdate)(inst);
 }
