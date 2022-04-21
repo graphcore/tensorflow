@@ -98,6 +98,7 @@ class KerasExtensions:
 
         # Change the class of the instance to be the patched class.
         instance.__class__ = patched_cls
+        instance.__original_class__ = instance_cls
 
         # Call the extension constructor as it has not been called yet on this
         # instance.
