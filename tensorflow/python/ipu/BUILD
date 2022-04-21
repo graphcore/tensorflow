@@ -844,6 +844,20 @@ py_test(
     ],
 )
 
+tf_py_test(
+    name = "softmax_test",
+    size = "medium",
+    srcs = ["tests/softmax_test.py"],
+    shard_count = 8,
+    deps = [
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
+    ],
+)
+
 cc_binary(
     name = "libadd_incrementing_custom.so",
     srcs = ["tests/add_incrementing_custom.cc"],
@@ -1798,6 +1812,7 @@ test_suite(
         "sequence_slice_test",
         "serving_export_test",
         "sharded_and_replicated_test",
+        "softmax_test",
         "user_ops_test",
         "utils_get_config_test",
         "utils_test",

@@ -64,6 +64,17 @@ std::unique_ptr<HloInstruction> CreateSwish(HloInstruction* const operand) {
   return CreateNonLinearity<HloSwishInstruction>(operand);
 }
 
+// Softmax
+std::unique_ptr<HloInstruction> CreateSoftmax(HloInstruction* const operand) {
+  return CreateNonLinearity<HloSoftmaxInstruction>(operand);
+}
+
+// StableSoftmax
+std::unique_ptr<HloInstruction> CreateStableSoftmax(
+    HloInstruction* const operand) {
+  return CreateNonLinearity<HloStableSoftmaxInstruction>(operand);
+}
+
 // ReluGrad
 std::unique_ptr<HloInstruction> CreateReluGrad(HloInstruction* const out,
                                                HloInstruction* const grad) {
@@ -122,6 +133,13 @@ static HloPoplarInstructionFactory hard_sigmoid_factory(
 
 static HloPoplarInstructionFactory swish_factory(
     PoplarOp::Swish, HloNonLinearityFactory<HloSwishInstruction>);
+
+static HloPoplarInstructionFactory softmax_factory(
+    PoplarOp::Softmax, HloNonLinearityFactory<HloSoftmaxInstruction>);
+
+static HloPoplarInstructionFactory stable_softmax_factory(
+    PoplarOp::StableSoftmax,
+    HloNonLinearityFactory<HloStableSoftmaxInstruction>);
 
 template <class NonLinearityGradInstruction>
 StatusOr<std::unique_ptr<HloInstruction>> HloNonLinearityGradFactory(
