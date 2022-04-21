@@ -38,6 +38,13 @@ HloInstructionMap<HloPoplarBufferIdSet> GenerateProgramLiveness(
     const std::vector<HloInstruction*>& flat_schedule,
     const HloInstructionMap<HloPoplarBufferSet>& buffer_usages);
 
+// Estimate the minimum amount of IPU memory required to run a program with
+// the given liveness.
+int64 EstimateMinimumLiveMemory(
+    const HloInstructionMap<HloPoplarBufferIdSet>& program_liveness,
+    const absl::flat_hash_map<HloPoplarBuffer::Id, int64>&
+        buffer_sizes_in_bytes);
+
 }  // namespace poplarplugin
 }  // namespace xla
 
