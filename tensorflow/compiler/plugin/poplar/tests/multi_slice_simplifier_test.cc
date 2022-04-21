@@ -110,6 +110,76 @@ ENTRY main {
       MultiSliceSimplifier(annotations).Run(module.get()).ValueOrDie());
 }
 
+using MultiUpdateAddSimplifierTest = HloTestBase;
+
+TEST_F(MultiUpdateAddSimplifierTest, ReplaceWithStaticMultiUpdateAddTest) {
+  const char* hlo = R"(
+HloModule top
+
+ENTRY main {
+  input = f32[6,2] parameter(0)
+  indices = s32[3,1] constant({{0}, {2}, {4}})
+  updates = f32[3,2] parameter(1)
+  scale = f32[] parameter(2)
+  ROOT output = f32[6,2] custom-call(input, indices, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}"
+}
+
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo));
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module.get()).ValueOrDie());
+
+  CompilerAnnotations annotations(module.get());
+  EXPECT_TRUE(MultiSliceSimplifier(annotations).Run(module.get()).ValueOrDie());
+
+  const Shape input_shape = ShapeUtil::MakeShape(F32, {6, 2});
+  const Shape updates_shape = ShapeUtil::MakeShape(F32, {3, 2});
+  const Shape scale_shape = ShapeUtil::MakeShape(F32, {});
+  const std::vector<int64> indices = {0, 2, 4};
+
+  HloStaticMultiUpdateAddInstruction* update =
+      Cast<HloStaticMultiUpdateAddInstruction>(
+          module->entry_computation()->root_instruction());
+
+  EXPECT_THAT(
+      update,
+      GmockMatch(
+          m::Op()
+              .WithCustomCallTarget("StaticMultiUpdateAdd")
+              .WithShapeEqualTo(&input_shape)
+              .WithOperand(0, m::Parameter().WithShapeEqualTo(&input_shape))
+              .WithOperand(1, m::Parameter().WithShapeEqualTo(&updates_shape))
+              .WithOperand(2, m::Parameter().WithShapeEqualTo(&scale_shape))));
+  EXPECT_EQ(GetNumInstructions<HloInstruction>(module->entry_computation()), 4);
+  EXPECT_EQ(update->GetIndices(), indices);
+}
+
+TEST_F(MultiUpdateAddSimplifierTest, CanNotSimplify) {
+  const char* hlo = R"(
+HloModule top
+
+ENTRY main {
+  input = f32[6,2] parameter(0)
+  indices = s32[3,1] parameter(1)
+  updates = f32[3,2] parameter(2)
+  scale = f32[] parameter(3)
+  ROOT output = f32[6,2] custom-call(input, indices, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}"
+}
+
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo));
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module.get()).ValueOrDie());
+
+  CompilerAnnotations annotations(module.get());
+  EXPECT_FALSE(
+      MultiSliceSimplifier(annotations).Run(module.get()).ValueOrDie());
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

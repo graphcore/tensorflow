@@ -49,15 +49,22 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloOpcode::kConstant, NodeOperands({}), IsVector},
     })),
+  HloMatcherPattern(
+    PatternType("multi_update_add_const_indices"),
+    PatternMetaTarget(0),
+    PatternInputs({1, 2, 3, 4}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloOpcode::kCustomCall, NodeOperands({1, 2, 3, 4}), IsMultiUpdateAdd},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloOpcode::kConstant, NodeOperands({}), IsVector},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+    })),
 };
 // clang-format on
 
-MultiSliceSimplifier::MultiSliceSimplifier(
-    struct CompilerAnnotations& annotations)
-    : HloMatcher(patterns, annotations, /*root_only=*/false,
-                 /*requires_unique_sharding=*/true) {}
-
-StatusOr<bool> MultiSliceSimplifier::HandleMatch(
+static StatusOr<bool> HandleMultiSliceConstIndices(
     HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
   HloComputation* comp = match.computation;
 
@@ -82,6 +89,54 @@ StatusOr<bool> MultiSliceSimplifier::HandleMatch(
   TF_RETURN_IF_ERROR(comp->ReplaceInstruction(slice, new_slice));
 
   return true;
+}
+
+static StatusOr<bool> HandleMultiUpdateAddConstIndices(
+    HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
+  HloComputation* comp = match.computation;
+
+  HloMultiUpdateAddInstruction* update_add =
+      Cast<HloMultiUpdateAddInstruction>(match.instruction_mapping.at(0));
+  HloInstruction* inputs = match.GetInputs()[0];
+  HloInstruction* indices = match.GetInputs()[1];
+  HloInstruction* updates = match.GetInputs()[2];
+  HloInstruction* scale = match.GetInputs()[3];
+
+  // Flatten the indices literal.
+  Literal indices_literal = indices->literal().Clone();
+  const int64 element_count = indices_literal.element_count();
+  TF_ASSIGN_OR_RETURN(indices_literal,
+                      indices_literal.Reshape({element_count}));
+  TF_ASSIGN_OR_RETURN(std::vector<int64> static_indices,
+                      LiteralVectorToNativeType<int64>(indices_literal));
+
+  HloInstruction* new_update_add = comp->AddInstruction(
+      CreateStaticMultiUpdateAdd(update_add->shape(), {inputs, updates, scale},
+                                 std::move(static_indices)));
+
+  update_add->SetupDerivedInstruction(new_update_add);
+
+  TF_RETURN_IF_ERROR(comp->ReplaceInstruction(update_add, new_update_add));
+
+  return true;
+}
+
+MultiSliceSimplifier::MultiSliceSimplifier(
+    struct CompilerAnnotations& annotations)
+    : HloMatcher(patterns, annotations, /*root_only=*/false,
+                 /*requires_unique_sharding=*/true) {}
+
+StatusOr<bool> MultiSliceSimplifier::HandleMatch(
+    HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
+  switch (match.pattern_idx) {
+    case 0: {
+      return HandleMultiSliceConstIndices(match, sharding_device);
+    }
+    case 1: {
+      return HandleMultiUpdateAddConstIndices(match, sharding_device);
+    }
+    default: { return xla::FailedPrecondition(""); }
+  }
 }
 
 }  // namespace poplarplugin

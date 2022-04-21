@@ -47,10 +47,6 @@ bool IsTuple(HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kTuple;
 }
 
-bool IsMultiUpdateAdd(const HloInstruction* inst) {
-  return IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst);
-}
-
 bool IsGradientAccumulatorAdd(const HloInstruction* inst) {
   return IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(inst);
 }

@@ -522,5 +522,9 @@ bool IsMultiSlice(const HloInstruction* inst) {
   return IsPoplarInstruction(PoplarOp::MultiSlice)(inst);
 }
 
+bool IsMultiUpdateAdd(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst);
+}
+
 }  // namespace poplarplugin
 }  // namespace xla
