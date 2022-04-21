@@ -92,6 +92,15 @@ std::unique_ptr<HloInstruction> CreateHardSigmoid(
 using HloSwishInstruction = HloNonLinearity<PoplarOp::Swish>;
 std::unique_ptr<HloInstruction> CreateSwish(HloInstruction* const operand);
 
+// Softmax
+using HloSoftmaxInstruction = HloNonLinearity<PoplarOp::Softmax>;
+std::unique_ptr<HloInstruction> CreateSoftmax(HloInstruction* const operand);
+
+// Stable Softmax
+using HloStableSoftmaxInstruction = HloNonLinearity<PoplarOp::StableSoftmax>;
+std::unique_ptr<HloInstruction> CreateStableSoftmax(
+    HloInstruction* const operand);
+
 template <PoplarOp Op>
 class HloNonLinearityGrad : public HloPoplarInstruction {
  public:

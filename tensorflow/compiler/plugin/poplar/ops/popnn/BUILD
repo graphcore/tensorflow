@@ -71,6 +71,17 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "softmax",
+    srcs = [
+        "softmax.cc",
+    ],
+    deps = [
+        "//tensorflow/core:framework",
+    ],
+    alwayslink = True,
+)
+
+poplar_cc_library(
     name = "swish",
     srcs = [
         "swish.cc",
@@ -91,6 +102,7 @@ poplar_cc_library(
         ":hard_sigmoid",
         ":lstm",
         ":norm",
+        ":softmax",
         ":swish",
     ],
 )

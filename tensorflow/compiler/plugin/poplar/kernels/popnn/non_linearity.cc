@@ -68,6 +68,8 @@ REGISTER_IPU_OP("Relu", NonLinearity<PoplarOp::Relu>);
 REGISTER_IPU_OP("Sigmoid", NonLinearity<PoplarOp::Sigmoid>);
 REGISTER_IPU_OP("IpuGelu", NonLinearity<PoplarOp::Gelu>);
 REGISTER_IPU_OP("IpuHardSigmoid", NonLinearity<PoplarOp::HardSigmoid>);
+REGISTER_IPU_OP("IpuSoftmax", NonLinearity<PoplarOp::Softmax>);
+REGISTER_IPU_OP("IpuStableSoftmax", NonLinearity<PoplarOp::StableSoftmax>);
 REGISTER_IPU_OP("IpuSwish", NonLinearity<PoplarOp::Swish>);
 
 template <PoplarOp Op, bool SwapInputs>

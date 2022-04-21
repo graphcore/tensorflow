@@ -281,6 +281,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/ops/popnn:hard_sigmoid",
         "//tensorflow/compiler/plugin/poplar/ops/popnn:lstm",
         "//tensorflow/compiler/plugin/poplar/ops/popnn:norm",
+        "//tensorflow/compiler/plugin/poplar/ops/popnn:softmax",
         "//tensorflow/compiler/plugin/poplar/ops/popnn:swish",
         "//tensorflow/compiler/plugin/poplar/ops/popops:all_to_all",
         "//tensorflow/compiler/plugin/poplar/ops/popops:cross_replica_sum",

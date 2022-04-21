@@ -88,6 +88,20 @@ def swish(x, name=None):
   return gen_popnn_ops.ipu_swish(x, name=name)
 
 
+def softmax(x, stable=False, name=None):
+  """ IPU implementation of the softmax activation function.
+
+    Args:
+    x: The input tensor.
+    stable: A boolean to decide whether to use the stable softmax
+      implementation. Defaults to `False`.
+    name: Optional op name.
+  """
+  if stable:
+    return gen_popnn_ops.ipu_stable_softmax(x, name=name)
+  return gen_popnn_ops.ipu_softmax(x, name=name)
+
+
 def multi_conv(func=None, options=None):
   """A function decorator for generating multi-convolution operations.
   Multi-convolutions allow for a set of data-independent convolutions to be

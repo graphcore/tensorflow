@@ -125,6 +125,8 @@ enum PoplarOp {
   AllReduceWithinReplica = 120;
   StaticMultiSlice = 121;
   StaticMultiUpdateAdd = 122;
+  Softmax = 123;
+  StableSoftmax = 124;
 
   // Supported Fusions.
   Conv_biasadd = 200;

@@ -21,6 +21,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import functional_ops_grad
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.ops.nn_grad import _BroadcastMul
 
@@ -44,6 +45,21 @@ def _ipu_swish_grad(op, grad):
   """Gradients for the IpuSwish op."""
   x = op.inputs[0]
   return [gen_popnn_ops.ipu_swish_grad(grad, x)]
+
+
+@ops.RegisterGradient("IpuSoftmax")
+def _ipu_softmax_grad(op, grad):
+  """Gradients for the IpuSoftmax op."""
+  # borrowed from tensorflow/python/ops/nn_grad.py
+  softmax = op.outputs[0]
+  sum_channels = math_ops.reduce_sum(grad * softmax, -1, keepdims=True)
+  return (grad - sum_channels) * softmax
+
+
+@ops.RegisterGradient("IpuStableSoftmax")
+def _ipu_stable_softmax_grad(op, grad):
+  """Gradients for the IpuSoftmax op."""
+  return _ipu_softmax_grad(op, grad)
 
 
 @ops.RegisterGradient("MultiConv")
