@@ -1167,7 +1167,7 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
     pipeline.AddPass<DistributedBatchNormDecomposer>(
         resources.recomputation_enabled,
         resources.experimental_distributed_batch_norm_replica_group_size);
-    pipeline.AddPass<HloPassFix<SeedHoisting>>();
+    pipeline.AddPass<SeedHoisting>();
     pipeline.AddPass<PipelineRecomputation>(resources.recomputation_enabled);
     pipeline.AddPass<RecomputationCheckpointRemover>();
     pipeline.AddPass<FlattenCallGraph>();

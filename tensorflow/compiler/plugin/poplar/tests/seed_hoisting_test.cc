@@ -131,7 +131,7 @@ ENTRY e {
   while (SeedHoisting().Run(module.get()).ValueOrDie()) {
     exec_counter++;
   }
-  EXPECT_EQ(exec_counter, 2);
+  EXPECT_EQ(exec_counter, 1);
 
   auto root = module->entry_computation()->root_instruction();
   EXPECT_THAT(root->operand_count(), 3);

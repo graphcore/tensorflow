@@ -281,9 +281,7 @@ Status HoistFromRepeatLoop(HloInstruction* seed, HloInstruction* loop) {
 }
 }  // namespace
 
-StatusOr<bool> SeedHoisting::Run(HloModule* module) {
-  VLOG(2) << "Before SeedHoisting:";
-  XLA_VLOG_LINES(2, module->ToString(HloPrintOptions::ShortParsable()));
+StatusOr<bool> ProcessModule(HloModule* module) {
   std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
 
   for (HloComputation* comp : module->MakeComputationPostOrder()) {
@@ -343,6 +341,28 @@ StatusOr<bool> SeedHoisting::Run(HloModule* module) {
     }
   }
   return false;
+}
+
+StatusOr<bool> SeedHoisting::Run(HloModule* module) {
+  VLOG(2) << "Before SeedHoisting:";
+  XLA_VLOG_LINES(2, module->ToString(HloPrintOptions::ShortParsable()));
+
+  bool hoisted = false;
+  int64 num_passes = 0;
+  do {
+    TF_ASSIGN_OR_RETURN(hoisted, ProcessModule(module));
+    if (hoisted) {
+      num_passes++;
+    }
+  } while (hoisted);
+
+  const bool seeds_hoisted = num_passes > 0;
+
+  if (seeds_hoisted) {
+    VLOG(2) << "Completed SeedHoisting in " << num_passes << " passes.";
+  }
+
+  return seeds_hoisted;
 }
 
 }  // namespace poplarplugin
