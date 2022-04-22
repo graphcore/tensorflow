@@ -47,16 +47,6 @@ struct NamedIpuSchedulerAlgorithm {
 };
 
 /**
- * Convert a tensorflow MemorySchedulerAlgorithm to a IpuSchedulerAlgorithm
- *
- * @param algorithm The tensorflow MemorySchedulerAlgorithm to convert
- *
- * @returns a valid IpuSchedulerAlgorithm, or a failure status
- */
-IpuSchedulerAlgorithm MemorySchedulerAlgorithmToIPU(
-    MemorySchedulerAlgorithm algorithm);
-
-/**
  * Convert an IpuSchedulerAlgorithm into a tensorflow MemorySchedulerAlgorithm
  *
  * @param algorithm The IpuSchedulerAlgorithm to convert

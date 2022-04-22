@@ -58,6 +58,19 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "post_order_scheduler",
+    srcs = [
+        "post_order_scheduler.cc",
+    ],
+    hdrs = [
+        "post_order_scheduler.h",
+    ],
+    deps = [
+        ":ipu_scheduler",
+    ],
+)
+
+poplar_cc_library(
     name = "schedule_tree",
     hdrs = [
         "schedule_tree.h",
@@ -103,6 +116,7 @@ poplar_cc_library(
         ":clustering_scheduler",
         ":ipu_scheduler",
         ":liveness_look_ahead_scheduler",
+        ":post_order_scheduler",
         ":schedule_tree",
         ":schedule_utils",
         ":shortest_path_scheduler",

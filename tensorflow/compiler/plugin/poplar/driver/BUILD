@@ -224,6 +224,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/poplar_passes",
         "//tensorflow/compiler/plugin/poplar/driver/schedulers:clustering_scheduler",
         "//tensorflow/compiler/plugin/poplar/driver/schedulers:liveness_look_ahead_scheduler",
+        "//tensorflow/compiler/plugin/poplar/driver/schedulers:post_order_scheduler",
         "//tensorflow/compiler/plugin/poplar/driver/schedulers:shortest_path_scheduler",
         "//tensorflow/compiler/plugin/poplar/driver/schedulers:sync_list_scheduler",
         "//tensorflow/compiler/plugin/poplar/driver/tools:data_initializer",
