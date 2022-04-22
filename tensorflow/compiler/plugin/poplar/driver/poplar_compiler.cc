@@ -163,6 +163,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/liveness_look_ahead_scheduler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/schedulers/post_order_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/shortest_path_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
@@ -917,7 +918,7 @@ StatusOr<std::vector<NamedIpuSchedulerAlgorithm>> GetSchedulerList(
   if (all || res.scheduler_selection == IpuSchedulingAlgorithm::POST_ORDER) {
     schedulers.emplace_back(
         IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::POST_ORDER),
-        MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler));
+        CreatePostOrderScheduler());
   }
   if (all || res.scheduler_selection == IpuSchedulingAlgorithm::CLUSTERING) {
     schedulers.emplace_back(
