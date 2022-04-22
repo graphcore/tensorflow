@@ -23,6 +23,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
+#include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/shortest_path_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -166,12 +167,11 @@ ENTRY c1 {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
 
-  HloMemoryScheduler scheduler(
+  IpuScheduler scheduler(
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateShortestPathScheduler(CompilerInformation()))));
+      CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -233,12 +233,11 @@ TEST_F(HloInplaceDependencyTest, MultipleUpdateInPlacePeers) {
                 in_place_ops.count(inst->name()) == 1);
   }
 
-  HloMemoryScheduler scheduler(
+  IpuScheduler scheduler(
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateShortestPathScheduler(CompilerInformation()))));
+      CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -292,12 +291,11 @@ TEST_F(HloInplaceDependencyTest, MultipleInplaceWithInterdependency) {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
 
-  HloMemoryScheduler scheduler(
+  IpuScheduler scheduler(
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateShortestPathScheduler(CompilerInformation()))));
+      CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -349,12 +347,11 @@ TEST_F(HloInplaceDependencyTest, MultipleInplaceWithRightOrder) {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
 
-  HloMemoryScheduler scheduler(
+  IpuScheduler scheduler(
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateShortestPathScheduler(CompilerInformation()))));
+      CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -406,12 +403,11 @@ TEST_F(HloInplaceDependencyTest, InplaceCorrectDependencies) {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
 
-  HloMemoryScheduler scheduler(
+  IpuScheduler scheduler(
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateShortestPathScheduler(CompilerInformation()))));
+      CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 

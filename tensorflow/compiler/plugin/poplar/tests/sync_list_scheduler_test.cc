@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/sync_list_scheduler.h"
-#include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
 
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 
@@ -60,12 +60,11 @@ add {
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  HloMemoryScheduler scheduler(
+  IpuScheduler scheduler(
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateSyncListMemoryScheduler(64 * 1024))));
+      CreateSyncListMemoryScheduler(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
   auto s = module->schedule().sequence(module->entry_computation());
@@ -119,12 +118,11 @@ add {
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  HloMemoryScheduler scheduler(
+  IpuScheduler scheduler(
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateSyncListMemoryScheduler(64 * 1024))));
+      CreateSyncListMemoryScheduler(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
   auto s = module->schedule().sequence(module->entry_computation());

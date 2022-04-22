@@ -4057,6 +4057,7 @@ test_suite(
         "allocation_analysis_test",
         "allocation_finder_priority_test",
         "allocation_finder_test",
+        "allreduce_lookahead_scheduler_test",
         "apply_recompute_suggestion_test",
         "arg_min_max_test",
         "arithmetic_expr_test",

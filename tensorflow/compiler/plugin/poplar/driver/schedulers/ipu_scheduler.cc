@@ -98,22 +98,6 @@ class AliasAnalysisCache {
 
 }  // namespace
 
-MemorySchedulerAlgorithm IpuToMemorySchedulerAlgorithm(
-    IpuSchedulerAlgorithm algorithm) {
-  return [algorithm = std::move(algorithm)](
-             HloComputation* computation,
-             const TuplePointsToAnalysis& points_to_analysis,
-             const HloAliasAnalysis& alias_analysis,
-             const LogicalBuffer::SizeFunction& size_function,
-             const absl::flat_hash_map<const HloComputation*, int64>&
-                 memory_by_computation,
-              const MemorySchedulerPostprocessor& postprocessor,
-             int64* peak_mem) {
-    return algorithm(computation, points_to_analysis, size_function,
-                     memory_by_computation);
-  };
-}
-
 StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
     std::vector<NamedIpuSchedulerAlgorithm> algorithms) {
   if (algorithms.empty()) {

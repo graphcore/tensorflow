@@ -36,6 +36,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/sync_list_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recv_from_host.h"
@@ -107,19 +108,17 @@ MATCHER_P(AllSharded, expected_sharding, "") {
 }
 
 struct CombineInstructionsTest : HloPoplarTestBase {
-  static HloMemoryScheduler CreateHloScheduler(
-      IpuSchedulerAlgorithm algorithm) {
-    HloMemoryScheduler scheduler(
+  static IpuScheduler CreateHloScheduler(IpuSchedulerAlgorithm algorithm) {
+    IpuScheduler scheduler(
         [](const BufferValue& buffer) {
           return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
         },
-        ComputationSchedulerToModuleScheduler(
-            IpuToMemorySchedulerAlgorithm(algorithm)));
+        algorithm);
 
     return scheduler;
   }
 
-  static HloMemoryScheduler CreateLookAheadScheduler(
+  static IpuScheduler CreateLookAheadScheduler(
       const CompilerInformation& information) {
     return CreateHloScheduler(CreateClusteringMemoryScheduler(information));
   }
