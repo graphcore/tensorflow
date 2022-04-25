@@ -2722,20 +2722,6 @@ tf_xla_py_test(
     ],
 )
 
-poprun_py_test(
-    name = "distributed_tf2_test",
-    size = "large",
-    srcs = ["tests/distributed_tf2_test.py"],
-    main = "tests/distributed_tf2_test.py",
-    num_instances = 2,
-    num_replicas = 8,
-    deps = [
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/ipu/test_utils",
-    ],
-)
-
 xla_test(
     name = "replicated_resource_update_elementwise_clustering_hw_test",
     srcs = ["tests/replicated_resource_update_elementwise_clustering_hw_test.cc"],
@@ -4093,7 +4079,6 @@ test_suite(
         "device_connection_test",
         "distributed_batch_norm_decomposer_test",
         "distributed_batch_norm_test",
-        "distributed_tf2_test",
         "dummy_input_test",
         "dynamic_slice_layout_test",
         "dynamic_slice_replacement_test",
