@@ -47,7 +47,7 @@ class CopyIntoOp : public PoplarOpDef {
         FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    auto destination = inputs[0][0];
+    poplar::Tensor destination = inputs[0][0];
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor value,
         FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));

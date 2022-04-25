@@ -51,7 +51,7 @@ class NormaliseImageOp : public PoplarOpDef {
         popops::normaliseImage(graph, seq, image, scale, channel_offsets,
                                channel_scales, {debug_name_and_id});
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
     return seq;
   }
 

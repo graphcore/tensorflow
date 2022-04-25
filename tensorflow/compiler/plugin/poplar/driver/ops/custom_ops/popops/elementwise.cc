@@ -60,7 +60,7 @@ class UnaryElementwiseOp : public PoplarOpDef {
       out = popops::map(graph, expr, input_tensors, seq, {debug_info});
     }
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 
     return seq;
   }
@@ -125,13 +125,13 @@ REGISTER_POPLAR_OP(GeluErf, UnaryElementwiseOp);
 
 struct NaryOutput {
   poplar::program::Sequence sequence;
-  DriverTensor result;
+  poplar::Tensor result;
 };
 
 class BinaryElementwiseOp : public PoplarOpDef {
  protected:
   static StatusOr<NaryOutput> Compute(
-      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugNameAndId& debug_name_and_id) {
     poplar::program::Sequence seq({}, debug_name_and_id);
@@ -157,7 +157,7 @@ class BinaryElementwiseOp : public PoplarOpDef {
     } else {
       out = popops::map(graph, expr, input_tensors, seq, {debug_name_and_id});
     }
-    return NaryOutput{seq, DriverTensor(out, graph)};
+    return NaryOutput{seq, out};
   }
 
  public:
@@ -168,8 +168,7 @@ class BinaryElementwiseOp : public PoplarOpDef {
     PoplarOpDefDebugInfo debug_info(debug_context, "BinaryElementwiseOp");
     TF_ASSIGN_OR_RETURN(auto output, Compute(graph, res, inst, output_shape,
                                              tensor_map, debug_info));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0,
-                                DriverTensor(output.result, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output.result));
     return output.sequence;
   }
 };
@@ -195,10 +194,10 @@ REGISTER_INPLACE_HLO_OP(kShiftLeft, BinaryElementwiseOp);
 REGISTER_INPLACE_HLO_OP(kShiftRightArithmetic, BinaryElementwiseOp);
 REGISTER_INPLACE_HLO_OP(kShiftRightLogical, BinaryElementwiseOp);
 
-StatusOr<DriverTensor> BroadcastImplicitNaryOutputTensor(
-    const DriverTensor& in, const HloInstruction* inst,
+StatusOr<poplar::Tensor> BroadcastImplicitNaryOutputTensor(
+    const poplar::Tensor& in, const HloInstruction* inst,
     const Shape& output_shape) {
-  auto output = in;
+  poplar::Tensor output = in;
   // Handle special case where all the inputs to the operation were broadcasts
   // of a scalar.
   if (!PoplarShapeMatchesXLAShape(output, output_shape)) {
@@ -289,8 +288,9 @@ class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
                                     "ImplicitBinaryElementwiseOp");
     TF_ASSIGN_OR_RETURN(auto output, Compute(graph, res, inst, output_shape,
                                              tensor_map, debug_info));
-    TF_ASSIGN_OR_RETURN(auto result, BroadcastImplicitNaryOutputTensor(
-                                         output.result, inst, output_shape));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor result,
+        BroadcastImplicitNaryOutputTensor(output.result, inst, output_shape));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, result));
     return output.sequence;
   }
@@ -302,7 +302,7 @@ REGISTER_POPLAR_OP(Implicit_binary, ImplicitBinaryElementwiseOp);
 class TernaryElementwiseOp : public PoplarOpDef {
  protected:
   static StatusOr<NaryOutput> Compute(
-      DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugNameAndId& debug_name_and_id) {
     poplar::program::Sequence seq({}, debug_name_and_id);
@@ -350,7 +350,7 @@ class TernaryElementwiseOp : public PoplarOpDef {
     } else {
       out = popops::map(graph, expr, input_tensors, seq, {debug_name_and_id});
     }
-    return NaryOutput{seq, DriverTensor(out, graph)};
+    return NaryOutput{seq, out};
   }
 
  public:
@@ -379,8 +379,9 @@ class ImplicitTernaryElementwiseOp : public TernaryElementwiseOp {
                                     "ImplicitTernaryElementwiseOp");
     TF_ASSIGN_OR_RETURN(auto output, Compute(graph, res, inst, output_shape,
                                              tensor_map, debug_info));
-    TF_ASSIGN_OR_RETURN(auto result, BroadcastImplicitNaryOutputTensor(
-                                         output.result, inst, output_shape));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor result,
+        BroadcastImplicitNaryOutputTensor(output.result, inst, output_shape));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, result));
     return output.sequence;
   }

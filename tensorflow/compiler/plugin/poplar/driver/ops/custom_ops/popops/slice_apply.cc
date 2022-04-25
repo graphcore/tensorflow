@@ -30,8 +30,8 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-DriverTensor SliceInputForBinaryApply(const HloSliceApplyBase* inst,
-                                      const DriverTensor& input) {
+poplar::Tensor SliceInputForBinaryApply(const HloSliceApplyBase* inst,
+                                        const poplar::Tensor& input) {
   const int64 slice_dimension = inst->GetApplyDimension();
   const int64 slice_start = inst->GetStartIndex();
   const int64 slice_end =
@@ -39,18 +39,18 @@ DriverTensor SliceInputForBinaryApply(const HloSliceApplyBase* inst,
   return input.slice(slice_start, slice_end, slice_dimension);
 }
 
-DriverTensor CreateSliceFromInput(
-    DriverGraph& graph, const HloSliceApplyBase* inst,
-    const DriverTensor& input, CompilerResources& res,
+poplar::Tensor CreateSliceFromInput(
+    poplar::Graph& graph, const HloSliceApplyBase* inst,
+    const poplar::Tensor& input, CompilerResources& res,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  auto input_slice = SliceInputForBinaryApply(inst, input);
+  poplar::Tensor input_slice = SliceInputForBinaryApply(inst, input);
   return TensorCloneAndRebalanceAliasing(graph, res, input_slice,
                                          {debug_name_and_id});
 }
 
-DriverTensor CreateInputFromSlice(
-    DriverGraph& graph, const HloSliceApplyBase* inst,
-    const DriverTensor& update, CompilerResources& res,
+poplar::Tensor CreateInputFromSlice(
+    poplar::Graph& graph, const HloSliceApplyBase* inst,
+    const poplar::Tensor& update, CompilerResources& res,
     const poplar::DebugNameAndId& debug_name_and_id) {
   // Allocate the input tensor from the update.
   const int64 slice_dimension = inst->GetApplyDimension();
@@ -84,15 +84,14 @@ class SliceApplyAllocatorOp : public PoplarOpDef {
       return xla::FailedPrecondition(
           "Elementwise %s layout input not found for %s", layout->name(), name);
     }
-    DriverTensor other_side = outputs[layout_output_idx];
+    poplar::Tensor other_side = outputs[layout_output_idx];
     const HloSliceApplyBase* slice_apply = Cast<HloSliceApplyBase>(inst);
 
-    poplar::Tensor result =
-        input_index == 0 ? CreateInputFromSlice(graph, slice_apply, other_side,
-                                                res, {debug_info})
-                         : CreateSliceFromInput(graph, slice_apply, other_side,
-                                                res, {debug_info});
-    return result;
+    return input_index == 0
+               ? CreateInputFromSlice(graph, slice_apply, other_side, res,
+                                      {debug_info})
+               : CreateSliceFromInput(graph, slice_apply, other_side, res,
+                                      {debug_info});
   }
 };
 
@@ -109,7 +108,7 @@ class SliceApplyaXbYOp : public SliceApplyAllocatorOp {
         FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    auto input = inputs[0][0];
+    poplar::Tensor input = inputs[0][0];
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor update,
         FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));
@@ -122,7 +121,7 @@ class SliceApplyaXbYOp : public SliceApplyAllocatorOp {
 
     // Slice the input into the right shape.
     const HloSliceApplyaXbY* slice_apply = Cast<HloSliceApplyaXbY>(inst);
-    DriverTensor input_slice = SliceInputForBinaryApply(slice_apply, input);
+    poplar::Tensor input_slice = SliceInputForBinaryApply(slice_apply, input);
 
     // Apply the aXbY.
     TF_RETURN_IF_ERROR(ScaledInplaceConstantOrTensor(
@@ -148,7 +147,7 @@ class SliceApplyabYOp : public SliceApplyAllocatorOp {
         FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    auto input = inputs[0][0];
+    poplar::Tensor input = inputs[0][0];
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor update,
         FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));
@@ -184,7 +183,7 @@ class SliceApplyaXbOp : public SliceApplyAllocatorOp {
         FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    auto input = inputs[0][0];
+    poplar::Tensor input = inputs[0][0];
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor update,
         FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));
@@ -198,9 +197,10 @@ class SliceApplyaXbOp : public SliceApplyAllocatorOp {
 
     const Shape& scalar_shape = inst->operand(2)->shape();
     TF_ASSIGN_OR_RETURN(
-        auto one, CreateConstantTensor(
-                      graph, LiteralUtil::One(scalar_shape.element_type()),
-                      scalar_shape, update.elementType(), {debug_info, "One"}));
+        poplar::Tensor one,
+        CreateConstantTensor(
+            graph, LiteralUtil::One(scalar_shape.element_type()), scalar_shape,
+            update.elementType(), {debug_info, "One"}));
 
     // Apply the aXb.
     TF_RETURN_IF_ERROR(ScaledInplaceConstantOrTensor(
@@ -226,7 +226,7 @@ class SliceApplyOp : public SliceApplyAllocatorOp {
         FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    auto input = inputs[0][0];
+    poplar::Tensor input = inputs[0][0];
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor update,
         FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));

@@ -189,7 +189,7 @@ PartitionedElementwiseClusterVisitor::MakeParameterAllocationFunction(
     const poplar::DebugNameAndId& debug_name_and_id) {
   return [this, shape, tensor_like,
           debug_name_and_id](TensorLocation allocation_location) mutable
-         -> StatusOr<DriverTensor> {
+         -> StatusOr<poplar::Tensor> {
     TF_ASSIGN_OR_RETURN(auto cbr_info, GetCollectiveBalancedReorder(
                                            allocation_location.instruction));
     if (!tensor_like && cbr_info) {
@@ -212,8 +212,9 @@ PartitionedElementwiseClusterVisitor::MakeParameterAllocationFunction(
 }
 
 Status PartitionedElementwiseClusterVisitor::SetRemoteBufferHostRearrangementId(
-    DriverGraph& graph, const HloComputation* entry_comp, int64 entry_param_idx,
-    int64 host_rearrangement_id, int64 elements_per_replica) {
+    poplar::Graph& graph, const HloComputation* entry_comp,
+    int64 entry_param_idx, int64 host_rearrangement_id,
+    int64 elements_per_replica) {
   auto& annotations = resources_.annotations;
   auto& remote_parameter_infos = annotations.remote_parameter_infos;
   auto old_info =

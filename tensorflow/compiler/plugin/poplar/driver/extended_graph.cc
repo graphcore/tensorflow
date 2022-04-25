@@ -79,22 +79,6 @@ ExtendedTensor ExtendedGraph::addVariable(
   return {std::move(tensor)};
 }
 
-ExtendedTensor ExtendedGraph::addConstantHalf(
-    const poplar::Type& type, poplar::ArrayRef<std::size_t> shape, uint16_t val,
-    const poplar::DebugContext& debugContext) {
-  auto tensor =
-      getPoplarGraph().addConstantHalf(type, shape, val, debugContext);
-  return {tensor, *this};
-}
-
-ExtendedTensor ExtendedGraph::addConstantHalf(
-    const poplar::Type& type, poplar::ArrayRef<std::size_t> shape,
-    const uint16_t* val, const poplar::DebugContext& debugContext) {
-  auto tensor =
-      getPoplarGraph().addConstantHalf(type, shape, val, debugContext);
-  return {tensor, *this};
-}
-
 void ExtendedGraph::setTileMapping(poplar::VertexRef v, unsigned tileNum) {
   getPoplarGraph().setTileMapping(v, tileNum);
 }
@@ -108,12 +92,7 @@ void ExtendedGraph::setTileMapping(const poplar::Tensor& t, unsigned tileNum) {
 }
 
 poplar::Graph::TileToTensorMapping ExtendedGraph::getTileMapping(
-    ExtendedTensor t) const {
-  return getPoplarGraph().getTileMapping(t);
-}
-
-poplar::Graph::TileToTensorMapping ExtendedGraph::getTileMapping(
-    poplar::Tensor t) const {
+    poplar::Tensor t) {
   return getPoplarGraph().getTileMapping(t);
 }
 

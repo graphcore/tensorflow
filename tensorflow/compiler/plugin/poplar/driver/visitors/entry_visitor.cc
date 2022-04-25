@@ -114,9 +114,9 @@ Status EntryVisitor::PreProcessParameter(HloInstruction* parameter) {
   return Status::OK();
 }
 
-StatusOr<DriverTensor> EntryVisitor::PostProcessParameterAllocation(
+StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
     TensorLocation location, const Shape& shape,
-    poplar::program::Sequence& stream_copy_seq, DriverTensor tensor,
+    poplar::program::Sequence& stream_copy_seq, poplar::Tensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
   const HloInstruction* inst = location.instruction;
   const int64 flat_tuple_index = location.flattened_output_tuple_index;
@@ -133,7 +133,7 @@ StatusOr<DriverTensor> EntryVisitor::PostProcessParameterAllocation(
     module_shapes = FlattenedXlaShape(mod_shape);
   }
 
-  auto& graph = GetGraph(resources_, inst);
+  poplar::Graph& graph = GetGraph(resources_, inst);
 
   const auto use_synthetic_data =
       UseSyntheticDataFor(SyntheticDataCategory::Parameters);
@@ -173,7 +173,8 @@ StatusOr<DriverTensor> EntryVisitor::PostProcessParameterAllocation(
   // between runs
   if (in_info.IsResourceNotModified()) {
     poplar::Tensor non_modified_tensor = tensor;
-    auto& graph = GetGraphWithOutputIndex(resources_, inst, flat_tuple_index);
+    poplar::Graph& graph =
+        GetGraphWithOutputIndex(resources_, inst, flat_tuple_index);
     tensor = graph.clone(non_modified_tensor,
                          {debug_name_and_id, "resource_not_modified_clone"});
 
@@ -204,7 +205,7 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
     VLOG(3) << "Root instruction shape is an empty tuple";
     return Status::OK();
   }
-  auto& graph = GetGraph(resources_, root);
+  poplar::Graph& graph = GetGraph(resources_, root);
 
   auto* layout = comp->parent()->mutable_entry_computation_layout();
   const Shape layout_shape = layout->result_shape();
@@ -284,10 +285,10 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
       // Add FIFOs to the host for each output tensor.
       for (uint64 tuple_index = 0; tuple_index != layout_sub_shapes.size();
            ++tuple_index) {
-        auto out = ConvertFromDeviceLayout(layout_sub_shapes[tuple_index],
-                                           out_tensors[tuple_index]);
+        poplar::Tensor out = ConvertFromDeviceLayout(
+            layout_sub_shapes[tuple_index], out_tensors[tuple_index]);
         if (!out.isParallelWriteable()) {
-          auto out_copy = TensorCloneAndRebalanceAliasing(
+          poplar::Tensor out_copy = TensorCloneAndRebalanceAliasing(
               graph, resources_, out, debug_name_and_id);
 
           seq.add(

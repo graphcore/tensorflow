@@ -570,9 +570,10 @@ bool IsReplicaPartitioned(const HloInstruction* inst,
 }
 
 StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteBuffer(
-    DriverGraph& graph, CompilerResources& res, std::string remote_buffer_name,
-    poplar::Type element_type, int64 element_count, int64 num_repeats,
-    int64 num_merged, bool is_replica_partitioned) {
+    poplar::Graph& graph, CompilerResources& res,
+    std::string remote_buffer_name, poplar::Type element_type,
+    int64 element_count, int64 num_repeats, int64 num_merged,
+    bool is_replica_partitioned) {
   auto found_buffer = res.remote_buffers.find(remote_buffer_name);
   if (found_buffer != res.remote_buffers.end()) {
     // Return the existing remote buffer.
@@ -771,7 +772,7 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
 }
 
 std::string GetTensorMappingJson(const std::string& module_name,
-                                 const DriverGraph& graph,
+                                 const poplar::Graph& graph,
                                  const TensorMaps& tensor_maps) {
   Json::Value mappings;
 
@@ -849,11 +850,11 @@ std::string GetTensorMappingJson(const std::string& module_name,
 }
 
 poplar::program::Sequence TensorCopyWithAliasing(
-    DriverGraph& graph, const DriverTensor& src, const DriverTensor& dst,
+    poplar::Graph& graph, const poplar::Tensor& src, const poplar::Tensor& dst,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
-  auto src_flat = src.flatten();
-  auto dst_flat = dst.flatten();
+  poplar::Tensor src_flat = src.flatten();
+  poplar::Tensor dst_flat = dst.flatten();
 
   if (src_flat.containsAliases()) {
     // Get the aliasing information.
@@ -861,8 +862,8 @@ poplar::program::Sequence TensorCopyWithAliasing(
         graph.getSortedContiguousRegions(src_flat,
                                          {{0, src_flat.numElements()}}, true);
     // Dealias source and destination.
-    src_flat = ConcatenateTensors(src_flat.slices(flat_dealiased_intervals));
-    dst_flat = ConcatenateTensors(dst_flat.slices(flat_dealiased_intervals));
+    src_flat = poplar::concat(src_flat.slices(flat_dealiased_intervals));
+    dst_flat = poplar::concat(dst_flat.slices(flat_dealiased_intervals));
   }
 
   seq.add(poplar::program::Copy(src_flat, dst_flat, false, debug_name_and_id));

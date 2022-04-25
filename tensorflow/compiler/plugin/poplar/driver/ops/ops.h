@@ -304,11 +304,11 @@ poplar::Tensor ShuffleNormOutputToTensorflow(const poplar::Tensor& output,
                                              const unsigned feature_dimension);
 
 StatusOr<poplar::program::Sequence> CreateSelectScalarFromRows(
-    DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
+    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id);
 
 StatusOr<poplar::program::Sequence> CreateUpdateScalarInRows(
-    DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
+    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id);
 
 StatusOr<poplar::program::Sequence> CreateTuple(

@@ -38,7 +38,7 @@ StatusOr<ExpressionInput> GetTensorInput(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     int64 operand_idx, int64 input_idx, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  DriverTensor tensor;
+  poplar::Tensor tensor;
 
   // Check whether this is the inplace input to the elementwise operation.
   bool inplace_input = false;

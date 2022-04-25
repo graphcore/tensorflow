@@ -81,8 +81,7 @@ Status FullVisitor::HandleConcatenate(HloInstruction* inst) {
   });
   poplar::Tensor out = poplar::concat(tensors, dimension);
 
-  auto& graph = GetGraph(resources_, inst);
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 
   return AddSequenceForInstruction(inst, seq);
 }
@@ -107,7 +106,7 @@ Status FullVisitor::HandleReverse(HloInstruction* inst) {
                                                seq, debug_name_and_id, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
-  auto t = inputs[0][0];
+  poplar::Tensor t = inputs[0][0];
 
   TF_ASSIGN_OR_RETURN(t, ReverseTensor(t, inst->dimensions()));
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, t));
@@ -139,7 +138,7 @@ Status FullVisitor::HandleBroadcast(HloInstruction* inst) {
                                                seq, debug_name_and_id, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
-  auto out = inputs[0][0];
+  poplar::Tensor out = inputs[0][0];
   TF_ASSIGN_OR_RETURN(
       out, BroadcastTensor(out, GetOutputShape(inst), inst->dimensions()));
   std::vector<size_t> dims(PoplarShapeFromXlaShape(GetOutputShape(inst)));
@@ -163,7 +162,7 @@ Status FullVisitor::HandleReshape(HloInstruction* inst) {
   if (inputs[0][0].IsRemoteBuffer()) {
     TF_CHECK_OK(AddOutput(tensor_map, inst, 0, inputs[0][0]));
   } else {
-    auto out = inputs[0][0].AsTensor();
+    poplar::Tensor out = inputs[0][0].AsTensor();
     std::vector<size_t> dims(PoplarShapeFromXlaShape(GetOutputShape(inst)));
     out = out.reshape(dims);
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
@@ -183,7 +182,7 @@ Status FullVisitor::HandleTranspose(HloInstruction* inst) {
                                                seq, debug_name_and_id, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
-  auto out = inputs[0][0];
+  poplar::Tensor out = inputs[0][0];
   auto optional_permutation =
       convert_array<std::vector<unsigned>>(inst->dimensions());
   if (!optional_permutation) {
@@ -283,8 +282,8 @@ Status FullVisitor::HandlePad(HloInstruction* inst) {
   CHECK_EQ(inputs.size(), 2);
   CHECK_EQ(inputs[0].size(), 1);
   CHECK_EQ(inputs[1].size(), 1);
-  auto out = inputs[0][0];
-  auto pad = inputs[1][0];
+  poplar::Tensor out = inputs[0][0];
+  poplar::Tensor pad = inputs[1][0];
   TF_ASSIGN_OR_RETURN(out, PadTensor(inst->padding_config(), out, pad));
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 

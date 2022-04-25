@@ -162,7 +162,7 @@ Status BaseVisitor::HandleBitcastConvert(HloInstruction* inst) {
                                                seq, debug_name_and_id));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
-  DriverTensor out = inputs[0][0];
+  poplar::Tensor out = inputs[0][0];
 
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(inst->shape()));
   out = out.reinterpret(type);
@@ -203,7 +203,7 @@ Status BaseVisitor::HandleConstant(HloInstruction* inst) {
 
   auto& graph = GetGraph(resources_, inst);
   TF_ASSIGN_OR_RETURN(
-      DriverTensor t,
+      poplar::Tensor t,
       AddConstantTensor(graph, TensorLocation{inst, 0}, GetOutputShape(inst),
                         inst->literal(), resources_, tensor_map, {debug_info}));
 
@@ -213,11 +213,9 @@ Status BaseVisitor::HandleConstant(HloInstruction* inst) {
   if (is_inplace_read_write && t.numElements() != 0) {
     VLOG(3) << "Constant tensor is read/write inplace, adding copy";
     poplar::program::Sequence prog({}, debug_info);
-    auto clone =
-        DriverTensor(poputil::duplicate(
-                         graph, t, prog, {debug_info, "clone"},
-                         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES),
-                     graph);
+    poplar::Tensor clone = poputil::duplicate(
+        graph, t, prog, {debug_info, "clone"},
+        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
 
     TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, prog));
     t = clone;
@@ -336,7 +334,7 @@ Status BaseVisitor::HandleReal(HloInstruction* inst) {
                       FindInstructionInput(tensor_map, resources_, inst, 0, seq,
                                            debug_name_and_id));
 
-  auto out = GetGraph(resources_, inst).clone(in);
+  poplar::Tensor out = GetGraph(resources_, inst).clone(in);
   seq.add(poplar::program::Copy(in, out, false, {debug_name_and_id}));
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 

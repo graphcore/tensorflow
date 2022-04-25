@@ -82,38 +82,19 @@ class ExtendedGraph : public snap::Graph {
                              poplar::ArrayRef<std::size_t> shape,
                              poplar::ArrayRef<T> values,
                              const poplar::DebugContext& debugContext = {
-                                 "<const>"}) {
+                                 "<const>"}) {  // NOLINT
     auto tensor = snap::Graph::addConstant(type, shape, values, debugContext);
     return {std::move(tensor)};
-  }
-
-  template <typename T>
-  ExtendedTensor addConstant(
-      const poplar::Type& type, poplar::ArrayRef<std::size_t> shape,
-      const T* values, const poplar::DebugContext& debugContext = {"<const>"}) {
-    auto tensor =
-        getPoplarGraph().addConstant(type, shape, values, debugContext);
-    return {std::move(tensor), *this};
   }
 
   template <typename T>
   ExtendedTensor addConstant(const poplar::Type& type,
                              poplar::ArrayRef<std::size_t> shape, T val,
                              const poplar::DebugContext& debugContext = {
-                                 "<const>"}) {
+                                 "<const>"}) {  // NOLINT
     auto tensor = getPoplarGraph().addConstant(type, shape, val, debugContext);
     return {tensor, *this};
   }
-
-  ExtendedTensor addConstantHalf(
-      const poplar::Type& type, poplar::ArrayRef<std::size_t> shape,
-      uint16_t val, const poplar::DebugContext& debugContext = {"<const>"});
-
-  ExtendedTensor addConstantHalf(const poplar::Type& type,
-                                 poplar::ArrayRef<std::size_t> shape,
-                                 const uint16_t* val,
-                                 const poplar::DebugContext& debugContext = {
-                                     "<const>"});
 
   void setTileMapping(poplar::VertexRef v, unsigned tileNum);
 
@@ -121,16 +102,7 @@ class ExtendedGraph : public snap::Graph {
 
   void setTileMapping(const poplar::Tensor& t, unsigned tileNum);
 
-  poplar::Graph::TileToTensorMapping getTileMapping(ExtendedTensor t) const;
-  poplar::Graph::TileToTensorMapping getTileMapping(poplar::Tensor t) const;
-
-  std::vector<std::vector<poplar::Interval>> getSortedContiguousRegions(
-      const ExtendedTensor& t, poplar::ArrayRef<poplar::Interval> regions,
-      bool removeAliasedIntervals = false,
-      std::vector<std::size_t>* aliases = nullptr) const {
-    return getPoplarGraph().getSortedContiguousRegions(
-        t, regions, removeAliasedIntervals, aliases);
-  }
+  poplar::Graph::TileToTensorMapping getTileMapping(poplar::Tensor t);
 
   poplar::Function addFunction(const poplar::program::Program& program);
 

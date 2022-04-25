@@ -65,7 +65,7 @@ class StatefulGradientAccumulateOp : public PoplarOpDef {
                         FindInplaceOutputTensors(tensor_map, res, inst, seq,
                                                  debug_info, false));
     CHECK_EQ(inputs.size(), inst->operand_count());
-    std::vector<DriverTensor> input_tensors(inst->operand_count());
+    std::vector<poplar::Tensor> input_tensors(inst->operand_count());
     for (size_t i = 0; i < inputs.size(); ++i) {
       CHECK_EQ(inputs[i].size(), 1);
       input_tensors[i] = inputs[i][0];
@@ -161,7 +161,7 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
       return xla::FailedPrecondition("Could not find layout input for %s",
                                      GetDebugName(inst));
     }
-    // TODO(T58509) - Remove cast
+    // TODO(T58874) - Remove cast
     return (poplar::Tensor)graph.clone(outputs[0], {debug_info});
   }
 
@@ -192,8 +192,8 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
 
     // Combine all the accumulator tensors and gradient tensors into a gradient
     // and accumulation tensor.
-    std::vector<DriverTensor> accumulator_tensors(num_grads);
-    std::vector<DriverTensor> grad_tensors(num_grads);
+    std::vector<poplar::Tensor> accumulator_tensors(num_grads);
+    std::vector<poplar::Tensor> grad_tensors(num_grads);
     for (uint64 i = 0; i != num_grads; ++i) {
       CHECK_EQ(inputs[i].size(), 1);
       accumulator_tensors[i] = inputs[i][0];

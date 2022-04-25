@@ -107,8 +107,7 @@ class AllGatherWithinReplicaOp : public PoplarOpDef {
     CHECK_EQ(ipu_count, output.dim(0))
         << "Expecting the gathered tensor to have an output on each IPU.";
     for (auto ipu = 0; ipu < ipu_count; ++ipu) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, ipu,
-                                  DriverTensor(output[ipu], graph)));
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, ipu, output[ipu]));
     }
 
     return seq;
@@ -175,13 +174,13 @@ class ReduceScatterWithinReplicaOp : public PoplarOpDef {
 
     CHECK_EQ(ipu_count, chunks.chunks.size())
         << "Expecting to have a chunk for each IPU.";
-    TF_CHECK_OK(SetOutputs(graph, chunks.chunks, inst, res, tensor_map));
+    TF_CHECK_OK(SetOutputs(chunks.chunks, inst, res, tensor_map));
 
     return seq;
   }
 
  private:
-  Status SetOutputs(DriverGraph& graph, std::vector<gcl::Chunk>& output_chunks,
+  Status SetOutputs(std::vector<gcl::Chunk>& output_chunks,
                     const HloInstruction* inst, CompilerResources& res,
                     TensorMap& tensor_map) {
     const auto output_tensor_shape =
@@ -211,8 +210,7 @@ class ReduceScatterWithinReplicaOp : public PoplarOpDef {
                              /*paddingUpper*/ pad_count, /*dim*/ 0, /*val*/ 0);
       }
 
-      TF_RETURN_IF_ERROR(
-          AddOutputTensor(tensor_map, inst, i, DriverTensor(tensor, graph)));
+      TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, i, tensor));
     }
 
     return Status::OK();
@@ -250,8 +248,7 @@ class AllReduceWithinReplicaOp : public PoplarOpDef {
     CHECK_EQ(ipu_count, output.dim(0))
         << "Expecting the reduced tensor to have an output on each IPU.";
     for (auto ipu = 0; ipu < ipu_count; ++ipu) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, ipu,
-                                  DriverTensor(output[ipu], graph)));
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, ipu, output[ipu]));
     }
 
     return seq;

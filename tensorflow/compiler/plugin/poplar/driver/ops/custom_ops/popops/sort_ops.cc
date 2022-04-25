@@ -81,7 +81,7 @@ class SortOp : public PoplarOpDef {
     if (sort->operand_count() == 1) {
       CHECK_EQ(inputs.size(), 1);
       CHECK_EQ(inputs[0].size(), 1);
-      auto to_sort = inputs[0][0];
+      poplar::Tensor to_sort = inputs[0][0];
 
       popops::sortInPlace(graph, to_sort, sort->dimensions(0), prog,
                           {debug_info});
@@ -96,8 +96,8 @@ class SortOp : public PoplarOpDef {
       CHECK_EQ(inputs.size(), 2);
       CHECK_EQ(inputs[0].size(), 1);
       CHECK_EQ(inputs[1].size(), 1);
-      auto key = inputs[0][0];
-      auto value = inputs[1][0];
+      poplar::Tensor key = inputs[0][0];
+      poplar::Tensor value = inputs[1][0];
 
       popops::sortKeyValueInPlace(graph, key, value, sort->dimensions(0), prog,
                                   {debug_info});

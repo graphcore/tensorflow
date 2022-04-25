@@ -43,12 +43,12 @@ class RemapDeduceOp : public PoplarOpDef {
     poplar::program::Sequence seq({}, debug_info);
 
     // Get the original tensor which is to be remapped.
-    TF_ASSIGN_OR_RETURN(auto input,
+    TF_ASSIGN_OR_RETURN(poplar::Tensor input,
                         FindInstructionInput(tensor_map, res, inst, 0, seq,
                                              {debug_info}, false));
 
     // Create a new tensor using "AddTensor" to get a good layout.
-    TF_ASSIGN_OR_RETURN(auto output,
+    TF_ASSIGN_OR_RETURN(poplar::Tensor output,
                         AddTensor(graph, TensorLocation{inst, 0}, output_shape,
                                   res, tensor_map, {debug_info, "output"}));
 

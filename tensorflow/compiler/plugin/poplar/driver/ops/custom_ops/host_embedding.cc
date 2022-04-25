@@ -43,7 +43,7 @@ namespace poplarplugin {
 namespace {
 
 StatusOr<RemoteBufferHolder*> GetOrCreateRemoteBuffer(
-    DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
+    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     const std::string& embedding_id, const xla::Shape& embedding_shape,
     HostEmbeddingSplittingStrategy splitting_strategy,
     const xla::Shape& output_shape) {
@@ -104,8 +104,9 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugNameAndId& debug_name_and_id) {
     TF_ASSIGN_OR_RETURN(
-        auto output, AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                               res, tensor_map, {debug_name_and_id, "output"}));
+        poplar::Tensor output,
+        AddTensor(graph, TensorLocation{inst, 0}, output_shape, res, tensor_map,
+                  {debug_name_and_id, "output"}));
     seq.add(poplar::program::WriteUndef(output, {debug_name_and_id}));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
@@ -119,8 +120,9 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugNameAndId& debug_name_and_id) {
     TF_ASSIGN_OR_RETURN(
-        auto output, AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                               res, tensor_map, {debug_name_and_id, "output"}));
+        poplar::Tensor output,
+        AddTensor(graph, TensorLocation{inst, 0}, output_shape, res, tensor_map,
+                  {debug_name_and_id, "output"}));
 
     res.annotations.host_embedding_lookup_infos.push_back(
         {inst->name(), inst->EmbeddingId(), inst->operand(0)->shape(),
@@ -148,8 +150,9 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       const poplar::DebugNameAndId& debug_name_and_id) {
     // Create the output tensor.
     TF_ASSIGN_OR_RETURN(
-        auto output, AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                               res, tensor_map, {debug_name_and_id, "output"}));
+        poplar::Tensor output,
+        AddTensor(graph, TensorLocation{inst, 0}, output_shape, res, tensor_map,
+                  {debug_name_and_id, "output"}));
 
     // Create the host sliceable tensor.
     auto host_sliceable = popops::createHostSliceableTensor(
@@ -182,8 +185,9 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       const poplar::DebugNameAndId& debug_name_and_id) {
     // Create the output tensor.
     TF_ASSIGN_OR_RETURN(
-        auto output, AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                               res, tensor_map, {debug_name_and_id, "output"}));
+        poplar::Tensor output,
+        AddTensor(graph, TensorLocation{inst, 0}, output_shape, res, tensor_map,
+                  {debug_name_and_id, "output"}));
 
     // All-Gather the indices from all replicas.
     indices = gcl::allGatherCrossReplica(graph, indices, seq,
@@ -274,8 +278,9 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       const poplar::DebugNameAndId& debug_name_and_id) {
     // Create the output tensor.
     TF_ASSIGN_OR_RETURN(
-        auto output, AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                               res, tensor_map, {debug_name_and_id, "output"}));
+        poplar::Tensor output,
+        AddTensor(graph, TensorLocation{inst, 0}, output_shape, res, tensor_map,
+                  {debug_name_and_id, "output"}));
 
     // All-Gather the indices from all replicas.
     indices = gcl::allGatherCrossReplica(graph, indices, seq,
