@@ -217,7 +217,7 @@ struct CompilerResources : public HloResources {
       outfeed_cache;
 
   // TODO(T28772): remove this mapping and the extra copy.
-  absl::flat_hash_map<std::string, poplar::Tensor> remote_buffer_layouts;
+  absl::flat_hash_map<std::string, DriverTensor> remote_buffer_layouts;
 
   PartitionedElementwiseClusterVisitor* current_cluster_visitor;
 

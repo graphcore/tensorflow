@@ -105,7 +105,7 @@ class CodeletExpressionOpOp : public PoplarOpDef {
 
     graph.addCodelets(vertex_source);
 
-    poplar::Tensor output = graph.clone(input_tensors[0], {debug_info});
+    auto output = graph.clone(input_tensors[0], {debug_info});
 
     auto cs = graph.addComputeSet({debug_info, "cs"});
     const auto tile_mapping = graph.getTileMapping(input_tensors[0]);

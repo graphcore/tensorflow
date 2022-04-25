@@ -92,8 +92,10 @@ class TopKOp : public PoplarOpDef {
     index_output = index_output.reshape(
         PoplarShapeFromXlaShape(output_shape.tuple_shapes(1)));
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, value_output));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, index_output));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0,
+                                DriverTensor(value_output, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1,
+                                DriverTensor(index_output, graph)));
     return seq;
   }
 

@@ -42,7 +42,7 @@ class AssumeEqualAcrossReplicasOp : public PoplarOpDef {
 
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    poplar::Tensor input = inputs[0][0];
+    auto input = inputs[0][0];
 
     seq.add(poplar::program::AssumeEqualAcrossReplicas(input));
 

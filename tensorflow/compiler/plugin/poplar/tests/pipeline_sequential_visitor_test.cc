@@ -126,10 +126,8 @@ ENTRY e {
 
   SequentialPipelineVisitor visitor(
       pipeline, *resources,
-      // TODO(T58443) - Remove the cast after conversion from poplar::Tensor
-      // to DriverTensor
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{(poplar::Tensor)p0}},
-                           {TensorOrRemoteBuffer{(poplar::Tensor)p1}}},
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{p0}},
+                           {TensorOrRemoteBuffer{p1}}},
       GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(pipeline_comp->Accept(&visitor));
 

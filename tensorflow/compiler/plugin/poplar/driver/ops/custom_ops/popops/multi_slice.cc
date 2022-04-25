@@ -184,7 +184,8 @@ class MultiSliceOp : public PoplarOpDef {
     // Unflatten the output:
     output = output.reshape(poplar_output_shape);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
     return seq;
   }
 
@@ -244,7 +245,8 @@ class StaticMultiSliceOp : public PoplarOpDef {
     // Unflatten the output:
     output = output.reshape(PoplarShapeFromXlaShape(output_shape));
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
 
     return seq;
   }
@@ -319,7 +321,7 @@ class MultiUpdateOp : public PoplarOpDef {
         FindInplaceOutputTensors(tensor_map, res, inst, prog, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    poplar::Tensor operand = inputs[0][0];
+    auto operand = inputs[0][0];
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor indices,
         FindInstructionInput(tensor_map, res, inst, 1, prog, {debug_info}));
@@ -406,7 +408,7 @@ class MultiUpdateAddOp : public MultiUpdateOp {
         FindInplaceOutputTensors(tensor_map, res, inst, prog, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    poplar::Tensor operand = inputs[0][0];
+    auto operand = inputs[0][0];
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor indices,
         FindInstructionInput(tensor_map, res, inst, 1, prog, {debug_info}));
@@ -503,7 +505,7 @@ class StaticMultiUpdateAddOp : public PoplarOpDef {
     const HloInstruction* layout = *tensor_target.layout;
     const int64 layout_output_idx = *tensor_target.layout_output_idx;
     const auto outputs = FindInstructionOutputs(tensor_map, res, layout);
-    const poplar::Tensor layout_tensor = outputs[layout_output_idx];
+    const DriverTensor layout_tensor = outputs[layout_output_idx];
 
     switch (allocation_index) {
       case 0: {
@@ -518,8 +520,8 @@ class StaticMultiUpdateAddOp : public PoplarOpDef {
     }
   }
 
-  static StatusOr<poplar::Tensor> CreateInputsTensorFromUpdates(
-      poplar::Graph& graph, const poplar::Tensor& updates,
+  static StatusOr<DriverTensor> CreateInputsTensorFromUpdates(
+      DriverGraph& graph, const DriverTensor& updates,
       const HloStaticMultiUpdateAddInstruction* inst, CompilerResources& res,
       const poplar::DebugNameAndId& debug_context) {
     const auto& shape = inst->shape();
@@ -527,8 +529,8 @@ class StaticMultiUpdateAddOp : public PoplarOpDef {
                                  {debug_context});
   }
 
-  static StatusOr<poplar::Tensor> CreateUpdatesTensorFromInputs(
-      poplar::Graph& graph, const poplar::Tensor& inputs,
+  static StatusOr<DriverTensor> CreateUpdatesTensorFromInputs(
+      DriverGraph& graph, const DriverTensor& inputs,
       const HloStaticMultiUpdateAddInstruction* inst, CompilerResources& res,
       const poplar::DebugNameAndId& debug_context) {
     const auto indices = inst->GetIndices();
@@ -537,8 +539,8 @@ class StaticMultiUpdateAddOp : public PoplarOpDef {
       return xla::FailedPrecondition(
           "StaticMultiUpdateAddOp::Creator - cannot cast update indices.");
     }
-    poplar::Tensor inputs_slices =
-        poplar::concat(inputs.slices(unsigned_indices.value(), 0), 0);
+    DriverTensor inputs_slices =
+        ConcatenateTensors(inputs.slices(unsigned_indices.value(), 0), 0);
     return TensorCloneAndRebalanceAliasing(graph, res, inputs_slices,
                                            {debug_context});
   }

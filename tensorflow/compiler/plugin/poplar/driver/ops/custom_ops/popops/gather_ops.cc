@@ -41,8 +41,8 @@ StatusOr<poplar::Tensor> AddGatherTensor(
                                    start_index_map, {debug_name_and_id});
 }
 
-StatusOr<poplar::Tensor> AddIndicesTensor(
-    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<DriverTensor> AddIndicesTensor(
+    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape, CompilerResources& resources) {
   return CreateIndicesTensor(graph, popops::SlicePlan(), shape,
                              {debug_name_and_id});
@@ -115,7 +115,8 @@ class GatherOp : public PoplarOpDef {
         {collapsed_slice_dims.begin(), collapsed_slice_dims.end()},
         {start_index_map.begin(), start_index_map.end()}, prog, {debug_info});
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, result));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(result, graph)));
     return prog;
   }
 };

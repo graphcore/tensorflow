@@ -79,9 +79,12 @@ class CandidateSamplerOp : public PoplarOpDef {
                         sampler->Expectation(graph, true_classes, k, seq));
 
     // Add the output tensors to the graph
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, samples));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, true_expectation));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, sampled_expectation));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(samples, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1,
+                                DriverTensor(true_expectation, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2,
+                                DriverTensor(sampled_expectation, graph)));
     return seq;
   }
 };

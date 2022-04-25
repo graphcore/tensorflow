@@ -22,6 +22,7 @@ limitations under the License.
 #include <poplar/exceptions.hpp>
 #include <poputil/exceptions.hpp>
 
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -42,7 +43,7 @@ namespace poplarplugin {
 struct CompilerResources;
 struct TensorTarget;
 
-StatusOr<poplar::Tensor> AllocatePoplarOpTensor(
+StatusOr<DriverTensor> AllocatePoplarOpTensor(
     DriverGraph& graph, CompilerResources& res,
     const poplar::DebugNameAndId& debug_name_and_id,
     const TensorTarget& tensor_target, const xla::Shape& shape,
@@ -53,7 +54,7 @@ StatusOr<poplar::program::Sequence> CreatePoplarOp(
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::Tensor> AllocateHloOpTensor(
+StatusOr<DriverTensor> AllocateHloOpTensor(
     DriverGraph& graph, CompilerResources& res,
     const poplar::DebugNameAndId& debug_name_and_id,
     const TensorTarget& tensor_target, const xla::Shape& shape,

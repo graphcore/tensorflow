@@ -137,7 +137,7 @@ class Conv2DOp : public PoplarOpDef {
 
     out = args[2];
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
 
     return seq;
   }
@@ -238,7 +238,7 @@ class Conv2DReverseOp : public PoplarOpDef {
 
     out = args[2];
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
 
     return seq;
   }
@@ -327,7 +327,8 @@ class ConvScaledInplaceOp : public PoplarOpDef {
 
     arg_weights = args[0];
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, arg_weights));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(arg_weights, graph)));
 
     return seq;
   }
@@ -577,8 +578,9 @@ class MultiConvOp : public PoplarOpDef {
 
     // Set the outputs.
     for (int64 i = 0; i != convolution_specs.size(); ++i) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
-                                  args[2 * convolution_specs.size() + i]));
+      TF_CHECK_OK(AddOutputTensor(
+          tensor_map, inst, i,
+          DriverTensor(args[2 * convolution_specs.size() + i], graph)));
     }
 
     return seq;
