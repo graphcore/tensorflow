@@ -1647,6 +1647,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/tools:slice_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:while_loop_util",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops",
         "//tensorflow/compiler/xla/service:while_loop_analysis",
         "//tensorflow/compiler/xla/service:while_loop_invariant_code_motion",
     ],

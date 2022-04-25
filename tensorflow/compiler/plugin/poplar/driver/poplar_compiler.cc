@@ -1192,7 +1192,7 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
       pass.AddPass<TupleSimplifier>(true);
       pass.AddPass<HloCSE>(true);
       pass.AddPass<HloDCE>();
-      pass.AddPass<PoplarWhileLoopOptimiser>();
+      pass.AddPass<PoplarWhileLoopOptimiser>(resources.num_uninitialised);
     }
     pipeline.AddPass<WideConstFinder>();
     pipeline.AddPass<CommutativeInstructionReorderOperands>();

@@ -124,6 +124,8 @@ struct HloResources {
 
   double io_tile_available_memory_proportion;
 
+  int64 num_uninitialised = 0;  // to help guarentee they are all unique
+
   absl::flat_hash_map<const HloInstruction*, std::uint64_t>
       hlo_instruction_to_debug_id_mapping;
 
