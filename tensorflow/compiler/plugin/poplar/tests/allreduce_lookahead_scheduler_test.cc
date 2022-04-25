@@ -13,7 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
 
 #include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 
@@ -61,11 +63,14 @@ add {
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  HloMemoryScheduler scheduler(
+  CompilerInformation information;
+  information.max_all_reduce_buffer_size = 64 * 1024;
+
+  IpuScheduler scheduler(
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      CreateClusteringMemoryScheduler(64 * 1024));
+      CreateClusteringMemoryScheduler(information));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
   auto s = module->schedule().sequence(module->entry_computation());
@@ -81,64 +86,6 @@ add {
   EXPECT_TRUE(all_reduce.contains(seq[5]));
   all_reduce.erase(seq[5]);
   EXPECT_TRUE(all_reduce.contains(seq[7]));
-  all_reduce.erase(seq[6]);
-  EXPECT_TRUE(all_reduce.contains(seq[7]));
-  all_reduce.erase(seq[7]);
-  EXPECT_EQ(all_reduce.size(), 0);
-}
-
-TEST_F(SchedulerTest, TestClusteringSchedulerBig) {
-  std::string hlo_string = R"(
-HloModule top
-
-add {
-  x = f32[] parameter(0)
-  y = f32[] parameter(1)
-  add = f32[] add(x, y)
-}
-
-%cluster_1  {
-  %arg0 = f16[32768] parameter(0)
-  %arg1 = f16[32768] parameter(1)
-  %arg2 = f16[32768] parameter(2)
-  %a1 = f16[32768] all-reduce(arg0), to_apply=add
-  %a2 = f16[32768] all-reduce(arg1), to_apply=add
-  %a3 = f16[32768] all-reduce(arg2), to_apply=add
-  %sin.0 = f16[32768] sine(f16[32768] %arg0)
-  %mul.0 = f16[32768] multiply(f16[32768] %sin.0, f16[32768] %arg1)
-  %mul.1 = f16[32768] multiply(f16[32768] %mul.0, f16[32768] %arg2)
-  ROOT %tuple = (f16[32768], f16[32768], f16[32768], f16[32768], f16[32768]) tuple(f16[32768] %mul.0, f16[32768] %mul.1, f16[32768] %a1, f16[32768] %a2, f16[32768] %a3)
-}
-  )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
-  EXPECT_TRUE(module_or_status.ok());
-
-  auto* module = module_or_status.ValueOrDie().get();
-
-  HloMemoryScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      CreateClusteringMemoryScheduler(64 * 1024));
-  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
-
-  auto s = module->schedule().sequence(module->entry_computation());
-  auto seq = s.instructions();
-  ASSERT_EQ(seq.size(), 10);
-
-  auto comp = module->GetComputationWithName("cluster_1");
-  auto a1 = comp->GetInstructionWithName("a1");
-  auto a2 = comp->GetInstructionWithName("a2");
-  auto a3 = comp->GetInstructionWithName("a3");
-
-  absl::flat_hash_set<const HloInstruction*> all_reduce = {a1, a2, a3};
-  EXPECT_TRUE(all_reduce.contains(seq[5]));
-  all_reduce.erase(seq[5]);
-  EXPECT_TRUE(all_reduce.contains(seq[6]));
   all_reduce.erase(seq[6]);
   EXPECT_TRUE(all_reduce.contains(seq[7]));
   all_reduce.erase(seq[7]);
