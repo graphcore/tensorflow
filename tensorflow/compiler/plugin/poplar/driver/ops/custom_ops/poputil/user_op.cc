@@ -241,8 +241,7 @@ class UserOpImpl : public PoplarOpDef {
           ", returned: ", outputs.size());
     }
     for (uint32_t i = 0; i < number_of_outputs; ++i) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
-                                  DriverTensor(outputs[i], graph)));
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
     }
     return seq;
   }

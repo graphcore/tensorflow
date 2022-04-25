@@ -137,7 +137,6 @@ poplar_cc_library(
     name = "driver_backend",
     srcs = [
         "extended_graph.cc",
-        "extended_tensor.cc",
     ],
     hdrs = [
         "driver_types.h",
@@ -146,7 +145,6 @@ poplar_cc_library(
         "extended_tensor.h",
     ],
     deps = [
-        "@com_google_absl//absl/algorithm:container",
         "@local_config_poplar//poplar:poplar_libs",
     ],
 )
@@ -412,7 +410,6 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops:poplar_ops.h",
     ],
     deps = [
-        ":driver_backend",
         "//tensorflow/compiler/plugin/poplar/driver/ops:ops_helper",
         "//tensorflow/compiler/plugin/poplar/driver/tools:conv_poplar_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:conversions",

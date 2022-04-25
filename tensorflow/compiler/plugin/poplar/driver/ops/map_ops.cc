@@ -231,7 +231,7 @@ StatusOr<poplar::program::Sequence> CreateWhileOp(
     }
   }
 
-  auto& graph = GetGraph(res, inst);
+  poplar::Graph& graph = GetGraph(res, inst);
 
   // Create a visitor for the condition computation.
   // Conditional should not change the inputs - therefore it's not inplace.
@@ -317,8 +317,8 @@ StatusOr<poplar::program::Sequence> CreateWhileOp(
     cond_seq.add(
         condition_visitor.GetSequence(/*copy_execution_counters*/ false));
 
-    predicate = popops::allTrue(graph, cond_outputs[0].AsTensor(), cond_seq,
-                                {debug_name_and_id});
+    predicate =
+        popops::allTrue(graph, cond_outputs[0], cond_seq, {debug_name_and_id});
     // Increase the local execution counters at the end of each iteration.
     cond_seq.add(cond_counters.IncrementLiveCounters());
   }
@@ -659,7 +659,7 @@ StatusOr<poplar::program::Sequence> CreateFunctionOp(
     DeferredArgRBVectors& deferred_inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing " << inst->name();
-  auto& graph = GetGraph(res, inst);
+  poplar::Graph& graph = GetGraph(res, inst);
   poplar::program::Sequence seq({}, debug_name_and_id);
 
   HloComputation* comp = inst->to_apply();
@@ -776,8 +776,8 @@ StatusOr<poplar::program::Sequence> CreateFunctionOp(
         poplar::Tensor cloned_output = poputil::duplicate(
             graph, output.AsTensor(), seq, {debug_name_and_id, name},
             poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-        TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, flat_tuple_index,
-                                           DriverTensor(cloned_output, graph)));
+        TF_RETURN_IF_ERROR(
+            AddOutputTensor(tensor_map, inst, flat_tuple_index, cloned_output));
       }
     }
     flat_tuple_index++;
@@ -833,7 +833,7 @@ StatusOr<poplar::program::Sequence> CreatePipelineOp(
     DeferredArgRBVectors& inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing " << inst->name();
-  auto& graph = GetGraph(res, inst);
+  poplar::Graph& graph = GetGraph(res, inst);
   poplar::program::Sequence seq({}, debug_name_and_id);
   HloComputation* pipeline_computation = inst->to_apply();
   TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
@@ -933,7 +933,7 @@ StatusOr<poplar::program::Sequence> CreateConditionalOp(
     DeferredArgRBVectors& deferred_inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing " << inst->name();
-  auto& graph = GetGraph(res, inst);
+  poplar::Graph& graph = GetGraph(res, inst);
 
   poplar::program::Sequence seq({}, debug_name_and_id);
 
@@ -994,8 +994,8 @@ StatusOr<poplar::program::Sequence> CreateConditionalOp(
   std::vector<poplar::Tensor> outputs;
   for (unsigned int i = 0; i < output_count; i++) {
     poplar::Tensor out =
-        graph.clone(bodies[0]->outputs()[i].AsTensor(), debug_name_and_id);
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, DriverTensor(out, graph)));
+        graph.clone(bodies[0]->outputs()[i], debug_name_and_id);
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, out));
     outputs.push_back(out);
   }
 

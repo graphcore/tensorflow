@@ -64,8 +64,7 @@ class HistogramOp : public PoplarOpDef {
         popops::histogram(graph, input, levels, hist_inst->AbsoluteOfInput(),
                           seq, {debug_info, "HistogramPoplar"}, options);
 
-    TF_RETURN_IF_ERROR(
-        AddOutputTensor(tensor_map, hist_inst, 0, DriverTensor(output, graph)));
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, hist_inst, 0, output));
     return seq;
   }
 };

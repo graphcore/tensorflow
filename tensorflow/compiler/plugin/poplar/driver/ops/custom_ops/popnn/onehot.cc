@@ -61,7 +61,7 @@ class OneHotOp : public PoplarOpDef {
 
     // Create the output tensor to store the result in (as popops takes this by
     // reference to make sure the output is in this layout).
-    TF_ASSIGN_OR_RETURN(auto output,
+    TF_ASSIGN_OR_RETURN(poplar::Tensor output,
                         AddTensor(graph, TensorLocation{inst, 0}, inst->shape(),
                                   res, tensor_map, {debug_info, "output"}));
 

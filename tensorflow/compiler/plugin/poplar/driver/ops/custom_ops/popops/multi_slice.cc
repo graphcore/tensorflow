@@ -184,8 +184,7 @@ class MultiSliceOp : public PoplarOpDef {
     // Unflatten the output:
     output = output.reshape(poplar_output_shape);
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
     return seq;
   }
 
@@ -245,8 +244,7 @@ class StaticMultiSliceOp : public PoplarOpDef {
     // Unflatten the output:
     output = output.reshape(PoplarShapeFromXlaShape(output_shape));
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
     return seq;
   }
@@ -321,7 +319,7 @@ class MultiUpdateOp : public PoplarOpDef {
         FindInplaceOutputTensors(tensor_map, res, inst, prog, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    auto operand = inputs[0][0];
+    poplar::Tensor operand = inputs[0][0];
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor indices,
         FindInstructionInput(tensor_map, res, inst, 1, prog, {debug_info}));
@@ -408,7 +406,7 @@ class MultiUpdateAddOp : public MultiUpdateOp {
         FindInplaceOutputTensors(tensor_map, res, inst, prog, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    auto operand = inputs[0][0];
+    poplar::Tensor operand = inputs[0][0];
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor indices,
         FindInstructionInput(tensor_map, res, inst, 1, prog, {debug_info}));

@@ -183,9 +183,10 @@ bool IsReplicaPartitioned(const HloInstruction* inst,
                           const CompilerResources& res);
 
 StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteBuffer(
-    DriverGraph& graph, CompilerResources& res, std::string remote_buffer_name,
-    poplar::Type element_type, int64 element_count, int64 num_repeats,
-    int64 num_merged, bool is_replica_partitioned = false);
+    poplar::Graph& graph, CompilerResources& res,
+    std::string remote_buffer_name, poplar::Type element_type,
+    int64 element_count, int64 num_repeats, int64 num_merged,
+    bool is_replica_partitioned = false);
 
 StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteParameterBuffer(
     const HloInstruction* inst, CompilerResources& res);
@@ -199,7 +200,7 @@ std::string UnmangleInputName(std::string name);
 
 // Add a copy between two tensors with compatbile aliasing Poplar Tensors.
 poplar::program::Sequence TensorCopyWithAliasing(
-    DriverGraph& graph, const DriverTensor& src, const DriverTensor& dst,
+    poplar::Graph& graph, const poplar::Tensor& src, const poplar::Tensor& dst,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 // Modify the compiler resources to indicate the embedding associated with a
@@ -238,7 +239,7 @@ DeferredArgRBVectors ConvertInputsToDeferredInputs(
 /* Generate a JSON struture describing the tensor mappings
  */
 std::string GetTensorMappingJson(const std::string& module_name,
-                                 const DriverGraph& graph,
+                                 const poplar::Graph& graph,
                                  const TensorMaps& tensor_map);
 
 /* Create an inputs / outputs metadata structure from the compiler resources

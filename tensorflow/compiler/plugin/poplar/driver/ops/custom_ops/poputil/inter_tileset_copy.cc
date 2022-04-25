@@ -16,7 +16,6 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_tileset_copy.h"
 
-#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
@@ -50,8 +49,8 @@ class InterTilesetCopyOp : public PoplarOpDef {
     CHECK(inputs[0].IsTensor())
         << "Expected to copy a poplar::Tensor: " << inst->ToString();
 
-    DriverTensor input = inputs[0];
-    DriverTensor output;
+    poplar::Tensor input = inputs[0];
+    poplar::Tensor output;
     if (copy_inst->IsCopyToIoTiles()) {
       // Sanity check that we are allocating on IO tiles.
       CHECK_EQ(graph.getTarget().getNumTiles(), res.num_io_tiles);

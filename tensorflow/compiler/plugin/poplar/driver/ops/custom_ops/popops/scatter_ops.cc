@@ -33,8 +33,8 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-StatusOr<DriverTensor> AddIndicesTensor(
-    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<poplar::Tensor> AddIndicesTensor(
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape, CompilerResources& resources) {
   return CreateIndicesTensor(graph, popops::SlicePlan(), shape,
                              {debug_name_and_id});
@@ -114,7 +114,7 @@ class ScatterOp : public PoplarOpDef {
         FindInplaceOutputTensors(tensor_map, res, inst, prog, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    auto operand = inputs[0][0];
+    poplar::Tensor operand = inputs[0][0];
 
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor indices,
@@ -129,9 +129,11 @@ class ScatterOp : public PoplarOpDef {
 
     auto tmp = graph.addVariable(operand.elementType(), {});
     graph.setTileMapping(tmp, 0);
+    // TODO(T58874) - Remove cast
     TensorOrRemoteBufferVectors args = {
-        TensorOrRemoteBufferVector{TensorOrRemoteBuffer{tmp}},
-        TensorOrRemoteBufferVector{TensorOrRemoteBuffer{graph.clone(tmp)}}};
+        TensorOrRemoteBufferVector{TensorOrRemoteBuffer{(poplar::Tensor)tmp}},
+        TensorOrRemoteBufferVector{
+            TensorOrRemoteBuffer{(poplar::Tensor)graph.clone(tmp)}}};
 
     std::shared_ptr<DeferredVisitor> update_comp_visitor;
     // Fast path the gradient accumulation case

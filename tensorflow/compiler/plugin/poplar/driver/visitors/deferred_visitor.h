@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <functional>
 #include <map>
+#include <poplar/Tensor.hpp>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,7 +26,6 @@ limitations under the License.
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/types/optional.h"
-#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_full.h"
@@ -44,13 +44,13 @@ using DeferredAllocationsLocationsSet = absl::flat_hash_set<TensorLocation>;
 // Inputs is the allocation location.
 // Returns the allocated tensor.
 using DeferredAllocateFunction =
-    std::function<StatusOr<DriverTensor>(TensorLocation)>;
+    std::function<StatusOr<poplar::Tensor>(TensorLocation)>;
 
 // Function which is called on a allocated tensor to add any stream copies etc.
 // Input is an allocated tensor.
 // Returns a post processed Tensor.
 using DeferredPostProcessFunction =
-    std::function<StatusOr<DriverTensor>(DriverTensor)>;
+    std::function<StatusOr<poplar::Tensor>(poplar::Tensor)>;
 
 // Class used by the DeferredVisitor to keep track of deferred
 // allocations in the current visitor.
@@ -75,7 +75,7 @@ class DeferredAllocations {
 
   // Post process a tensor from an allocation location.
   Status PostProcessAllocation(TensorLocation allocation_location,
-                               DriverTensor tensor);
+                               poplar::Tensor tensor);
 
   // Returns whether the given location is a deferred allocation location, given
   // the current state.
@@ -373,38 +373,38 @@ class DeferredVisitor : public FullVisitor {
   // Allocates the input by trying to find an allocation target, otherwise tries
   // to use the `tensor_like` argument to create an input tensor.
   // Allocation location is the location where the tensor is actually allocated.
-  StatusOr<DriverTensor> AllocateInput(
+  StatusOr<poplar::Tensor> AllocateInput(
       TensorLocation allocation_location, const Shape& shape,
-      absl::optional<DriverTensor> tensor_like,
+      absl::optional<poplar::Tensor> tensor_like,
       const poplar::DebugNameAndId& debug_name_and_id);
 
-  StatusOr<DriverTensor> AllocateInput(
+  StatusOr<poplar::Tensor> AllocateInput(
       TensorLocation allocation_location, const Shape& shape,
       absl::optional<TensorOrRemoteBuffer> tensor_like,
       const poplar::DebugNameAndId& debug_name_and_id);
 
-  StatusOr<DriverTensor> AllocateInput(
+  StatusOr<poplar::Tensor> AllocateInput(
       TensorLocation allocation_location, const Shape& shape,
       const poplar::DebugNameAndId& debug_name_and_id);
 
   // Function called for each input tensor into the computation.
   // Input location is the location at which the tensor is an input to the
   // computation (parameter/infeed).
-  StatusOr<DriverTensor> PostProcessInputTensor(
-      DriverTensor tensor, TensorLocation input_location, const Shape& shape,
+  StatusOr<poplar::Tensor> PostProcessInputTensor(
+      poplar::Tensor tensor, TensorLocation input_location, const Shape& shape,
       const poplar::DebugNameAndId& debug_name_and_id);
 
   // Called by AllocateInput when allocating an input for an infeed.
-  StatusOr<DriverTensor> PostProcessInfeedAllocation(
+  StatusOr<poplar::Tensor> PostProcessInfeedAllocation(
       TensorLocation location, const Shape& shape,
-      poplar::program::Sequence& sequence, DriverTensor tensor,
+      poplar::program::Sequence& sequence, poplar::Tensor tensor,
       const poplar::DebugNameAndId& debug_name_and_id);
 
   // Called by AllocateInput when allocating an input for a parameter.
   // By default, inplace evaluator does no post processing for parameters.
-  virtual StatusOr<DriverTensor> PostProcessParameterAllocation(
+  virtual StatusOr<poplar::Tensor> PostProcessParameterAllocation(
       TensorLocation location, const Shape& shape,
-      poplar::program::Sequence& sequence, DriverTensor tensor,
+      poplar::program::Sequence& sequence, poplar::Tensor tensor,
       const poplar::DebugNameAndId& debug_name_and_id) {
     return tensor;
   }
@@ -488,7 +488,7 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   // If the subcomputation is used as a loop, then add input/output aliasing
   // copies. Returns the loop state (i.e. the output of the loop).
   StatusOr<TensorOrRemoteBufferVector> AddLoopInputOutputAliasingCopies(
-      DriverGraph& graph, const HloComputation* computation,
+      poplar::Graph& graph, const HloComputation* computation,
       const poplar::DebugNameAndId& debug_name_and_id);
 
   // A function which propagates any tensors which were not allocated at call

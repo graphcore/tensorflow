@@ -37,8 +37,9 @@ namespace {
 
 class ArgMinMaxOp : public PoplarOpDef {
   virtual Status LowerToPoplar(
-      DriverGraph& graph, poplar::Tensor& input, poplar::program::Sequence& seq,
-      CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
+      poplar::Graph& graph, poplar::Tensor& input,
+      poplar::program::Sequence& seq, CompilerResources& res,
+      const HloInstruction* inst, TensorMap& tensor_map,
       const std::vector<std::size_t>& output_dimensions,
       const poplar::DebugNameAndId& debug_name_and_id) {
     poplar::Tensor indices;
@@ -54,8 +55,7 @@ class ArgMinMaxOp : public PoplarOpDef {
     indices = indices.reinterpret(output_type);
     indices = indices.reshape(output_dimensions);
 
-    TF_RETURN_IF_ERROR(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(indices, graph)));
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, indices));
     return Status::OK();
   }
 
@@ -105,8 +105,9 @@ REGISTER_POPLAR_OP(ArgMin, ArgMinMaxOp);
 
 class MaxMinAndArgMinMaxOp : public ArgMinMaxOp {
   virtual Status LowerToPoplar(
-      DriverGraph& graph, poplar::Tensor& input, poplar::program::Sequence& seq,
-      CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
+      poplar::Graph& graph, poplar::Tensor& input,
+      poplar::program::Sequence& seq, CompilerResources& res,
+      const HloInstruction* inst, TensorMap& tensor_map,
       const std::vector<std::size_t>& output_dimensions,
       const poplar::DebugNameAndId& debug_name_and_id) {
     poplar::Tensor values;
@@ -128,10 +129,8 @@ class MaxMinAndArgMinMaxOp : public ArgMinMaxOp {
     indices = indices.reshape(output_dimensions);
     values = values.reshape(output_dimensions);
 
-    TF_RETURN_IF_ERROR(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(values, graph)));
-    TF_RETURN_IF_ERROR(
-        AddOutputTensor(tensor_map, inst, 1, DriverTensor(indices, graph)));
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, values));
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 1, indices));
     return Status::OK();
   }
 };

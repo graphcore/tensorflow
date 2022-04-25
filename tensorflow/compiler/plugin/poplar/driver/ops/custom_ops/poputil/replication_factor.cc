@@ -67,7 +67,7 @@ class ReplicationNormaliseOp : public PoplarOpDef {
                                                  debug_info, false));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    auto inout = inputs[0][0];
+    poplar::Tensor inout = inputs[0][0];
 
     if (res.replication_factor > 1) {
       popops::mapInPlace(

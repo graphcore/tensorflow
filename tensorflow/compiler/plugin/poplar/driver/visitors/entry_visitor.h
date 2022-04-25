@@ -43,9 +43,9 @@ class EntryVisitor : public DeferredVisitor {
       const HloInstruction* inst,
       const poplar::program::Sequence& seq) override;
 
-  StatusOr<DriverTensor> PostProcessParameterAllocation(
+  StatusOr<poplar::Tensor> PostProcessParameterAllocation(
       TensorLocation location, const Shape& shape,
-      poplar::program::Sequence& sequence, DriverTensor tensor,
+      poplar::program::Sequence& sequence, poplar::Tensor tensor,
       const poplar::DebugNameAndId& debug_name_and_id) override;
 
   Status FinishDeferedAllocationVisit(HloInstruction* root) override;

@@ -132,7 +132,7 @@ ReusablePipelineStageVisitor::GetRecomputationStageSequence(
 
 poplar::program::Sequence ReusablePipelineStageVisitor::GetCachedSequence(
     const HloInstruction* callsite, const TensorOrRemoteBufferVectors& inputs) {
-  auto& graph = GetGraph(resources_, callsite);
+  poplar::Graph& graph = GetGraph(resources_, callsite);
   // When recomputation is enabled, copies need to be inserted for all the non
   // parameter inputs as we are re-using the forward stage Poplar
   // Sequence/visitor for both the forward and recomputation stages. Note that

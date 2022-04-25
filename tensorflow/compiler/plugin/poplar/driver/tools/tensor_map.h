@@ -21,6 +21,9 @@ limitations under the License.
  */
 
 #include <map>
+#include <poplar/DataStream.hpp>
+#include <poplar/Graph.hpp>
+#include <poplar/Tensor.hpp>
 #include <string>
 #include <utility>
 #include <vector>
@@ -28,7 +31,6 @@ limitations under the License.
 #include "absl/types/any.h"
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
-#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_location.h"
 #include "tensorflow/compiler/xla/status.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -48,7 +50,7 @@ namespace poplarplugin {
 
 class RemoteBufferHolder {
  public:
-  explicit RemoteBufferHolder(const DriverRemoteBuffer& buffer)
+  explicit RemoteBufferHolder(const poplar::RemoteBuffer& buffer)
       : graph_(nullptr),
         handle_(buffer.handle()),
         element_type_(buffer.elementType()),
@@ -58,7 +60,7 @@ class RemoteBufferHolder {
         optimise_memory_(buffer.isOptimisedForMemory()),
         remote_buffer_(buffer) {}
 
-  RemoteBufferHolder(DriverGraph& graph, const std::string& handle,
+  RemoteBufferHolder(poplar::Graph& graph, const std::string& handle,
                      const poplar::Type& element_type, std::size_t num_elements,
                      std::size_t repeats = 1, bool rearrange_on_host = false,
                      bool optimise_memory = false)
@@ -73,7 +75,7 @@ class RemoteBufferHolder {
   /**
    * Creates poplar RemoteBuffer or returns it if it's already created.
    */
-  DriverRemoteBuffer Get();
+  poplar::RemoteBuffer Get();
   Status SetNumElements(std::size_t num_elements);
 
   const std::string& GetHandle() const { return handle_; }
@@ -86,7 +88,7 @@ class RemoteBufferHolder {
   }
 
  private:
-  DriverGraph* graph_;
+  poplar::Graph* graph_;
   std::string handle_;
   poplar::Type element_type_;
   std::size_t num_elements_;
@@ -94,7 +96,7 @@ class RemoteBufferHolder {
   bool rearrange_on_host_;
   bool optimise_memory_;
 
-  absl::optional<DriverRemoteBuffer> remote_buffer_;
+  absl::optional<poplar::RemoteBuffer> remote_buffer_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(RemoteBufferHolder);
 };
@@ -120,7 +122,7 @@ struct TensorOrRemoteBuffer {
   /**
    * Construct with a poplar tensor.
    */
-  explicit TensorOrRemoteBuffer(DriverTensor tensor)
+  explicit TensorOrRemoteBuffer(poplar::Tensor tensor)
       : tensor(tensor), content_type(ContentType::Tensor) {}
 
   /**
@@ -172,7 +174,7 @@ struct TensorOrRemoteBuffer {
    * Helper function to force the cast to a poplar tensor when it is
    * unambiguous.
    */
-  DriverTensor AsTensor() const {
+  poplar::Tensor AsTensor() const {
     CHECK(content_type == ContentType::Tensor);
     return tensor;
   }
@@ -187,7 +189,7 @@ struct TensorOrRemoteBuffer {
     return *remote_buffer_holder;
   }
 
-  DriverRemoteBuffer AsRemoteBuffer() const {
+  poplar::RemoteBuffer AsRemoteBuffer() const {
     return AsRemoteBufferHolder().Get();
   }
 
@@ -203,8 +205,8 @@ struct TensorOrRemoteBuffer {
   /**
    * Operator overloads to support implicit casts.
    */
-  operator DriverTensor() const { return AsTensor(); }
-  operator DriverRemoteBuffer() const { return AsRemoteBuffer(); }
+  operator poplar::Tensor() const { return AsTensor(); }
+  operator poplar::RemoteBuffer() const { return AsRemoteBuffer(); }
 
   TensorOrRemoteBuffer& operator=(const TensorOrRemoteBuffer& rhs) {
     switch (rhs.content_type) {
@@ -233,7 +235,7 @@ struct TensorOrRemoteBuffer {
   /**
    * Support assignment, like this is a poplar tensor.
    */
-  TensorOrRemoteBuffer& operator=(DriverTensor t) {
+  TensorOrRemoteBuffer& operator=(poplar::Tensor t) {
     content_type = ContentType::Tensor;
     tensor = t;
     return *this;
@@ -277,7 +279,7 @@ struct TensorOrRemoteBuffer {
   /**
    * The inner storage is a variable of a tensor, a remote buffer, or neither.
    */
-  DriverTensor tensor;
+  poplar::Tensor tensor;
   RemoteBufferHolder* remote_buffer_holder = nullptr;
   absl::any opaque_;
 
@@ -295,7 +297,7 @@ struct TensorOrRemoteBuffer {
 using TensorOrRemoteBufferVector = std::vector<TensorOrRemoteBuffer>;
 using TensorOrRemoteBufferVectors = std::vector<TensorOrRemoteBufferVector>;
 
-using TensorVector = std::vector<DriverTensor>;
+using TensorVector = std::vector<poplar::Tensor>;
 using TensorVectors = std::vector<TensorVector>;
 
 /**
@@ -334,18 +336,18 @@ class TensorMap {
   ConstIterator end() const { return ConstIterator(_map.end()); }
 
   // Status AddOutputTensor( TensorLocation key, const std::string& tensor_name,
-  // DriverTensor tensor);
+  // poplar::Tensor tensor);
   Status AddOutputTensor(const HloInstruction* inst, int64 output_index,
-                         DriverTensor tensor);
+                         poplar::Tensor tensor);
   Status AddOutputOpaque(const HloInstruction* inst, int64 output_index,
                          absl::any opaque);
   Status AddOutput(const HloInstruction* inst, int64 output_index,
                    TensorOrRemoteBuffer torb);
 
-  Status UpdateTensor(TensorLocation key, DriverTensor tensor);
-  DriverTensor GetTensor(TensorLocation key) const;
-  DriverTensor FindTensorByName(const std::string& name,
-                                int64 output_index) const;
+  Status UpdateTensor(TensorLocation key, poplar::Tensor tensor);
+  poplar::Tensor GetTensor(TensorLocation key) const;
+  poplar::Tensor FindTensorByName(const std::string& name,
+                                  int64 output_index) const;
   void Clear();
   /* This returns a vector of poplar tensors or remote buffers which are all of
    * the outputs from the given instruction

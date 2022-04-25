@@ -203,8 +203,7 @@ class FifoOp : public PoplarOpDef {
             graph, inputs[tuple_idx], seq,
             {debug_info, absl::StrCat("copy/", tuple_idx)},
             poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-        TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx,
-                                    DriverTensor(output, graph)));
+        TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
       }
       return seq;
     }
@@ -215,9 +214,9 @@ class FifoOp : public PoplarOpDef {
     // and use copies.
     if (fifo_depth == 1) {
       for (size_t tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
-        auto input = inputs[tuple_idx];
+        poplar::Tensor input = inputs[tuple_idx];
         // Create the output with the same mapping as the input.
-        auto output =
+        poplar::Tensor output =
             graph.clone(input, {debug_info, absl::StrCat("out/", tuple_idx)},
                         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
@@ -282,7 +281,7 @@ class FifoOp : public PoplarOpDef {
     auto counters = CreateCounters(graphs, inst, res, debug_context);
 
     for (size_t tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
-      auto input_clone = graph.clone(
+      poplar::Tensor input_clone = graph.clone(
           inputs[tuple_idx], {debug_info, absl::StrCat("out/", tuple_idx)},
           poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, input_clone));

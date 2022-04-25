@@ -28,7 +28,6 @@ limitations under the License.
 #include "absl/algorithm/container.h"
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
-#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conversions.h"
@@ -60,34 +59,36 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 // Adds a tensor which is linearly mapped across the tiles.
-DriverTensor AddLinearlyMappedTensor(
-    DriverGraph& graph, const poplar::Type poplar_type,
+poplar::Tensor AddLinearlyMappedTensor(
+    poplar::Graph& graph, const poplar::Type poplar_type,
     const std::vector<std::size_t>& shape,
     const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Allocating a linearly mapped tensor "
           << debug_name_and_id.getPathName() << " "
           << absl::StrJoin(shape, ", ");
-  DriverTensor out = graph.addVariable(poplar_type, shape, {debug_name_and_id});
+  poplar::Tensor out =
+      graph.addVariable(poplar_type, shape, {debug_name_and_id});
   poputil::mapTensorLinearly(graph, out);
   return out;
 }
 
 // Adds a tensor which is linearly mapped across the tiles, however the starting
 // tile depends on previous allocations.
-DriverTensor AddLinearlyMappedTensorWithOffset(
-    DriverGraph& graph, const poplar::Type poplar_type,
+poplar::Tensor AddLinearlyMappedTensorWithOffset(
+    poplar::Graph& graph, const poplar::Type poplar_type,
     const std::vector<std::size_t>& shape,
     const poplar::DebugNameAndId& debug_name_and_id,
     CompilerResources& resources) {
   VLOG(1) << "Allocating a linearly mapped tensor with an offset "
           << debug_name_and_id.getPathName() << " "
           << absl::StrJoin(shape, ", ");
-  DriverTensor out = graph.addVariable(poplar_type, shape, {debug_name_and_id});
+  poplar::Tensor out =
+      graph.addVariable(poplar_type, shape, {debug_name_and_id});
   MappingHelper::MapTensorLinearly(resources.linear_mapping_state, graph, out);
   return out;
 }
 
-bool ShouldRebalanceTensor(DriverGraph& graph, const DriverTensor& tensor) {
+bool ShouldRebalanceTensor(poplar::Graph& graph, const poplar::Tensor& tensor) {
   // Do not rebalance if the tensor doesn't have aliasing.
   if (tensor.isParallelWriteable()) {
     return false;
@@ -97,11 +98,12 @@ bool ShouldRebalanceTensor(DriverGraph& graph, const DriverTensor& tensor) {
   return tensor.numElements() > graph.getTarget().getNumTiles();
 }
 
-DriverTensor RebalanceTensorIfRequired(
-    DriverGraph& graph, CompilerResources& res, poplar::program::Sequence& seq,
-    const DriverTensor& tensor, const poplar::DebugNameAndId& debug_name_and_id,
+poplar::Tensor RebalanceTensorIfRequired(
+    poplar::Graph& graph, CompilerResources& res,
+    poplar::program::Sequence& seq, const poplar::Tensor& tensor,
+    const poplar::DebugNameAndId& debug_name_and_id,
     bool always_add_copy = false) {
-  DriverTensor rebalanced_tensor = tensor;
+  poplar::Tensor rebalanced_tensor = tensor;
   bool rebalance =
       always_add_copy ? true : ShouldRebalanceTensor(graph, tensor);
 
@@ -185,27 +187,17 @@ std::vector<size_t> PoplarShapeFromXlaShape(const xla::Shape& xla_shape) {
   return shape;
 }
 
-// Concatenate all tensors into a single tensor.
-DriverTensor ConcatenateTensors(const std::vector<DriverTensor>& tensors,
-                                int64 dimension) {
-  std::vector<snap::Tensor> snap_tensors(tensors.size());
-  absl::c_copy(tensors, snap_tensors.begin());
-  auto ret = snap::concat(snap_tensors, dimension);
-  return ret;
-}
-
-DriverTensor FlattenAndConcatenateTensors(
-    const std::vector<DriverTensor>& tensors) {
-  std::vector<DriverTensor> flat_tensors(tensors.size());
+poplar::Tensor FlattenAndConcatenateTensors(
+    const std::vector<poplar::Tensor>& tensors) {
+  std::vector<poplar::Tensor> flat_tensors(tensors.size());
   absl::c_transform(
       tensors, flat_tensors.begin(),
-      [&](const DriverTensor& tensor) { return tensor.flatten(); });
-  auto ret = ConcatenateTensors(flat_tensors);
-  return ret;
+      [&](const poplar::Tensor& tensor) { return tensor.flatten(); });
+  return poplar::concat(flat_tensors);
 }
 
-StatusOr<DriverTensor> SliceTensor(
-    DriverTensor tensor_to_slice,
+StatusOr<poplar::Tensor> SliceTensor(
+    poplar::Tensor tensor_to_slice,
     const HloInstruction::InstructionVector& slices, int64 slice_index,
     int64 dimension) {
   size_t offset = 0;
@@ -223,10 +215,10 @@ StatusOr<DriverTensor> SliceTensor(
   return xla::InvalidArgument("Slice index out of bounds");
 }
 
-std::vector<DriverTensor> SliceTensorIntoTensorsLike(
-    DriverTensor tensor_to_slice,
-    const std::vector<DriverTensor>& like_tensors) {
-  std::vector<DriverTensor> output_tensors(like_tensors.size());
+std::vector<poplar::Tensor> SliceTensorIntoTensorsLike(
+    poplar::Tensor tensor_to_slice,
+    const std::vector<poplar::Tensor>& like_tensors) {
+  std::vector<poplar::Tensor> output_tensors(like_tensors.size());
   for (size_t i = 0; i < like_tensors.size(); ++i) {
     auto tensor = like_tensors[i];
     auto output_tensor = tensor_to_slice.slice(0, tensor.numElements(), 0);
@@ -248,10 +240,10 @@ xla::Shape XlaShapeFromPoplarShape(PrimitiveType element_type,
   return shape;
 }
 
-DriverTensor ConvertToDeviceLayout(const Shape& shape,
-                                   const DriverTensor& tensor) {
+poplar::Tensor ConvertToDeviceLayout(const Shape& shape,
+                                     const poplar::Tensor& tensor) {
   // Reshape then dimshuffle
-  DriverTensor out = tensor;
+  poplar::Tensor out = tensor;
   if (!LayoutUtil::IsMonotonicWithDim0Major(shape.layout())) {
     unsigned int rank = tensor.rank();
     std::vector<std::size_t> dim(rank);
@@ -267,8 +259,8 @@ DriverTensor ConvertToDeviceLayout(const Shape& shape,
   return out;
 }
 
-StatusOr<DriverTensor> CreateIndicesTensor(
-    DriverGraph& graph, const popops::SlicePlan& plan,
+StatusOr<poplar::Tensor> CreateIndicesTensor(
+    poplar::Graph& graph, const popops::SlicePlan& plan,
     const xla::Shape& xla_indices_shape,
     const poplar::DebugNameAndId& debug_name_and_id) {
   std::vector<size_t> indices_shape =
@@ -278,30 +270,28 @@ StatusOr<DriverTensor> CreateIndicesTensor(
   const auto num_indices =
       std::accumulate(indices_shape.begin(), indices_shape.end(),
                       std::size_t(1), std::multiplies<std::size_t>());
-  return DriverTensor(popops::createIndicesTensor(graph, {0}, num_indices, plan,
-                                                  {}, {debug_name_and_id})
-                          .reshape(indices_shape)
-                          .reinterpret(indices_type),
-                      graph);
+  return popops::createIndicesTensor(graph, {0}, num_indices, plan, {},
+                                     {debug_name_and_id})
+      .reshape(indices_shape)
+      .reinterpret(indices_type);
 }
 
-StatusOr<DriverTensor> AddHostCopyTensor(
-    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<poplar::Tensor> AddHostCopyTensor(
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape) {
   TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(shape));
   const std::vector<std::size_t> poplar_shape = PoplarShapeFromXlaShape(shape);
 
   // Passing isRead=false gives better tile balance.
-  return DriverTensor(popops::createHostTransferableTensor(
-                          graph, poplar_type, poplar_shape,
-                          /*isRead=*/false, {debug_name_and_id}),
-                      graph);
+  return popops::createHostTransferableTensor(graph, poplar_type, poplar_shape,
+                                              /*isRead=*/false,
+                                              {debug_name_and_id});
 }
 
-DriverTensor ConvertFromDeviceLayout(const Shape& shape,
-                                     const DriverTensor& tensor) {
+poplar::Tensor ConvertFromDeviceLayout(const Shape& shape,
+                                       const poplar::Tensor& tensor) {
   // Dimshuffle then reshape
-  DriverTensor out = tensor;
+  poplar::Tensor out = tensor;
   if (!LayoutUtil::IsMonotonicWithDim0Major(shape.layout())) {
     unsigned int rank = tensor.rank();
     std::vector<unsigned int> shuffle(rank);
@@ -314,11 +304,9 @@ DriverTensor ConvertFromDeviceLayout(const Shape& shape,
   return out;
 }
 
-StatusOr<DriverTensor> AddPlainTensor(DriverGraph& graph,
-                                      const poplar::DebugContext& debug_context,
-                                      const xla::Shape& shape,
-                                      CompilerResources& resources,
-                                      bool offset) {
+StatusOr<poplar::Tensor> AddPlainTensor(
+    poplar::Graph& graph, const poplar::DebugContext& debug_context,
+    const xla::Shape& shape, CompilerResources& resources, bool offset) {
   PoplarOpDefDebugInfo debug_info(debug_context, "AddPlainTensor");
 
   std::vector<std::size_t> dim = PoplarShapeFromXlaShape(shape);
@@ -331,8 +319,8 @@ StatusOr<DriverTensor> AddPlainTensor(DriverGraph& graph,
   }
 }
 
-StatusOr<DriverTensor> AddIndicesTensor(
-    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<poplar::Tensor> AddIndicesTensor(
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape, CompilerResources& resources) {
   return CreateIndicesTensor(graph, popops::SlicePlan(), shape,
                              {debug_name_and_id});
@@ -402,8 +390,8 @@ int64 HighestFactorLessOrEqualThanN(int64 to_factor, int64 n) {
 }
 }  // namespace
 
-DriverTensor CreateTensorFromSlice(
-    DriverGraph& graph, const DriverTensor& slice, int64 slice_dimension,
+poplar::Tensor CreateTensorFromSlice(
+    poplar::Graph& graph, const poplar::Tensor& slice, int64 slice_dimension,
     int64 output_size, CompilerResources& resources,
     const poplar::DebugNameAndId& debug_name_and_id) {
   const int64 slice_size = slice.dim(slice_dimension);
@@ -412,14 +400,14 @@ DriverTensor CreateTensorFromSlice(
       HighestFactorLessOrEqualThanN(output_size, slice_size);
 
   // Slice out the right number of rows from the slice.
-  DriverTensor adjusted_slice = slice;
+  poplar::Tensor adjusted_slice = slice;
   if (rows_to_clone != slice_size) {
     adjusted_slice = adjusted_slice.slice(0, rows_to_clone, slice_dimension);
   }
 
   // Calculate how many slices are required for the input tensor.
   const int64 number_of_clones = output_size / rows_to_clone;
-  std::vector<DriverTensor> output_slices(number_of_clones);
+  std::vector<poplar::Tensor> output_slices(number_of_clones);
 
   // Make a clone of the slice.
   output_slices[0] = TensorCloneAndRebalanceAliasing(
@@ -431,12 +419,12 @@ DriverTensor CreateTensorFromSlice(
   }
 
   // Concatentate all the slices into a single tensor.
-  return ConcatenateTensors(output_slices, slice_dimension);
+  return poplar::concat(output_slices, slice_dimension);
 }
 
-static StatusOr<DriverTensor> PathTransform(
-    DriverGraph& graph, const TensorLocation& source,
-    CompilerResources& resources, DriverTensor in, int64 input_index,
+static StatusOr<poplar::Tensor> PathTransform(
+    poplar::Graph& graph, const TensorLocation& source,
+    CompilerResources& resources, poplar::Tensor in, int64 input_index,
     const std::vector<const HloInstruction*>& path,
     const poplar::DebugNameAndId& debug_name_and_id) {
   // Now revert any transformations required by the path from the source to
@@ -535,10 +523,8 @@ static StatusOr<DriverTensor> PathTransform(
         }
 
         // Broadcast the layout and tile mapping across the reduce dimensions.
-        in = DriverTensor(
-            popops::createSliceableTensorFromSlice(
-                graph, in, slice_dims, slice_dim_sizes, {debug_name_and_id}),
-            graph);
+        in = popops::createSliceableTensorFromSlice(
+            graph, in, slice_dims, slice_dim_sizes, {debug_name_and_id});
         break;
       }
       default: {
@@ -551,8 +537,8 @@ static StatusOr<DriverTensor> PathTransform(
   return in;
 }
 
-StatusOr<DriverTensor> AddDynamicSliceTensor(
-    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<poplar::Tensor> AddDynamicSliceTensor(
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla) {
   const SliceInfo slice_info = GetSliceInfo(shape_xla, slice_shape_xla);
 
@@ -560,22 +546,20 @@ StatusOr<DriverTensor> AddDynamicSliceTensor(
     // Use the old dynamic slice allocator when we are slicing in all
     // dimensions.
     // TODO Remove this special case once T8594 is fixed.
-    DriverTensor unused;
+    poplar::Tensor unused;
     return AddDynamicSliceTensor(graph, debug_name_and_id, shape_xla,
                                  slice_shape_xla, unused);
   } else {
     TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(shape_xla));
     const auto input_shape = PoplarShapeFromXlaShape(shape_xla);
-    return DriverTensor(
-        popops::createSliceableTensor(
-            graph, poplar_type, input_shape, slice_info.sliced_dims,
-            slice_info.slice_sizes, 0, {debug_name_and_id}),
-        graph);
+    return popops::createSliceableTensor(
+        graph, poplar_type, input_shape, slice_info.sliced_dims,
+        slice_info.slice_sizes, 0, {debug_name_and_id});
   }
 }
 
-StatusOr<DriverTensor> AddDynamicUpdateSliceTensor(
-    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<poplar::Tensor> AddDynamicUpdateSliceTensor(
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& input_shape_xla, const xla::Shape& update_shape_xla) {
   const SliceInfo slice_info = GetSliceInfo(input_shape_xla, update_shape_xla);
 
@@ -584,24 +568,22 @@ StatusOr<DriverTensor> AddDynamicUpdateSliceTensor(
     // Use the old dynamic slice allocator when we are slicing in all
     // dimensions.
     // TODO Remove this special case once T8594 is fixed.
-    DriverTensor unused;
+    poplar::Tensor unused;
     return AddDynamicSliceTensor(graph, {debug_name_and_id}, update_shape_xla,
                                  update_shape_xla, unused);
   } else {
     TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(update_shape_xla));
     const auto update_shape = PoplarShapeFromXlaShape(update_shape_xla);
-    return DriverTensor(
-        popops::createSliceableTensor(
-            graph, poplar_type, update_shape, slice_info.sliced_dims,
-            slice_info.slice_sizes, 0, {debug_name_and_id}),
-        graph);
+    return popops::createSliceableTensor(
+        graph, poplar_type, update_shape, slice_info.sliced_dims,
+        slice_info.slice_sizes, 0, {debug_name_and_id});
   }
 }
 
-StatusOr<DriverTensor> AddDynamicSliceTensor(
-    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<poplar::Tensor> AddDynamicSliceTensor(
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla,
-    DriverTensor& physical_layout) {
+    poplar::Tensor& physical_layout) {
   const auto shape = PoplarShapeFromXlaShape(shape_xla);
   TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(shape_xla));
   const auto volume =
@@ -640,8 +622,8 @@ StatusOr<DriverTensor> AddDynamicSliceTensor(
   }
 
   // If a value for G was found
-  DriverTensor out = graph.addVariable(poplar_type, {D / G, S, G},
-                                       poplar::DebugContext{debug_name_and_id});
+  poplar::Tensor out = graph.addVariable(
+      poplar_type, {D / G, S, G}, poplar::DebugContext{debug_name_and_id});
   physical_layout = out;
 
   // Map the sequence dimension across the tiles
@@ -664,15 +646,15 @@ StatusOr<DriverTensor> AddDynamicSliceTensor(
   return out;
 }
 
-StatusOr<DriverTensor> AddScatterTensor(
-    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<poplar::Tensor> AddScatterTensor(
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla) {
   return AddDynamicSliceTensor(graph, debug_name_and_id, shape_xla,
                                slice_shape_xla);
 }
 
-static StatusOr<DriverTensor> AddLeftMatMul(
-    DriverGraph& graph, CompilerResources& resources,
+static StatusOr<poplar::Tensor> AddLeftMatMul(
+    poplar::Graph& graph, CompilerResources& resources,
     const poplar::DebugNameAndId& debug_name_and_id,
     const TensorTarget& tensor_target, const xla::Shape& shape) {
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(shape));
@@ -692,24 +674,21 @@ static StatusOr<DriverTensor> AddLeftMatMul(
   TF_ASSIGN_OR_RETURN(const poplar::OptionFlags opts,
                       GetMatMulOptionsForInst(target, resources));
 
-  auto result = DriverTensor(
-      poplin::createMatMulGroupedInputLHS(
-          graph, type, type, PoplarShapeFromXlaShape(a_shape),
-          PoplarShapeFromXlaShape(b_shape), {debug_name_and_id, "lhs"}, opts,
-          &resources.matmul_cache),
-      graph);
+  auto result = poplin::createMatMulGroupedInputLHS(
+      graph, type, type, PoplarShapeFromXlaShape(a_shape),
+      PoplarShapeFromXlaShape(b_shape), {debug_name_and_id, "lhs"}, opts,
+      &resources.matmul_cache);
 
   // Unpack matrix
   result = result.reshape(PoplarShapeFromXlaShape(shuffled_shape));
   // Permute the matrix dimensions back to the XLA shape
   // Note: the permutations vector was generated for an XLA shape
   // therefore it is already inverted.
-  result = result.dimShuffle(ToUnsignedVector(permutations));
-  return result;
+  return result.dimShuffle(ToUnsignedVector(permutations));
 }
 
-static StatusOr<DriverTensor> AddRightMatMul(
-    DriverGraph& graph, CompilerResources& resources,
+static StatusOr<poplar::Tensor> AddRightMatMul(
+    poplar::Graph& graph, CompilerResources& resources,
     const poplar::DebugNameAndId& debug_name_and_id,
     const TensorTarget& tensor_target, const xla::Shape& shape) {
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(shape));
@@ -751,7 +730,7 @@ static StatusOr<DriverTensor> AddRightMatMul(
     }
   }
 
-  DriverTensor result;
+  poplar::Tensor result;
   std::vector<size_t> poplar_a_shape = PoplarShapeFromXlaShape(a_shape);
   std::vector<size_t> poplar_b_shape = PoplarShapeFromXlaShape(b_shape);
   if (make_output_dimension_sliceable) {
@@ -762,21 +741,17 @@ static StatusOr<DriverTensor> AddRightMatMul(
     // Set the correct contracting dimension in a as well.
     poplar_a_shape[2] = poplar_b_shape[1];
 
-    result = DriverTensor(
-        poplin::createMatMulGroupedInputRHS(
-            graph, type, type, poplar_a_shape, poplar_b_shape,
-            {debug_name_and_id, "rhs"}, opts, &resources.matmul_cache),
-        graph);
+    result = poplin::createMatMulGroupedInputRHS(
+        graph, type, type, poplar_a_shape, poplar_b_shape,
+        {debug_name_and_id, "rhs"}, opts, &resources.matmul_cache);
 
     // Move the contracting dimension and output dimension into the right
     // locations.
     result = result.dimShuffle({0, 2, 1});
   } else {
-    result = DriverTensor(
-        poplin::createMatMulGroupedInputRHS(
-            graph, type, type, poplar_a_shape, poplar_b_shape,
-            {debug_name_and_id, "rhs"}, opts, &resources.matmul_cache),
-        graph);
+    result = poplin::createMatMulGroupedInputRHS(
+        graph, type, type, poplar_a_shape, poplar_b_shape,
+        {debug_name_and_id, "rhs"}, opts, &resources.matmul_cache);
   }
 
   // Unpack matrix
@@ -784,12 +759,11 @@ static StatusOr<DriverTensor> AddRightMatMul(
   // Permute the matrix dimensions back to the XLA shape
   // Note: the permutations vector was generated for an XLA shape
   // therefore it is already inverted.
-  result = result.dimShuffle(ToUnsignedVector(permutations));
-  return result;
+  return result.dimShuffle(ToUnsignedVector(permutations));
 }
 
-static StatusOr<DriverTensor> AddElementwiseBinary(
-    DriverGraph& graph, CompilerResources& res,
+static StatusOr<poplar::Tensor> AddElementwiseBinary(
+    poplar::Graph& graph, CompilerResources& res,
     const poplar::DebugNameAndId& debug_name_and_id, const xla::Shape& shape,
     const HloInstruction* layout, uint64 layout_output_idx,
     const TensorMap& tensor_map) {
@@ -802,7 +776,7 @@ static StatusOr<DriverTensor> AddElementwiseBinary(
         debug_name_and_id.getPathName());
   }
 
-  DriverTensor other_side = outputs[layout_output_idx];
+  poplar::Tensor other_side = outputs[layout_output_idx];
 
   TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(shape));
 
@@ -814,7 +788,7 @@ static StatusOr<DriverTensor> AddElementwiseBinary(
   // Instead of passing the debug_name_and_id to the following methods we
   // we pass an empty name and it will then use the name other `other_side`
 
-  DriverTensor output =
+  poplar::Tensor output =
       TensorCloneAndRebalanceAliasing(graph, res, other_side, {});
 
   if (output.elementType() != poplar_type) {
@@ -830,7 +804,7 @@ bool HasTensorAllocationTarget(const TensorLocation& src,
   return tensor_allocation_map.find(src) != tensor_allocation_map.end();
 }
 
-StatusOr<DriverTensor> AddTensorForTarget(
+StatusOr<poplar::Tensor> AddTensorForTarget(
     DriverGraph& graph, const TensorLocation& source,
     const TensorTarget& tensor_target, CompilerResources& resources,
     const TensorMap& tensor_map, const poplar::DebugContext& debug_context) {
@@ -844,7 +818,7 @@ StatusOr<DriverTensor> AddTensorForTarget(
   VLOG(3) << "Allocation target " << target->ToString() << " index "
           << input_index;
 
-  DriverTensor out;
+  poplar::Tensor out;
   if (IsPopOpsElementwiseBinary(target)) {
     TF_ASSIGN_OR_RETURN(
         out, AddElementwiseBinary(graph, resources, {debug_info}, tshape,
@@ -935,19 +909,21 @@ StatusOr<DriverTensor> AddTensorForTarget(
       PoplarDataType(shapes[source.flattened_output_tuple_index]));
 
   if (src_type != out.elementType()) {
-    return graph.clone(src_type, out, {debug_info});
+    // TODO(T58874) - Remove cast
+    return (poplar::Tensor)graph.clone(src_type, out, {debug_info});
   }
 
   return out;
 }
 
-StatusOr<DriverTensor> AddTensor(DriverGraph& graph, const TensorLocation& src,
-                                 const xla::Shape& shape,
-                                 CompilerResources& resources,
-                                 const TensorMap& tensor_map,
-                                 const poplar::DebugContext& debug_context) {
+StatusOr<poplar::Tensor> AddTensor(DriverGraph& graph,
+                                   const TensorLocation& src,
+                                   const xla::Shape& shape,
+                                   CompilerResources& resources,
+                                   const TensorMap& tensor_map,
+                                   const poplar::DebugContext& debug_context) {
   PoplarOpDefDebugInfo debug_info(debug_context, "AddTensor");
-  DriverTensor out;
+  poplar::Tensor out;
 
   auto itr = resources.annotations.tensor_allocation_map.find(src);
   if (itr != resources.annotations.tensor_allocation_map.end()) {
@@ -967,7 +943,7 @@ StatusOr<DriverTensor> AddTensor(DriverGraph& graph, const TensorLocation& src,
 
 namespace {
 template <typename TYPE>
-void SetInitialTensorValueImpl(DriverGraph& graph, DriverTensor& tensor,
+void SetInitialTensorValueImpl(poplar::Graph& graph, poplar::Tensor& tensor,
                                const xla::Literal& literal) {
   const TYPE* data(static_cast<const TYPE*>(literal.untyped_data()));
   size_t element_count = literal.element_count();
@@ -975,7 +951,7 @@ void SetInitialTensorValueImpl(DriverGraph& graph, DriverTensor& tensor,
   graph.setInitialValue<TYPE>(tensor, array);
 }
 
-void SetFp16InitialTensorValueImpl(DriverGraph& graph, DriverTensor& tensor,
+void SetFp16InitialTensorValueImpl(poplar::Graph& graph, poplar::Tensor& tensor,
                                    const xla::Literal& literal) {
   const uint16_t* data(static_cast<const uint16_t*>(literal.untyped_data()));
   size_t element_count = literal.element_count();
@@ -983,7 +959,8 @@ void SetFp16InitialTensorValueImpl(DriverGraph& graph, DriverTensor& tensor,
   graph.setInitialValueHalf(tensor, array);
 }
 
-void Set64BitInitialTensorValueImpl(DriverGraph& graph, DriverTensor& tensor,
+void Set64BitInitialTensorValueImpl(poplar::Graph& graph,
+                                    poplar::Tensor& tensor,
                                     const xla::Literal& literal) {
   size_t element_count = literal.element_count();
   const void* data(static_cast<const void*>(literal.untyped_data()));
@@ -996,14 +973,14 @@ void Set64BitInitialTensorValueImpl(DriverGraph& graph, DriverTensor& tensor,
 }
 }  // namespace
 
-DriverTensor TensorCloneAndRebalanceAliasing(
-    DriverGraph& graph, CompilerResources& res, const DriverTensor& tensor,
+poplar::Tensor TensorCloneAndRebalanceAliasing(
+    poplar::Graph& graph, CompilerResources& res, const poplar::Tensor& tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
   if (tensor.isParallelWriteable()) {
     return graph.clone(tensor, {debug_name_and_id});
   }
 
-  DriverTensor tensor_flat = tensor.flatten();
+  poplar::Tensor tensor_flat = tensor.flatten();
   // Get all the intervals, and create new intervals for the aliased ones.
   std::vector<std::size_t> interval_aliases;
   std::vector<std::vector<poplar::Interval>> sorted_contiguous_intervals =
@@ -1036,11 +1013,12 @@ DriverTensor TensorCloneAndRebalanceAliasing(
     return graph.clone(tensor, {debug_name_and_id});
   }
 
-  DriverTensor aliased_clone =
-      graph.clone(ConcatenateTensors(tensor_flat.slices(aliased_intervals)),
+  // Clone the intervals into a new tensor.
+  poplar::Tensor aliased_clone =
+      graph.clone(poplar::concat(tensor_flat.slices(aliased_intervals)),
                   {debug_name_and_id});
-  DriverTensor unaliased_clone =
-      graph.clone(ConcatenateTensors(tensor_flat.slices(unaliased_intervals)),
+  poplar::Tensor unaliased_clone =
+      graph.clone(poplar::concat(tensor_flat.slices(unaliased_intervals)),
                   {debug_name_and_id});
 
   // Remap the aliased intervals clone.
@@ -1053,7 +1031,7 @@ DriverTensor TensorCloneAndRebalanceAliasing(
   auto unaliased_intervals_itr = unaliased_intervals.begin();
   uint64 next_idx_unaliased_tensor = 0;
 
-  std::vector<DriverTensor> output_slices(interval_id);
+  std::vector<poplar::Tensor> output_slices(interval_id);
   for (uint64 i = 0; i != is_interval_an_alias.size(); ++i) {
     if (is_interval_an_alias[i]) {
       const uint64 interval_size = aliased_intervals_itr->size();
@@ -1070,12 +1048,10 @@ DriverTensor TensorCloneAndRebalanceAliasing(
       unaliased_intervals_itr++;
     }
   }
-  DriverTensor result =
-      ConcatenateTensors(output_slices).reshape(tensor.shape());
-  return result;
+  return poplar::concat(output_slices).reshape(tensor.shape());
 }
 
-Status SetInitialTensorValue(DriverGraph& graph, DriverTensor& tensor,
+Status SetInitialTensorValue(poplar::Graph& graph, poplar::Tensor& tensor,
                              const xla::Literal& literal) {
   const auto type = literal.shape().element_type();
   switch (type) {
@@ -1115,14 +1091,14 @@ Status SetInitialTensorValue(DriverGraph& graph, DriverTensor& tensor,
 namespace {
 
 template <typename TYPE>
-DriverTensor CreateConstantTensorImpl(
-    DriverGraph& graph, const xla::Literal& literal, const xla::Shape& shape,
+poplar::Tensor CreateConstantTensorImpl(
+    poplar::Graph& graph, const xla::Literal& literal, const xla::Shape& shape,
     const poplar::Type& type, const poplar::DebugNameAndId& debug_name_and_id) {
   int64 num_elements(ShapeUtil::ElementsIn(literal.shape()));
   std::vector<std::size_t> dim = PoplarShapeFromXlaShape(shape);
   const TYPE* data(static_cast<const TYPE*>(literal.untyped_data()));
 
-  DriverTensor tensor;
+  poplar::Tensor tensor;
   if (num_elements == 0) {
     tensor = graph.addConstant(type, {0}, (TYPE)0, {debug_name_and_id});
   } else if (num_elements == 1) {
@@ -1135,14 +1111,14 @@ DriverTensor CreateConstantTensorImpl(
   return ConvertToDeviceLayout(literal.shape(), tensor);
 }
 
-DriverTensor CreateFp16ConstantTensorImpl(
-    DriverGraph& graph, const xla::Literal& literal, const xla::Shape& shape,
+poplar::Tensor CreateFp16ConstantTensorImpl(
+    poplar::Graph& graph, const xla::Literal& literal, const xla::Shape& shape,
     const poplar::Type& type, const poplar::DebugNameAndId& debug_name_and_id) {
   int64 num_elements(ShapeUtil::ElementsIn(literal.shape()));
   std::vector<std::size_t> dim = PoplarShapeFromXlaShape(shape);
   const uint16_t* data(static_cast<const uint16_t*>(literal.untyped_data()));
 
-  DriverTensor tensor;
+  poplar::Tensor tensor;
   if (num_elements == 0) {
     tensor = graph.addConstantHalf(type, {0}, static_cast<uint16_t>(0),
                                    {debug_name_and_id});
@@ -1156,8 +1132,8 @@ DriverTensor CreateFp16ConstantTensorImpl(
   return ConvertToDeviceLayout(literal.shape(), tensor);
 }
 
-DriverTensor Create64BitConstantTensorImpl(
-    DriverGraph& graph, const xla::Literal& literal, const xla::Shape& shape,
+poplar::Tensor Create64BitConstantTensorImpl(
+    poplar::Graph& graph, const xla::Literal& literal, const xla::Shape& shape,
     const poplar::Type& type, const poplar::DebugNameAndId& debug_name_and_id) {
   int64 num_elements(ShapeUtil::ElementsIn(literal.shape()));
   std::vector<std::size_t> dim = PoplarShapeFromXlaShape(shape);
@@ -1168,7 +1144,7 @@ DriverTensor Create64BitConstantTensorImpl(
 
   const int32* data32 = reinterpret_cast<const int32*>(converted.data());
 
-  DriverTensor tensor;
+  poplar::Tensor tensor;
   if (num_elements == 0) {
     tensor = graph.addConstant(type, {0}, static_cast<int32>(0),
                                {debug_name_and_id});
@@ -1183,8 +1159,8 @@ DriverTensor Create64BitConstantTensorImpl(
 }
 }  // namespace
 
-StatusOr<DriverTensor> CreateConstantTensor(
-    DriverGraph& graph, const xla::Literal& literal, const xla::Shape& shape,
+StatusOr<poplar::Tensor> CreateConstantTensor(
+    poplar::Graph& graph, const xla::Literal& literal, const xla::Shape& shape,
     const poplar::Type& poplar_type,
     const poplar::DebugNameAndId& debug_name_and_id) {
   const auto type = literal.shape().element_type();
@@ -1221,7 +1197,7 @@ StatusOr<DriverTensor> CreateConstantTensor(
   }
 }
 
-StatusOr<DriverTensor> AddConstantTensor(
+StatusOr<poplar::Tensor> AddConstantTensor(
     DriverGraph& graph, const TensorLocation& src, const xla::Shape& shape,
     const xla::Literal& literal, CompilerResources& resources,
     const TensorMap& tensor_map, const poplar::DebugContext& debug_context) {
@@ -1234,7 +1210,7 @@ StatusOr<DriverTensor> AddConstantTensor(
     if (ShapeUtil::ElementsIn(target->shape()) ==
         ShapeUtil::ElementsIn(shape)) {
       TF_ASSIGN_OR_RETURN(
-          DriverTensor tensor,
+          poplar::Tensor tensor,
           AddTensor(graph, src, shape, resources, tensor_map, {debug_info}));
       TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
       return ConvertToDeviceLayout(literal.shape(), tensor);
@@ -1243,7 +1219,7 @@ StatusOr<DriverTensor> AddConstantTensor(
 
   if (ShapeUtil::ElementsIn(literal.shape()) > 32) {
     TF_ASSIGN_OR_RETURN(
-        DriverTensor tensor,
+        poplar::Tensor tensor,
         AddTensor(graph, src, shape, resources, tensor_map, {debug_info}));
     TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
     return ConvertToDeviceLayout(literal.shape(), tensor);
@@ -1251,14 +1227,14 @@ StatusOr<DriverTensor> AddConstantTensor(
 
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(literal.shape()));
   TF_ASSIGN_OR_RETURN(
-      DriverTensor tensor,
+      poplar::Tensor tensor,
       CreateConstantTensor(graph, literal, shape, type, {debug_info}));
   return tensor.reshape(PoplarShapeFromXlaShape(shape));
 }
 
 template <typename T>
-DriverTensor TileTensor(const T& multiples, const DriverTensor& in) {
-  DriverTensor out = in;
+poplar::Tensor TileTensor(const T& multiples, const poplar::Tensor& in) {
+  poplar::Tensor out = in;
   for (unsigned d = 0; d < multiples.size(); d++) {
     int m = multiples[d];
     out = out.broadcast(m, d);
@@ -1266,15 +1242,15 @@ DriverTensor TileTensor(const T& multiples, const DriverTensor& in) {
   return out;
 }
 
-template DriverTensor TileTensor<tensorflow::BCast::Vec>(
-    const tensorflow::BCast::Vec&, const DriverTensor&);
+template poplar::Tensor TileTensor<tensorflow::BCast::Vec>(
+    const tensorflow::BCast::Vec&, const poplar::Tensor&);
 
-template DriverTensor TileTensor<std::vector<std::size_t>>(
-    const std::vector<std::size_t>&, const DriverTensor&);
+template poplar::Tensor TileTensor<std::vector<std::size_t>>(
+    const std::vector<std::size_t>&, const poplar::Tensor&);
 
-StatusOr<DriverTensor> UnpadTensor(const PaddingConfig& cfg,
-                                   const DriverTensor& in) {
-  DriverTensor out = in;
+StatusOr<poplar::Tensor> UnpadTensor(const PaddingConfig& cfg,
+                                     const poplar::Tensor& in) {
+  poplar::Tensor out = in;
   for (unsigned d = 0; d < in.rank(); d++) {
     std::vector<std::size_t> shape(out.shape());
     // Remove front and back padding first:
@@ -1308,51 +1284,51 @@ StatusOr<DriverTensor> UnpadTensor(const PaddingConfig& cfg,
   return out;
 }
 
-StatusOr<DriverTensor> PadTensor(const PaddingConfig& cfg,
-                                 const DriverTensor& in,
-                                 const DriverTensor& pad) {
+StatusOr<poplar::Tensor> PadTensor(const PaddingConfig& cfg,
+                                   const poplar::Tensor& in,
+                                   const poplar::Tensor& pad) {
   if (pad.numElements() != 1) {
     return xla::FailedPrecondition(
         "PadTensor: pad tensor is not single valued");
   }
 
-  DriverTensor p(pad.reshape(std::vector<std::size_t>(in.rank(), 1)));
+  poplar::Tensor p(pad.reshape(std::vector<std::size_t>(in.rank(), 1)));
 
-  DriverTensor out = in;
+  poplar::Tensor out = in;
   for (unsigned d = 0; d < in.rank(); d++) {
     std::vector<std::size_t> shape(out.shape());
 
     if (cfg.dimensions(d).interior_padding() > 0 && shape[d] > 0) {
       shape[d] = cfg.dimensions(d).interior_padding();
-      DriverTensor padded = TileTensor(shape, p);
-      DriverTensor interleaved = out.slice(0, 1, d);
+      poplar::Tensor padded = TileTensor(shape, p);
+      poplar::Tensor interleaved = out.slice(0, 1, d);
       for (unsigned int slice = 1; slice < out.dim(d); slice++) {
-        interleaved = ConcatenateTensors({interleaved, padded}, d);
-        interleaved = ConcatenateTensors(
-            {interleaved, out.slice(slice, slice + 1, d)}, d);
+        interleaved = poplar::concat(interleaved, padded, d);
+        interleaved =
+            poplar::concat(interleaved, out.slice(slice, slice + 1, d), d);
       }
       out = interleaved;
     }
 
     if (cfg.dimensions(d).edge_padding_low() > 0) {
       shape[d] = cfg.dimensions(d).edge_padding_low();
-      DriverTensor padded = TileTensor(shape, p);
-      out = ConcatenateTensors({padded, out}, d);
+      poplar::Tensor padded = TileTensor(shape, p);
+      out = poplar::concat(padded, out, d);
     }
 
     if (cfg.dimensions(d).edge_padding_high() > 0) {
       shape[d] = cfg.dimensions(d).edge_padding_high();
-      DriverTensor padded = TileTensor(shape, p);
-      out = ConcatenateTensors({out, padded}, d);
+      poplar::Tensor padded = TileTensor(shape, p);
+      out = poplar::concat(out, padded, d);
     }
   }
 
   return out;
 }
 
-StatusOr<DriverTensor> ReverseTensor(const DriverTensor& in,
-                                     const std::vector<int64>& dimensions) {
-  DriverTensor out = in;
+StatusOr<poplar::Tensor> ReverseTensor(const poplar::Tensor& in,
+                                       const std::vector<int64>& dimensions) {
+  poplar::Tensor out = in;
   if (in.numElements() > 0) {
     for (int64 d : dimensions) {
       out = out.reverse(d);
@@ -1361,9 +1337,9 @@ StatusOr<DriverTensor> ReverseTensor(const DriverTensor& in,
   return out;
 }
 
-StatusOr<DriverTensor> BroadcastTensor(const DriverTensor& in,
-                                       const xla::Shape& out,
-                                       const std::vector<int64>& dimensions) {
+StatusOr<poplar::Tensor> BroadcastTensor(const poplar::Tensor& in,
+                                         const xla::Shape& out,
+                                         const std::vector<int64>& dimensions) {
   if (PoplarShapeMatchesXLAShape(in, out)) {
     return in;
   }
@@ -1394,7 +1370,7 @@ StatusOr<DriverTensor> BroadcastTensor(const DriverTensor& in,
                                    Join(bcast_shape, ",").c_str());
   }
 
-  DriverTensor o = in;
+  poplar::Tensor o = in;
   auto optional_bcast_x_shape =
       convert_array<std::vector<size_t>>(bcast.x_reshape());
   if (!optional_bcast_x_shape) {
@@ -1407,7 +1383,7 @@ StatusOr<DriverTensor> BroadcastTensor(const DriverTensor& in,
   return o.reshape(PoplarShapeFromXlaShape(out));
 }
 
-bool PoplarShapeMatchesXLAShape(const DriverTensor& tensor,
+bool PoplarShapeMatchesXLAShape(const poplar::Tensor& tensor,
                                 const xla::Shape& shape) {
   VLOG(5) << "Checking Tensor shape";
   if (tensor.rank() != shape.rank()) return false;
@@ -1515,7 +1491,7 @@ TensorOrRemoteBufferVector FindInstructionInputsInRange(
                                debug_name_and_id, range.first, range.second);
 }
 
-StatusOr<DriverTensor> FindInstructionInput(
+StatusOr<poplar::Tensor> FindInstructionInput(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     int64 input, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing) {
@@ -1678,11 +1654,11 @@ StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
                                        debug_name_and_id, expand_aliasing);
     for (int64 j = 0; j < tensors[i].size(); ++j) {
       if (tensors[i][j].IsTensor()) {
-        DriverTensor tensor = tensors[i][j].AsTensor();
+        poplar::Tensor tensor = tensors[i][j].AsTensor();
         if (require_parallel_writeable && !tensor.isParallelWriteable()) {
-          DriverGraph& graph =
+          poplar::Graph& graph =
               GetGraphWithOutputIndex(res, inst->operand(inplace_index), j);
-          DriverTensor out = TensorCloneAndRebalanceAliasing(
+          poplar::Tensor out = TensorCloneAndRebalanceAliasing(
               graph, res, tensor, {debug_name_and_id, "clone"});
           seq.add(poplar::program::Copy(tensor, out, false, debug_name_and_id));
           tensors[i][j] = out;
@@ -1700,7 +1676,7 @@ Status AddOutput(TensorMap& map, const HloInstruction* inst, int64 n,
 }
 
 Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
-                       const DriverTensor& tensor) {
+                       const poplar::Tensor& tensor) {
   return map.AddOutputTensor(inst, n, tensor);
 }
 

@@ -115,7 +115,7 @@ StatusOr<poplar::program::Sequence> CreateDynamicUpdateSliceOp(
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto* dynamic_inst = Cast<HloDynamicIndexInstruction>(inst);
-  auto& graph = GetGraph(res, dynamic_inst);
+  poplar::Graph& graph = GetGraph(res, dynamic_inst);
 
   poplar::program::Sequence seq({}, debug_name_and_id);
 
@@ -154,8 +154,7 @@ StatusOr<poplar::program::Sequence> CreateDynamicUpdateSliceOp(
                                   {debug_name_and_id}));
   }
 
-  TF_CHECK_OK(
-      AddOutputTensor(tensor_map, dynamic_inst, 0, DriverTensor(input, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, dynamic_inst, 0, input));
 
   return seq;
 }
@@ -165,7 +164,7 @@ StatusOr<poplar::program::Sequence> CreateDynamicSliceOp(
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto* dynamic_inst = Cast<HloDynamicIndexInstruction>(inst);
-  auto& graph = GetGraph(res, dynamic_inst);
+  poplar::Graph& graph = GetGraph(res, dynamic_inst);
 
   poplar::program::Sequence seq({}, debug_name_and_id);
 
@@ -196,8 +195,7 @@ StatusOr<poplar::program::Sequence> CreateDynamicSliceOp(
     out = poputil::duplicate(graph, sliced_input, seq, {debug_name_and_id});
   }
 
-  TF_CHECK_OK(
-      AddOutputTensor(tensor_map, dynamic_inst, 0, DriverTensor(out, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, dynamic_inst, 0, out));
 
   return seq;
 }
@@ -208,7 +206,7 @@ StatusOr<poplar::program::Sequence> CreateIota(
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
 
-  auto& graph = GetGraph(res, inst);
+  poplar::Graph& graph = GetGraph(res, inst);
 
   auto iota_inst = Cast<HloIotaInstruction>(inst);
   const auto iota_dimension = iota_inst->iota_dimension();
@@ -242,7 +240,7 @@ StatusOr<poplar::program::Sequence> CreateIota(
 
   // Create a tensor which stores the iota.
   TF_ASSIGN_OR_RETURN(
-      auto iota_tensor,
+      poplar::Tensor iota_tensor,
       AddPlainTensor(graph, {debug_name_and_id, "InitialIotaTensor"},
                      iota_shape, res));
   // Do the Iota.
@@ -262,9 +260,8 @@ StatusOr<poplar::program::Sequence> CreateIota(
           : iota_tensor;
 
   // Broadcast it to the right shape given the iota dimension.
-  TF_ASSIGN_OR_RETURN(auto out,
-                      BroadcastTensor(DriverTensor(casted, graph), output_shape,
-                                      {iota_dimension}));
+  TF_ASSIGN_OR_RETURN(poplar::Tensor out,
+                      BroadcastTensor(casted, output_shape, {iota_dimension}));
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 
   return seq;
@@ -276,7 +273,7 @@ StatusOr<poplar::program::Sequence> CreateSlice(
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
 
-  auto& graph = GetGraph(res, inst);
+  poplar::Graph& graph = GetGraph(res, inst);
   poplar::Tensor input;
   poplar::Tensor output;
 
@@ -337,13 +334,12 @@ StatusOr<poplar::program::Sequence> CreateSlice(
         graph, input, seq, {debug_name_and_id},
         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
   }
-  TF_CHECK_OK(
-      AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
   return seq;
 }
 
 StatusOr<poplar::program::Sequence> CreateSelectScalarFromRows(
-    DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
+    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
 
@@ -358,13 +354,13 @@ StatusOr<poplar::program::Sequence> CreateSelectScalarFromRows(
   poplar::Tensor out = popops::selectScalarFromRows(graph, params, indices, seq,
                                                     {debug_name_and_id});
 
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 
   return seq;
 }
 
 StatusOr<poplar::program::Sequence> CreateUpdateScalarInRows(
-    DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
+    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
 
@@ -382,8 +378,7 @@ StatusOr<poplar::program::Sequence> CreateUpdateScalarInRows(
 
   popops::updateScalarInRows(graph, params, indices, seq, {debug_name_and_id});
 
-  TF_CHECK_OK(
-      AddOutputTensor(tensor_map, inst, 0, DriverTensor(params, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, params));
 
   return seq;
 }

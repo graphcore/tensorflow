@@ -210,7 +210,7 @@ StatusOr<ExternalAndLocalTransferSequence> CreateInfeed(
       poplar::program::Sequence({}, {debug_name_and_id, "LocalSequence"})};
   const HloInfeedInstruction* infeed = Cast<HloInfeedInstruction>(inst);
 
-  auto& graph = GetGraph(res, inst);
+  poplar::Graph& graph = GetGraph(res, inst);
 
   // Parse the infeed config to find out how much data to prefetch if at all.
   xla::poplarplugin::PoplarFeedConfig infeed_config;
@@ -235,9 +235,7 @@ StatusOr<ExternalAndLocalTransferSequence> CreateInfeed(
     // Initialize the tensor with a synthetic initalizer.
     auto& initializer = DataInitializer::GetSyntheticDataInitializer();
     TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
-
-    DriverTensor d(tensor, graph);
-    TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, d, literal));
+    TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
   }
   return seqs;
 }
@@ -248,7 +246,7 @@ StatusOr<ExternalAndLocalTransferSequence> CreateOutfeed(
   ExternalAndLocalTransferSequence seqs = {
       poplar::program::Sequence({}, {debug_name_and_id, "ExternalSequence"}),
       poplar::program::Sequence({}, {debug_name_and_id, "LocalSequence"})};
-  auto& graph = GetGraph(res, inst);
+  poplar::Graph& graph = GetGraph(res, inst);
 
   const HloOutfeedInstruction* outfeed = Cast<HloOutfeedInstruction>(inst);
   xla::poplarplugin::PoplarFeedConfig outfeed_config;

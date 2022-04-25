@@ -113,7 +113,7 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
 
   // Add the aliasing copies for the loop so that the outputs of one iteration
   // are aliased to the inputs of the next one.
-  auto& graph = GetGraph(resources_, inst);
+  poplar::Graph& graph = GetGraph(resources_, inst);
   TF_ASSIGN_OR_RETURN(loop_state_, AddLoopInputOutputAliasingCopies(
                                        graph, inst->parent(), {dnai_}));
 

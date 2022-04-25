@@ -41,7 +41,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-StatusOr<DriverTensor> AllocatePoplarOpTensor(
+StatusOr<poplar::Tensor> AllocatePoplarOpTensor(
     DriverGraph& graph, CompilerResources& res,
     const poplar::DebugNameAndId& parent_debug_name_and_id,
     const TensorTarget& tensor_target, const xla::Shape& shape,
@@ -57,7 +57,7 @@ StatusOr<DriverTensor> AllocatePoplarOpTensor(
   TF_ASSIGN_OR_RETURN(poplar::Tensor out,
                       op_def->Allocator(graph, res, "", tensor_target,
                                         tensor_map, {debug_info}));
-  return DriverTensor(out, graph);
+  return out;
 }
 
 StatusOr<poplar::program::Sequence> CreatePoplarOp(
@@ -74,7 +74,7 @@ StatusOr<poplar::program::Sequence> CreatePoplarOp(
   return prog;
 }
 
-StatusOr<DriverTensor> AllocateHloOpTensor(
+StatusOr<poplar::Tensor> AllocateHloOpTensor(
     DriverGraph& graph, CompilerResources& res,
     const poplar::DebugNameAndId& parent_debug_name_and_id,
     const TensorTarget& tensor_target, const xla::Shape& shape,
@@ -101,7 +101,7 @@ StatusOr<DriverTensor> AllocateHloOpTensor(
   TF_ASSIGN_OR_RETURN(poplar::Tensor out,
                       op_def->Allocator(graph, res, "", tensor_target,
                                         tensor_map, {debug_info}));
-  return DriverTensor(out, graph);
+  return out;
 }
 
 StatusOr<poplar::program::Sequence> CreateHloOp(DriverGraph& graph,
