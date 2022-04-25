@@ -245,20 +245,20 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       {
           'testcase_name': 'tf_rnn1',
           'build': build_tf_rnn1,
-          'cycles': 9892094 if TF1 else 12969762,
-          'total_memory': 18308926 if TF1 else 18661282,
-          'max_memory': 19416 if TF1 else 20280
+          'cycles': 9892094 if TF1 else 12151519,
+          'total_memory': 18729634 if TF1 else 19254644,
+          'max_memory': 19728 if TF1 else 20614
       }, {
           'testcase_name': 'tf_rnn2',
           'build': build_tf_rnn2,
-          'cycles': 18478591 if TF1 else 21954915,
-          'total_memory': 17702776 if TF1 else 17767924,
-          'max_memory': 22016 if TF1 else 22644
+          'cycles': 18478591 if TF1 else 21633515,
+          'total_memory': 18022860 if TF1 else 18126860,
+          'max_memory': 22292 if TF1 else 23072
       }, {
           'testcase_name': 'tf_lstm1',
           'build': build_tf_lstm1,
-          'cycles': 25246207 if TF1 else 27353594,
-          'total_memory': 56144611 if TF1 else 56530606,
+          'cycles': 25246207 if TF1 else 26924294,
+          'total_memory': 56144611 if TF1 else 57301126,
           'max_memory': 51278 if TF1 else 51754,
           'options': {
               'dims': 64,
@@ -268,26 +268,26 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           'testcase_name': 'tf_gru1',
           'build': build_tf_gru1,
           'cycles': 47908969 if TF1 else 52940411,
-          'total_memory': 35142802 if TF1 else 35349686,
+          'total_memory': 35142802 if TF1 else 35737058,
           'max_memory': 36824 if TF1 else 37552
       }, {
           'testcase_name': 'model_rnn1',
           'build': build_model_rnn1,
-          'cycles': 15720790 if TF1 else 15785499,
-          'total_memory': 29223581 if TF1 else 19511535,
-          'max_memory': 23178 if TF1 else 23055
+          'cycles': 15720790 if TF1 else 15209999,
+          'total_memory': 19594181 if TF1 else 20071337,
+          'max_memory': 23493 if TF1 else 23055
       }, {
           'testcase_name': 'model_rnn2',
           'build': build_model_rnn2,
-          'cycles': 31392149 if TF1 else 31226960,
-          'total_memory': 23736413 if TF1 else 24970739,
-          'max_memory': 31879 if TF1 else 30424
+          'cycles': 31392149 if TF1 else 30696360,
+          'total_memory': 24036497 if TF1 else 25376741,
+          'max_memory': 32499 if TF1 else 30424
       }, {
           'testcase_name': 'model_cnn1',
           'build': build_model_cnn1,
           'cycles': 9979900 if TF1 else 10219500,
-          'total_memory': 28276555 if TF1 else 28643523,
-          'max_memory': 29397 if TF1 else 29357,
+          'total_memory': 28622880 if TF1 else 28981052,
+          'max_memory': 29733 if TF1 else 29357,
           'options': {
               'batch_size': 1,
               'steps': 32
@@ -296,8 +296,8 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           'testcase_name': 'trivial_multiply',
           'build': build_trivial_while,
           'cycles': 61735537 if TF1 else 60961863,
-          'total_memory': 20610982 if TF1 else 20142774,
-          'max_memory': 15353 if TF1 else 14945,
+          'total_memory': 20238568 if TF1 else 19850674,
+          'max_memory': 15107 if TF1 else 14945,
           'options': {
               'batch_size': 4,
               'steps': 32,
@@ -317,6 +317,10 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @test_util.deprecated_graph_mode_only
   def test_trivial_multiply_pipeline(self):
+    if TF1:
+      self.skipTest("Dynamic slice gradient requires pad with non-const dim"
+                    " and it does not work in TF1")
+
     opts = TestOptions()
     dataset = opts.createDataset()
 
@@ -453,14 +457,14 @@ class RNNKerasModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           "model_fn": createLSTMKerasModel,
           "ipu_count": 1,
           "expected_cycles": 32019581,
-          "expected_total_tile_memory": 20357005,
-          "expected_max_tile_memory": 33320
+          "expected_total_tile_memory": 20517577,
+          "expected_max_tile_memory": 32428
       }, {
           "testcase_name": "pipelined_lstm",
           "model_fn": createPipelinedLSTMKerasModel,
           "ipu_count": 2,
-          "expected_cycles": 29172285,
-          "expected_total_tile_memory": 32750233,
+          "expected_cycles": 29032125,
+          "expected_total_tile_memory": 33307929,
           "expected_max_tile_memory": 31673
       })
   @test_util.run_v2_only
