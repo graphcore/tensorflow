@@ -127,6 +127,7 @@ enum PoplarOp {
   StaticMultiUpdateAdd = 122;
   Softmax = 123;
   StableSoftmax = 124;
+  Uninitialised = 125;
 
   // Supported Fusions.
   Conv_biasadd = 200;

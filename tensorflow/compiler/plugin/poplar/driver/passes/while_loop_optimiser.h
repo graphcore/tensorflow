@@ -44,6 +44,12 @@ class PoplarWhileLoopOptimiser : public HloModulePass {
   //    propagated through the module
   static Status PropagateNewShapes(
       const std::vector<HloInstruction*>& instructions_with_new_shapes);
+
+  explicit PoplarWhileLoopOptimiser(int64& num_uninitialised)
+      : num_uninitialised_(num_uninitialised) {}
+
+ private:
+  int64& num_uninitialised_;
 };
 
 // For instructions that require remapping inside a while

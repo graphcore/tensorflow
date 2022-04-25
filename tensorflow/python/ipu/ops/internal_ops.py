@@ -53,7 +53,6 @@ def remap_deduce(x, name=None):
   """
   return gen_poputil_ops.ipu_remap_deduce(x, name=name)
 
-
 def fifo(x, depth, offload=False, name=None):
   """Introduces a first-in-first-out queue with a fixed depth.
 

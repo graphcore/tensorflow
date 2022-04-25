@@ -21,6 +21,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_analysis.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/uninitialised.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/print_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/slice_util.h"
@@ -865,6 +866,34 @@ Status RemoveTensorListBroadcasts(HloInstruction* inst,
   return Status::OK();
 }
 
+bool MakeInputsUninitialised(HloInstruction* while_loop,
+                             const BroadcastAndSlice& broadcast,
+                             int64& num_uninitialised) {
+  int64 index = broadcast.broadcast.input_index;
+  auto* while_init = while_loop->mutable_operand(0);
+  auto* orig = while_init->operand(index);
+  if (IsPoplarInstruction(PoplarOp::Uninitialised)(orig)) {
+    return false;
+  }
+  auto* comp = while_init->parent();
+  auto* uninit = comp->AddInstruction(
+      CreateUninitialisedInstruction(orig->shape(), num_uninitialised));
+  while_init->ReplaceOperandWith(index, uninit);
+  return true;
+}
+
+bool MakeInputsUninitialised(
+    HloInstruction* while_loop,
+    const std::vector<BroadcastAndSlice>& slice_only_broadcast_params,
+    int64& num_uninitialised) {
+  bool changed = false;
+  for (const auto& broadcast : slice_only_broadcast_params) {
+    changed |=
+        MakeInputsUninitialised(while_loop, broadcast, num_uninitialised);
+  }
+  return changed;
+}
+
 struct IndexAndInstruction {
   HloInstruction* instruction;
   int64 index;
@@ -1115,6 +1144,8 @@ StatusOr<bool> PoplarWhileLoopOptimiser::Run(HloModule* module) {
         continue;
       }
       auto slice_only_broadcast_params = FindAllValidBroadcasts(inst);
+      changed |= MakeInputsUninitialised(inst, slice_only_broadcast_params,
+                                         num_uninitialised_);
       SelectInvariantBroadcasts(inst, slice_only_broadcast_params);
       if (slice_only_broadcast_params.empty()) {
         continue;

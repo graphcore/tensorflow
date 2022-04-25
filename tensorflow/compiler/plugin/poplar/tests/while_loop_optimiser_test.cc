@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_matchers.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
@@ -36,6 +37,8 @@ namespace xla {
 namespace m = match;
 namespace poplarplugin {
 namespace {
+
+int64 pass_arg = 0;
 
 using WhileLoopOptimiserTest = HloTestBase;
 using WhileLoopRemapTest = HloTestBase;
@@ -79,7 +82,7 @@ ENTRY entry {
                           ParseAndReturnVerifiedModule(hlo_string));
 
   TF_ASSERT_OK_AND_ASSIGN(bool changed,
-                          PoplarWhileLoopOptimiser().Run(module.get()));
+                          PoplarWhileLoopOptimiser(pass_arg).Run(module.get()));
   ASSERT_TRUE(changed);
 }
 
@@ -126,7 +129,7 @@ ENTRY entry {
                           ParseAndReturnVerifiedModule(hlo_string));
 
   TF_ASSERT_OK_AND_ASSIGN(bool changed,
-                          PoplarWhileLoopOptimiser().Run(module.get()));
+                          PoplarWhileLoopOptimiser(pass_arg).Run(module.get()));
   ASSERT_TRUE(changed);
 }
 
@@ -168,7 +171,8 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().Run(module.get()).ValueOrDie();
+  auto count =
+      PoplarWhileLoopOptimiser(pass_arg).Run(module.get()).ValueOrDie();
   ASSERT_FALSE(count);
 }
 
@@ -223,7 +227,8 @@ ENTRY entry {
   auto* producer = comp->GetInstructionWithName("new_shape");
   TF_ASSERT_OK(replacement->ReplaceAllUsesWithDifferentShape(producer));
   std::vector<HloInstruction*> new_shapes = {producer};
-  TF_ASSERT_OK(PoplarWhileLoopOptimiser().PropagateNewShapes(new_shapes));
+  TF_ASSERT_OK(
+      PoplarWhileLoopOptimiser(pass_arg).PropagateNewShapes(new_shapes));
   module->VerifyOrAddFailure("End of test check");
 }
 
@@ -289,7 +294,8 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().Run(module.get()).ValueOrDie();
+  auto count =
+      PoplarWhileLoopOptimiser(pass_arg).Run(module.get()).ValueOrDie();
   ASSERT_TRUE(count);
 }
 
@@ -332,7 +338,8 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().Run(module.get()).ValueOrDie();
+  auto count =
+      PoplarWhileLoopOptimiser(pass_arg).Run(module.get()).ValueOrDie();
   ASSERT_FALSE(count);
 }
 
@@ -375,7 +382,8 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().Run(module.get()).ValueOrDie();
+  auto count =
+      PoplarWhileLoopOptimiser(pass_arg).Run(module.get()).ValueOrDie();
   ASSERT_FALSE(count);
 }
 
@@ -452,7 +460,8 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().Run(module.get()).ValueOrDie();
+  auto count =
+      PoplarWhileLoopOptimiser(pass_arg).Run(module.get()).ValueOrDie();
   ASSERT_TRUE(count);
 }
 
@@ -529,7 +538,8 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  auto count = PoplarWhileLoopOptimiser().Run(module.get()).ValueOrDie();
+  auto count =
+      PoplarWhileLoopOptimiser(pass_arg).Run(module.get()).ValueOrDie();
   ASSERT_FALSE(count);
 }
 
@@ -572,7 +582,7 @@ ENTRY entry {
                           ParseAndReturnVerifiedModule(hlo_string));
 
   TF_ASSERT_OK_AND_ASSIGN(bool changed,
-                          PoplarWhileLoopOptimiser().Run(module.get()));
+                          PoplarWhileLoopOptimiser(pass_arg).Run(module.get()));
   ASSERT_EQ(changed, true);
   TF_ASSERT_OK_AND_ASSIGN(changed, TupleSimplifier().Run(module.get()));
 
@@ -628,7 +638,7 @@ ENTRY entry {
                           ParseAndReturnVerifiedModule(hlo_string));
 
   TF_ASSERT_OK_AND_ASSIGN(bool changed,
-                          PoplarWhileLoopOptimiser().Run(module.get()));
+                          PoplarWhileLoopOptimiser(pass_arg).Run(module.get()));
   ASSERT_EQ(changed, true);
   TF_ASSERT_OK_AND_ASSIGN(changed, TupleSimplifier().Run(module.get()));
 
@@ -640,6 +650,53 @@ ENTRY entry {
     ASSERT_EQ(slice->shape(), slice->operand(0)->shape());
     ASSERT_TRUE(slice->operand(0)->opcode() != HloOpcode::kGetTupleElement);
   }
+}
+
+TEST_F(WhileLoopOptimiserTest, MakeUninitialised) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  one = s32[] constant(1)
+  zero = s32[] constant(0)
+  add = s32[] add(p_body.0, one)
+  two = s32[] constant(2)
+  slice-input = s32[1, 1] reshape(two)
+  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+}
+
+condition {
+  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_2 = s32[] constant(1)
+  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
+  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10, 1] get-tuple-element(while), index=1
+  ROOT slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  TF_ASSERT_OK_AND_ASSIGN(bool changed,
+                          PoplarWhileLoopOptimiser(pass_arg).Run(module.get()));
+  ASSERT_TRUE(changed);
+  auto* comp = module->GetComputationWithName("entry");
+  auto* init = comp->GetInstructionWithName("repeat_init");
+  auto* target = init->mutable_operand(1);
+  ASSERT_TRUE(IsPoplarInstruction(PoplarOp::Uninitialised)(target));
 }
 
 TEST_F(WhileLoopRemapTest, RemapDots) {

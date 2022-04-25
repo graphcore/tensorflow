@@ -196,6 +196,18 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "uninitialised",
+    srcs = [
+        "uninitialised.cc",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver:tensor",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:uninitialised",
+    ],
+    alwayslink = True,
+)
+
+poplar_cc_library(
     name = "user_op",
     srcs = [
         "user_op.cc",

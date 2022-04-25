@@ -84,6 +84,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poputil:replication_index",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poputil:stateful_gradient_accumulate",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poputil:stateful_noop",
+        "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poputil:uninitialised",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poputil:user_op",
     ],
 )

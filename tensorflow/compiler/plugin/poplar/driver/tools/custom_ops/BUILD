@@ -797,6 +797,19 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "uninitialised",
+    srcs = [
+        "uninitialised.cc",
+    ],
+    hdrs = [
+        "uninitialised.h",
+    ],
+    deps = [
+        ":custom_ops_dependencies",
+    ],
+)
+
+poplar_cc_library(
     name = "user_op_hlo",
     srcs = [
         "user_op_hlo.cc",
@@ -880,6 +893,7 @@ poplar_cc_library(
         ":stateless_random",
         ":topk",
         ":truncated_normal",
+        ":uninitialised",
         ":user_op_hlo",
         ":weights_transpose_chans_flip_xy",
         ":within_replicas",
