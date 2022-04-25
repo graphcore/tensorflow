@@ -9,18 +9,10 @@ An IPU-specific TensorFlow distribution strategy, the ``IPUStrategy``, is
 available for setting up all appropriate scoping when creating a model. The
 ``IPUStrategy`` should always be used to target the Poplar XLA device.
 
-If you are using Keras, you must instantiate your Keras model inside of the
-strategy scope:
-
-.. literalinclude:: keras_tf2_example1.py
-  :language: python
-  :linenos:
-  :start-at: strategy = ipu.ipu_strategy.IPUStrategy()
-
-If you are not using Keras, you must use the ``@tf.function`` annotation along
-with ``strategy.run``. This will cause all operations created by the Python
-function passed into ``strategy.run`` to be placed on the IPU system and
-compiled together into a single Poplar executable:
+If you are using Keras see :numref:`keras`, otherwise you must use
+the ``@tf.function`` annotation along with ``strategy.run``. This will cause all
+operations created by the Python function passed into ``strategy.run`` to be
+placed on the IPU system and compiled together into a single Poplar executable:
 
 .. literalinclude:: targeting_tf2_example1.py
   :language: python

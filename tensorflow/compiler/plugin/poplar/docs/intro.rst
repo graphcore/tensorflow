@@ -61,9 +61,6 @@ Document overview
   <device_selection>` hardware and configuring the code to run on it.
 * The `IPUStrategy` class and its use in Keras is described in the
   section on :any:`support for TensorFlow 2 <targeting_tf2>`
-* The following section provides information on how to use :any:`Keras with IPUs
-  <keras_tf2>`, including examples on how to run models in both a data-parallel
-  and model-parallel manner.
 * The next section describes executable caches and pre-compilation of
   executables.
 * The following sections provide information on various methods related to

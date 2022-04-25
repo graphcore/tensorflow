@@ -60,7 +60,7 @@ It is best practice to ensure that anything which is intended to be executed on
 the IPU is placed into a Python function which is annotated with
 ``@tf.function(jit_compile=True)``. Note that this does not apply to
 constructing a Keras model or using the Keras ``Model.fit()`` API. See the
-:any:`Keras with IPUs <keras_tf2>` section for details on Keras.
+:numref:`keras` section for details on Keras.
 
 When calling a function which is marked with a
 ``@tf.function(jit_compile=True)`` annotation from within a
@@ -97,11 +97,11 @@ device and returns a ``tf.Tensor`` object containing the result:
 On-device loops
 ~~~~~~~~~~~~~~~
 
-In the :any:`Keras with IPUs <keras_tf2>` section, we describe how to use Keras
-to perform training, testing and prediction. However, sometimes a more
-sophisticated loop is required. You can create these to train, test and run
-inference of your models using a loop created inside of a ``tf.function`` - this
-is commonly known as an on-device loop.
+In the :numref:`keras` section, we describe how to use Keras to perform
+training, testing and prediction. However, sometimes a more sophisticated loop
+is required. You can create these to train, test and run inference of your
+models using a loop created inside of a ``tf.function`` - this is commonly known
+as an on-device loop.
 
 By executing multiple steps of the model with an on-device loop, you can improve
 the performance of your model. This is achieved by creating a ``for`` loop
