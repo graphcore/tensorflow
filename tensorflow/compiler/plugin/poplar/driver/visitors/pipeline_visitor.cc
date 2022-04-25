@@ -820,7 +820,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
     const HloInstruction* inst,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
-  poplar::Graph& graph = GetGraph(resources_, inst);
+  auto& graph = GetGraph(resources_, inst);
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, inst));
 
   TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
@@ -847,7 +847,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
           VLOG(3) << "Adding a clone for input (" << op_idx << ", " << flat_idx
                   << ").";
           visitor_inputs[op_idx][flat_idx] = graph.clone(
-              *optional_tensor, {debug_name_and_id, name},
+              optional_tensor->AsTensor(), {debug_name_and_id, name},
               poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         }
       }
@@ -917,10 +917,12 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   for (const auto& leaf : add_copies.leaves()) {
     auto output = pipeline_outputs[flat_tuple_index];
     if (leaf.second && StageOutputsRequireCopies() && output.IsTensor()) {
-      output = poputil::duplicate(
-          graph, output, seq,
-          {debug_name_and_id, absl::StrCat("output/", flat_tuple_index)},
-          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+      output = DriverTensor(
+          poputil::duplicate(
+              graph, output.AsTensor(), seq,
+              {debug_name_and_id, absl::StrCat("output/", flat_tuple_index)},
+              poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES),
+          graph);
     }
     TF_CHECK_OK(AddOutput(tensor_map, inst, flat_tuple_index, output));
 

@@ -42,9 +42,9 @@ class ScaledInplaceXbYOp : public PoplarOpDef {
                                                  debug_info, false));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    poplar::Tensor in0 = inputs[0][0];
+    auto in0 = inputs[0][0];
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor in1,
+    TF_ASSIGN_OR_RETURN(auto in1,
                         FindInstructionInput(tensor_map, res, inst, 1, seq,
                                              {debug_info}, false));
 
@@ -60,7 +60,7 @@ class ScaledInplaceXbYOp : public PoplarOpDef {
           graph, in0, in1, scale_val, seq, scaled_inplace->GetOperation(),
           {debug_info}));
     } else {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor scale_tensor,
+      TF_ASSIGN_OR_RETURN(auto scale_tensor,
                           FindInstructionInput(tensor_map, res, inst, 2, seq,
                                                {debug_info}, false));
       TF_RETURN_IF_ERROR(ScaledInplaceConstantOrTensor(
@@ -86,9 +86,9 @@ class ScaledInplaceaXbYOp : public PoplarOpDef {
         FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info, true));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
-    poplar::Tensor in0 = inputs[0][0];
+    auto in0 = inputs[0][0];
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor in1,
+    TF_ASSIGN_OR_RETURN(auto in1,
                         FindInstructionInput(tensor_map, res, inst, 1, seq,
                                              {debug_info}, false));
 
@@ -107,11 +107,11 @@ class ScaledInplaceaXbYOp : public PoplarOpDef {
           graph, in0, a_val, in1, b_val, seq, scaled_inplace->GetOperation(),
           {debug_info}));
     } else {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor a_tensor,
+      TF_ASSIGN_OR_RETURN(auto a_tensor,
                           FindInstructionInput(tensor_map, res, inst, 2, seq,
                                                {debug_info}, false));
 
-      TF_ASSIGN_OR_RETURN(poplar::Tensor b_tensor,
+      TF_ASSIGN_OR_RETURN(auto b_tensor,
                           FindInstructionInput(tensor_map, res, inst, 3, seq,
                                                {debug_info}, false));
 

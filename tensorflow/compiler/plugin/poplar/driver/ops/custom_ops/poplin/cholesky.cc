@@ -81,7 +81,7 @@ class CholeskyOp : public PoplarOpDef {
 
     out = args[1];
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
 
     return seq;
   }

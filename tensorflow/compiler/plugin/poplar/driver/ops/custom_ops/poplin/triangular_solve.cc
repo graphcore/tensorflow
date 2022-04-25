@@ -120,7 +120,7 @@ class TriangularSolveOp : public PoplarOpDef {
 
     x = args[2];
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, x));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(x, graph)));
     return seq;
   }
 

@@ -15,6 +15,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TENSOR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TENSOR_H_
 
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -50,13 +51,13 @@ std::vector<size_t> PoplarShapeFromXlaShape(const xla::Shape& xla_shape);
 xla::Shape XlaShapeFromPoplarShape(PrimitiveType element_type,
                                    const std::vector<size_t>& poplar_shape);
 
-poplar::Tensor ConvertToDeviceLayout(const Shape& shape,
-                                     const poplar::Tensor& tensor);
+DriverTensor ConvertToDeviceLayout(const Shape& shape,
+                                   const DriverTensor& tensor);
 
-poplar::Tensor ConvertFromDeviceLayout(const Shape& shape,
-                                       const poplar::Tensor& tensor);
+DriverTensor ConvertFromDeviceLayout(const Shape& shape,
+                                     const DriverTensor& tensor);
 
-bool PoplarShapeMatchesXLAShape(const poplar::Tensor& tensor,
+bool PoplarShapeMatchesXLAShape(const DriverTensor& tensor,
                                 const xla::Shape& shape);
 
 bool PoplarShapeMatchesXLAShape(poplar::RemoteBuffer remote_buffer,
@@ -67,63 +68,69 @@ bool PoplarShapeMatchesXLAShape(TensorOrRemoteBuffer torb,
                                 CompilerResources& resources);
 
 // Concatenate all tensors into a single tensor.
-poplar::Tensor FlattenAndConcatenateTensors(
-    const std::vector<poplar::Tensor>& tensors);
+DriverTensor ConcatenateTensors(const std::vector<DriverTensor>& tensors,
+                                int64 dimension = 0);
+
+// Concatenate all tensors into a single tensor.
+DriverTensor FlattenAndConcatenateTensors(
+    const std::vector<DriverTensor>& tensors);
 
 // Given a tensor of shape [..., N, ...] where N is the `slice_dimension`,
 // create an output tensor of size [..., output_size, ...]
-poplar::Tensor CreateTensorFromSlice(
-    poplar::Graph& graph, const poplar::Tensor& slice, int64 slice_dimension,
+DriverTensor CreateTensorFromSlice(
+    DriverGraph& graph, const DriverTensor& slice, int64 slice_dimension,
     int64 output_size, CompilerResources& resources,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 // Clone the tensor and rebalance any aliasing across the tiles.
-poplar::Tensor TensorCloneAndRebalanceAliasing(
-    poplar::Graph& graph, CompilerResources& res, const poplar::Tensor& tensor,
+DriverTensor TensorCloneAndRebalanceAliasing(
+    DriverGraph& graph, CompilerResources& res, const DriverTensor& tensor,
     const poplar::DebugNameAndId& debug_name_and_id);
-StatusOr<poplar::Tensor> SliceTensor(
-    poplar::Tensor tensor_to_slice,
+StatusOr<DriverTensor> SliceTensor(
+    DriverTensor tensor_to_slice,
     const HloInstruction::InstructionVector& slices, int64 slice_index);
 
 // Slice tensor into tensors with shapes like the tensors.
-std::vector<poplar::Tensor> SliceTensorIntoTensorsLike(
-    poplar::Tensor tensor_to_slice,
-    const std::vector<poplar::Tensor>& like_tensors);
+std::vector<DriverTensor> SliceTensorIntoTensorsLike(
+    DriverTensor tensor_to_slice,
+    const std::vector<DriverTensor>& like_tensors);
 
-StatusOr<poplar::Tensor> AddDynamicSliceTensor(
-    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<DriverTensor> AddDynamicSliceTensor(
+    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla);
 
-StatusOr<poplar::Tensor> AddDynamicUpdateSliceTensor(
-    poplar::Graph& graph, const std::string& debug_name,
+StatusOr<DriverTensor> AddDynamicUpdateSliceTensor(
+    DriverGraph& graph, const std::string& debug_name,
     const xla::Shape& input_shape_xla, const xla::Shape& update_shape_xla);
 
-StatusOr<poplar::Tensor> AddDynamicSliceTensor(
-    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<DriverTensor> AddDynamicSliceTensor(
+    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla,
-    poplar::Tensor& physical_layout);
+    DriverTensor& physical_layout);
 
-StatusOr<poplar::Tensor> AddScatterTensor(
-    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<DriverTensor> AddScatterTensor(
+    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla);
 
-StatusOr<poplar::Tensor> AddGatherTensor(poplar::Graph& graph,
-                                         const std::string& debug_name,
-                                         const xla::Shape& shape_xla,
-                                         std::vector<std::size_t> slice_sizes,
-                                         std::vector<unsigned> start_index_map);
+StatusOr<DriverTensor> AddGatherTensor(DriverGraph& graph,
+                                       const std::string& debug_name,
+                                       const xla::Shape& shape_xla,
+                                       std::vector<std::size_t> slice_sizes,
+                                       std::vector<unsigned> start_index_map);
 
-StatusOr<poplar::Tensor> AddPlainTensor(
-    poplar::Graph& graph, const poplar::DebugContext& debug_context,
-    const xla::Shape& shape, CompilerResources& resources, bool offset = true);
+StatusOr<DriverTensor> AddPlainTensor(DriverGraph& graph,
+                                      const poplar::DebugContext& debug_context,
+                                      const xla::Shape& shape,
+                                      CompilerResources& resources,
+                                      bool offset = true);
 
 // Add a tensor with layout optimised for host exchange.
-StatusOr<poplar::Tensor> AddHostCopyTensor(
-    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<DriverTensor> AddHostCopyTensor(
+    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape);
 
-StatusOr<poplar::Tensor> CreateIndicesTensor(
-    poplar::Graph& graph, const popops::SlicePlan& plan,
+StatusOr<DriverTensor> CreateIndicesTensor(
+    DriverGraph& graph, const popops::SlicePlan& plan,
     const xla::Shape& xla_indices_shape,
     const poplar::DebugNameAndId& debug_name_and_id);
 
@@ -132,55 +139,54 @@ StatusOr<poplar::Tensor> CreateIndicesTensor(
 bool HasTensorAllocationTarget(const TensorLocation& src,
                                const CompilerResources& resources);
 
-StatusOr<poplar::Tensor> AddTensorForTarget(
+StatusOr<DriverTensor> AddTensorForTarget(
     DriverGraph& graph, const TensorLocation& source,
     const TensorTarget& tensor_target, CompilerResources& resources,
     const TensorMap& tensor_map, const poplar::DebugContext& debug_context);
 
-StatusOr<poplar::Tensor> AddTensor(DriverGraph& graph,
-                                   const TensorLocation& src,
-                                   const xla::Shape& shape,
-                                   CompilerResources& resources,
-                                   const TensorMap& tensor_map,
-                                   const poplar::DebugContext& debug_context);
+StatusOr<DriverTensor> AddTensor(DriverGraph& graph, const TensorLocation& src,
+                                 const xla::Shape& shape,
+                                 CompilerResources& resources,
+                                 const TensorMap& tensor_map,
+                                 const poplar::DebugContext& debug_context);
 
-StatusOr<poplar::Tensor> AddConstantTensor(
+StatusOr<DriverTensor> AddConstantTensor(
     DriverGraph& graph, const TensorLocation& src, const xla::Shape& shape,
     const xla::Literal& literal, CompilerResources& resources,
     const TensorMap& tensor_map, const poplar::DebugContext& debug_context);
 
 // Creates a constant tensor.
-StatusOr<poplar::Tensor> CreateConstantTensor(
-    poplar::Graph& graph, const xla::Literal& literal, const xla::Shape& shape,
+StatusOr<DriverTensor> CreateConstantTensor(
+    DriverGraph& graph, const xla::Literal& literal, const xla::Shape& shape,
     const poplar::Type& poplar_type,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 // Sets a value of a tensor to a constant.
-Status SetInitialTensorValue(poplar::Graph& graph, poplar::Tensor& tensor,
+Status SetInitialTensorValue(DriverGraph& graph, DriverTensor& tensor,
                              const xla::Literal& literal);
 
 template <typename T>
-poplar::Tensor TileTensor(const T& multiples, const poplar::Tensor& in);
+DriverTensor TileTensor(const T& multiples, const DriverTensor& in);
 
-StatusOr<poplar::Tensor> UnpadTensor(const PaddingConfig& cfg,
-                                     const poplar::Tensor& in);
+StatusOr<DriverTensor> UnpadTensor(const PaddingConfig& cfg,
+                                   const DriverTensor& in);
 
-StatusOr<poplar::Tensor> PadTensor(const PaddingConfig& cfg,
-                                   const poplar::Tensor& in,
-                                   const poplar::Tensor& pad);
+StatusOr<DriverTensor> PadTensor(const PaddingConfig& cfg,
+                                 const DriverTensor& in,
+                                 const DriverTensor& pad);
 
-StatusOr<poplar::Tensor> ReverseTensor(const poplar::Tensor& in,
-                                       const std::vector<int64>& dimensions);
+StatusOr<DriverTensor> ReverseTensor(const DriverTensor& in,
+                                     const std::vector<int64>& dimensions);
 
-StatusOr<poplar::Tensor> BroadcastTensor(
-    const poplar::Tensor& in, const xla::Shape& out,
+StatusOr<DriverTensor> BroadcastTensor(
+    const DriverTensor& in, const xla::Shape& out,
     const std::vector<int64>& dimensions = {});
 
 Status AddOutput(TensorMap& map, const HloInstruction* inst, int64 n,
                  const TensorOrRemoteBuffer& torb);
 
 Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
-                       const poplar::Tensor& tensor);
+                       const DriverTensor& tensor);
 
 Status AddOutputOpaque(TensorMap& map, const HloInstruction* inst, int64 n,
                        absl::any token);
@@ -251,7 +257,7 @@ TensorOrRemoteBufferVector FindInstructionInputsInRange(
 /* This returns the single poplar tensor which is the non-tuple input to the
  * input to the instruction
  */
-StatusOr<poplar::Tensor> FindInstructionInput(
+StatusOr<DriverTensor> FindInstructionInput(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     int64 input, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id,

@@ -16,9 +16,12 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_EXTENDED_TENSOR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_EXTENDED_TENSOR_H_
 
+#include <string>
 #include <utility>
+#include <vector>
 
 #include <snap/DataStream.hpp>
+#include <snap/RemoteBuffer.hpp>
 #include <snap/Tensor.hpp>
 
 namespace xla {
@@ -27,15 +30,60 @@ namespace poplarplugin {
 // Wrapper class to abstract migration from poplar to snap
 class ExtendedTensor : public snap::Tensor {
  public:
-  ExtendedTensor() = default;
+  using snap::Tensor::Tensor;
   ExtendedTensor(snap::Tensor&& tensor)  // NOLINT
       : snap::Tensor(std::move(tensor)) {}
-  ExtendedTensor(poplar::Tensor tensor, snap::Graph& graph)
-      : snap::Tensor(tensor, graph) {}
+
+  ExtendedTensor reshape(poplar::ArrayRef<std::size_t> shape) const;
+
+  ExtendedTensor flatten() const;
+
+  ExtendedTensor flatten(unsigned dimBegin, unsigned dimEnd) const;
+
+  ExtendedTensor slice(const poplar::Interval& region,
+                       unsigned dimension = 0) const;
+
+  ExtendedTensor slice(std::size_t begin, std::size_t end,
+                       unsigned dimension = 0) const&;
+
+  std::vector<ExtendedTensor> slices(
+      poplar::ArrayRef<poplar::Interval> intervals,
+      unsigned dimension = 0) const;
+
+  std::vector<ExtendedTensor> slices(
+      const std::vector<std::vector<poplar::Interval>>& intervals,
+      unsigned dimension = 0) const;
+
+  std::vector<ExtendedTensor> slices(const poplar::ArrayRef<unsigned>& indices,
+                                     unsigned dimension = 0) const;
+
+  bool containsAliases() const { return getPoplarTensor().containsAliases(); }
+
+  bool containsConstant() const { return getPoplarTensor().containsConstant(); }
+
+  ExtendedTensor dimRoll(unsigned dimIdx, unsigned newIdx = 0) const;
+
+  ExtendedTensor reinterpret(const poplar::Type& type) const;
+
+  const std::vector<poplar::Interval> getContiguousRegions() const {
+    return getPoplarTensor().getContiguousRegions();
+  }
+
+  std::string shapeToString() const {
+    return getPoplarTensor().shapeToString();
+  }
+
+  bool intersectsWith(const poplar::Tensor& other) const {
+    return getPoplarTensor().intersectsWith(other);
+  }
+
+  bool operator!=(const Tensor& o) const { return !(*this == o); }
 
   operator poplar::Tensor&() { return getPoplarTensor(); }
   operator const poplar::Tensor&() const { return getPoplarTensor(); }
 };
+
+std::ostream& operator<<(std::ostream& os, const ExtendedTensor& tensor);
 
 // Wrapper class to abstract migration from poplar to snap
 class ExtendedDataStream : public snap::DataStream {
@@ -46,6 +94,19 @@ class ExtendedDataStream : public snap::DataStream {
 
   operator poplar::DataStream&() { return getPoplarDataStream(); }
   operator const poplar::DataStream&() const { return getPoplarDataStream(); }
+};
+
+// Wrapper class to abstract migration from poplar to snap
+class ExtendedRemoteBuffer : public snap::RemoteBuffer {
+ public:
+  ExtendedRemoteBuffer() = default;
+  ExtendedRemoteBuffer(snap::RemoteBuffer&& remote_buffer)  // NOLINT
+      : snap::RemoteBuffer(std::move(remote_buffer)) {}
+
+  operator poplar::RemoteBuffer&() { return getPoplarRemoteBuffer(); }
+  operator const poplar::RemoteBuffer&() const {
+    return getPoplarRemoteBuffer();
+  }
 };
 
 }  // namespace poplarplugin

@@ -41,15 +41,15 @@ class InterIpuCopyOp : public PoplarOpDef {
 namespace {
 struct TensorCopyInfo {
   // The input tensor with the correct shape and aliasing.
-  poplar::Tensor input;
+  DriverTensor input;
   // The input tensor which has been flattened and aliasing might have been
   // removed.
-  poplar::Tensor input_for_copy;
+  DriverTensor input_for_copy;
   // The output tensor with the correct shape and aliasing.
-  poplar::Tensor output;
+  DriverTensor output;
   // The output tensor which has been flattened and aliasing might have been
   // removed.
-  poplar::Tensor output_for_copy;
+  DriverTensor output_for_copy;
 };
 
 StatusOr<bool> SrcAndDstGraphsCompatible(CompilerResources& res,
@@ -81,10 +81,8 @@ StatusOr<bool> SrcAndDstGraphsCompatible(CompilerResources& res,
     CHECK_LT(src_shard, res.shard_compute_graphs.size()) << src->ToString();
     CHECK_GE(dst_shard, 0) << inst->ToString();
     CHECK_LT(dst_shard, res.shard_compute_graphs.size()) << inst->ToString();
-    const poplar::Graph& src_compute_graph =
-        res.shard_compute_graphs[src_shard];
-    const poplar::Graph& dst_compute_graph =
-        res.shard_compute_graphs[dst_shard];
+    const auto& src_compute_graph = res.shard_compute_graphs[src_shard];
+    const auto& dst_compute_graph = res.shard_compute_graphs[dst_shard];
     if (src_compute_graph.getTarget().getNumTiles() !=
         dst_compute_graph.getTarget().getNumTiles()) {
       return false;
@@ -100,8 +98,8 @@ StatusOr<bool> SrcAndDstGraphsCompatible(CompilerResources& res,
     CHECK_LT(src_shard, res.shard_io_graphs.size()) << src->ToString();
     CHECK_GE(dst_shard, 0) << inst->ToString();
     CHECK_LT(dst_shard, res.shard_io_graphs.size()) << inst->ToString();
-    const poplar::Graph& src_io_graph = res.shard_io_graphs[src_shard];
-    const poplar::Graph& dst_io_graph = res.shard_io_graphs[dst_shard];
+    const auto& src_io_graph = res.shard_io_graphs[src_shard];
+    const auto& dst_io_graph = res.shard_io_graphs[dst_shard];
     if (src_io_graph.getTarget().getNumTiles() !=
         dst_io_graph.getTarget().getNumTiles()) {
       return false;
@@ -111,7 +109,7 @@ StatusOr<bool> SrcAndDstGraphsCompatible(CompilerResources& res,
 }
 
 StatusOr<TensorCopyInfo> GetTensorCopyInfo(
-    CompilerResources& res, poplar::Tensor input, const HloInstruction* inst,
+    CompilerResources& res, DriverTensor input, const HloInstruction* inst,
     const HloInstruction* src, int64 output_flat_tuple_index, int64 dst_shard,
     const Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -127,7 +125,7 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
     // and the other does not.
     auto& dst_graph =
         GetGraphWithOutputIndex(res, inst, output_flat_tuple_index);
-    TF_ASSIGN_OR_RETURN(poplar::Tensor output,
+    TF_ASSIGN_OR_RETURN(auto output,
                         AddTensor(dst_graph, output_location, output_shape, res,
                                   tensor_map, {debug_name_and_id, "output"}));
     return TensorCopyInfo{input, input.flatten(), output, output.flatten()};
@@ -140,7 +138,7 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
   // reuse the src tensor preserving aliasing.
   auto& master_graph = GetMasterGraph(res);
 
-  poplar::Tensor output;
+  DriverTensor output;
   // When the destination is all the compute tiles, we can directly clone it.
   if (dst_shard == Devices::All) {
     output = master_graph.clone(
@@ -148,14 +146,16 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
   } else {
     const unsigned dst_device_id = res.shard_to_ipu_id[dst_shard];
-    output = poputil::cloneToIpu(
-        master_graph, input, dst_device_id,
-        {debug_name_and_id, std::to_string(output_flat_tuple_index)},
-        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+    output = DriverTensor(
+        poputil::cloneToIpu(
+            master_graph, input, dst_device_id,
+            {debug_name_and_id, std::to_string(output_flat_tuple_index)},
+            poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES),
+        master_graph);
   }
 
-  poplar::Tensor input_dealiased = input.flatten();
-  poplar::Tensor output_dealiased = output.flatten();
+  auto input_dealiased = input.flatten();
+  auto output_dealiased = output.flatten();
   if (input_dealiased.containsAliases()) {
     input_dealiased = input_dealiased.flatten();
     output_dealiased = output_dealiased.flatten();
@@ -163,8 +163,9 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
     auto flat_regions = master_graph.getSortedContiguousRegions(
         input_dealiased, {{0, input_dealiased.numElements()}}, true);
 
-    input_dealiased = poplar::concat(input_dealiased.slices(flat_regions));
-    output_dealiased = poplar::concat(output_dealiased.slices(flat_regions));
+    input_dealiased = ConcatenateTensors(input_dealiased.slices(flat_regions));
+    output_dealiased =
+        ConcatenateTensors(output_dealiased.slices(flat_regions));
   }
   return TensorCopyInfo{input, input_dealiased, output, output_dealiased};
 }

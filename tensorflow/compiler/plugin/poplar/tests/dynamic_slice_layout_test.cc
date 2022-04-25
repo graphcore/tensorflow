@@ -18,6 +18,7 @@ limitations under the License.
 #include <poplar/IPUModel.hpp>
 #include <poplar/Target.hpp>
 
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/xla/test.h"
 
@@ -33,16 +34,16 @@ const std::size_t Q = 2;
 
 TEST(AddDynamicSliceTensorTest, Layout) {
   Device device = Device::createCPUDevice();
-  Graph graph(device);
+  DriverGraph graph(device.getTarget());
 
-  Tensor t_layout;
-  StatusOr<Tensor> t_status =
+  DriverTensor t_layout;
+  StatusOr<DriverTensor> t_status =
       AddDynamicSliceTensor(graph, "t", ShapeUtil::MakeShape(F32, {P, Q, S}),
                             ShapeUtil::MakeShape(F32, {P, Q, 1}), t_layout);
 
   ASSERT_TRUE(t_status.ok());
 
-  Tensor t = t_status.ValueOrDie();
+  DriverTensor t = t_status.ValueOrDie();
 
   graph.createHostWrite("t-write", t, true);
   graph.createHostRead("t_layout-read", t_layout, true);
