@@ -181,7 +181,7 @@ def _record_gradient_with_sharding(op_name, inputs, attrs, *args, **kwargs):
       shard_attrs = (_XLA_SHARDING, shard)
       attrs = attrs + shard_attrs if attrs is not None else shard_attrs
 
-  return backprop._record_gradient(op_name, inputs, attrs, *args, **kwargs)  # pylint: disable=protected-access
+  return backprop.record_gradient(op_name, inputs, attrs, *args, **kwargs)
 
 
 def _sharding_supported():

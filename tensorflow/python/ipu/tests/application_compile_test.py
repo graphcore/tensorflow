@@ -19,7 +19,6 @@ import numpy as np
 
 from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.driver import poplar_executable_pb2
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import def_function
@@ -31,6 +30,7 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
+from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python.ipu.config import DeviceConnectionType
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.ops import pipelining_ops
