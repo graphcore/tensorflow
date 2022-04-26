@@ -1032,6 +1032,89 @@ ENTRY cluster_1  {
   ASSERT_THAT(out1, Each(768));  // 3 * (2 ^ 8);
   ASSERT_THAT(out2, Each(16));   // 0 + (2 * 8)
 }
+TEST_F(CombineInstructionsTest, OutputOfCombinedReducesWithIdentityInits) {
+  // Test that the output of reduces combined into a reduce many
+  // is correct when some of those reduces have identity init values.
+  std::string hlo_string = R"(
+HloModule top
+
+add {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT add.1 = f32[] add(p0, p1)
+}
+
+ENTRY cluster_1  {
+  arg0 = f16[] constant(2)
+  arg1 = f32[] constant(2)
+  b0 = f16[16,8] broadcast(arg0), dimensions={}
+  b1 = f32[16,8] broadcast(arg1), dimensions={}
+  c0 = f32[] constant(0)
+  c1 = f32[] constant(3)
+  r0 = f32[16] reduce(b0, c0), dimensions={1}, to_apply=add
+  r1 = f32[16] reduce(b0, c1), dimensions={1}, to_apply=add
+  r2 = f32[16] reduce(b1, c0), dimensions={1}, to_apply=add
+  ROOT %tuple = (f32[16], f32[16], f32[16]) tuple(r0, r1, r2)
+}
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string, config_));
+  using ::testing::Each;
+
+  CompilerAnnotations annotations(module.get());
+  auto* entry = module.get()->entry_computation();
+
+  uint64 node_size = 4 * 32;  // float32 * 32.
+  // Schedule and combine.
+  auto scheduler = CreateLookAheadScheduler(
+      CompilerInformation().set_max_reduce_many_buffer_size(4 * node_size));
+  EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(CombineInstructions().Run(module.get()).ValueOrDie());
+
+  // Prepare to execute graph.
+  auto device = CreateIpuModel(1, 32);
+  auto resources = GetMockResources(device, module.get());
+
+  auto order = module->schedule().sequence(entry).instructions();
+  EntryVisitor visitor(*resources, entry);
+  TF_CHECK_OK(entry->AcceptOrdered(&visitor, order));
+
+  poplar::program::Sequence main_program;
+  if (resources->preamble_sequence) {
+    main_program.add(resources->preamble_sequence->getPoplarSequence());
+  }
+
+  main_program.add(visitor.GetSequenceAndInitializeCounters());
+
+  poplar::Engine engine(*resources->main_graph, main_program);
+
+  // Connect i/o
+  auto& io_map = resources->annotations.input_output_aliasing_map;
+  auto& outputs = io_map.GetEntryOutputInfos();
+  EXPECT_EQ(outputs.size(), 3);
+  EXPECT_EQ(outputs[0].Handles().size(), 1);
+  EXPECT_EQ(outputs[1].Handles().size(), 1);
+  EXPECT_EQ(outputs[2].Handles().size(), 1);
+
+  std::array<float, 16> out0, out1, out2;
+  engine.connectStream(outputs[0].Handles()[0], out0.data(),
+                       out0.data() + out0.size());
+  engine.connectStream(outputs[1].Handles()[0], out1.data(),
+                       out1.data() + out1.size());
+  engine.connectStream(outputs[2].Handles()[0], out2.data(),
+                       out2.data() + out2.size());
+
+  // Run the program.
+  device.attach();
+  engine.load(device);
+  engine.run(0);
+  device.detach();
+
+  // Check outputs
+  ASSERT_THAT(out0, Each(16));  // 0 + (2 * 8);
+  ASSERT_THAT(out1, Each(19));  // 3 + (2 * 8);
+  ASSERT_THAT(out2, Each(16));  // 0 + (2 * 8);
+}
 
 TEST_F(CombineInstructionsTest, TestInplace) {
   auto module_or_status =
