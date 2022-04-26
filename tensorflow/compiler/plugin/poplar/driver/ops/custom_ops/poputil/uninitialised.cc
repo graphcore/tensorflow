@@ -36,7 +36,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class UninitialisedOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -48,9 +48,8 @@ class UninitialisedOp : public PoplarOpDef {
                                   res, tensor_map, {debug_info}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
-    return poplar::program::Sequence(
-        {poplar::program::WriteUndef(output.getPoplarTensor(), debug_info)},
-        debug_info);
+    return DriverProgramSequence(
+        {ExtendedProgramWriteUndef(output, debug_info)}, graph, debug_info);
   }
 };
 REGISTER_POPLAR_OP(Uninitialised, UninitialisedOp);

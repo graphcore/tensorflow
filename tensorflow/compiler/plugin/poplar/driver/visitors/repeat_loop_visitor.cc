@@ -153,12 +153,13 @@ void RepeatLoopVisitor::AddSequenceForAliasingCopy(
   }
 }
 
-poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(
+DriverProgramSequence RepeatLoopVisitor::GetRepeatLoopSequence(
     const HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   const int64 repeat_count = GetRepeatLoopCount(inst);
 
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  auto& graph = GetGraph(resources_, inst);
+  DriverProgramSequence seq(graph, debug_name_and_id);
   seq.add(pre_loop_sequence_);
   poplar::program::Sequence repeat_seq({}, {debug_name_and_id, "repeat"});
 

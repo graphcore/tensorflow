@@ -37,12 +37,12 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class RemapOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "RemapOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     TF_ASSIGN_OR_RETURN(auto input,
                         FindInstructionInput(tensor_map, res, inst, 0, seq,

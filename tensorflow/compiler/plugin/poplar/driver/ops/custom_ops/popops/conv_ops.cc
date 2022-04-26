@@ -75,12 +75,12 @@ StatusOr<poplar::Tensor> AddConvolutionWeights(
 }
 
 class Conv2DOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "Conv2DOp");
-    poplar::program::Sequence seq({}, {debug_info});
+    DriverProgramSequence seq(graph, {debug_info});
 
     // Find the input tensor
     TF_ASSIGN_OR_RETURN(poplar::Tensor in,
@@ -176,12 +176,12 @@ class Conv2DOp : public PoplarOpDef {
 REGISTER_HLO_OP(kConvolution, Conv2DOp);
 
 class Conv2DReverseOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "Conv2DReverseOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     // Find the input tensor
     TF_ASSIGN_OR_RETURN(poplar::Tensor in,
@@ -247,12 +247,12 @@ class Conv2DReverseOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(ConvWithReverse, Conv2DReverseOp);
 
 class ConvScaledInplaceOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ConvScaledInplaceOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -416,12 +416,12 @@ class MultiConvOp : public PoplarOpDef {
     return out;
   }
 
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiConvOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     const HloMultiConvInstruction* multi_conv_inst =
         Cast<HloMultiConvInstruction>(inst);

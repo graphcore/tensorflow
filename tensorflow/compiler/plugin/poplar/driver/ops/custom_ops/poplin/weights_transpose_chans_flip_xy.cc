@@ -58,13 +58,13 @@ StatusOr<poplar::Tensor> AddConvWeightsTransposeChansFlipXY(
 }
 
 class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
                                     "WeightsTransposeChansFlipXYOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor in_weights,

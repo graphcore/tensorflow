@@ -133,12 +133,12 @@ StatusOr<poplar::Tensor> CreateUpdatesTensor(
 }
 
 class MultiSliceOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiSliceOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor input,
@@ -218,12 +218,12 @@ class MultiSliceOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(MultiSlice, MultiSliceOp);
 
 class StaticMultiSliceOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "StaticMultiSliceOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     auto slice_inst = Cast<HloStaticMultiSliceInstruction>(inst);
 
@@ -258,9 +258,8 @@ Status MultiUpdateInternal(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     const popops::SlicePlan& plan, poplar::Tensor operand,
     const poplar::Tensor& indices, const poplar::Tensor& updates,
-    poplar::program::Sequence& prog,
-    const HloMultiUpdateInstruction* multi_update, UpdateMode mode,
-    const poplar::DebugNameAndId& debug_name_and_id,
+    DriverProgramSequence& prog, const HloMultiUpdateInstruction* multi_update,
+    UpdateMode mode, const poplar::DebugNameAndId& debug_name_and_id,
     absl::optional<poplar::Tensor> scale = absl::nullopt) {
   // If the updates tensor is empty, there is no need to update the operand. We
   // can return the operand as is.
@@ -308,14 +307,14 @@ Status MultiUpdateInternal(
 }
 
 class MultiUpdateOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiUpdateOp");
     const HloMultiUpdateInstruction* multi_update =
         Cast<HloMultiUpdateInstruction>(inst);
-    poplar::program::Sequence prog({}, debug_info);
+    DriverProgramSequence prog(graph, debug_info);
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
         FindInplaceOutputTensors(tensor_map, res, inst, prog, debug_info));
@@ -394,14 +393,14 @@ class MultiUpdateOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(MultiUpdate, MultiUpdateOp);
 
 class MultiUpdateAddOp : public MultiUpdateOp {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiUpdateAddOp");
     const HloMultiUpdateAddInstruction* multi_update_add =
         Cast<HloMultiUpdateAddInstruction>(inst);
-    poplar::program::Sequence prog({}, debug_info);
+    DriverProgramSequence prog(graph, debug_info);
 
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -453,12 +452,12 @@ class MultiUpdateAddOp : public MultiUpdateOp {
 REGISTER_POPLAR_OP(MultiUpdateAdd, MultiUpdateAddOp);
 
 class StaticMultiUpdateAddOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "StaticMultiUpdateAddOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     auto* update_inst = Cast<HloStaticMultiUpdateAddInstruction>(inst);
 

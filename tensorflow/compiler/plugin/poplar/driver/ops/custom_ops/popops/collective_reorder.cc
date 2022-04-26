@@ -37,13 +37,13 @@ namespace poplarplugin {
 namespace {
 
 class CollectiveReorderOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "CollectiveReorderOp");
     poplar::DebugNameAndId dnai(debug_info);
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     CHECK(res.current_cluster_visitor)
         << "collective-reorder instruction must be used only inside "
@@ -103,12 +103,12 @@ class CollectiveReorderOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(CollectiveReorder, CollectiveReorderOp);
 
 class UndoCollectiveReorderOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "UndoCollectiveReorderOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     CHECK(res.current_cluster_visitor)
         << "undo-collective-reorder instruction must be used only inside "

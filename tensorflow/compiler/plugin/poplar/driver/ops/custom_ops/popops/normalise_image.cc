@@ -26,12 +26,12 @@ namespace poplarplugin {
 namespace {
 
 class NormaliseImageOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "NormaliseImageOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     const HloNormaliseImage* as_norm_image = Cast<HloNormaliseImage>(inst);
     const float scale = as_norm_image->Scale();

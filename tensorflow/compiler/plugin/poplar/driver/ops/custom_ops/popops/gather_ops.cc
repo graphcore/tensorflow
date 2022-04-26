@@ -85,7 +85,7 @@ class GatherOp : public PoplarOpDef {
     return out;
   }
 
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -98,7 +98,7 @@ class GatherOp : public PoplarOpDef {
     const auto collapsed_slice_dims = dim_numbers.collapsed_slice_dims();
     const auto start_index_map = dim_numbers.start_index_map();
 
-    poplar::program::Sequence prog({}, debug_info);
+    DriverProgramSequence prog(graph, debug_info);
 
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor operand,

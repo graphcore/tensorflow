@@ -171,7 +171,7 @@ std::vector<poplar::Graph*> GetGraphs(poplar::Graph& graph,
 }
 
 class FifoOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -180,7 +180,7 @@ class FifoOp : public PoplarOpDef {
     const size_t fifo_depth = fifo_inst->depth();
     const bool fifo_offload = fifo_inst->offload();
 
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     const std::string debug_name = GetDebugName(inst);
 
     // Opaque inputs are compile-time constants, so pass through FIFOs.

@@ -34,6 +34,7 @@ using DriverRemoteBuffer = ExtendedRemoteBuffer;
 using DriverProgramSequence = ExtendedProgramSequence;
 using DriverProgramCopy = ExtendedProgramCopy;
 using DriverProgramSync = ExtendedProgramSync;
+using DriverProgramWriteUndef = ExtendedProgramWriteUndef;
 
 }  // namespace poplarplugin
 }  // namespace xla

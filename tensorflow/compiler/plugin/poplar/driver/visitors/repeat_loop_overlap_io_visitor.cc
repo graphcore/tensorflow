@@ -113,15 +113,15 @@ Status RepeatLoopOverlapIOVisitor::AddSequenceForInstruction(
   return RepeatLoopVisitor::AddSequenceForInstruction(inst, seq);
 }
 
-poplar::program::Sequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
+DriverProgramSequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
     const HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   const int64 repeat_count = GetRepeatLoopCount(inst);
 
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  auto& graph = GetGraph(resources_, inst);
+  DriverProgramSequence seq(graph, debug_name_and_id);
   seq.add(pre_loop_sequence_);
 
-  poplar::Graph& graph = GetGraph(resources_, inst);
   poplar::program::Sequence call_seq({}, {debug_name_and_id, "call"});
   {
     poplar::program::Sequence compute_seq({}, {debug_name_and_id, "compute"});

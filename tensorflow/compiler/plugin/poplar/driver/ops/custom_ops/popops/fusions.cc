@@ -103,12 +103,12 @@ static StatusOr<poplar::Tensor> ReversePathTransform(
 }
 
 class ConvBiasAddOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ConvBiasAddOp");
-    poplar::program::Sequence prog({}, {debug_info});
+    DriverProgramSequence prog(graph, {debug_info});
 
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -165,7 +165,7 @@ class ConvBiasAddOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Conv_biasadd, ConvBiasAddOp);
 
 class MatMulBiasAddOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -176,7 +176,7 @@ class MatMulBiasAddOp : public PoplarOpDef {
     const HloInstruction* broadcast = root->operand(1);
     CHECK_EQ(broadcast->opcode(), HloOpcode::kBroadcast);
 
-    poplar::program::Sequence prog({}, debug_info);
+    DriverProgramSequence prog(graph, debug_info);
 
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                         FindInplaceOutputTensors(tensor_map, res, inst, prog,
@@ -232,12 +232,12 @@ class MatMulBiasAddOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Matmul_biasadd, MatMulBiasAddOp);
 
 class BiasApplyOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "BiasApplyOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     const HloInstruction* root = inst->fused_expression_root();
 
@@ -303,12 +303,12 @@ class BiasApplyOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Bias_apply, BiasApplyOp);
 
 class ZeroPadOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ZeroPadOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     const HloInstruction* root = inst->fused_expression_root();
     const PaddingConfig& cfg(root->padding_config());
 
@@ -339,12 +339,12 @@ class ZeroPadOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Zero_pad, ZeroPadOp);
 
 class PaddingReduceWindowOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "PaddingReduceWindowOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     const HloInstruction* root = inst->fused_expression_root();
     const Window& window(root->window());
@@ -376,14 +376,14 @@ class PaddingReduceWindowOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Padding_reduce_window, PaddingReduceWindowOp)
 
 class ReductionFp16InputOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ReductionFp16InputOp");
     const HloInstruction* reduce_inst = inst->fused_expression_root();
     TF_ASSIGN_OR_RETURN(
-        poplar::program::Sequence prog,
+        DriverProgramSequence prog,
         CreateSimpleReduction(res, inst, reduce_inst, output_shape, tensor_map,
                               /*with_scale=*/false, {debug_info}));
     return prog;
@@ -393,7 +393,7 @@ class ReductionFp16InputOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Reduction_fp16_input, ReductionFp16InputOp)
 
 class ReductionSquareAddOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -402,7 +402,7 @@ class ReductionSquareAddOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(const HloInstruction* reduce_inst,
                         GetReduceInstruction(inst));
     TF_ASSIGN_OR_RETURN(
-        poplar::program::Sequence prog,
+        DriverProgramSequence prog,
         CreateSimpleReduction(res, popops::Operation::SQUARE_ADD, inst,
                               reduce_inst, output_shape, tensor_map, with_scale,
                               {debug_info}));
@@ -413,7 +413,7 @@ class ReductionSquareAddOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Reduction_square_add, ReductionSquareAddOp)
 
 class ReductionScaledOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -421,7 +421,7 @@ class ReductionScaledOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(const HloInstruction* reduce_inst,
                         GetReduceInstruction(inst));
     TF_ASSIGN_OR_RETURN(
-        poplar::program::Sequence prog,
+        DriverProgramSequence prog,
         CreateSimpleReduction(res, inst, reduce_inst, output_shape, tensor_map,
                               /*with_scale=*/true, {debug_info}));
     return prog;
@@ -431,12 +431,12 @@ class ReductionScaledOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Reduction_scaled, ReductionScaledOp)
 
 class ArithemticExpressionOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ArithemticExpressionOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     // Get all the inputs.
     TensorVectors args;

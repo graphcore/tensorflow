@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <string>
 
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 
 namespace xla {
@@ -36,7 +37,7 @@ class RepeatLoopVisitor : public InplaceDeferredVisitor {
 
   Status FinishDeferedAllocationVisit(HloInstruction* inst) override;
 
-  virtual poplar::program::Sequence GetRepeatLoopSequence(
+  virtual DriverProgramSequence GetRepeatLoopSequence(
       const HloInstruction* inst);
 
   const TensorOrRemoteBufferVector& GetLoopState() const;

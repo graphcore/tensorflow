@@ -40,7 +40,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class MaxPoolOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -54,7 +54,7 @@ class MaxPoolOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(MaxPool, MaxPoolOp);
 
 class AvgPoolOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -68,7 +68,7 @@ class AvgPoolOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(AvgPool, AvgPoolOp);
 
 class MaxPoolGradOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -82,7 +82,7 @@ class MaxPoolGradOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(MaxPoolGrad, MaxPoolGradOp);
 
 class AvgPoolGradOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

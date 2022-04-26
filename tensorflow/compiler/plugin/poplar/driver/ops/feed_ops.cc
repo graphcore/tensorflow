@@ -162,7 +162,7 @@ Status CreatePoplarD2HFIFO(
 Status CreateReusablePoplarD2HFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const xla::poplarplugin::PoplarFeedConfig& outfeed_config,
-    const std::string& handle, poplar::Graph& graph, poplar::Tensor& in,
+    const std::string& handle, DriverGraph& graph, poplar::Tensor& in,
     ExternalAndLocalTransferSequence& seqs,
     const poplar::DebugNameAndId& debug_name_and_id) {
   // Is the stream registered in the cache?
@@ -180,7 +180,7 @@ Status CreateReusablePoplarD2HFIFO(
   poplar::Tensor tmp = CreateTemporary(graph, outfeed_config, in,
                                        /*is_read=*/true, debug_name_and_id);
 
-  ExternalAndLocalTransferSequence external_copy;
+  ExternalAndLocalTransferSequence external_copy(graph);
 
   xla::poplarplugin::PoplarFeedConfig internal_config = outfeed_config;
   // already created the temporary so don't need to create it inside
@@ -205,12 +205,11 @@ StatusOr<ExternalAndLocalTransferSequence> CreateInfeed(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const xla::Shape& shape, poplar::Tensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  ExternalAndLocalTransferSequence seqs = {
-      poplar::program::Sequence({}, {debug_name_and_id, "ExternalSequence"}),
-      poplar::program::Sequence({}, {debug_name_and_id, "LocalSequence"})};
-  const HloInfeedInstruction* infeed = Cast<HloInfeedInstruction>(inst);
-
   auto& graph = GetGraph(res, inst);
+  ExternalAndLocalTransferSequence seqs = {
+      DriverProgramSequence(graph, {debug_name_and_id, "ExternalSequence"}),
+      DriverProgramSequence(graph, {debug_name_and_id, "LocalSequence"})};
+  const HloInfeedInstruction* infeed = Cast<HloInfeedInstruction>(inst);
 
   // Parse the infeed config to find out how much data to prefetch if at all.
   xla::poplarplugin::PoplarFeedConfig infeed_config;
@@ -245,10 +244,10 @@ StatusOr<ExternalAndLocalTransferSequence> CreateInfeed(
 StatusOr<ExternalAndLocalTransferSequence> CreateOutfeed(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  ExternalAndLocalTransferSequence seqs = {
-      poplar::program::Sequence({}, {debug_name_and_id, "ExternalSequence"}),
-      poplar::program::Sequence({}, {debug_name_and_id, "LocalSequence"})};
   auto& graph = GetGraph(res, inst);
+  ExternalAndLocalTransferSequence seqs = {
+      DriverProgramSequence(graph, {debug_name_and_id, "ExternalSequence"}),
+      DriverProgramSequence(graph, {debug_name_and_id, "LocalSequence"})};
 
   const HloOutfeedInstruction* outfeed = Cast<HloOutfeedInstruction>(inst);
   xla::poplarplugin::PoplarFeedConfig outfeed_config;

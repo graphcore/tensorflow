@@ -27,6 +27,7 @@ namespace poplarplugin {
 
 using ExtendedProgramCopy = snap::program::Copy;
 using ExtendedProgramSync = snap::program::Sync;
+using ExtendedProgramWriteUndef = snap::program::WriteUndef;
 
 // Wrapper class to abstract migration from poplar to snap
 class ExtendedProgramSequence : public snap::program::Sequence {
@@ -36,6 +37,10 @@ class ExtendedProgramSequence : public snap::program::Sequence {
   explicit ExtendedProgramSequence(snap::Graph& graph,
                                    const poplar::DebugContext& debugContext)
       : snap::program::Sequence(debugContext, graph) {}
+  explicit ExtendedProgramSequence(
+      poplar::ArrayRef<snap::program::Program> programs, snap::Graph& graph,
+      const poplar::DebugContext& debugContext)
+      : snap::program::Sequence(programs, debugContext, graph) {}
 
   operator poplar::program::Sequence&() { return getPoplarSequence(); }
   operator const poplar::program::Sequence&() const {

@@ -35,12 +35,12 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class RemapDeduceOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "RemapDeduceOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     // Get the original tensor which is to be remapped.
     TF_ASSIGN_OR_RETURN(auto input,

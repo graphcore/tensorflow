@@ -34,12 +34,12 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class UnaryElementwiseOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "UnaryElementwiseOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     TF_ASSIGN_OR_RETURN(auto expression_inputs,
                         helper::GetElementwiseInputs(res, inst, {0}, tensor_map,
                                                      seq, {debug_info}));
@@ -124,7 +124,7 @@ REGISTER_POPLAR_OP(Erf, UnaryElementwiseOp);
 REGISTER_POPLAR_OP(GeluErf, UnaryElementwiseOp);
 
 struct NaryOutput {
-  poplar::program::Sequence sequence;
+  DriverProgramSequence sequence;
   DriverTensor result;
 };
 
@@ -134,7 +134,7 @@ class BinaryElementwiseOp : public PoplarOpDef {
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugNameAndId& debug_name_and_id) {
-    poplar::program::Sequence seq({}, debug_name_and_id);
+    DriverProgramSequence seq(graph, debug_name_and_id);
     TF_ASSIGN_OR_RETURN(
         auto expression_inputs,
         helper::GetElementwiseInputs(res, inst, {0, 1}, tensor_map, seq,
@@ -161,7 +161,7 @@ class BinaryElementwiseOp : public PoplarOpDef {
   }
 
  public:
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -281,7 +281,7 @@ class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
     return output;
   }
 
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -305,7 +305,7 @@ class TernaryElementwiseOp : public PoplarOpDef {
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugNameAndId& debug_name_and_id) {
-    poplar::program::Sequence seq({}, debug_name_and_id);
+    DriverProgramSequence seq(graph, debug_name_and_id);
 
     // Get the ternary operation.
     auto operation = helper::GetElementwiseOp(inst);
@@ -354,7 +354,7 @@ class TernaryElementwiseOp : public PoplarOpDef {
   }
 
  public:
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -371,7 +371,7 @@ REGISTER_HLO_OP(kClamp, TernaryElementwiseOp);
 REGISTER_HLO_OP(kSelect, TernaryElementwiseOp);
 
 class ImplicitTernaryElementwiseOp : public TernaryElementwiseOp {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

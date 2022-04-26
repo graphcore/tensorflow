@@ -93,7 +93,7 @@ class ScatterOp : public PoplarOpDef {
     return out;
   }
 
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -107,7 +107,7 @@ class ScatterOp : public PoplarOpDef {
         dim_numbers.scatter_dims_to_operand_dims();
     const auto index_vector_dim = dim_numbers.index_vector_dim();
 
-    poplar::program::Sequence prog({}, debug_info);
+    DriverProgramSequence prog(graph, debug_info);
 
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,

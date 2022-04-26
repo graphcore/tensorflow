@@ -61,7 +61,7 @@ bool ReverseSortOutput(const HloInstruction* inst) {
 }
 
 class SortOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -73,7 +73,13 @@ class SortOp : public PoplarOpDef {
           "Current Sort implementation only supports GT/LT/GE/LE comparisons");
     }
 
-    poplar::program::Sequence prog({}, debug_info);
+    if (sort->is_stable()) {
+      LOG(INFO) << "Detected a stable sort instruction " << inst->ToString()
+                << ", however stable sort is not supported and an unstable "
+                   "sort is performed instead.";
+    }
+
+    DriverProgramSequence prog(graph, debug_info);
     // Get the inplace input/outputs.
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,

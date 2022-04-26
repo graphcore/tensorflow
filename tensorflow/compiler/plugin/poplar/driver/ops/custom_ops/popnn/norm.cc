@@ -282,13 +282,13 @@ class NormInferenceAndTrainingOp : public PoplarOpDef {
 };
 
 class NormInferenceOp : public NormInferenceAndTrainingOp {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "NormInferenceOp");
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
@@ -391,13 +391,13 @@ REGISTER_POPLAR_OP(GroupNormInference, NormInferenceOp);
 REGISTER_HLO_OP(kBatchNormInference, NormInferenceOp);
 
 class NormTrainingOp : public NormInferenceAndTrainingOp {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {
     PoplarOpDefDebugInfo debug_info(debug_context, "NormTrainingOp");
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
@@ -531,13 +531,13 @@ REGISTER_POPLAR_OP(GroupNormTraining, NormTrainingOp);
 REGISTER_HLO_OP(kBatchNormTraining, NormTrainingOp);
 
 class NormGradOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
     PoplarOpDefDebugInfo debug_info(debug_context, "NormGradOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
@@ -687,13 +687,13 @@ REGISTER_POPLAR_OP(GroupNormGrad, NormGradOp);
 REGISTER_HLO_OP(kBatchNormGrad, NormGradOp);
 
 class NormStatisticsOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
     PoplarOpDefDebugInfo debug_info(debug_context, "NormStatisticsOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.

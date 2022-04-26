@@ -43,14 +43,14 @@ class TriangularSolveOp : public PoplarOpDef {
     }
   }
 
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "TriangularSolve");
     poplar::DebugNameAndId debug_name_and_id(debug_info);
     // Create the control program.
-    poplar::program::Sequence seq({}, debug_name_and_id);
+    DriverProgramSequence seq(graph, debug_name_and_id);
 
     // Get the input.
     TF_ASSIGN_OR_RETURN(

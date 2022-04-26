@@ -34,14 +34,14 @@ namespace poplarplugin {
 namespace {
 
 class AssertOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "Assert");
 
     // Create the control program.
-    poplar::program::Sequence seq;
+    DriverProgramSequence seq(graph);
 
     // Get the input - don't expand constants.
     TF_ASSIGN_OR_RETURN(

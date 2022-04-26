@@ -32,7 +32,7 @@ namespace poplarplugin {
 namespace {
 
 class InterIpuCopyOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override;
@@ -171,12 +171,12 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
 }
 }  // namespace
 
-StatusOr<poplar::program::Sequence> InterIpuCopyOp::Creator(
-    DriverGraph&, CompilerResources& res, const HloInstruction* inst,
+StatusOr<DriverProgramSequence> InterIpuCopyOp::Creator(
+    DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
     const Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugContext& debug_context) {
   PoplarOpDefDebugInfo debug_info(debug_context, "InterIpuCopyOp");
-  poplar::program::Sequence seq({}, debug_info);
+  DriverProgramSequence seq(graph, debug_info);
 
   if (!inst->has_sharding()) {
     return FailedPrecondition("Missing shard information on %s", inst->name());

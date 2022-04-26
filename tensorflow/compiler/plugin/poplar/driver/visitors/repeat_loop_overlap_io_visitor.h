@@ -27,7 +27,7 @@ class RepeatLoopOverlapIOVisitor : public RepeatLoopVisitor {
  public:
   using RepeatLoopVisitor::RepeatLoopVisitor;
 
-  poplar::program::Sequence GetRepeatLoopSequence(
+  DriverProgramSequence GetRepeatLoopSequence(
       const HloInstruction* inst) override;
 
  protected:

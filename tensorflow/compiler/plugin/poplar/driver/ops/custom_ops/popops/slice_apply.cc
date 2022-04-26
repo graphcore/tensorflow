@@ -97,12 +97,12 @@ class SliceApplyAllocatorOp : public PoplarOpDef {
 };
 
 class SliceApplyaXbYOp : public SliceApplyAllocatorOp {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyaXbYOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     // Get the inputs.
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -136,12 +136,12 @@ class SliceApplyaXbYOp : public SliceApplyAllocatorOp {
 REGISTER_POPLAR_OP(SliceApplyaXbY, SliceApplyaXbYOp);
 
 class SliceApplyabYOp : public SliceApplyAllocatorOp {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyabYOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     // Get the inputs.
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -172,12 +172,12 @@ class SliceApplyabYOp : public SliceApplyAllocatorOp {
 REGISTER_POPLAR_OP(SliceApplyabY, SliceApplyabYOp);
 
 class SliceApplyaXbOp : public SliceApplyAllocatorOp {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyaXbOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     // Get the inputs.
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -214,12 +214,12 @@ class SliceApplyaXbOp : public SliceApplyAllocatorOp {
 REGISTER_POPLAR_OP(SliceApplyaXb, SliceApplyaXbOp);
 
 class SliceApplyOp : public SliceApplyAllocatorOp {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     // Get the inputs.
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,

@@ -41,13 +41,13 @@ namespace {
  */
 class HistogramOp : public PoplarOpDef {
  public:
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "HistogramOp");
 
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     auto hist_inst = Cast<HloHistogramInstruction>(inst);
 
@@ -76,13 +76,13 @@ REGISTER_POPLAR_OP(Histogram, HistogramOp);
  */
 class HistogramUpdateOp : public PoplarOpDef {
  public:
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "HistogramUpdateOp");
 
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     auto hist_upd_inst = Cast<HloHistogramUpdateInstruction>(inst);
 
