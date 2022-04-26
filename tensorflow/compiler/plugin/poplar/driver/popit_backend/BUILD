@@ -76,11 +76,27 @@ popit_cc_library(
 )
 
 popit_cc_library(
+    name = "popit_platform",
+    srcs = [
+        "popit_platform.cc",
+    ],
+    hdrs = [
+        "popit_platform.h",
+    ],
+    deps = [
+        ":popit_executor",
+        ":popit_platform_id",
+        "//tensorflow/compiler/plugin/poplar/driver:poplar_executor",
+    ],
+)
+
+popit_cc_library(
     name = "popit_backend",
     deps = [
         ":popit_compiler",
         ":popit_executable",
         ":popit_executor",
+        ":popit_platform",
         ":popit_transfer_manager",
     ],
 )
