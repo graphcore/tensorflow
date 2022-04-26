@@ -3852,17 +3852,6 @@ tf_xla_py_test(
     ],
 )
 
-tf_xla_py_test(
-    name = "tensorboard_tf2_example",
-    size = "large",
-    srcs = ["docs/tensorboard_tf2_example.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
 xla_test(
     name = "hash_test",
     size = "small",
@@ -4114,7 +4103,6 @@ test_suite(
         "synthetic_data_with_outfeeds_test",
         "tensor_array_test",
         "tensor_path_transform_test",
-        "tensorboard_tf2_example",
         "topk_onehot_test",
         "topk_test",
         "triangular_solve_test",
