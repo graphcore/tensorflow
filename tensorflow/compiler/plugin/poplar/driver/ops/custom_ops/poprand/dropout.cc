@@ -109,7 +109,7 @@ poplar::Tensor GetReferenceTensor(const HloDropout* dropout_instruction,
 }
 
 class DropoutOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -118,7 +118,7 @@ class DropoutOp : public PoplarOpDef {
     const float rate = dropout_instruction->Rate();
     const float scale = dropout_instruction->Scale();
 
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     TF_ASSIGN_OR_RETURN(poplar::Tensor input,
                         FindInstructionInput(tensor_map, res, inst, 0, seq,
                                              {debug_info}, false));

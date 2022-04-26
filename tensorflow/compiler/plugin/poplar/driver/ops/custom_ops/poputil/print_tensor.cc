@@ -35,14 +35,14 @@ namespace poplarplugin {
 namespace {
 
 class PrintTensorOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "PrintTensorOp");
     auto print_tensor_inst = Cast<HloPrintTensor>(inst);
     // Create the control program.
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     // Get the input - don't expand constants.
     TF_ASSIGN_OR_RETURN(poplar::Tensor input,

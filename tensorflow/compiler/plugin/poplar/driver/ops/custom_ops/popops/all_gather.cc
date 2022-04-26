@@ -52,12 +52,12 @@ std::function<poplar::Tensor(int64, int64)> OffsetSlice(
 }
 
 class AllGatherOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "AllGatherOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     const int64 num_inputs = inst->operand_count();
 
     // If there is no replication, then we can just duplicate the inputs.

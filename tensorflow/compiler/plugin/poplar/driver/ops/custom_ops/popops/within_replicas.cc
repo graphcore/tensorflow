@@ -70,7 +70,7 @@ Status ValidateInputSharding(const HloInstruction* inst,
 
 StatusOr<poplar::Tensor> BuildReductionInputTensor(
     const HloInstruction* inst, CompilerResources& res, TensorMap& tensor_map,
-    poplar::program::Sequence& seq, const PoplarOpDefDebugInfo& debug_info) {
+    DriverProgramSequence& seq, const PoplarOpDefDebugInfo& debug_info) {
   std::vector<poplar::Tensor> input_shards;
 
   for (auto i = 0u; i < inst->operand_count(); ++i) {
@@ -88,12 +88,12 @@ StatusOr<poplar::Tensor> BuildReductionInputTensor(
 
 class AllGatherWithinReplicaOp : public PoplarOpDef {
  public:
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "AllGatherWithinReplicaOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     const auto ipu_count = GetNumIPUs(res);
     TF_RETURN_IF_ERROR(ValidateInputSharding(inst, ipu_count));
@@ -117,7 +117,7 @@ class AllGatherWithinReplicaOp : public PoplarOpDef {
  private:
   static StatusOr<gcl::Chunks> BuildInputChunks(
       const HloInstruction* inst, CompilerResources& res, TensorMap& tensor_map,
-      poplar::program::Sequence& seq, const PoplarOpDefDebugInfo& debug_info) {
+      DriverProgramSequence& seq, const PoplarOpDefDebugInfo& debug_info) {
     gcl::Chunks chunks;
 
     std::vector<poplar::Tensor> shards;
@@ -147,13 +147,13 @@ REGISTER_POPLAR_OP(AllGatherWithinReplica, AllGatherWithinReplicaOp);
 
 class ReduceScatterWithinReplicaOp : public PoplarOpDef {
  public:
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
                                     "ReduceScatterWithinReplicaOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     const auto ipu_count = GetNumIPUs(res);
     TF_RETURN_IF_ERROR(ValidateInputSharding(inst, ipu_count));
@@ -223,12 +223,12 @@ REGISTER_POPLAR_OP(ReduceScatterWithinReplica, ReduceScatterWithinReplicaOp);
 
 class AllReduceWithinReplicaOp : public PoplarOpDef {
  public:
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "AllReduceWithinReplicaOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     const auto ipu_count = GetNumIPUs(res);
     TF_RETURN_IF_ERROR(ValidateInputSharding(inst, ipu_count));

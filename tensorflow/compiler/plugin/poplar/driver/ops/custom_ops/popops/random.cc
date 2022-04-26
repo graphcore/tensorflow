@@ -33,7 +33,7 @@ inline const HloInstruction* LookThroughBroadcast(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kBroadcast ? inst->operand(0) : inst;
 }
 
-static StatusOr<poplar::program::Sequence> RandomNormal(
+static StatusOr<DriverProgramSequence> RandomNormal(
     DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
     double mean_val, double sd_val, const xla::Shape& output_shape,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
@@ -43,7 +43,7 @@ static StatusOr<poplar::program::Sequence> RandomNormal(
 
   TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
   auto out = poprand::normal(graph, nullptr, 0, ref, dtype, mean_val, sd_val,
                              seq, {debug_name_and_id});
 
@@ -52,7 +52,7 @@ static StatusOr<poplar::program::Sequence> RandomNormal(
 }
 
 class RandomNormalScaleOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -86,7 +86,7 @@ class RandomNormalScaleOp : public PoplarOpDef {
 
 REGISTER_POPLAR_OP(Norm_scale_add, RandomNormalScaleOp);
 
-static StatusOr<poplar::program::Sequence> RandomUniform(
+static StatusOr<DriverProgramSequence> RandomUniform(
     DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
     double lower_val, double upper_val, const xla::Shape& output_shape,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
@@ -96,7 +96,7 @@ static StatusOr<poplar::program::Sequence> RandomUniform(
 
   TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
   auto out = poprand::uniform(graph, nullptr, 0, ref, dtype, lower_val,
                               upper_val, seq, {debug_name_and_id});
 
@@ -105,7 +105,7 @@ static StatusOr<poplar::program::Sequence> RandomUniform(
 }
 
 class RandomUniformScaleOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -141,7 +141,7 @@ class RandomUniformScaleOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Uniform_scale_add, RandomUniformScaleOp);
 
 class RngOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

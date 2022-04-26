@@ -241,13 +241,13 @@ StatusOr<popops::expr::TernaryOpType> LookupTernaryFn(
   }
 }
 
-StatusOr<poplar::program::Sequence> CreateTupleSelectOp(
+StatusOr<DriverProgramSequence> CreateTupleSelectOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(poplar::Tensor pred,
                       FindInstructionInput(tensor_map, res, inst, 0, seq,
@@ -372,13 +372,13 @@ Status ScaledInplaceConstantOrTensor(
                                          debug_name_and_id);
 }
 
-StatusOr<poplar::program::Sequence> CreateMatMulForDotOp(
+StatusOr<DriverProgramSequence> CreateMatMulForDotOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   CHECK_EQ(inst->opcode(), HloOpcode::kDot);
 
@@ -462,13 +462,13 @@ StatusOr<poplar::program::Sequence> CreateMatMulForDotOp(
   return seq;
 }
 
-StatusOr<poplar::program::Sequence> CreateCastOp(
+StatusOr<DriverProgramSequence> CreateCastOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   // TODO(T16423) - Do not expand aliasing when casting.
   TF_ASSIGN_OR_RETURN(

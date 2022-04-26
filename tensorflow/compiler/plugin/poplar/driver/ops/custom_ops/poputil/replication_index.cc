@@ -36,7 +36,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class ReplicationIndexOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -48,7 +48,7 @@ class ReplicationIndexOp : public PoplarOpDef {
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
-    return poplar::program::Sequence({}, debug_info);
+    return DriverProgramSequence(graph, debug_info);
   }
 };
 REGISTER_HLO_OP(kReplicaId, ReplicationIndexOp);

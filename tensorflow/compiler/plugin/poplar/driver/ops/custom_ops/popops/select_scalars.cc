@@ -29,7 +29,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class SelectScalarFromRowsOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -41,7 +41,7 @@ class SelectScalarFromRowsOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(SelectScalarFromRows, SelectScalarFromRowsOp);
 
 class UpdateScalarInRowsOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

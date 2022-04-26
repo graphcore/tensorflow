@@ -36,7 +36,7 @@ namespace {
 // Get the input tensor and create a PlaceHolder Expression.
 StatusOr<ExpressionInput> GetTensorInput(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
-    int64 operand_idx, int64 input_idx, poplar::program::Sequence& seq,
+    int64 operand_idx, int64 input_idx, DriverProgramSequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
   DriverTensor tensor;
 
@@ -100,7 +100,7 @@ StatusOr<ExpressionInput> GetConstantInput(const HloInstruction* inst) {
 
 StatusOr<ExpressionInput> GetElementwiseInput(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
-    int64 operand_idx, int64 input_idx, poplar::program::Sequence& seq,
+    int64 operand_idx, int64 input_idx, DriverProgramSequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
   if (inst->opcode() == HloOpcode::kFusion) {
     // Fusion indicates implicit broadcasting.
@@ -153,7 +153,7 @@ const HloInstruction* GetElementwiseOp(const HloInstruction* inst) {
 StatusOr<ExpressionInputs> GetElementwiseInputs(
     CompilerResources& res, const HloInstruction* inst,
     const std::vector<int64>& inputs_permutation, TensorMap& tensor_map,
-    poplar::program::Sequence& seq,
+    DriverProgramSequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto operation = GetElementwiseOp(inst);
 

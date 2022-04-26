@@ -67,7 +67,7 @@ const HloInstruction* GetElementwiseOp(const HloInstruction* inst);
 StatusOr<ExpressionInputs> GetElementwiseInputs(
     CompilerResources& res, const HloInstruction* inst,
     const std::vector<int64>& inputs_permutation, TensorMap& tensor_map,
-    poplar::program::Sequence& seq,
+    DriverProgramSequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 }  // namespace helper

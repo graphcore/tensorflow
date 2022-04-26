@@ -38,13 +38,13 @@ namespace {
 
 class SequenceSliceOp : public PoplarOpDef {
  public:
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SequenceSliceOp");
 
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     auto seq_slice_inst = Cast<HloSequenceSliceInstruction>(inst);
 
@@ -82,7 +82,7 @@ class SequenceSliceOp : public PoplarOpDef {
  protected:
   virtual StatusOr<DriverTensor> GetOutputTensor(
       DriverGraph& graph, TensorMap& tensor_map, CompilerResources& res,
-      const HloInstruction* inst, poplar::program::Sequence& seq,
+      const HloInstruction* inst, DriverProgramSequence& seq,
       PoplarOpDefDebugInfo& debug_info) {
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -94,25 +94,25 @@ class SequenceSliceOp : public PoplarOpDef {
 
   virtual StatusOr<poplar::Tensor> GetInputTensor(
       TensorMap& tensor_map, CompilerResources& res, const HloInstruction* inst,
-      poplar::program::Sequence& seq, PoplarOpDefDebugInfo& debug_info) {
+      DriverProgramSequence& seq, PoplarOpDefDebugInfo& debug_info) {
     return FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info});
   }
 
   virtual StatusOr<poplar::Tensor> GetNumElemsTensor(
       TensorMap& tensor_map, CompilerResources& res, const HloInstruction* inst,
-      poplar::program::Sequence& seq, PoplarOpDefDebugInfo& debug_info) {
+      DriverProgramSequence& seq, PoplarOpDefDebugInfo& debug_info) {
     return FindInstructionInput(tensor_map, res, inst, 2, seq, {debug_info});
   }
 
   virtual StatusOr<poplar::Tensor> GetSrcOffsetsTensor(
       TensorMap& tensor_map, CompilerResources& res, const HloInstruction* inst,
-      poplar::program::Sequence& seq, PoplarOpDefDebugInfo& debug_info) {
+      DriverProgramSequence& seq, PoplarOpDefDebugInfo& debug_info) {
     return FindInstructionInput(tensor_map, res, inst, 3, seq, {debug_info});
   }
 
   virtual StatusOr<poplar::Tensor> GetDstOffsetsTensor(
       TensorMap& tensor_map, CompilerResources& res, const HloInstruction* inst,
-      poplar::program::Sequence& seq, PoplarOpDefDebugInfo& debug_info) {
+      DriverProgramSequence& seq, PoplarOpDefDebugInfo& debug_info) {
     return FindInstructionInput(tensor_map, res, inst, 4, seq, {debug_info});
   }
 };
@@ -122,7 +122,7 @@ class SequenceSliceUnpackOp : public SequenceSliceOp {
  protected:
   StatusOr<DriverTensor> GetOutputTensor(
       DriverGraph& graph, TensorMap& tensor_map, CompilerResources& res,
-      const HloInstruction* inst, poplar::program::Sequence& seq,
+      const HloInstruction* inst, DriverProgramSequence& seq,
       PoplarOpDefDebugInfo& debug_info) override {
     return AddTensor(graph, TensorLocation{inst, 0}, inst->shape(), res,
                      tensor_map, {debug_info, "output"});
@@ -130,29 +130,25 @@ class SequenceSliceUnpackOp : public SequenceSliceOp {
 
   StatusOr<poplar::Tensor> GetInputTensor(
       TensorMap& tensor_map, CompilerResources& res, const HloInstruction* inst,
-      poplar::program::Sequence& seq,
-      PoplarOpDefDebugInfo& debug_info) override {
+      DriverProgramSequence& seq, PoplarOpDefDebugInfo& debug_info) override {
     return FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info});
   }
 
   StatusOr<poplar::Tensor> GetNumElemsTensor(
       TensorMap& tensor_map, CompilerResources& res, const HloInstruction* inst,
-      poplar::program::Sequence& seq,
-      PoplarOpDefDebugInfo& debug_info) override {
+      DriverProgramSequence& seq, PoplarOpDefDebugInfo& debug_info) override {
     return FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info});
   }
 
   StatusOr<poplar::Tensor> GetSrcOffsetsTensor(
       TensorMap& tensor_map, CompilerResources& res, const HloInstruction* inst,
-      poplar::program::Sequence& seq,
-      PoplarOpDefDebugInfo& debug_info) override {
+      DriverProgramSequence& seq, PoplarOpDefDebugInfo& debug_info) override {
     return FindInstructionInput(tensor_map, res, inst, 2, seq, {debug_info});
   }
 
   StatusOr<poplar::Tensor> GetDstOffsetsTensor(
       TensorMap& tensor_map, CompilerResources& res, const HloInstruction* inst,
-      poplar::program::Sequence& seq,
-      PoplarOpDefDebugInfo& debug_info) override {
+      DriverProgramSequence& seq, PoplarOpDefDebugInfo& debug_info) override {
     return FindInstructionInput(tensor_map, res, inst, 3, seq, {debug_info});
   }
 };

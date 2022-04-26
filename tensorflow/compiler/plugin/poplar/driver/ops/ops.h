@@ -34,6 +34,7 @@ limitations under the License.
 
 #include "absl/container/inlined_vector.h"
 #include "absl/types/optional.h"
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
@@ -71,9 +72,10 @@ StatusOr<popops::expr::BinaryOpType> LookupComparisonFn(
 std::set<unsigned int> GetPoolingReductionDims(const Window& window);
 /* Ops */
 
-StatusOr<poplar::program::Sequence> CreateComparisonOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output, TensorMap& tensor_map);
+StatusOr<DriverProgramSequence> CreateComparisonOp(CompilerResources& res,
+                                                   const HloInstruction* inst,
+                                                   const xla::Shape& output,
+                                                   TensorMap& tensor_map);
 
 // Performs A = A z B * c (where z is + or -, depending on the op_type)
 Status ScaledInplaceConstantOrTensor(
@@ -98,22 +100,22 @@ Status ScaledInplaceConstantOrTensor(
     poplar::program::Sequence& prog, const HloOpcode op_type,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateMatMulForDotOp(
+StatusOr<DriverProgramSequence> CreateMatMulForDotOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateTupleSelectOp(
+StatusOr<DriverProgramSequence> CreateTupleSelectOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateCastOp(
+StatusOr<DriverProgramSequence> CreateCastOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateSimpleReduction(
+StatusOr<DriverProgramSequence> CreateSimpleReduction(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
@@ -121,178 +123,178 @@ StatusOr<poplar::program::Sequence> CreateSimpleReduction(
 // Same as above, but allows the instruction for which we get the inputs for
 // (`inst`) and the instruction from which we take the reduction parameters from
 // (`reduce_inst`) to be different.
-StatusOr<poplar::program::Sequence> CreateSimpleReduction(
+StatusOr<DriverProgramSequence> CreateSimpleReduction(
     CompilerResources& res, const HloInstruction* inst,
     const HloInstruction* reduce_inst, const xla::Shape& output,
     TensorMap& tensor_map, bool with_scale,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateSimpleReduction(
+StatusOr<DriverProgramSequence> CreateSimpleReduction(
     CompilerResources& res, popops::Operation reduction_operation,
     const HloInstruction* inst, const HloInstruction* reduce_inst,
     const xla::Shape& output, TensorMap& tensor_map, bool with_scale,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateSimpleWindowReduction(
+StatusOr<DriverProgramSequence> CreateSimpleWindowReduction(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreatePoplibsWindowReduction(
+StatusOr<DriverProgramSequence> CreatePoplibsWindowReduction(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreatePoplibsGfloatParams(
+StatusOr<DriverProgramSequence> CreatePoplibsGfloatParams(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     poplar::Type gf_calc_type, const unsigned gf_packed_cfg,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreatePoplibsCastNativeToGfloat(
+StatusOr<DriverProgramSequence> CreatePoplibsCastNativeToGfloat(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     popfloat::experimental::GfloatCast::CastConfig& cast_op_cfg,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreatePoplibsCastGfloatToNative(
+StatusOr<DriverProgramSequence> CreatePoplibsCastGfloatToNative(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     popfloat::experimental::GfloatCast::CastConfig& cast_op_cfg,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreatePoplibsPooling(
+StatusOr<DriverProgramSequence> CreatePoplibsPooling(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     popnn::PoolingType pooling_type, const Window& window,
     const poplar::DebugNameAndId& debug_name_and_id,
     absl::optional<const HloInstruction*> optional_reduction_op =
         absl::nullopt);
 
-StatusOr<poplar::program::Sequence> CreatePoplibsMaxPoolGrad(
+StatusOr<DriverProgramSequence> CreatePoplibsMaxPoolGrad(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     const Window& window, const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreatePoplibsPoolingGrad(
+StatusOr<DriverProgramSequence> CreatePoplibsPoolingGrad(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     popnn::PoolingType pooling_type, const Window& window,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateParallelMap(
+StatusOr<DriverProgramSequence> CreateParallelMap(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateCallOp(
+StatusOr<DriverProgramSequence> CreateCallOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateCustomCallOp(
+StatusOr<DriverProgramSequence> CreateCustomCallOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateFusionOp(
+StatusOr<DriverProgramSequence> CreateFusionOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateWhileOp(
+StatusOr<DriverProgramSequence> CreateWhileOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 // Version of While op which allows inputs to not have a layout.
-StatusOr<poplar::program::Sequence> CreateWhileOp(
+StatusOr<DriverProgramSequence> CreateWhileOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateRepeatOp(
+StatusOr<DriverProgramSequence> CreateRepeatOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 // Version of Repeat op which allows inputs to not have a layout.
-StatusOr<poplar::program::Sequence> CreateRepeatOp(
+StatusOr<DriverProgramSequence> CreateRepeatOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id);
 
 // A ResourceUpdate op which allows inputs to not have a layout.
-StatusOr<poplar::program::Sequence> CreateResourceUpdateOp(
+StatusOr<DriverProgramSequence> CreateResourceUpdateOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateFunctionOp(
+StatusOr<DriverProgramSequence> CreateFunctionOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 // Version of Function op which allows inputs to not have a layout.
-StatusOr<poplar::program::Sequence> CreateFunctionOp(
+StatusOr<DriverProgramSequence> CreateFunctionOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreatePipelineOp(
+StatusOr<DriverProgramSequence> CreatePipelineOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 // Version of Pipeline op which allows inputs to not have a layout.
-StatusOr<poplar::program::Sequence> CreatePipelineOp(
+StatusOr<DriverProgramSequence> CreatePipelineOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateConvBiasAddOp(
+StatusOr<DriverProgramSequence> CreateConvBiasAddOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map);
 
-StatusOr<poplar::program::Sequence> CreateSimpleSelectAndScatter(
+StatusOr<DriverProgramSequence> CreateSimpleSelectAndScatter(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateDynamicUpdateSliceOp(
+StatusOr<DriverProgramSequence> CreateDynamicUpdateSliceOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateDynamicSliceOp(
+StatusOr<DriverProgramSequence> CreateDynamicSliceOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateIota(
+StatusOr<DriverProgramSequence> CreateIota(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateSlice(
+StatusOr<DriverProgramSequence> CreateSlice(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateConditionalOp(
+StatusOr<DriverProgramSequence> CreateConditionalOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateConditionalOp(
+StatusOr<DriverProgramSequence> CreateConditionalOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& deferred_inputs, const xla::Shape& output,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateReplicatedAllReduce(
+StatusOr<DriverProgramSequence> CreateReplicatedAllReduce(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const gcl::CollectiveOperator op,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateReplicatedAllToAll(
+StatusOr<DriverProgramSequence> CreateReplicatedAllToAll(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
@@ -303,15 +305,15 @@ poplar::Tensor ShuffleNormInputToPoplar(const poplar::Tensor& input,
 poplar::Tensor ShuffleNormOutputToTensorflow(const poplar::Tensor& output,
                                              const unsigned feature_dimension);
 
-StatusOr<poplar::program::Sequence> CreateSelectScalarFromRows(
+StatusOr<DriverProgramSequence> CreateSelectScalarFromRows(
     DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateUpdateScalarInRows(
+StatusOr<DriverProgramSequence> CreateUpdateScalarInRows(
     DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::program::Sequence> CreateTuple(
+StatusOr<DriverProgramSequence> CreateTuple(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id);
 
@@ -321,8 +323,16 @@ struct ExternalAndLocalTransferSequence {
   // sequence. This is because we can then merge them together. To
   // do this, instead of returning the sequence return both so that
   // the calling layer can decide how to interleave these copies
-  poplar::program::Sequence external_transfer;
-  poplar::program::Sequence local_transfer;
+
+  explicit ExternalAndLocalTransferSequence(DriverGraph& graph)
+      : external_transfer(graph), local_transfer(graph) {}
+
+  ExternalAndLocalTransferSequence(DriverProgramSequence et,
+                                   DriverProgramSequence lt)
+      : external_transfer(et), local_transfer(lt) {}
+
+  DriverProgramSequence external_transfer;
+  DriverProgramSequence local_transfer;
 };
 
 StatusOr<ExternalAndLocalTransferSequence> CreateOutfeed(

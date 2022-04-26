@@ -34,7 +34,7 @@ namespace poplarplugin {
 namespace {
 
 class TruncatedNormalOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -45,7 +45,7 @@ class TruncatedNormalOp : public PoplarOpDef {
 
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     auto out = poprand::truncatedNormal(graph, nullptr, 0, ref, dtype, 0.0, 1.0,
                                         1.0, seq, {debug_info});
 
@@ -56,12 +56,12 @@ class TruncatedNormalOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(TruncatedNormal, TruncatedNormalOp);
 
 class StatelessRandomUniformOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "StatelessRandomUniformOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor seed,
         FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info}));
@@ -108,13 +108,13 @@ class StatelessRandomUniformOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(StatelessRandomUniform, StatelessRandomUniformOp);
 
 class StatelessRandomUniformIntOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
                                     "StatelessRandomUniformIntOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor seed,
@@ -162,12 +162,12 @@ class StatelessRandomUniformIntOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(StatelessRandomUniformInt, StatelessRandomUniformIntOp);
 
 class StatelessRandomNormalOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "StatelessRandomNormalOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor seed,
@@ -205,13 +205,13 @@ class StatelessRandomNormalOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(StatelessRandomNormal, StatelessRandomNormalOp);
 
 class StatelessTruncatedNormalOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
                                     "StatelessTruncatedNormalOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor seed,
@@ -249,12 +249,12 @@ class StatelessTruncatedNormalOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(StatelessTruncatedNormal, StatelessTruncatedNormalOp);
 
 class SeedOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SeedOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     TF_ASSIGN_OR_RETURN(poplar::Tensor seed_ref,
                         AddPlainTensor(graph, {debug_info, "SeedRef"},
                                        output_shape, res, false));

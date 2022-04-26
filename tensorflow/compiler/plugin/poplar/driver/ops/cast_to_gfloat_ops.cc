@@ -27,7 +27,7 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
-StatusOr<poplar::program::Sequence> CreatePoplibsGfloatParams(
+StatusOr<DriverProgramSequence> CreatePoplibsGfloatParams(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     poplar::Type gf_calc_type, const unsigned gf_packed_cfg,
@@ -36,7 +36,7 @@ StatusOr<poplar::program::Sequence> CreatePoplibsGfloatParams(
 
   auto& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   poplar::Tensor gf_param =
       popfloat::experimental::GfloatCast::createCastOpParamsTensor(
@@ -47,7 +47,7 @@ StatusOr<poplar::program::Sequence> CreatePoplibsGfloatParams(
   return seq;
 }
 
-StatusOr<poplar::program::Sequence> CreatePoplibsCastNativeToGfloat(
+StatusOr<DriverProgramSequence> CreatePoplibsCastNativeToGfloat(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     popfloat::experimental::GfloatCast::CastConfig& gf_cast_cfg,
@@ -59,7 +59,7 @@ StatusOr<poplar::program::Sequence> CreatePoplibsCastNativeToGfloat(
 
   auto& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   auto tf_in_type = cast_inst->InputType();
 
@@ -101,7 +101,7 @@ StatusOr<poplar::program::Sequence> CreatePoplibsCastNativeToGfloat(
   return seq;
 }
 
-StatusOr<poplar::program::Sequence> CreatePoplibsCastGfloatToNative(
+StatusOr<DriverProgramSequence> CreatePoplibsCastGfloatToNative(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     popfloat::experimental::GfloatCast::CastConfig& gf_cast_cfg,
@@ -110,7 +110,7 @@ StatusOr<poplar::program::Sequence> CreatePoplibsCastGfloatToNative(
 
   auto& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor operand,

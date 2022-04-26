@@ -45,13 +45,13 @@ namespace poplarplugin {
 namespace {
 
 class StatefulGradientAccumulateOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
                                     "StatefulGradientAccumulateOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     const HloStatefulGradientAccumulate* grad_inst =
         Cast<HloStatefulGradientAccumulate>(inst);
@@ -165,7 +165,7 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
     return (poplar::Tensor)graph.clone(outputs[0], {debug_info});
   }
 
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -181,7 +181,7 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
             inst) &&
         res.replication_factor > 1;
 
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                         FindInplaceOutputTensors(tensor_map, res, inst, seq,
@@ -310,7 +310,7 @@ REGISTER_POPLAR_OP(StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm,
 // which can be used by multiple pipeline stages on the same IPU.
 // It is however handeled by the deferred allocation visitor.
 class GradientAccumulatorCreateOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -326,7 +326,7 @@ REGISTER_POPLAR_OP(GradientAccumulatorCreate, GradientAccumulatorCreateOp);
 // A gradient accumulation sink combines accumulators from different pipeline
 // stages on the same IPU into a single buffer.
 class GradientAccumulatorSinkOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -335,7 +335,7 @@ class GradientAccumulatorSinkOp : public PoplarOpDef {
       return InternalErrorStrCat("Expected the instruction ", inst->name(),
                                  " to have been lowered inplace.");
     }
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     TF_ASSIGN_OR_RETURN(auto inputs, FindInplaceOutputs(tensor_map, res, inst,
                                                         seq, debug_info));
     CHECK_EQ(inputs.size(), inst->operand_count());
@@ -362,12 +362,13 @@ REGISTER_POPLAR_OP(GradientAccumulatorSink, GradientAccumulatorSinkOp);
 // An instruction only used for keeping track of the gradient accumulation count
 // in compilation. Doesn't produce calls to poplar/poplibs
 class GradientAccumulationCountOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    return poplar::program::Sequence(
-        {}, PoplarOpDefDebugInfo(debug_context, "GradientAccumulationCount"));
+    return DriverProgramSequence(
+        graph,
+        PoplarOpDefDebugInfo(debug_context, "GradientAccumulationCount"));
   }
 };
 

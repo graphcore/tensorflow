@@ -71,7 +71,7 @@ AddRemoteBufferStoreCopy(
 }
 
 class RemoteParameterLoadOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -82,13 +82,13 @@ class RemoteParameterLoadOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(RemoteParameterLoad, RemoteParameterLoadOp);
 
 class RemoteParameterStoreOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "RemoteParameterStoreOp");
     VLOG(1) << "Processing " << GetDebugName(inst);
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     const auto* store_inst = Cast<HloRemoteParameterStore>(inst);
     const int64 num_outputs = store_inst->RemoteBuffers().size();
@@ -143,7 +143,7 @@ class RemoteParameterStoreOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(RemoteParameterStore, RemoteParameterStoreOp);
 
 class BufferLoadSliceOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -154,7 +154,7 @@ class BufferLoadSliceOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(BufferLoadSlice, BufferLoadSliceOp);
 
 class BufferStoreSliceOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -165,7 +165,7 @@ class BufferStoreSliceOp : public PoplarOpDef {
     const auto shapes = FlattenedXlaShape(output_shape);
     CHECK_EQ(shapes.size(), num_outputs);
 
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     TF_ASSIGN_OR_RETURN(
         TensorOrRemoteBufferVectors outputs,
         FindInplaceOutputs(tensor_map, res, inst, seq, debug_info));

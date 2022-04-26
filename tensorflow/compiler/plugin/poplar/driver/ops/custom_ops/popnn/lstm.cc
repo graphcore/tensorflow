@@ -163,12 +163,12 @@ class LstmLayerBaseOp : public PoplarOpDef {
     }
   }
 
-  virtual StatusOr<poplar::program::Sequence> Creator(
+  virtual StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {
     PoplarOpDefDebugInfo debug_info(debug_context, ClassName());
-    poplar::program::Sequence seq({}, {debug_info});
+    DriverProgramSequence seq(graph, {debug_info});
 
     auto lstm_inst = Cast<HloRNNInstruction>(inst);
     bool training = lstm_inst->is_training();

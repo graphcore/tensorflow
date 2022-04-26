@@ -33,14 +33,14 @@ namespace poplarplugin {
 namespace {
 
 class InterTilesetCopyOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     const auto* copy_inst = Cast<HloInterTilesetCopy>(inst);
 
     PoplarOpDefDebugInfo debug_info(debug_context, "InterTilesetCopyOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
 
     CHECK(!IsLoweredInplace(inst)) << inst->ToString();
 

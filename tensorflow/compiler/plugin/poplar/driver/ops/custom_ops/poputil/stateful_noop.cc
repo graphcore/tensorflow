@@ -34,12 +34,12 @@ namespace poplarplugin {
 namespace {
 
 class StatefulNoopOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
-      DriverGraph&, CompilerResources&, const HloInstruction*,
+  StatusOr<DriverProgramSequence> Creator(
+      DriverGraph& graph, CompilerResources&, const HloInstruction*,
       const xla::Shape&, TensorMap&,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "StatefulNoopOp");
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     return seq;
   }
 };

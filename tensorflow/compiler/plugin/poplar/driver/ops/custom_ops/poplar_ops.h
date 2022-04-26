@@ -51,7 +51,7 @@ class PoplarOpDef {
         "Non-allocating op should not be allocating - %s.", name);
   }
 
-  virtual StatusOr<poplar::program::Sequence> Creator(
+  virtual StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) = 0;

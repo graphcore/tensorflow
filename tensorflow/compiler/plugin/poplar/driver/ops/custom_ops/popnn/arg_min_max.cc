@@ -37,7 +37,7 @@ namespace {
 
 class ArgMinMaxOp : public PoplarOpDef {
   virtual Status LowerToPoplar(
-      DriverGraph& graph, poplar::Tensor& input, poplar::program::Sequence& seq,
+      DriverGraph& graph, poplar::Tensor& input, DriverProgramSequence& seq,
       CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
       const std::vector<std::size_t>& output_dimensions,
       const poplar::DebugNameAndId& debug_name_and_id) {
@@ -59,13 +59,13 @@ class ArgMinMaxOp : public PoplarOpDef {
     return Status::OK();
   }
 
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ArgMinMaxOp");
     // Create the control program.
-    poplar::program::Sequence seq({}, {debug_info});
+    DriverProgramSequence seq(graph, {debug_info});
 
     // Get the input.
     TF_ASSIGN_OR_RETURN(
@@ -105,7 +105,7 @@ REGISTER_POPLAR_OP(ArgMin, ArgMinMaxOp);
 
 class MaxMinAndArgMinMaxOp : public ArgMinMaxOp {
   virtual Status LowerToPoplar(
-      DriverGraph& graph, poplar::Tensor& input, poplar::program::Sequence& seq,
+      DriverGraph& graph, poplar::Tensor& input, DriverProgramSequence& seq,
       CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
       const std::vector<std::size_t>& output_dimensions,
       const poplar::DebugNameAndId& debug_name_and_id) {

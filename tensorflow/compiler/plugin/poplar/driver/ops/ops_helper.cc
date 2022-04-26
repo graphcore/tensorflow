@@ -60,7 +60,7 @@ StatusOr<DriverTensor> AllocatePoplarOpTensor(
   return DriverTensor(out, graph);
 }
 
-StatusOr<poplar::program::Sequence> CreatePoplarOp(
+StatusOr<DriverProgramSequence> CreatePoplarOp(
     DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -68,7 +68,7 @@ StatusOr<poplar::program::Sequence> CreatePoplarOp(
   PoplarOpDefDebugInfo debug_info(debug_context, "CreatePoplarOp");
 
   TF_ASSIGN_OR_RETURN(auto op_def, PoplarOpManager::GetOp(inst));
-  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
+  TF_ASSIGN_OR_RETURN(DriverProgramSequence prog,
                       op_def->Creator(graph, res, inst, output_shape,
                                       tensor_map, {debug_info}));
   return prog;
@@ -104,17 +104,17 @@ StatusOr<DriverTensor> AllocateHloOpTensor(
   return DriverTensor(out, graph);
 }
 
-StatusOr<poplar::program::Sequence> CreateHloOp(DriverGraph& graph,
-                                                CompilerResources& res,
-                                                const HloInstruction* inst,
-                                                const xla::Shape& output_shape,
-                                                TensorMap& tensor_map) {
+StatusOr<DriverProgramSequence> CreateHloOp(DriverGraph& graph,
+                                            CompilerResources& res,
+                                            const HloInstruction* inst,
+                                            const xla::Shape& output_shape,
+                                            TensorMap& tensor_map) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(res, inst);
   poplar::DebugContext debug_context(debug_name_and_id);
   PoplarOpDefDebugInfo debug_info(debug_context, "CreateHloOp");
 
   TF_ASSIGN_OR_RETURN(auto op_def, HloOpManager::GetOp(inst));
-  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
+  TF_ASSIGN_OR_RETURN(DriverProgramSequence prog,
                       op_def->Creator(graph, res, inst, output_shape,
                                       tensor_map, {debug_info}));
   return prog;

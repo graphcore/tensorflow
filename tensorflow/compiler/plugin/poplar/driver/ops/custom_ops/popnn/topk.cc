@@ -51,13 +51,13 @@ std::vector<std::size_t> Get2DDimensions(const Shape& shape) {
 }
 
 class TopKOp : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "TopKOp");
     // Create the control program.
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     const auto& xla_shape = inst->operand(0)->shape();
 
     // Get the input.

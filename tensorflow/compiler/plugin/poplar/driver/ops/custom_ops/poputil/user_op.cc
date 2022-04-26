@@ -35,7 +35,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class UserOpImpl : public PoplarOpDef {
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -86,7 +86,7 @@ class UserOpImpl : public PoplarOpDef {
     as_function_host_rw_ptr =
         reinterpret_cast<decltype(as_function_host_rw_ptr)>(
             user_op_inst->GetPointerToFunc());
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     std::vector<poplar::Tensor> outputs;
 
     // Track the number of outputs/inputs this operation has.

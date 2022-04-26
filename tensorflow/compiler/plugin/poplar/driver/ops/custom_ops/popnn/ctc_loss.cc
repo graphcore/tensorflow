@@ -44,17 +44,17 @@ class CTCLossOpBase : public PoplarOpDef {
   virtual std::pair<poplar::Tensor, poplar::Tensor> CalcLossAndGradient(
       poplar::Graph&, const poplar::Type&, const poplar::Tensor&,
       const poplar::Tensor&, const poplar::Tensor&, const poplar::Tensor&,
-      poplar::program::Sequence&, const int64, const popnn::ctc::Plan&,
+      DriverProgramSequence&, const int64, const popnn::ctc::Plan&,
       const poplar::DebugInfo&) const = 0;
 
  public:
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, ClassName());
     // Create the control program.
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     const HloCTCLossInstructionBase* ctc_inst =
         Cast<HloCTCLossInstructionBase>(inst);
 
@@ -154,7 +154,7 @@ class CTCLossWithLogitsOp : public CTCLossOpBase {
       poplar::Graph& graph, const poplar::Type& out_type,
       const poplar::Tensor& logits, const poplar::Tensor& labels,
       const poplar::Tensor& data_lengths, const poplar::Tensor& label_lengths,
-      poplar::program::Sequence& prog, const int64 blank_class,
+      DriverProgramSequence& prog, const int64 blank_class,
       const popnn::ctc::Plan& plan,
       const poplar::DebugInfo& debug_info) const override {
     return popnn::ctc::calcLossAndGradientLogits(
@@ -172,7 +172,7 @@ class CTCLossWithLogProbsOp : public CTCLossOpBase {
       poplar::Graph& graph, const poplar::Type& out_type,
       const poplar::Tensor& log_probs, const poplar::Tensor& labels,
       const poplar::Tensor& data_lengths, const poplar::Tensor& label_lengths,
-      poplar::program::Sequence& prog, const int64 blank_class,
+      DriverProgramSequence& prog, const int64 blank_class,
       const popnn::ctc::Plan& plan,
       const poplar::DebugInfo& debug_info) const override {
     return popnn::ctc::calcLossAndGradientLogProbabilities(
@@ -196,18 +196,18 @@ class CTCBeamSearchOpBase : public PoplarOpDef {
 
   virtual BeamSearchReturns PerformBeamSearch(
       poplar::Graph& graph, const poplar::Tensor& data,
-      const poplar::Tensor& dataLengths, poplar::program::Sequence& prog,
+      const poplar::Tensor& dataLengths, DriverProgramSequence& prog,
       int64 blankClass, int64 beamwidth, int64 topPaths,
       const popnn::ctc::Plan& plan,
       const poplar::DebugNameAndId& debug_name_and_id) const = 0;
 
  public:
-  StatusOr<poplar::program::Sequence> Creator(
+  StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, ClassName());
-    poplar::program::Sequence seq({}, debug_info);
+    DriverProgramSequence seq(graph, debug_info);
     const auto* ctc_inst = Cast<HloCTCInferenceInstructionBase>(inst);
 
     // Retreive intputs, attributes and outputs from instruction
@@ -282,7 +282,7 @@ class CTCBeamSearchWithLogitsOp : public CTCBeamSearchOpBase {
 
   CTCBeamSearchOpBase::BeamSearchReturns PerformBeamSearch(
       poplar::Graph& graph, const poplar::Tensor& data,
-      const poplar::Tensor& data_lengths, poplar::program::Sequence& prog,
+      const poplar::Tensor& data_lengths, DriverProgramSequence& prog,
       int64 blank_class, int64 beam_width, int64 top_paths,
       const popnn::ctc::Plan& plan,
       const poplar::DebugNameAndId& debug_name_and_id) const override {
@@ -317,7 +317,7 @@ class CTCBeamSearchWithLogProbsOp : public CTCBeamSearchOpBase {
 
   CTCBeamSearchOpBase::BeamSearchReturns PerformBeamSearch(
       poplar::Graph& graph, const poplar::Tensor& data,
-      const poplar::Tensor& data_lengths, poplar::program::Sequence& prog,
+      const poplar::Tensor& data_lengths, DriverProgramSequence& prog,
       int64 blank_class, int64 beam_width, int64 top_paths,
       const popnn::ctc::Plan& plan,
       const poplar::DebugNameAndId& debug_name_and_id) const override {
