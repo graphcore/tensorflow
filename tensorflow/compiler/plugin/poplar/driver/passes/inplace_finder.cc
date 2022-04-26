@@ -303,7 +303,15 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
       } else {
         operands_to_copy.emplace_back(inst);
         for (auto op_index : inplace_description.GetInplaceOperandIndices()) {
+          auto* operand = inst->operand(op_index);
+          if (operand->user_count() == 1 &&
+              IsPoplarInstruction(PoplarOp::Uninitialised, operand)) {
+            continue;
+          }
           operands_to_copy.back().operands.push_back(op_index);
+        }
+        if (operands_to_copy.back().operands.empty()) {
+          operands_to_copy.pop_back();
         }
       }
     }
