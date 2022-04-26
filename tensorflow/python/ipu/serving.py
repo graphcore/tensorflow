@@ -28,7 +28,6 @@ from tensorflow.python.ipu import application_compile_op
 from tensorflow.python.ipu import embedded_runtime
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
-from tensorflow.python.ipu import keras as ipu_keras
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.module import module
@@ -382,8 +381,7 @@ def export_keras(model, export_dir):
     raise ValueError(
         "Directory is not empty. Please specify an empty directory.")
 
-  if not isinstance(
-      model, ipu_keras.extensions.keras_extension_base.KerasExtensionBase):
+  if not hasattr(model, 'export_for_ipu_serving'):
     raise ValueError(
         "Provided model was not created inside an IPU strategy, so it "
         "does not contain IPU-specific functions. Please wrap its "
