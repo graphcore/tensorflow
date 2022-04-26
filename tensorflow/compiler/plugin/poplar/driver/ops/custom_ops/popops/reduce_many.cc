@@ -119,8 +119,8 @@ class ReduceManyOp : public PoplarOpDef {
                             ToBinaryOpType(info.reduction_op));
         popops::mapInPlace(graph, binary_op_type, out, init_val, seq,
                            {debug_info, "initval"});
-        reduction_dims_id += with_scale ? 3 : 2;
       }
+      reduction_dims_id += with_scale ? 3 : 2;
       TF_CHECK_OK(
           AddOutputTensor(tensor_map, inst, i, DriverTensor(out, graph)));
     }
