@@ -545,6 +545,7 @@ xla_test(
     srcs = ["tests/recompute_casts_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    tags = ["nopoplar_asan"],  #TODO(T61247)
     deps = [
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -822,6 +823,7 @@ xla_test(
     srcs = ["tests/inter_ipu_copy_inserter_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    tags = ["nopoplar_asan"],  #TODO(T61247)
     deps = [
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -1274,6 +1276,7 @@ xla_test(
     srcs = ["tests/matmul_combiner_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    tags = ["nopoplar_asan"],  #TODO(T61247)
     deps = [
         ":test_utils",
         "//tensorflow/compiler/xla:array3d",
@@ -1309,6 +1312,7 @@ xla_test(
     srcs = ["tests/multi_slice_combiner_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    tags = ["nopoplar_asan"],  #TODO(T61247)
     deps = [
         ":test_utils",
         "//tensorflow/compiler/xla:array3d",
@@ -1344,6 +1348,7 @@ xla_test(
     srcs = ["tests/multi_update_combiner_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    tags = ["nopoplar_asan"],  #TODO(T61247)
     deps = [
         ":test_utils",
         "//tensorflow/compiler/xla:array3d",
@@ -1450,6 +1455,7 @@ xla_test(
     srcs = ["tests/create_buffer_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    tags = ["nopoplar_asan"],  #TODO(T61247)
     deps = [
         ":test_utils",
         "//tensorflow/compiler/xla:array3d",
@@ -1520,6 +1526,7 @@ xla_test(
     srcs = ["tests/pipeline_util_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    tags = ["nopoplar_asan"],  #TODO(T61247)
     deps = [
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/service:hlo_query",
@@ -3833,6 +3840,7 @@ xla_test(
     srcs = ["tests/pipeline_control_dep_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    tags = ["nopoplar_asan"],  #TODO(T61247)
     deps = [
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
