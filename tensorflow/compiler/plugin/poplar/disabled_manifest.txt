@@ -4,6 +4,8 @@ AdjustSaturationTest
 ArrayElementwiseOpTest.ClampF32 # Incorrect NaN passing
 BinaryOpsTest.testNextAfter # Unsigned int
 BinaryOpsTest.testS64Comparisons # No S64
+BinaryOpsTest.testIntDivision # T61243
+BinaryOpsTest.testIntRemainder # T61243
 CategoricalTest.testCategoricalIsNotConstant # disable until poplar CPU random works
 CategoricalTest.testEmpty # Integer output
 CategoricalTest.testStatelessMultinomialIsInRange # No U64
