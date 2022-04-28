@@ -154,9 +154,8 @@ def enable_sharded_gradient_tape():
 
 def _sharded_backprop_gradient_function(op_name, attr_tuple, *args, **kwargs):
   attr_scope = {}
-
   # pylint: disable=protected-access
-  if _sharding_supported() and len(attr_tuple) >= 2:
+  if _sharding_supported() and attr_tuple and len(attr_tuple) >= 2:
 
     attr_name, value = attr_tuple[-2:]
     if attr_name == _XLA_SHARDING:
