@@ -24,12 +24,14 @@ from tensorflow.python.keras.engine import sequential
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import deprecation
+from tensorflow.python.util import deprecation
 
 
 class SequentialLayerPipelineStageAssignment:
   """A class used to indicate which pipeline stage a layer in a `Sequential`
   model should be executed in.
   """
+  @deprecation.deprecated(None, "Use `tf.keras` instead of `tf.python.keras`.")
   def __init__(self, layer, pipeline_stage=None):
     """Create a new `SequentialLayerPipelineStageAssignment`.
 
@@ -70,6 +72,7 @@ class SequentialLayerPipelineStageAssignment:
 
 class SequentialExtension(keras_extension_base.KerasExtensionBase):  # pylint: disable=abstract-method
   @trackable.no_automatic_dependency_tracking
+  @deprecation.deprecated(None, "Use `tf.keras` instead of `tf.python.keras`.")
   def __init__(self, *args, **kwargs):  # pylint: disable=unused-argument
     keras_extension_base.KerasExtensionBase.__init__(self)
     self._pipeline_stage_assignment_valid = False

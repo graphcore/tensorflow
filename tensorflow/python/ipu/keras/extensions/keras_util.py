@@ -14,8 +14,10 @@
 # ==============================================================================
 from tensorflow.python.ops import array_ops
 from tensorflow.python.util import nest
+from tensorflow.python.util import deprecation
 
 
+@deprecation.deprecated(None, "Use `tf.keras` instead of `tf.python.keras`.")
 def merge_into_batch_dimension(tensors, local_replication_factor):  # pylint: disable=missing-return-type-doc
   """Merges steps (and replication) into batch dimension
 

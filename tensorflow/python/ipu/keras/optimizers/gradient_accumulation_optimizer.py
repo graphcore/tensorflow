@@ -20,6 +20,7 @@ Optimizer wrapper to accumulate gradients
 from tensorflow.python.ipu.keras.optimizers import IpuOptimizer
 from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.python.ipu.optimizers import GradientAccumulationOptimizerV2
+from tensorflow.python.util import deprecation
 
 
 class GradientAccumulationOptimizer(IpuOptimizer):
@@ -39,6 +40,7 @@ class GradientAccumulationOptimizer(IpuOptimizer):
       return opt
     return super(GradientAccumulationOptimizer, cls).__new__(cls)
 
+  @deprecation.deprecated(None, "This optimizer will be removed.")
   def __init__(self,
                opt,
                num_mini_batches,

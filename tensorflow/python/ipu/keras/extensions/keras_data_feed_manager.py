@@ -15,6 +15,7 @@
 from tensorflow.python.eager import context
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
+from tensorflow.python.util import deprecation
 
 
 class InfeedManager:
@@ -22,6 +23,7 @@ class InfeedManager:
 
   Re-using infeed names for different execution modes means that the internal
   tf.function does not need to be retraced."""
+  @deprecation.deprecated(None, "Use `tf.keras` instead of `tf.python.keras`.")
   def __init__(self):
     self._infeed_names = dict()
     self._infeeds = dict()
@@ -59,6 +61,7 @@ class OutfeedManager:
 
   Re-using outfeeds for different execution modes means that the internal
   tf.function does not need to be retraced."""
+  @deprecation.deprecated(None, "Use `tf.keras` instead of `tf.python.keras`.")
   def __init__(self):
     self._outfeeds = dict()
 

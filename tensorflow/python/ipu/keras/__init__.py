@@ -23,7 +23,4 @@ from tensorflow.python.ipu.keras.extensions import FunctionalExtension
 from tensorflow.python.ipu.keras.extensions import SequentialLayerPipelineStageAssignment
 from tensorflow.python.ipu.keras.extensions import SequentialExtension
 from tensorflow.python.ipu.keras import layers
-from tensorflow.python.ipu.keras.model import Model, Sequential
-from tensorflow.python.ipu.keras.pipeline import PipelineModel
-from tensorflow.python.ipu.keras.pipeline import PipelineSequential
 from tensorflow.python.ipu.keras.losses import CTCLoss

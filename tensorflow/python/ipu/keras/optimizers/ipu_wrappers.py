@@ -19,6 +19,7 @@ Convenience wrappers for v2 optimizers
 from tensorflow.python.keras.optimizer_v1 import TFOptimizer
 from tensorflow.python.keras.optimizer_v2.optimizer_v2 import OptimizerV2
 from tensorflow.python.training.optimizer import Optimizer
+from tensorflow.python.util import deprecation
 
 
 class IpuOptimizer(OptimizerV2):
@@ -31,6 +32,7 @@ class IpuOptimizer(OptimizerV2):
   have not been overwritten to the sub class and also allows you to define
   custom APIs specifically for the IPU.
   """
+  @deprecation.deprecated(None, "This optimizer will be removed.")
   def __init__(self, opt, name=None, **kwargs):
     """
     Construct a new IpuOptimizer
@@ -334,6 +336,7 @@ class _TensorflowOptimizerWrapper(Optimizer):
   giving it a TensorFlow optimizer interface,
   but generating gradients against the Keras Model.
   """
+  @deprecation.deprecated(None, "This optimizer will be removed.")
   def __init__(self, model, opt):
     super(_TensorflowOptimizerWrapper, self).__init__(use_locking=False,
                                                       name="optimizer_shim")
@@ -370,6 +373,7 @@ class _KerasOptimizerWrapper(Optimizer):
   """A class which wraps a Keras optimizer,
   giving it a TensorFlow optimizer interface.
   """
+  @deprecation.deprecated(None, "This optimizer will be removed.")
   def __init__(self, model, opt):
     super(_KerasOptimizerWrapper, self).__init__(use_locking=False,
                                                  name="optimizer_shim")

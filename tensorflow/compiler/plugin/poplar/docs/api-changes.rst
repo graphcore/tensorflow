@@ -20,6 +20,16 @@ Removal of deprecated APIs
   - The `tensorflow.python.ipu.ops.rnn_ops` module has been removed (deprecated in Poplar SDK version 2.5). As a result, the following ops are no longer available - `PopnnLSTM`, `PopnnDynamicLSTM`, `PopnnGRU`, `PopnnDynamicGRU`, and `PopnnAUGRU`.
   - The `tensorflow.python.ipu.keras.layers.rnn` module has been removed (deprecated in Poplar SDK version 2.5). As a result, the following Keras layers are no longer available - `PopnnLSTM`, `PopnnGRU`.
 
+Non-breaking changes
+____________________
+
+IPU Keras changes
+'''''''''''''''''
+
+As part of releasing a separate Keras package, everything inside of the
+`tensorflow.python.ipu.keras` module is deprecated and will be removed in the
+future release.
+
 Release 2.5
 ~~~~~~~~~~~
 

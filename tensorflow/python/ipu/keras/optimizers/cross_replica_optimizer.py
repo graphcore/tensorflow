@@ -19,10 +19,12 @@ Optimizer wrapper for replicated graphs
 
 from tensorflow.python.ipu.optimizers.cross_replica_optimizer import apply_cross_replica_op_single
 from tensorflow.python.ipu.keras.optimizers import IpuOptimizer
+from tensorflow.python.util import deprecation
 
 
 class CrossReplicaOptimizer(IpuOptimizer):
   """An optimizer that averages gradients across IPU replicas."""
+  @deprecation.deprecated(None, "This optimizer will be removed.")
   def __init__(self, opt, name="CrossReplicaOptimizer"):
     """Construct a new cross-replica optimizer.
 

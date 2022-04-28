@@ -27,6 +27,7 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.util import nest
 from tensorflow.python.ops import variables
+from tensorflow.python.util import deprecation
 
 # Counter to keep track of number of log entries per token.
 _counter_per_token = {}
@@ -51,6 +52,7 @@ class IPUDataHandler(data_adapter.DataHandler):
   """Handles iterating over epoch-level Iterator objects on IPU.
   To defer setting the replication factor pass replication_factor=None,
   then set it later using set_replication_factor."""
+  @deprecation.deprecated(None, "Use `tf.keras` instead of `tf.python.keras`.")
   def __init__(  # pylint: disable=super-init-not-called
       self,
       x,

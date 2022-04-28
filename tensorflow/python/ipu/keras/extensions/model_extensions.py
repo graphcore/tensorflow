@@ -27,6 +27,7 @@ from tensorflow.python.keras.engine import training as training_module
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import deprecation
 from tensorflow.python.util import nest
+from tensorflow.python.util import deprecation
 
 
 class ModelLayerPipelineStageAssignment:
@@ -38,6 +39,7 @@ class ModelLayerPipelineStageAssignment:
   different pipeline stages (as long as these stages are mapped to the same
   device).
   """
+  @deprecation.deprecated(None, "Use `tf.keras` instead of `tf.python.keras`.")
   def __init__(self, layer, node_index, pipeline_stage=None):
     """Create a new `ModelLayerPipelineStageAssignment`.
 
@@ -97,6 +99,7 @@ class ModelLayerPipelineStageAssignment:
 
 class ModelExtension(keras_extension_base.KerasExtensionBase):  # pylint: disable=abstract-method
   @trackable.no_automatic_dependency_tracking
+  @deprecation.deprecated(None, "Use `tf.keras` instead of `tf.python.keras`.")
   def __init__(self, *args, **kwargs):  # pylint: disable=unused-argument
     keras_extension_base.KerasExtensionBase.__init__(self)
     self._pipeline_stage_assignment = []

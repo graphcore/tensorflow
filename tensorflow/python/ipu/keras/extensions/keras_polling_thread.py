@@ -18,9 +18,11 @@ import time
 from tensorflow.python.ops import array_ops
 from tensorflow.python.util import nest
 from tensorflow.python.ipu.keras.extensions import keras_util
+from tensorflow.python.util import deprecation
 
 
 class PollingThread(threading.Thread):
+  @deprecation.deprecated(None, "Use `tf.keras` instead of `tf.python.keras`.")
   def __init__(self,
                output_iterator,
                num_steps,

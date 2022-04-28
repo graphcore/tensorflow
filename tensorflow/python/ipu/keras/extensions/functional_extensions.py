@@ -25,6 +25,7 @@ from tensorflow.python.keras.engine import functional
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import deprecation
 from tensorflow.python.util import nest
+from tensorflow.python.util import deprecation
 
 
 class PipelineStage(object):
@@ -62,6 +63,7 @@ class PipelineStage(object):
   Pipeline stages assigned to layer calls take precedence over those assigned
   when constructing the layer.
   """
+  @deprecation.deprecated(None, "Use `tf.keras` instead of `tf.python.keras`.")
   def __init__(self, stage):
     """Creates a scope within which  Keras Layers and/or calls to Keras layers
     are assigned to pipeline stages.
@@ -103,6 +105,7 @@ class FunctionalLayerPipelineStageAssignment:
   different pipeline stages (as long as these stages are mapped to the same
   device).
   """
+  @deprecation.deprecated(None, "Use `tf.keras` instead of `tf.python.keras`.")
   def __init__(self, layer, node_index, pipeline_stage=None):
     """Create a new `FunctionalLayerPipelineStageAssignment`.
 
@@ -162,6 +165,7 @@ class FunctionalLayerPipelineStageAssignment:
 
 class FunctionalExtension(keras_extension_base.KerasExtensionBase):  # pylint: disable=abstract-method
   @trackable.no_automatic_dependency_tracking
+  @deprecation.deprecated(None, "Use `tf.keras` instead of `tf.python.keras`.")
   def __init__(self, *args, **kwargs):  # pylint: disable=unused-argument
     keras_extension_base.KerasExtensionBase.__init__(self)
     self._pipeline_stage_assignment = []

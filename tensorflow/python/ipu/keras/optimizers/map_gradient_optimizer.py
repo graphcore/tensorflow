@@ -18,12 +18,14 @@ Map gradient optimizer wrapper
 """
 
 from tensorflow.python.ipu.keras.optimizers import IpuOptimizer
+from tensorflow.python.util import deprecation
 
 
 class MapGradientOptimizer(IpuOptimizer):
   """
   Removed, please use MapGradientOptimizerInvertedChaining.
   """
+  @deprecation.deprecated(None, "This optimizer will be removed.")
   def __init__(self,
                opt,
                gradient_mapping_function,
@@ -51,6 +53,7 @@ class MapGradientOptimizerInvertedChaining(IpuOptimizer):
   If used with `MapGradientOptimizer` wrapper then
   the `MapGradientOptimziers` will always be applied first.
   """
+  @deprecation.deprecated(None, "This optimizer will be removed.")
   def __init__(self,
                opt,
                gradient_mapping_function,

@@ -22,6 +22,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ipu.ops import statistics_ops
 from tensorflow.python.ipu.keras.optimizers import IpuOptimizer
 from tensorflow.python.ops import array_ops
+from tensorflow.python.util import deprecation
 
 from tensorflow.python.ipu.optimizers.automatic_loss_scaling_optimizer import AutomaticLossScalingOptimizer as ALS
 
@@ -99,6 +100,7 @@ class AutomaticLossScalingOptimizer(IpuOptimizer):
 
       loss = strategy.run(f, args=[x, t])
   """
+  @deprecation.deprecated(None, "This experimental feature will be removed.")
   def __init__(self,
                opt,
                initial_loss_scaling_factor=1.0,
