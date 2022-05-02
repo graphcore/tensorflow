@@ -236,11 +236,9 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(init)
 
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 16
       serving.export_pipeline([stage1, stage2],
                               tmp_folder,
-                              2,
-                              iterations,
+                              iterations=16,
                               device_mapping=[0, 0],
                               input_signature=input_signature,
                               variable_initializer=init_variables)
@@ -270,11 +268,9 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       return x + 2
 
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 16
       serving.export_pipeline([stage1, stage2],
                               tmp_folder,
-                              2,
-                              iterations,
+                              iterations=16,
                               inputs=[np.float16(42.0)],
                               device_mapping=[0, 0])
 
@@ -301,11 +297,9 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       return x + 2
 
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 16
       serving.export_pipeline([stage1, stage2],
                               tmp_folder,
-                              2,
-                              iterations,
+                              iterations=16,
                               inputs=[42.0],
                               device_mapping=[0, 0],
                               input_dataset=dataset)
@@ -329,7 +323,6 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       with self.assertRaisesRegex(ValueError, "is not empty"):
         serving.export_pipeline([stage, stage],
                                 tmp_folder,
-                                pipeline_depth=2,
                                 iterations=16,
                                 device_mapping=[0, 0],
                                 input_signature=input_signature)
