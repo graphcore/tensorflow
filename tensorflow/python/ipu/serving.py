@@ -21,6 +21,7 @@ import collections
 import inspect
 import os
 import tempfile
+import uuid
 
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.data.ops import dataset_ops
@@ -149,8 +150,9 @@ def _export_saved_model(defunc, export_dir, variable_initializer,
     run the executable that was included in the SavedModel's `assets` subfolder.
   """
   with tempfile.TemporaryDirectory() as tmp_folder:
+    unique_name = str(uuid.uuid4())
     # Compile poplar_exec
-    exec_filename = "application.poplar_exec"
+    exec_filename = f'application_{unique_name}.poplar_exec'
     poplar_exec_filepath = os.path.join(tmp_folder, exec_filename)
     g = ops.Graph()
     with g.as_default(), session_lib.Session(graph=g) as sess:
@@ -163,8 +165,7 @@ def _export_saved_model(defunc, export_dir, variable_initializer,
     # Create SavedModel with Embedded Runtime
     g = ops.Graph()
     with g.as_default(), session_lib.Session(graph=g).as_default() as sess:
-      dir_name = os.path.basename(export_dir)
-      engine_name = f'engine_{dir_name}'
+      engine_name = f'engine_{unique_name}'
 
       def predict_func(*args, asset_path=None):
         if asset_path is None:
