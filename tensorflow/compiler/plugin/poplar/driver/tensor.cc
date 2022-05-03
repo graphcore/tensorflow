@@ -33,6 +33,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conversions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
@@ -434,6 +435,59 @@ DriverTensor CreateTensorFromSlice(
   return ConcatenateTensors(output_slices, slice_dimension);
 }
 
+/**
+ * Revert the change in tensor shape from a custom HLO Poplar instruction. This
+ * is used in `xla::poplarplugin::PathTransform`.
+ */
+static StatusOr<DriverTensor> RevertPoplarCustomOpTensorTransformation(
+    DriverGraph& graph, const HloInstruction* inst,
+    CompilerResources& resources, DriverTensor in,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  const auto opcode = GetPoplarCustomOp(inst);
+
+  if (!opcode.has_value()) {
+    return in;
+  }
+
+  switch (opcode.value()) {
+    case PoplarOp::StaticMultiSlice: {
+      const auto slice_inst = Cast<HloStaticMultiSliceInstruction>(inst);
+
+      // Start by getting the indices in the slice that correspond to
+      // unique slices from the input tensor. For example, if the input
+      // slice indices were `[3, 3, 2]`, then the unique indices in the
+      // slice would be `[0, 2]` (the index `1` is omitted because it
+      // corresponds to a duplicated slice from the input).
+      const auto input_indices = slice_inst->GetIndices();
+      std::vector<unsigned> unique_slice_indices;
+      absl::flat_hash_set<int64> visited_input_indices;
+      for (unsigned i = 0; i < input_indices.size(); i++) {
+        if (!visited_input_indices.count(input_indices[i])) {
+          unique_slice_indices.push_back(i);
+          visited_input_indices.insert(input_indices[i]);
+        }
+      }
+
+      // Modify the slice instruction output such that it only contains
+      // unique slices.
+      in = ConcatenateTensors(in.slices(unique_slice_indices), 0);
+
+      // Finally, create the input tensor from the output slice.
+      in = CreateTensorFromSlice(graph, in, 0,
+                                 slice_inst->operand(0)->shape().dimensions(0),
+                                 resources, {debug_name_and_id});
+
+      break;
+    }
+    default: {
+      // All other instructions in the path do not modify the shape
+      break;
+    }
+  }
+
+  return in;
+}
+
 static StatusOr<DriverTensor> PathTransform(
     DriverGraph& graph, const TensorLocation& source,
     CompilerResources& resources, DriverTensor in, int64 input_index,
@@ -539,6 +593,12 @@ static StatusOr<DriverTensor> PathTransform(
             popops::createSliceableTensorFromSlice(
                 graph, in, slice_dims, slice_dim_sizes, {debug_name_and_id}),
             graph);
+        break;
+      }
+      case HloOpcode::kCustomCall: {
+        TF_ASSIGN_OR_RETURN(in,
+                            RevertPoplarCustomOpTensorTransformation(
+                                graph, inst, resources, in, debug_name_and_id));
         break;
       }
       default: {
