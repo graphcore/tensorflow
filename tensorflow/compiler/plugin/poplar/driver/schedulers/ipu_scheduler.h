@@ -31,12 +31,14 @@ limitations under the License.
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_dataflow_analysis.h"
+
 namespace xla {
 namespace poplarplugin {
+struct CompilerAnnotations;
 
 using IpuSchedulerAlgorithm = std::function<StatusOr<HloInstructionSequence>(
-    HloComputation*, const TuplePointsToAnalysis&,
-    const LogicalBuffer::SizeFunction&,
+    HloComputation*, const HloPoplarDataflowAnalysis&,
     const absl::flat_hash_map<const HloComputation*, int64>&)>;
 
 struct NamedIpuSchedulerAlgorithm {
@@ -55,6 +57,7 @@ struct NamedIpuSchedulerAlgorithm {
  * @returns a valid IpuSchedulerAlgorithm
  */
 StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
+    const LogicalBuffer::SizeFunction& size_function,
     std::vector<NamedIpuSchedulerAlgorithm> algorithms);
 
 /**
@@ -66,7 +69,8 @@ class IpuScheduler : public HloModulePass {
   // size_function is the function returning the number of bytes required for a
   // LogicalBuffer. algorithm is the memory scheduling algorithm to use.
   IpuScheduler(const LogicalBuffer::SizeFunction& size_function,
-               IpuSchedulerAlgorithm algorithm);
+               IpuSchedulerAlgorithm algorithm,
+               const CompilerAnnotations* annotations = nullptr);
 
   absl::string_view name() const override { return "ipu-scheduler"; }
 
@@ -74,8 +78,8 @@ class IpuScheduler : public HloModulePass {
 
  private:
   LogicalBuffer::SizeFunction size_function_;
-
   IpuSchedulerAlgorithm algorithm_;
+  const CompilerAnnotations* annotations_;
 };
 
 }  // namespace poplarplugin

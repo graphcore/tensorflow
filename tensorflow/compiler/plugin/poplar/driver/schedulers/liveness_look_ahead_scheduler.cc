@@ -29,7 +29,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
-#include "tensorflow/compiler/xla/service/tuple_points_to_analysis.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -47,8 +46,7 @@ namespace {
 int64 BytesIfScheduled(HloInstruction* instruction,
                        const absl::flat_hash_map<const HloComputation*, int64>&
                            memory_by_computation_,
-                       const TuplePointsToAnalysis& points_to_analysis_,
-                       const LogicalBuffer::SizeFunction& size_function_) {
+                       const HloPoplarDataflowAnalysis& dataflow_analysis) {
   auto opcode = instruction->opcode();
 
   // We only count the memory usage of the largest subcomputation, instead of
@@ -65,10 +63,15 @@ int64 BytesIfScheduled(HloInstruction* instruction,
   }
 
   int64 bytes_defined = 0;
-  for (auto* buffer :
-       points_to_analysis_.GetBuffersDefinedByInstruction(instruction)) {
-    bytes_defined += size_function_(*buffer);
-  }
+  dataflow_analysis.GetInstructionBufferSet(instruction)
+      .ForEachElement([&](const ShapeIndex& /*index*/,
+                          const HloPoplarBufferSet& buffer_set) {
+        for (auto* buffer : buffer_set.buffers()) {
+          if (buffer->DefinedBy(instruction)) {
+            bytes_defined += buffer->SizeInBytes();
+          }
+        }
+      });
 
   if (max_subcomputation_bytes > 0 &&
       (opcode == HloOpcode::kWhile || opcode == HloOpcode::kCall ||
@@ -86,12 +89,10 @@ int64 BytesIfScheduled(HloInstruction* instruction,
 struct GrossCost {
   const absl::flat_hash_map<const HloComputation*, int64>&
       memory_by_computation_;
-  const TuplePointsToAnalysis& points_to_analysis_;
-  const LogicalBuffer::SizeFunction& size_function_;
+  const HloPoplarDataflowAnalysis& dataflow_analysis;
 
   int64 operator()(HloInstruction* inst) const {
-    return BytesIfScheduled(inst, memory_by_computation_, points_to_analysis_,
-                            size_function_);
+    return BytesIfScheduled(inst, memory_by_computation_, dataflow_analysis);
   }
 };
 
@@ -136,8 +137,7 @@ using HloScheduleTree =
                  HloInstructionPtrComparison>;
 
 StatusOr<HloInstructionSequence> ScheduleInstructions(
-    HloComputation* comp, const TuplePointsToAnalysis& points_to_analysis,
-    const LogicalBuffer::SizeFunction& size_function,
+    HloComputation* comp, const HloPoplarDataflowAnalysis& dataflow_analysis,
     const absl::flat_hash_map<const HloComputation*, int64>&
         memory_by_computation,
     int64 max_search_depth, int64 max_search_size) {
@@ -145,9 +145,8 @@ StatusOr<HloInstructionSequence> ScheduleInstructions(
   auto schedule_tree = std::make_shared<HloScheduleTree const>(
       instructions, HloInstructionForEachPredecessor{},
       HloInstructionForEachSucessor{},
-      GrossCost{memory_by_computation, points_to_analysis, size_function},
-      TempCost{
-          GrossCost{memory_by_computation, points_to_analysis, size_function}});
+      GrossCost{memory_by_computation, dataflow_analysis},
+      TempCost{GrossCost{memory_by_computation, dataflow_analysis}});
 
   schedule_tree =
       schedule_tree->TakeAllReady()->Grow(max_search_depth, max_search_size);
@@ -162,15 +161,14 @@ StatusOr<HloInstructionSequence> ScheduleInstructions(
 
 StatusOr<HloInstructionSequence> LivenessLookAheadMemoryScheduler(
     HloComputation* computation,
-    const TuplePointsToAnalysis& points_to_analysis,
-    const LogicalBuffer::SizeFunction& size_function,
+    const HloPoplarDataflowAnalysis& dataflow_analysis,
     const absl::flat_hash_map<const HloComputation*, int64>&
         memory_by_computation,
     int64 max_search_depth, int64 max_search_size) {
-  TF_ASSIGN_OR_RETURN(auto sched,
-                      ScheduleInstructions(computation, points_to_analysis,
-                                           size_function, memory_by_computation,
-                                           max_search_depth, max_search_size));
+  TF_ASSIGN_OR_RETURN(
+      auto sched, ScheduleInstructions(computation, dataflow_analysis,
+                                       memory_by_computation, max_search_depth,
+                                       max_search_size));
 
   return sched;
 }
@@ -181,12 +179,11 @@ StatusOr<HloInstructionSequence> LivenessLookAheadMemoryScheduler(
 IpuSchedulerAlgorithm CreateLivenessLookAheadMemoryScheduler(
     const CompilerInformation& information) {
   return [=](HloComputation* computation,
-             const TuplePointsToAnalysis& points_to_analysis,
-             const LogicalBuffer::SizeFunction& size_function,
+             const HloPoplarDataflowAnalysis& dataflow_analysis,
              const absl::flat_hash_map<const HloComputation*, int64>&
                  memory_by_computation) {
     return LivenessLookAheadMemoryScheduler(
-        computation, points_to_analysis, size_function, memory_by_computation,
+        computation, dataflow_analysis, memory_by_computation,
         information.max_scheduler_lookahead_depth,
         information.max_scheduler_search_space_size);
   };

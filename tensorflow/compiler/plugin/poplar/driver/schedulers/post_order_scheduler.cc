@@ -15,10 +15,10 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/post_order_scheduler.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_dataflow_analysis.h"
 #include "tensorflow/compiler/xla/service/buffer_value.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_schedule.h"
-#include "tensorflow/compiler/xla/service/tuple_points_to_analysis.h"
 
 #include "absl/container/flat_hash_map.h"
 
@@ -26,8 +26,7 @@ namespace xla {
 namespace poplarplugin {
 
 IpuSchedulerAlgorithm CreatePostOrderScheduler() {
-  return [](HloComputation* computation, const TuplePointsToAnalysis&,
-            const LogicalBuffer::SizeFunction&,
+  return [](HloComputation* computation, const HloPoplarDataflowAnalysis&,
             const absl::flat_hash_map<const HloComputation*, int64>&) {
     HloInstructionSequence sequence(computation->MakeInstructionPostOrder());
     return sequence;

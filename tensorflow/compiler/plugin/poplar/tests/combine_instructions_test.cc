@@ -224,7 +224,7 @@ ENTRY entry () -> f32[2] {
   fusion = f32[2] fusion(), kind=kCustom, calls=_pop_op_wide_const, sharding={maximal device=0}, backend_config="{}"
   constant.6 = s32[] constant(2), sharding={maximal device=0}
   tuple.7 = (s32[], f32[2], s32[]) tuple(constant.6, fusion, constant.6), sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}, backend_config="{\"isInplace\":true}"
-  call = (s32[], f32[2], s32[]) call(tuple.7), to_apply=loop_body, sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}, backend_config="{\"repeatConfig\":{\"isRepeatLoop\":true,\"repeatCount\":\"2\"},\"isInplace\":true}"
+  call = (s32[], f32[2], s32[]) call(tuple.7), to_apply=loop_body, sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"2\"}},\"isInplace\":true}"
   ROOT get-tuple-element.52 = f32[2] get-tuple-element(call), index=1, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
 }
   )";

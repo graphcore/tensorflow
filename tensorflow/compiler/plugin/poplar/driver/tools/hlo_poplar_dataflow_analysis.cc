@@ -933,7 +933,7 @@ StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>>
 HloPoplarDataflowAnalysis::Run(const HloModule* module,
                                const CompilerAnnotations& annotations) {
   auto call_graph = CallGraph::Build(module);
-  return Run(module, annotations, *call_graph);
+  return Run(module, &annotations, *call_graph);
 }
 
 /* static */
@@ -941,7 +941,23 @@ StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>>
 HloPoplarDataflowAnalysis::Run(const HloModule* module,
                                const CompilerAnnotations& annotations,
                                const CallGraph& call_graph) {
-  return Run(module->entry_computation(), call_graph, &annotations);
+  return Run(module, &annotations, call_graph);
+}
+
+/* static */
+StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>>
+HloPoplarDataflowAnalysis::Run(const HloModule* module,
+                               const CompilerAnnotations* annotations) {
+  auto call_graph = CallGraph::Build(module);
+  return Run(module, annotations, *call_graph);
+}
+
+/* static */
+StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>>
+HloPoplarDataflowAnalysis::Run(const HloModule* module,
+                               const CompilerAnnotations* annotations,
+                               const CallGraph& call_graph) {
+  return Run(module->entry_computation(), call_graph, annotations);
 }
 
 }  // namespace poplarplugin

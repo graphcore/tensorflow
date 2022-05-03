@@ -23,6 +23,8 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_dataflow_analysis.h"
+
 namespace xla {
 namespace poplarplugin {
 namespace {
@@ -207,8 +209,7 @@ class SequenceCosts {
 };
 
 StatusOr<HloInstructionSequence> ScheduleInstructions(
-    HloComputation* comp, const TuplePointsToAnalysis& points_to_analysis,
-    const LogicalBuffer::SizeFunction& size_function,
+    HloComputation* comp, const HloPoplarDataflowAnalysis& dataflow_analysis,
     const absl::flat_hash_map<const HloComputation*, int64>&
         memory_by_computation) {
   SequenceCosts seq_costs;
@@ -222,13 +223,12 @@ StatusOr<HloInstructionSequence> ScheduleInstructions(
 
 StatusOr<HloInstructionSequence> ShortestPathScheduler(
     HloComputation* computation,
-    const TuplePointsToAnalysis& points_to_analysis,
-    const LogicalBuffer::SizeFunction& size_function,
+    const HloPoplarDataflowAnalysis& dataflow_analysis,
     const absl::flat_hash_map<const HloComputation*, int64>&
         memory_by_computation) {
-  TF_ASSIGN_OR_RETURN(
-      auto sched, ScheduleInstructions(computation, points_to_analysis,
-                                       size_function, memory_by_computation));
+  TF_ASSIGN_OR_RETURN(auto sched,
+                      ScheduleInstructions(computation, dataflow_analysis,
+                                           memory_by_computation));
 
   return sched;
 }
@@ -239,11 +239,10 @@ StatusOr<HloInstructionSequence> ShortestPathScheduler(
 IpuSchedulerAlgorithm CreateShortestPathScheduler(
     const CompilerInformation& information) {
   return [=](HloComputation* computation,
-             const TuplePointsToAnalysis& points_to_analysis,
-             const LogicalBuffer::SizeFunction& size_function,
+             const HloPoplarDataflowAnalysis& dataflow_analysis,
              const absl::flat_hash_map<const HloComputation*, int64>&
                  memory_by_computation) {
-    return ShortestPathScheduler(computation, points_to_analysis, size_function,
+    return ShortestPathScheduler(computation, dataflow_analysis,
                                  memory_by_computation);
   };
 }

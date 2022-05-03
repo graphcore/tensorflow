@@ -27,7 +27,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
-#include "tensorflow/compiler/xla/service/tuple_points_to_analysis.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -47,12 +46,11 @@ class SyncListScheduler {
   // containing the given HLO computation.
   static StatusOr<HloInstructionSequence> Run(
       HloComputation* computation,
-      const TuplePointsToAnalysis& points_to_analysis,
-      const LogicalBuffer::SizeFunction& size_function,
+      const HloPoplarDataflowAnalysis& dataflow_analysis,
       const absl::flat_hash_map<const HloComputation*, int64>&
           memory_by_computation,
       int64 max_syncs) {
-    SyncListScheduler scheduler(computation, points_to_analysis, size_function,
+    SyncListScheduler scheduler(computation, dataflow_analysis,
                                 memory_by_computation, max_syncs);
     return scheduler.CreateSchedule();
   }
@@ -74,59 +72,66 @@ class SyncListScheduler {
   using Priority = std::tuple<int64, int64, int64>;
 
   SyncListScheduler(HloComputation* computation,
-                    const TuplePointsToAnalysis& points_to_analysis,
-                    const LogicalBuffer::SizeFunction& size_function,
+                    const HloPoplarDataflowAnalysis& dataflow_analysis,
                     const absl::flat_hash_map<const HloComputation*, int64>&
                         memory_by_computation,
                     int64 max_syncs)
       : computation_(computation),
-        points_to_analysis_(points_to_analysis),
-        size_function_(size_function),
+        dataflow_analysis_(dataflow_analysis),
         memory_by_computation_(memory_by_computation),
         max_syncs_(max_syncs) {
-    // Create a map containing the LogicalBuffer uses for each HLO
-    // instruction. An HLO instruction "uses" a LogicalBuffer if the
-    // LogicalBuffer is in an operand of the instruction as indicated by
-    // points-to analysis.
+    // Create a map containing the buffer uses for each HLO
+    // instruction. An HLO instruction "uses" a buffer if the
+    // buffer is in an operand of the instruction as indicated by
+    // the dataflow analysis.
     for (auto* instruction : computation->instructions()) {
-      absl::flat_hash_set<const LogicalBuffer*> instr_uses;
+      absl::flat_hash_set<const HloPoplarBuffer*> instr_uses;
       for (auto* operand : instruction->operands()) {
-        points_to_analysis.GetPointsToSet(operand).ForEachElement(
+        dataflow_analysis.GetInstructionBufferSet(operand).ForEachElement(
             [&](const ShapeIndex& /*index*/,
-                const PointsToSet::BufferList& buffers) {
+                const HloPoplarBufferSet& buffer_set) {
+              const auto& buffers = buffer_set.buffers();
               instr_uses.insert(buffers.begin(), buffers.end());
             });
       }
-      buffer_uses_[instruction] = std::vector<const LogicalBuffer*>(
+      buffer_uses_[instruction] = std::vector<const HloPoplarBuffer*>(
           instr_uses.begin(), instr_uses.end());
     }
 
     // Create map containing the number of unscheduled uses (hlo instructions)
     // of each logical buffer.
     for (auto* instruction : computation->instructions()) {
-      for (auto* buffer :
-           points_to_analysis.GetBuffersDefinedByInstruction(instruction)) {
-        unscheduled_use_count_[buffer] = 0;
-      }
+      dataflow_analysis.GetInstructionBufferSet(instruction)
+          .ForEachElement([&](const ShapeIndex& /*index*/,
+                              const HloPoplarBufferSet& buffer_set) {
+            for (auto* buffer : buffer_set.buffers()) {
+              if (buffer->DefinedBy(instruction)) {
+                unscheduled_use_count_[buffer] = 0;
+              }
+            }
+          });
     }
+
     for (auto* instruction : computation->instructions()) {
-      for (const LogicalBuffer* buffer : buffer_uses_.at(instruction)) {
+      for (auto* buffer : buffer_uses_.at(instruction)) {
         ++unscheduled_use_count_[buffer];
       }
     }
 
     // Buffers live out of the computation have an implicit use at the end of
     // the computation.
-    for (const LogicalBuffer* live_out_buffer :
-         points_to_analysis.GetPointsToSet(computation->root_instruction())
-             .CreateFlattenedSet()) {
-      ++unscheduled_use_count_[live_out_buffer];
-    }
+    const auto* root = computation->root_instruction();
+    dataflow_analysis.GetInstructionBufferSet(root).ForEachElement(
+        [&](const ShapeIndex& /*index*/, const HloPoplarBufferSet& buffer_set) {
+          for (auto* live_out_buffer : buffer_set.buffers()) {
+            ++unscheduled_use_count_[live_out_buffer];
+          }
+        });
   }
 
   // Returns whether the memory used by the given buffer should be ignored by
   // the scheduling heuristic.
-  static bool IgnoreBuffer(const LogicalBuffer& buffer) {
+  static bool IgnoreBuffer(const HloPoplarBuffer& buffer) {
     return IgnoreInstruction(*buffer.instruction());
   }
 
@@ -143,7 +148,7 @@ class SyncListScheduler {
     // U is the number of uses of B that have not yet been scheduled. This pair
     // is a pointer into the unscheduled_use_count_ map, so it gets updated for
     // free when we update counts in the map.
-    std::vector<const std::pair<const LogicalBuffer* const, int64>*>
+    std::vector<const std::pair<const HloPoplarBuffer* const, int64>*>
         used_buffer_unscheduled_use_counts;
   };
 
@@ -153,12 +158,15 @@ class SyncListScheduler {
     entry.instruction = instruction;
 
     entry.bytes_defined = 0;
-    for (auto* buffer :
-         points_to_analysis_.GetBuffersDefinedByInstruction(instruction)) {
-      if (!IgnoreBuffer(*buffer)) {
-        entry.bytes_defined += size_function_(*buffer);
-      }
-    }
+    dataflow_analysis_.GetInstructionBufferSet(instruction)
+        .ForEachElement([&](const ShapeIndex& /*index*/,
+                            const HloPoplarBufferSet& buffer_set) {
+          for (auto* buffer : buffer_set.buffers()) {
+            if (buffer->DefinedBy(instruction) && !IgnoreBuffer(*buffer)) {
+              entry.bytes_defined += buffer->SizeInBytes();
+            }
+          }
+        });
 
     for (auto* buffer : buffer_uses_.at(instruction)) {
       if (IgnoreBuffer(*buffer)) {
@@ -190,7 +198,7 @@ class SyncListScheduler {
       auto buffer = kv->first;
       auto use_count = kv->second;
       if (use_count == 1) {
-        freed_bytes += size_function_(*buffer);
+        freed_bytes += buffer->SizeInBytes();
       }
     }
     // We only count the memory usage of the largest subcomputation, instead of
@@ -292,8 +300,8 @@ class SyncListScheduler {
       scheduled_instructions_.insert(best);
 
       bool adjust_ready_queue = false;
-      // Update the unscheduled uses of the logical buffers.
-      for (const LogicalBuffer* buffer : buffer_uses_.at(best)) {
+      // Update the unscheduled uses of the buffers.
+      for (auto* buffer : buffer_uses_.at(best)) {
         int64& count = unscheduled_use_count_[buffer];
         CHECK_GT(count, 0);
         --count;
@@ -389,21 +397,21 @@ class SyncListScheduler {
   }
 
   HloComputation* computation_;
-  const TuplePointsToAnalysis& points_to_analysis_;
-  const LogicalBuffer::SizeFunction& size_function_;
+  const HloPoplarDataflowAnalysis& dataflow_analysis_;
   // Computations are analyzed in post-order. When scheduling an instruction
   // that includes subcomputations, such as a while loop, we use this map to
   // look up the memory needed by subcomputations.
   const absl::flat_hash_map<const HloComputation*, int64>&
       memory_by_computation_;
 
-  // A map containing the LogicalBuffers that each instruction uses.
-  absl::flat_hash_map<const HloInstruction*, std::vector<const LogicalBuffer*>>
+  // A map containing the buffers that each instruction uses.
+  absl::flat_hash_map<const HloInstruction*,
+                      std::vector<const HloPoplarBuffer*>>
       buffer_uses_;
 
   // A map containing the count of unscheduled HLOs which using a particular
-  // LogicalBuffer.
-  absl::flat_hash_map<const LogicalBuffer*, int64> unscheduled_use_count_;
+  // buffer.
+  absl::flat_hash_map<const HloPoplarBuffer*, int64> unscheduled_use_count_;
 
   // Set of instructions which have been scheduled.
   absl::flat_hash_set<const HloInstruction*> scheduled_instructions_;
@@ -414,25 +422,22 @@ class SyncListScheduler {
 // List scheduler
 StatusOr<HloInstructionSequence> SyncListMemoryScheduler(
     HloComputation* computation,
-    const TuplePointsToAnalysis& points_to_analysis,
-    const LogicalBuffer::SizeFunction& size_function,
+    const HloPoplarDataflowAnalysis& dataflow_analysis,
     const absl::flat_hash_map<const HloComputation*, int64>&
         memory_by_computation,
     int64 max_syncs) {
-  return SyncListScheduler::Run(computation, points_to_analysis, size_function,
+  return SyncListScheduler::Run(computation, dataflow_analysis,
                                 memory_by_computation, max_syncs);
 }
 }  // namespace
 
 IpuSchedulerAlgorithm CreateSyncListMemoryScheduler(int64 max_syncs) {
   return [=](HloComputation* computation,
-             const TuplePointsToAnalysis& points_to_analysis,
-             const LogicalBuffer::SizeFunction& size_function,
+             const HloPoplarDataflowAnalysis& dataflow_analysis,
              const absl::flat_hash_map<const HloComputation*, int64>&
                  memory_by_computation) {
-    return SyncListMemoryScheduler(computation, points_to_analysis,
-                                   size_function, memory_by_computation,
-                                   max_syncs);
+    return SyncListMemoryScheduler(computation, dataflow_analysis,
+                                   memory_by_computation, max_syncs);
   };
 }
 

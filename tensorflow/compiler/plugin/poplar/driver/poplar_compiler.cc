@@ -1400,7 +1400,8 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
         resources.information.max_reduce_many_buffer_size > 0 ||
         resources.information.max_all_gather_buffer_size > 0) {
       pipeline.AddPass<IpuScheduler>(
-          SizeFunction, CreateClusteringMemoryScheduler(resources.information));
+          SizeFunction, CreateClusteringMemoryScheduler(resources.information),
+          &resources.annotations);
       pipeline.AddPass<CombineInstructions>();
       pipeline.AddPass<HloDescheduler>();
     }
@@ -1413,10 +1414,12 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
 
     TF_ASSIGN_OR_RETURN(auto schedulers, GetSchedulerList(resources));
 
-    TF_ASSIGN_OR_RETURN(auto scheduler, BestIpuSchedule(schedulers));
+    TF_ASSIGN_OR_RETURN(auto scheduler,
+                        BestIpuSchedule(SizeFunction, schedulers));
 
     pipeline.AddPass<ResourceUpdateScheduleOptimizer>();
-    pipeline.AddPass<IpuScheduler>(SizeFunction, std::move(scheduler));
+    pipeline.AddPass<IpuScheduler>(SizeFunction, std::move(scheduler),
+                                   &resources.annotations);
     pipeline.AddPass<ModuleFlatten>(resources.annotations);
     pipeline.AddPass<LowerFrontendAttributes>();
     pipeline.AddPass<MarkReplicaIdenticalInstructions>();
