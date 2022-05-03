@@ -636,6 +636,21 @@ xla_test(
 )
 
 xla_test(
+    name = "ipu_scheduler_test",
+    size = "small",
+    srcs = ["tests/ipu_scheduler_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":poplar_test_base",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "combine_instructions_test",
     size = "large",
     srcs = ["tests/combine_instructions_test.cc"],
