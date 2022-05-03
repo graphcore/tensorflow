@@ -16,13 +16,16 @@ limitations under the License.
 #include <string>
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_compiler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/embedding_plans_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/shape.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
+#include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/platform/types.h"
 
 namespace xla {
@@ -30,7 +33,7 @@ namespace poplarplugin {
 namespace {
 
 // StaticMultiSlice.
-using StaticMultiSliceTest = HloTestBase;
+using StaticMultiSliceTest = HloPoplarTestBase;
 
 TEST_F(StaticMultiSliceTest, NumericalTest) {
   std::string hlo = R"(
@@ -57,6 +60,47 @@ ENTRY main (input: f32[6,2]) -> f32[3,2] {
   EXPECT_EQ(input.Slice({0, 0}, {1, 2}), output.Slice({0, 0}, {1, 2}));
   EXPECT_EQ(input.Slice({2, 0}, {3, 2}), output.Slice({1, 0}, {2, 2}));
   EXPECT_EQ(input.Slice({4, 0}, {5, 2}), output.Slice({2, 0}, {3, 2}));
+}
+
+// Test that a `StaticMultiSlice` instruction can be allocated through.
+TEST_F(StaticMultiSliceTest, AllocationTest) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY main (input: f32[6,2]) -> f32[2,2] {
+  input = f32[6,2] parameter(0)
+  static-multi-slice = f32[3,2] custom-call(input), custom_call_target="StaticMultiSlice", backend_config="{\"indices\":[0,2,4]}\n"
+  indices = s32[2] constant({0, 1})
+  ROOT multi-slice = f32[2,2] custom-call(static-multi-slice, indices), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
+}
+
+)";
+
+  auto module = ParseAndReturnVerifiedModule(hlo).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), false);
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(
+      ModuleFlatten(resources->annotations).Run(module.get()).ValueOrDie());
+  EXPECT_FALSE(
+      EmbeddingPlansPreplanning(*resources).Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(
+      AllocationFinder(resources->annotations).Run(module.get()).ValueOrDie());
+
+  const auto* input =
+      module->entry_computation()->GetInstructionWithName("input");
+  const auto* root = module->entry_computation()->root_instruction();
+  const auto input_target =
+      resources->annotations.tensor_allocation_map.at(TensorLocation{input, 0});
+
+  // Verify that the `multi-slice:0` is the target of `input:0` as set by the
+  // allocation finder.
+  EXPECT_EQ(input_target.tgt, root);
+  EXPECT_EQ(input_target.input_index, 0);
+
+  // If the `PathTransform` does not handle the view change from the
+  // `StaticMultiSlice`, compilation will fail.
+  TF_ASSERT_OK(Compile(*resources, module.get()).status());
 }
 
 class StaticMultiSliceInvalidIndicesTestSpec {
