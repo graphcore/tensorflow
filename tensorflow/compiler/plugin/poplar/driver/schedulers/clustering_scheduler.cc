@@ -80,14 +80,12 @@ class ClusteringScheduler {
   // containing the given HLO computation.
   static StatusOr<HloInstructionSequence> Run(
       HloComputation* computation,
-      const TuplePointsToAnalysis& points_to_analysis,
-      const LogicalBuffer::SizeFunction& size_function,
+      const HloPoplarDataflowAnalysis& dataflow_analysis,
       const absl::flat_hash_map<const HloComputation*, int64>&
           memory_by_computation,
       const CompilerInformation& information) {
-    ClusteringScheduler scheduler(computation, points_to_analysis,
-                                  size_function, memory_by_computation,
-                                  information);
+    ClusteringScheduler scheduler(computation, dataflow_analysis,
+                                  memory_by_computation, information);
     return scheduler.CreateSchedule();
   }
 
@@ -196,20 +194,18 @@ class ClusteringScheduler {
   using QueueIterator = std::list<ColocatorCluster<Cluster::Ref>>::iterator;
 
   ClusteringScheduler(HloComputation* computation,
-                      const TuplePointsToAnalysis& points_to_analysis,
-                      const LogicalBuffer::SizeFunction& size_function,
+                      const HloPoplarDataflowAnalysis& dataflow_analysis,
                       const absl::flat_hash_map<const HloComputation*, int64>&
                           memory_by_computation,
                       const CompilerInformation& info)
       : computation_(computation),
-        points_to_analysis_(points_to_analysis),
-        size_function_(size_function),
+        dataflow_analysis_(dataflow_analysis),
         memory_by_computation_(memory_by_computation),
         information(info) {}
 
   // Returns whether the memory used by the given buffer should be ignored by
   // the scheduling heuristic.
-  static bool IgnoreBuffer(const LogicalBuffer& buffer) {
+  static bool IgnoreBuffer(const HloPoplarBuffer& buffer) {
     return IgnoreInstruction(*buffer.instruction());
   }
 
@@ -247,8 +243,7 @@ class ClusteringScheduler {
   HloInstructionSequence CreateSchedule();
 
   HloComputation* computation_;
-  const TuplePointsToAnalysis& points_to_analysis_;
-  const LogicalBuffer::SizeFunction& size_function_;
+  const HloPoplarDataflowAnalysis& dataflow_analysis_;
 
   // Computations are analyzed in post-order. When scheduling an instruction
   // that includes subcomputations, such as a while loop, we use this map to
@@ -304,12 +299,11 @@ int64 ClusteringScheduler::GetBufferMemoryFreed(const HloInstruction* parent,
                                                 const HloInstruction* operand) {
   int64 size = 0;
   // Calculate the total memory used by this operands output.
-  points_to_analysis_.GetPointsToSet(operand).ForEachElement(
-      [&](const ShapeIndex& /*index*/, const PointsToSet::BufferList& buffers) {
-        std::for_each(buffers.begin(), buffers.end(),
-                      [&](const LogicalBuffer* buffer) {
-                        size += this->size_function_(*buffer);
-                      });
+  dataflow_analysis_.GetInstructionBufferSet(operand).ForEachElement(
+      [&](const ShapeIndex& /*index*/, const HloPoplarBufferSet& buffer_set) {
+        for (auto* buffer : buffer_set.buffers()) {
+          size += buffer->SizeInBytes();
+        }
       });
 
   return size;
@@ -346,12 +340,15 @@ int64 ClusteringScheduler::BytesFreedIfScheduled(
     bytes_defined = max_subcomputation_bytes;
   } else {
     // Calculate bytes defined.
-    for (auto* buffer :
-         points_to_analysis_.GetBuffersDefinedByInstruction(instruction)) {
-      if (!IgnoreBuffer(*buffer)) {
-        bytes_defined += size_function_(*buffer);
-      }
-    }
+    dataflow_analysis_.GetInstructionBufferSet(instruction)
+        .ForEachElement([&](const ShapeIndex& /*index*/,
+                            const HloPoplarBufferSet& buffer_set) {
+          for (auto* buffer : buffer_set.buffers()) {
+            if (buffer->DefinedBy(instruction) && !IgnoreBuffer(*buffer)) {
+              bytes_defined += buffer->SizeInBytes();
+            }
+          }
+        });
   }
   return freed_bytes - bytes_defined;
 }
@@ -684,15 +681,13 @@ HloInstructionSequence ClusteringScheduler::CreateSchedule() {
 
 StatusOr<HloInstructionSequence> ClusteringScheduler(
     HloComputation* computation,
-    const TuplePointsToAnalysis& points_to_analysis,
-    const LogicalBuffer::SizeFunction& size_function,
+    const HloPoplarDataflowAnalysis& dataflow_analysis,
     const absl::flat_hash_map<const HloComputation*, int64>&
         memory_by_computation,
     const CompilerInformation& information) {
   VLOG(3) << "ClusteringScheduler";
-  return ClusteringScheduler::Run(computation, points_to_analysis,
-                                  size_function, memory_by_computation,
-                                  information);
+  return ClusteringScheduler::Run(computation, dataflow_analysis,
+                                  memory_by_computation, information);
 }
 }  // namespace
 
@@ -700,11 +695,10 @@ StatusOr<HloInstructionSequence> ClusteringScheduler(
 IpuSchedulerAlgorithm CreateClusteringMemoryScheduler(
     const CompilerInformation& information) {
   return [=](HloComputation* computation,
-             const TuplePointsToAnalysis& points_to_analysis,
-             const LogicalBuffer::SizeFunction& size_function,
+             const HloPoplarDataflowAnalysis& dataflow_analysis,
              const absl::flat_hash_map<const HloComputation*, int64>&
                  memory_by_computation) {
-    return ClusteringScheduler(computation, points_to_analysis, size_function,
+    return ClusteringScheduler(computation, dataflow_analysis,
                                memory_by_computation, information);
   };
 }

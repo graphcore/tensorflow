@@ -349,6 +349,11 @@ class InstructionPoplarBufferSet {
     return buffer_sets_;
   }
 
+  template <typename Fn>
+  void ForEachElement(const Fn& func) const {
+    GetBufferSets().ForEachElement(func);
+  }
+
  private:
   const Shape shape_;
   ShapeTree<HloPoplarBufferSet> buffer_sets_;

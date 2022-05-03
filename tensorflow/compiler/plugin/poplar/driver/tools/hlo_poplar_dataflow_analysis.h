@@ -66,6 +66,14 @@ class HloPoplarDataflowAnalysis {
       const HloModule* module, const CompilerAnnotations& annotations,
       const CallGraph& call_graph);
 
+  static StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>> Run(
+      const HloModule* module,
+      const CompilerAnnotations* annotations = nullptr);
+
+  static StatusOr<std::unique_ptr<HloPoplarDataflowAnalysis>> Run(
+      const HloModule* module, const CompilerAnnotations* annotations,
+      const CallGraph& call_graph);
+
   // Returns a new HloPoplarBuffer defined at the given instruction and shape
   // index.
   HloPoplarBuffer* NewHloPoplarBuffer(HloInstruction* instruction,

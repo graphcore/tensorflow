@@ -394,7 +394,7 @@ PoplarBackendConfig ParsePoplarBackendConfig(const HloInstruction* inst) {
   if (!status_or.ok()) {
     LOG(FATAL)
         << "Could not parse the PoplarBackendConfig for HloInstruction ''"
-        << inst->name() << "'";
+        << inst->name() << "' " << status_or.status().error_message();
   }
   return status_or.ValueOrDie();
 }

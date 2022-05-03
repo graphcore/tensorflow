@@ -240,7 +240,12 @@ bool HloPoplarBuffer::operator!=(const HloPoplarBuffer& other) const {
 }
 
 int64 HloPoplarBuffer::SizeInBytes() const {
-  return ShapeUtil::ByteSizeOf(shape());
+  const auto& shape = defining_position_.shape();
+  if (shape.IsOpaque()) {
+    return 0;
+  }
+
+  return ShapeUtil::ByteSizeOf(shape);
 }
 
 string HloPoplarBuffer::ToString() const {
