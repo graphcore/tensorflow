@@ -48,17 +48,28 @@ struct NamedIpuSchedulerAlgorithm {
       : name(std::move(name)), function(std::move(function)) {}
 };
 
+using MemoryEstimator = std::function<StatusOr<int64>(
+    const HloComputation& computation, const HloInstructionSequence& sequence,
+    const HloAliasAnalysis& alias_analysis,
+    const LogicalBuffer::SizeFunction& size_function,
+    const absl::flat_hash_map<const HloComputation*, int64>*)>;
+
+MemoryEstimator HeapMemoryEstimator();
+
 /**
  * Given a set of scheduling algorithms, create a new schedule algorithm which
- * will return the best of the given scheduling algorithms.
+ * will return the best of the given scheduling algorithms based on the provided
+ * MemoryEstimator.
  *
  * @param algorithms The set of algorithms
+ * @param memory_estimator The schedule memory estimator.
  *
  * @returns a valid IpuSchedulerAlgorithm
  */
 StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
     const LogicalBuffer::SizeFunction& size_function,
-    std::vector<NamedIpuSchedulerAlgorithm> algorithms);
+    std::vector<NamedIpuSchedulerAlgorithm> algorithms,
+    MemoryEstimator memory_estimator = HeapMemoryEstimator());
 
 /**
  * An HLO module pass which applies the given scheduling algorithm to each

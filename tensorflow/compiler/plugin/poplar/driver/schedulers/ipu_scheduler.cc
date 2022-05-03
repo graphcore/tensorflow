@@ -99,9 +99,21 @@ class AliasAnalysisCache {
 
 }  // namespace
 
+MemoryEstimator HeapMemoryEstimator() {
+  using HeapSimulatorOverload = StatusOr<int64> (*)(
+      const HloComputation& computation, const HloInstructionSequence& sequence,
+      const HloAliasAnalysis& alias_analysis,
+      const LogicalBuffer::SizeFunction& size_function,
+      const absl::flat_hash_map<const HloComputation*, int64>*);
+
+  return static_cast<HeapSimulatorOverload>(
+      HeapSimulator::MinimumMemoryForComputation);
+}
+
 StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
     const LogicalBuffer::SizeFunction& size_function,
-    std::vector<NamedIpuSchedulerAlgorithm> algorithms) {
+    std::vector<NamedIpuSchedulerAlgorithm> algorithms,
+    MemoryEstimator memory_estimator) {
   if (algorithms.empty()) {
     return xla::FailedPrecondition(
         "Cannot construct BestIpuSchedule when the input is empty");
@@ -110,7 +122,7 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
   return IpuSchedulerAlgorithm{
       [algorithms = std::move(algorithms),
        alias_analysis_cache = std::make_shared<AliasAnalysisCache>(),
-       size_function = size_function](
+       size_function = size_function, memory_estimator = memory_estimator](
           HloComputation* computation,
           const HloPoplarDataflowAnalysis& dataflow_analysis,
           const absl::flat_hash_map<const HloComputation*, int64>&
@@ -139,10 +151,10 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
           const auto schedule = schedule_or_status.ValueOrDie();
 
           // TODO(T9494): Replace the heap simulator.
-          TF_ASSIGN_OR_RETURN(const int64 schedule_memory,
-                              HeapSimulator::MinimumMemoryForComputation(
-                                  *computation, schedule, alias_analysis,
-                                  size_function, &memory_by_computation));
+          TF_ASSIGN_OR_RETURN(
+              const int64 schedule_memory,
+              memory_estimator(*computation, schedule, alias_analysis,
+                               size_function, &memory_by_computation));
 
           VLOG(2) << "Scheduler " << algorithm.name
                   << " produced a schedule for " << computation->name()
