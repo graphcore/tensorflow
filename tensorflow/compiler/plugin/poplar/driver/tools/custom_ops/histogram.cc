@@ -49,7 +49,7 @@ HloPoplarUseDescriptions HloHistogramInstruction::GetUseDescriptions() const {
 
 HloPoplarBufferDescriptions HloHistogramInstruction::GetBufferDescriptions()
     const {
-  return BufferDescriptionsNoAllocations();
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloHistogramInstruction::AllocatingOutput() const { return false; }

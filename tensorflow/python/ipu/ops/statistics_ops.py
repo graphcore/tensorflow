@@ -45,7 +45,7 @@ def histogram(inputs, levels, absolute_of_input=False):
 
   Args:
     inputs: A rank-1 tensor of values over which to compute binning levels.
-    n_bins: The number of bins required.
+    levels: The number of bins required.
     absolute_of_input: If True, bin on input magnitude (absolute value).
       Default is False.
 
@@ -76,7 +76,7 @@ def histogram_update(hist, inputs, levels, absolute_of_input=False):
 
   Args:
     inputs: A rank-1 tensor of values over which to compute binning levels.
-    n_bins: The number of bins required.
+    levels: The number of bins required.
     absolute_of_input: If True, bin on input magnitude (absolute value).
       Default is False.
 

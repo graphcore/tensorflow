@@ -1755,6 +1755,7 @@ test_suite(
         "gelu_erf_test",
         "gradient_accumulation_test",
         "group_conv_test",
+        "histogram_test",
         "host_embedding_lookup_ga_test",
         "host_embedding_lookup_test",
         "image_ops_test",
