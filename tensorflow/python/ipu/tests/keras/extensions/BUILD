@@ -114,7 +114,6 @@ tf_py_test(
 
 test_suite(
     name = "tests",
-    tests = [],
 )
 
 test_suite(

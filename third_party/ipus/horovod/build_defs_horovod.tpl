@@ -2,7 +2,7 @@
 
 def if_horovod(if_true, if_false = []):
     """Tests whether Horovod is enabled in this build."""
-    return {IF_HOROVOD}
+    return if_true if {HOROVOD_ENABLED} else if_false
 
 def horovod_py_test(
         name,
@@ -11,20 +11,23 @@ def horovod_py_test(
         num_processes = 1,
         args = [],
         **kwargs):
-    native.py_test(
-        name = name,
-        srcs = srcs + [
-            "//third_party/ipus/horovod:horovod_test_wrapper.py",
-        ],
-        main = "horovod_test_wrapper.py",
-        args = [
-            "$(location @local_config_poplar//poplar:mpirun)",
-            str(num_processes),
-            "$(location {})".format(main),
-        ] + args,
-        data = ["@local_config_poplar//poplar:mpirun"],
-        **kwargs
-    )
+    if {HOROVOD_ENABLED}:
+        native.py_test(
+            name = name,
+            srcs = srcs + [
+                "//third_party/ipus/horovod:horovod_test_wrapper.py",
+            ],
+            main = "horovod_test_wrapper.py",
+            args = [
+                "$(location @local_config_poplar//poplar:mpirun)",
+                str(num_processes),
+                "$(location {})".format(main),
+            ] + args,
+            data = ["@local_config_poplar//poplar:mpirun"],
+            **kwargs
+        )
+    else:
+        print("Skipping test %s as Horovod is not configured.\n" % name)
 
 def poprun_py_test(
         name,

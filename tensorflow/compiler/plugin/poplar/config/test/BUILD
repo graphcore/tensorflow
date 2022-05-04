@@ -23,7 +23,4 @@ tf_cc_test(
 
 test_suite(
     name = "all_ipu_config_tests",
-    tests = [
-        "ipu_config_test",
-    ],
 )

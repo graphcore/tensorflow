@@ -27,7 +27,7 @@ def _impl(repository_ctx):
         "build_defs_horovod.bzl",
         Label("//third_party/ipus/horovod:build_defs_horovod.tpl"),
         {
-            "{IF_HOROVOD}": "if_true" if enabled else "if_false",
+            "{HOROVOD_ENABLED}": str(enabled),
             "{PYTHON_INTERPRETER}": str(repository_ctx.which("python")),
         },
     )
