@@ -64,7 +64,4 @@ tf_kernel_library(
 
 test_suite(
     name = "dataset_tests",
-    tests = [
-        "buffer_dataset_op_test",
-    ],
 )

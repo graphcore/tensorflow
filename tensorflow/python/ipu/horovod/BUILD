@@ -118,8 +118,4 @@ horovod_py_test(
 
 test_suite(
     name = "horovod_test_suite",
-    tests = [
-        "horovod_test",
-        "popdist_strategy_test",
-    ],
 )

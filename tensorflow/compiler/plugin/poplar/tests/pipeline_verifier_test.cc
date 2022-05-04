@@ -197,7 +197,7 @@ ENTRY main {
     // Get the pipeline program
     auto program = visitor.GetPipelineSequence(count).ValueOrDie();
 
-    poplar::program::Sequence seq(verify_program, program);
+    poplar::program::Sequence seq({verify_program, program});
 
     // Compile the graph
     poplar::Engine engine(*resources->main_graph, seq);
