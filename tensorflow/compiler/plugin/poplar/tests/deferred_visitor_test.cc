@@ -943,8 +943,7 @@ ENTRY main {
       FindInstructionOutputTensors(func2_tensor_map, *resources.get(), p2_2));
   ASSERT_EQ(p2_2_ts.size(), 1);
 
-  EXPECT_NE(bzero_ts[0].getContiguousRegions(),
-            p2_2_ts[0].getContiguousRegions());
+  EXPECT_FALSE(bzero_ts[0].intersectsWith(p2_2_ts[0]));
 }
 
 TEST_F(DeferredVisitorTest, TestConditional) {
