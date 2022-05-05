@@ -24,6 +24,7 @@ cc_library(
         "gccs/include",
         "popir/include",
         "poprithms/include",
+        "graphcore_target_access/include",
     ],
 )
 
