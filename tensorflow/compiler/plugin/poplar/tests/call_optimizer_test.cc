@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/service/hlo_cse.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -421,13 +422,15 @@ ENTRY cluster {
                                          m::Parameter(2), m::Parameter(3)),
                                 m::Op())));
 
-  CallOptimizer optimizer;
-  TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
-  EXPECT_TRUE(changed);
-  HloDCE dce;
-  EXPECT_TRUE(dce.Run(module.get()).ValueOrDie());
-  TF_ASSERT_OK_AND_ASSIGN(changed, optimizer.Run(module.get()));
-  EXPECT_TRUE(changed);
+  int64 num_runs = 0;
+  bool changed = true;
+  while (changed) {
+    TF_ASSERT_OK_AND_ASSIGN(changed, CallOptimizer().Run(module.get()));
+    EXPECT_TRUE(HloCSE(/*is_layout_sensitive=*/false).Run(module.get()).ok());
+    EXPECT_TRUE(HloDCE().Run(module.get()).ok());
+    num_runs++;
+  }
+  EXPECT_EQ(num_runs, 3);
   TF_ASSERT_OK_AND_ASSIGN(stages, GetPipelineStages(pipeline_computation));
   stage_1 = stages.forward[1];
   outfeed = find_outfeed(stage_1);

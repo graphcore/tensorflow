@@ -2224,7 +2224,6 @@ xla_test(
     srcs = ["tests/call_optimizer_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
-    tags = ["disabled_poplar_test"],
     deps = [
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/service:hlo_query",
