@@ -427,7 +427,6 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     shard_count = 8,
-    tags = ["disabled_poplar_test"],
 )
 
 tf_py_test(
