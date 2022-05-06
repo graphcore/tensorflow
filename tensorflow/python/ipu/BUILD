@@ -452,7 +452,6 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/nn_ops_test.py"],
     shard_count = 8,
-    tags = ["disabled_poplar_test"],
     deps = [
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
