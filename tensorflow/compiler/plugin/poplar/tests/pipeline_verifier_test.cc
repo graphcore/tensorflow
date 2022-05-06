@@ -130,8 +130,8 @@ ENTRY main {
   {
     auto device = CreateIpuModel(2, 4);
 
-    std::unique_ptr<HloModule> module =
-        ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+    TF_ASSERT_OK_AND_ASSIGN(auto module,
+                            ParseAndReturnVerifiedModule(hlo_string));
     auto resources = GetMockResources(device, module.get(), false, 2);
 
     CustomOpReplacer replacer;
@@ -143,36 +143,35 @@ ENTRY main {
     HloTrivialScheduler scheduler;
     EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
 
-    auto pipeline_call_computation = module->entry_computation();
-    auto entry_computation =
-        pipeline_call_computation->GetInstructionWithName("p")
-            ->called_computations()[0];
+    auto entry_computation = module->entry_computation();
+    auto pipeline_computation =
+        entry_computation->GetInstructionWithName("p")->to_apply();
 
     // Count the number of stages
     auto stage_count = absl::c_count_if(
-        entry_computation->instructions(), [](const HloInstruction* hlo) {
+        pipeline_computation->instructions(), [](const HloInstruction* hlo) {
           return hlo->opcode() == HloOpcode::kCall;
         });
 
     // Assign each instruction in the pipeline to a stage
     const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
-        {entry_computation->GetInstructionWithName("arg"), 0},
-        {entry_computation->GetInstructionWithName("grad_acc"), 0},
-        {entry_computation->GetInstructionWithName("a0"), 0},
-        {entry_computation->GetInstructionWithName("gte_a"), 0},
-        {entry_computation->GetInstructionWithName("b0"), 1},
-        {entry_computation->GetInstructionWithName("gte_b"), 1},
-        {entry_computation->GetInstructionWithName("c0"), 2},
-        {entry_computation->GetInstructionWithName("gte_c"), 2},
-        {entry_computation->GetInstructionWithName("d"), 3},
+        {pipeline_computation->GetInstructionWithName("arg"), 0},
+        {pipeline_computation->GetInstructionWithName("grad_acc"), 0},
+        {pipeline_computation->GetInstructionWithName("a0"), 0},
+        {pipeline_computation->GetInstructionWithName("gte_a"), 0},
+        {pipeline_computation->GetInstructionWithName("b0"), 1},
+        {pipeline_computation->GetInstructionWithName("gte_b"), 1},
+        {pipeline_computation->GetInstructionWithName("c0"), 2},
+        {pipeline_computation->GetInstructionWithName("gte_c"), 2},
+        {pipeline_computation->GetInstructionWithName("d"), 3},
         // Inter-IPU-copy between stage 0 and 1
-        {entry_computation->GetInstructionWithName("inter-ipu-copy"), 0},
+        {pipeline_computation->GetInstructionWithName("inter-ipu-copy"), 0},
         // Inter-IPU-copy between stage 2 and 3
-        {entry_computation->GetInstructionWithName("inter-ipu-copy.1"), 2},
+        {pipeline_computation->GetInstructionWithName("inter-ipu-copy.1"), 2},
     };
 
     auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
-    const poplar::Tensor grad_acc_placeholder =
+    auto grad_acc_placeholder =
         resources->main_graph->addConstant(poplar::INT, {}, count);
     resources->main_graph->setTileMapping(placeholder, 0);
     resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
@@ -182,16 +181,16 @@ ENTRY main {
         stage_count, {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
         DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
                              {TensorOrRemoteBuffer{grad_acc_placeholder}}},
-        GetInplaceDescription(entry_computation->root_instruction()),
+        GetInplaceDescription(pipeline_computation->root_instruction()),
         "visitor");
 
-    TF_EXPECT_OK(entry_computation->Accept(&visitor));
+    TF_ASSERT_OK(pipeline_computation->Accept(&visitor));
 
     // Get verify program
     auto verify_program =
         visitor
             .VerifyPipelineArguments(
-                pipeline_call_computation->GetInstructionWithName("arg.1"),
+                entry_computation->GetInstructionWithName("arg.1"),
                 grad_acc_placeholder, *(resources->main_graph))
             .ValueOrDie();
     // Get the pipeline program

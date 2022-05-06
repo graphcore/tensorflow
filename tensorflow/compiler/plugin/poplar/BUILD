@@ -905,7 +905,6 @@ xla_test(
     srcs = ["tests/pipeline_verifier_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
-    tags = ["disabled_poplar_test"],
     deps = [
         ":poplar_test_base",
         ":test_utils",
