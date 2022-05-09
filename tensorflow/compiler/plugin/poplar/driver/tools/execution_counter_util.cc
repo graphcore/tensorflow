@@ -32,8 +32,8 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-StatusOr<poplar::Tensor> GetExecutionCounter(CompilerResources& resources,
-                                             const HloInstruction* inst) {
+StatusOr<DriverTensor> GetExecutionCounter(CompilerResources& resources,
+                                           const HloInstruction* inst) {
   int64 shard = 0;
   if (inst->has_sharding()) {
     auto optional_shard = inst->sharding_unique_device();
@@ -52,16 +52,17 @@ StatusOr<poplar::Tensor> GetExecutionCounter(CompilerResources& resources,
   return resources.execution_counter_scopes.top()->GetCounter(shard);
 }
 
-Status CopyExecutionCountersFromScope(CompilerResources& resources,
+Status CopyExecutionCountersFromScope(DriverGraph& graph,
+                                      CompilerResources& resources,
                                       ExecutionCounters& counters,
-                                      poplar::program::Sequence& sequence) {
+                                      DriverProgramSequence& sequence) {
   // There must already be a scope present.
   if (resources.execution_counter_scopes.empty()) {
     return FailedPrecondition("Cannot set the execution counters from stack.");
   }
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Sequence copies_seq,
-      counters.SetInitialValuesFrom(resources.execution_counter_scopes.top()));
+  TF_ASSIGN_OR_RETURN(DriverProgramSequence copies_seq,
+                      counters.SetInitialValuesFrom(
+                          graph, resources.execution_counter_scopes.top()));
   sequence.add(copies_seq);
   return Status::OK();
 }
@@ -71,7 +72,7 @@ namespace {
 uint64 GetNumCounters(CompilerResources& resources) {
   return std::max(resources.shard_compute_graphs.size(), 1UL);
 }
-poplar::Graph& GetGraphForShard(CompilerResources& resources, size_t shard) {
+DriverGraph& GetGraphForShard(CompilerResources& resources, size_t shard) {
   return resources.shard_compute_graphs.size()
              ? resources.shard_compute_graphs.at(shard)
              : *resources.main_graph;
@@ -92,7 +93,7 @@ ExecutionCounters ExecutionCounters::Clone(
   // Clone all the live counters.
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
-      poplar::Graph& graph = GetGraphForShard(resources_, shard);
+      auto& graph = GetGraphForShard(resources_, shard);
       cloned.counters_[shard] = graph.clone(
           counters_[shard],
           {debug_name_and_id, absl::StrCat("ExecutionCounter/", shard)});
@@ -103,11 +104,11 @@ ExecutionCounters ExecutionCounters::Clone(
   return cloned;
 }
 
-StatusOr<poplar::Tensor> ExecutionCounters::GetCounter(int64 shard) {
+StatusOr<DriverTensor> ExecutionCounters::GetCounter(int64 shard) {
   CHECK_LT(shard, counters_.size());
   if (!live_counters_[shard]) {
     // Requesting a counter which was not live, create it.
-    poplar::Graph& graph = GetGraphForShard(resources_, shard);
+    DriverGraph& graph = GetGraphForShard(resources_, shard);
     counters_[shard] = graph.addVariable(
         poplar::INT, {}, {dnai_, absl::StrCat("ExecutionCounter/", shard)});
     graph.setTileMapping(counters_[shard], 0);
@@ -116,25 +117,26 @@ StatusOr<poplar::Tensor> ExecutionCounters::GetCounter(int64 shard) {
   return counters_[shard];
 }
 
-StatusOr<poplar::program::Sequence> ExecutionCounters::SetInitialValuesFrom(
-    ExecutionCounters* source) {
+StatusOr<DriverProgramSequence> ExecutionCounters::SetInitialValuesFrom(
+    DriverGraph& graph, ExecutionCounters* source) {
   CHECK_EQ(source->counters_.size(), counters_.size());
-  poplar::program::Sequence seq({}, dnai_);
+  DriverProgramSequence seq(graph, dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor source_counter,
+      TF_ASSIGN_OR_RETURN(DriverTensor source_counter,
                           source->GetCounter(shard));
       // Copy the value.
-      seq.add(poplar::program::Copy(source_counter, counters_[shard], false,
-                                    {dnai_}));
+      seq.add(
+          DriverProgramCopy(source_counter, counters_[shard], false, {dnai_}));
     }
   }
   initialized_ = true;
   return seq;
 }
 
-poplar::program::Sequence ExecutionCounters::SetInitialValuesToZero() {
-  poplar::program::Sequence seq({}, dnai_);
+DriverProgramSequence ExecutionCounters::SetInitialValuesToZero(
+    DriverGraph& graph) {
+  DriverProgramSequence seq(graph, dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
       auto& graph = GetGraphForShard(resources_, shard);
@@ -146,27 +148,28 @@ poplar::program::Sequence ExecutionCounters::SetInitialValuesToZero() {
   return seq;
 }
 
-StatusOr<poplar::program::Sequence> ExecutionCounters::UpdateCounters(
-    ExecutionCounters* destination) {
+StatusOr<DriverProgramSequence> ExecutionCounters::UpdateCounters(
+    DriverGraph& graph, ExecutionCounters* destination) {
   CHECK_EQ(destination->counters_.size(), counters_.size());
-  poplar::program::Sequence seq({}, dnai_);
+  DriverProgramSequence seq(graph, dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor destination_counter,
+      TF_ASSIGN_OR_RETURN(DriverTensor destination_counter,
                           destination->GetCounter(shard));
       // Copy the value.
-      seq.add(poplar::program::Copy(counters_[shard], destination_counter,
-                                    false, {dnai_}));
+      seq.add(DriverProgramCopy(counters_[shard], destination_counter, false,
+                                {dnai_}));
     }
   }
   return seq;
 }
 
-poplar::program::Sequence ExecutionCounters::IncrementLiveCounters() const {
-  poplar::program::Sequence seq({}, dnai_);
+DriverProgramSequence ExecutionCounters::IncrementLiveCounters(
+    DriverGraph& graph) const {
+  DriverProgramSequence seq(graph, dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
-      poplar::Graph& graph = GetGraphForShard(resources_, shard);
+      DriverGraph& graph = GetGraphForShard(resources_, shard);
       popops::addInPlace(
           graph, counters_[shard], 1, seq,
           {dnai_, absl::StrCat("IncrementExecutionCounter/", shard)});

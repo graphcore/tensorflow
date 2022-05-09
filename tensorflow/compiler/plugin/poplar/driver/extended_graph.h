@@ -32,6 +32,8 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+using ExtendedFunction = snap::Function;
+
 // Wrapper class to abstract migration from poplar to snap
 class ExtendedGraph : public snap::Graph {
  public:
@@ -45,6 +47,8 @@ class ExtendedGraph : public snap::Graph {
   ExtendedGraph createVirtualGraph(unsigned lowerTile, unsigned upperTile);
 
   ExtendedGraph createVirtualGraph(const std::vector<unsigned>& perIpuTiles);
+
+  ExtendedGraph getTopLevelGraph();
 
   ExtendedTensor addReplicationIndexConstant(
       const poplar::DebugContext& debugContext = {});
@@ -76,6 +80,15 @@ class ExtendedGraph : public snap::Graph {
                              poplar::ArrayRef<std::size_t> shape,
                              poplar::VariableMappingMethod mappingMethod,
                              const poplar::DebugContext& debugContext = {});
+
+  ExtendedTensor addLinearlyMappedVariable(
+      const poplar::Type& type, poplar::ArrayRef<std::size_t> shape,
+      const poplar::DebugContext& debugContext = {});
+
+  ExtendedTensor addLinearlyMappedVariable(
+      const poplar::Type& type, poplar::ArrayRef<std::size_t> shape,
+      unsigned minElementsPerTile, unsigned grainSize,
+      const poplar::DebugContext& debugContext = {});
 
   template <typename T>
   ExtendedTensor addConstant(const poplar::Type& type,
@@ -131,8 +144,6 @@ class ExtendedGraph : public snap::Graph {
     return getPoplarGraph().getSortedContiguousRegions(
         t, regions, removeAliasedIntervals, aliases);
   }
-
-  poplar::Function addFunction(const poplar::program::Program& program);
 
   poplar::HostFunction addHostFunction(
       poplar::StringRef handle,

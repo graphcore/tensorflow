@@ -38,18 +38,19 @@ PipelineStageVisitor::PipelineStageVisitor(
     const poplar::DebugNameAndId& debug_name_and_id)
     : InplaceDeferredVisitor(res, inputs, description, debug_name_and_id) {}
 
-poplar::program::Sequence PipelineStageVisitor::GetCachedSequence() {
+DriverProgramSequence PipelineStageVisitor::GetCachedSequence(
+    DriverGraph& graph) {
   if (!has_function_) {
-    poplar::program::Sequence seq =
-        InplaceDeferredVisitor::GetSequence(/*copy_execution_counters*/ false);
+    DriverProgramSequence seq = InplaceDeferredVisitor::GetSequence(
+        graph, /*copy_execution_counters*/ false);
 
     // Always increment the execution counters.
-    seq.add(execution_counters_.IncrementLiveCounters());
+    seq.add(execution_counters_.IncrementLiveCounters(graph));
     function_ = GetMasterGraph(resources_).addFunction(seq);
     has_function_ = true;
   }
-  return poplar::program::Sequence({poplar::program::Call(function_, {dnai_})},
-                                   dnai_);
+  return DriverProgramSequence({DriverProgramCall(graph, function_, {dnai_})},
+                               graph, dnai_);
 }
 
 ShapeTree<bool> PipelineStageVisitor::GetOutputCopies(
@@ -91,10 +92,11 @@ Status ReusablePipelineStageVisitor::PropagateDeferredAllocations(
       callsite_inst, callsite_inputs, add_clones, debug_name_and_id);
 }
 
-poplar::program::Sequence ReusablePipelineStageVisitor::GetForwardStageSequence(
+DriverProgramSequence ReusablePipelineStageVisitor::GetForwardStageSequence(
     const HloInstruction* callsite, const DeferredArgRBVectors& deferred_inputs,
     TensorMap& callsite_tensor_map) {
-  poplar::program::Sequence seq({}, dnai_);
+  auto& graph = GetGraph(resources_, callsite);
+  DriverProgramSequence seq(graph, dnai_);
   // Convert deferred args to actual tensors, filling gaps where required.
   CHECK_EQ(callsite->operand_count(), deferred_inputs.size());
   TensorOrRemoteBufferVectors inputs(deferred_inputs.size());
@@ -124,13 +126,13 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetForwardStageSequence(
   return seq;
 }
 
-poplar::program::Sequence
+DriverProgramSequence
 ReusablePipelineStageVisitor::GetRecomputationStageSequence(
     const HloInstruction* callsite, const TensorOrRemoteBufferVectors& inputs) {
   return GetCachedSequence(callsite, inputs);
 }
 
-poplar::program::Sequence ReusablePipelineStageVisitor::GetCachedSequence(
+DriverProgramSequence ReusablePipelineStageVisitor::GetCachedSequence(
     const HloInstruction* callsite, const TensorOrRemoteBufferVectors& inputs) {
   auto& graph = GetGraph(resources_, callsite);
   // When recomputation is enabled, copies need to be inserted for all the non
@@ -140,7 +142,7 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetCachedSequence(
   // modified. Note that since we are adding these copies, the FIFO instructions
   // can be executed after the PipelineStage and before the
   // PipelineStageRecomputation since the values won't be modified inplace.
-  poplar::program::Sequence seq({}, dnai_);
+  DriverProgramSequence seq(graph, dnai_);
   for (int64 op_idx = 0; op_idx != callsite->operand_count(); ++op_idx) {
     const HloInstruction* operand = callsite->operand(op_idx);
     if (IsPipelineStageReadOnlyInput(operand)) {
@@ -159,7 +161,7 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetCachedSequence(
   }
 
   // Add the actual sequence for the stage.
-  seq.add(PipelineStageVisitor::GetCachedSequence());
+  seq.add(PipelineStageVisitor::GetCachedSequence(graph));
   return seq;
 }
 

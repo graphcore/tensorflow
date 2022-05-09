@@ -452,7 +452,7 @@ class ArithemticExpressionOp : public PoplarOpDef {
     const HloComputation* comp = inst->fused_instructions_computation();
     ArithmeticExprVisitor arithmetic_visitor(res, args, inst, debug_info);
     TF_RETURN_IF_ERROR(comp->Accept(&arithmetic_visitor));
-    seq.add(arithmetic_visitor.GetSequence());
+    seq.add(arithmetic_visitor.GetSequence(graph));
 
     for (size_t i = 0; i < arithmetic_visitor.outputs().size(); i++) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,

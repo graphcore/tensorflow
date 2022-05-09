@@ -34,6 +34,9 @@ class ExtendedTensor : public snap::Tensor {
   ExtendedTensor(snap::Tensor&& tensor)  // NOLINT
       : snap::Tensor(std::move(tensor)) {}
 
+  ExtendedTensor(snap::Graph& graph)  // NOLINT
+      : snap::Tensor(poplar::Tensor(), graph) {}
+
   ExtendedTensor reshape(poplar::ArrayRef<std::size_t> shape) const;
 
   ExtendedTensor flatten() const;
@@ -84,6 +87,8 @@ class ExtendedTensor : public snap::Tensor {
 };
 
 std::ostream& operator<<(std::ostream& os, const ExtendedTensor& tensor);
+
+std::vector<snap::Tensor> GetSnapTensors(std::vector<ExtendedTensor>& tensors);
 
 // Wrapper class to abstract migration from poplar to snap
 class ExtendedDataStream : public snap::DataStream {

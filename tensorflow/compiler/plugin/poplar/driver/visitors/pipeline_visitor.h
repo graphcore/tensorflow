@@ -40,6 +40,7 @@ struct CompilerResources;
 class PipelineVisitor : public InplaceDeferredVisitor {
  public:
   PipelineVisitor(
+      DriverGraph& graph,
       PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule,
       int64 stage_count, const std::vector<int>& stage_ipu_mapping,
       const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
@@ -49,8 +50,8 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       const HloPoplarInplaceDescription& description,
       const poplar::DebugNameAndId& debug_name_and_id);
 
-  PipelineVisitor(const HloInstruction* pipeline, CompilerResources& res,
-                  const DeferredArgRBVectors& inputs,
+  PipelineVisitor(DriverGraph& graph, const HloInstruction* pipeline,
+                  CompilerResources& res, const DeferredArgRBVectors& inputs,
                   const HloPoplarInplaceDescription& description,
                   const poplar::DebugNameAndId& debug_name_and_id);
 
@@ -115,9 +116,9 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   virtual Status HandleInterTilesetCopy(HloInstruction* hlo);
 
   struct CountAndGraph {
-    poplar::Graph& graph;
-    const poplar::Tensor count;
-    CountAndGraph(poplar::Graph& graph, const poplar::Tensor count)
+    DriverGraph& graph;
+    const DriverTensor count;
+    CountAndGraph(DriverGraph& graph, const DriverTensor count)
         : graph(graph), count(std::move(count)) {}
   };
 
@@ -125,31 +126,27 @@ class PipelineVisitor : public InplaceDeferredVisitor {
 
   virtual IterationsType RampDownAdditionalIterations(
       IterationsType iterations, const size_t overlap_length,
-      poplar::program::Sequence& program) const;
+      DriverProgramSequence& program) const;
 
-  virtual StatusOr<poplar::program::Sequence> VerifyPipelineArguments(
+  virtual StatusOr<DriverProgramSequence> VerifyPipelineArguments(
       const HloInstruction* accumulation_count,
-      poplar::Tensor accumulation_count_tensor, poplar::Graph& graph) const;
+      DriverTensor accumulation_count_tensor, DriverGraph& graph) const;
 
-  StatusOr<poplar::program::Sequence> GetPipelineSequence(
-      IterationsType iterations) const;
+  StatusOr<DriverProgramSequence> GetPipelineSequence(
+      DriverGraph& graph, IterationsType iterations) const;
 
  protected:
-  Status AddSequenceForInstruction(
-      const HloInstruction* inst,
-      const poplar::program::Sequence& seq) override;
+  Status AddSequenceForInstruction(const HloInstruction* inst,
+                                   const DriverProgramSequence& seq) override;
 
   Status AppendSequenceGroupedByInstruction(
-      const HloInstruction* inst,
-      const poplar::program::Sequence& seq) override;
+      const HloInstruction* inst, const DriverProgramSequence& seq) override;
 
   Status PrependSequenceGroupedByInstruction(
-      const HloInstruction* inst,
-      const poplar::program::Sequence& seq) override;
+      const HloInstruction* inst, const DriverProgramSequence& seq) override;
 
-  void AddSequenceForAliasingCopy(
-      const HloInstruction* inst,
-      const poplar::program::Sequence& seq) override;
+  void AddSequenceForAliasingCopy(const HloInstruction* inst,
+                                  const DriverProgramSequence& seq) override;
 
   Status HandleDeferredAllocationCall(HloInstruction* inst) override;
   Status HandleNonDeferredCustomCall(HloInstruction* hlo) override;
@@ -159,27 +156,27 @@ class PipelineVisitor : public InplaceDeferredVisitor {
 
   std::unique_ptr<pipelinevisitorutils::PipelineSchedulerUtil>
       pipeline_scheduler_util_;
-  std::vector<poplar::program::Sequence> copy_sequences_;
-  std::vector<poplar::program::Sequence> inter_ipu_copy_sequences_;
-  std::vector<poplar::program::Sequence> fifo_sequences_;
-  std::vector<poplar::program::Sequence> infeed_sequences_;
-  std::vector<poplar::program::Sequence> outfeed_sequences_;
-  std::vector<poplar::program::Sequence> program_sequences_;
-  std::vector<poplar::program::Sequence> recomputation_sequences_;
-  std::vector<poplar::program::Sequence> inter_tileset_copy_in_sequences_;
-  std::vector<poplar::program::Sequence> inter_tileset_copy_out_sequences_;
-  poplar::program::Sequence resource_update_;
+  std::vector<DriverProgramSequence> copy_sequences_;
+  std::vector<DriverProgramSequence> inter_ipu_copy_sequences_;
+  std::vector<DriverProgramSequence> fifo_sequences_;
+  std::vector<DriverProgramSequence> infeed_sequences_;
+  std::vector<DriverProgramSequence> outfeed_sequences_;
+  std::vector<DriverProgramSequence> program_sequences_;
+  std::vector<DriverProgramSequence> recomputation_sequences_;
+  std::vector<DriverProgramSequence> inter_tileset_copy_in_sequences_;
+  std::vector<DriverProgramSequence> inter_tileset_copy_out_sequences_;
+  DriverProgramSequence resource_update_;
 
   // Sequence which sets the initial values for all the execution counters.
-  poplar::program::Sequence pipeline_execution_counters_initialize_sequence_;
+  DriverProgramSequence pipeline_execution_counters_initialize_sequence_;
 
   // Sequence which zeros pipeline specific tensors before the pipeline is
   // executed.
-  poplar::program::Sequence pipeline_tensors_zeroing_sequence_;
+  DriverProgramSequence pipeline_tensors_zeroing_sequence_;
 
   // Sequence which write undefs pipeline specific tensors which are not fully
   // written to before the pipeline is executed.
-  poplar::program::Sequence pipeline_write_undef_sequence_;
+  DriverProgramSequence pipeline_write_undef_sequence_;
 
   std::vector<int> stage_ipu_mapping_;
   absl::flat_hash_map<const HloInstruction*, int> inst_stage_mapping_;
@@ -189,17 +186,18 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       fwd_stage_visitors_;
 
   struct RepeatBlock {
-    poplar::program::Sequence program;
+    DriverProgramSequence program;
     int64 iterations;
   };
 
   virtual RepeatBlock GetPipelineRampUpSequence(
+      DriverGraph& graph,
       const poplar::DebugNameAndId& debug_name_and_id) const = 0;
-  virtual poplar::program::Sequence GetPipelineRampDownSequence(
-      const poplar::DebugNameAndId& debug_name_and_id,
+  virtual DriverProgramSequence GetPipelineRampDownSequence(
+      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& additional_iterations = 0) const = 0;
-  virtual poplar::program::Sequence GetPipelineRepeatBlockSequence(
-      const poplar::DebugNameAndId& debug_name_and_id,
+  virtual DriverProgramSequence GetPipelineRepeatBlockSequence(
+      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& iterations) const = 0;
 
   // Function which indicates whether stage outputs should be copied.
@@ -208,12 +206,12 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   Status HandleNotImplemented(HloInstruction* hlo);
 
   // Creator for PipelineStage(Backward).
-  StatusOr<poplar::program::Sequence> CreatePipelineStageOp(
+  StatusOr<DriverProgramSequence> CreatePipelineStageOp(
       const HloInstruction* inst,
       const poplar::DebugNameAndId& debug_name_and_id);
 
   // Creator for PipelineStageRecomputation.
-  StatusOr<poplar::program::Sequence> CreatePipelineStageRecomputationOp(
+  StatusOr<DriverProgramSequence> CreatePipelineStageRecomputationOp(
       const HloInstruction* inst,
       const poplar::DebugNameAndId& debug_name_and_id);
 
@@ -230,19 +228,20 @@ class ParallelPipelineVisitor : public PipelineVisitor {
   using PipelineVisitor::PipelineVisitor;
 
   static std::unique_ptr<PipelineVisitor> Create(
-      const HloInstruction* pipeline, CompilerResources& res,
-      const DeferredArgRBVectors& inputs,
+      DriverGraph& graph, const HloInstruction* pipeline,
+      CompilerResources& res, const DeferredArgRBVectors& inputs,
       const HloPoplarInplaceDescription& description,
       const poplar::DebugNameAndId& debug_name_and_id);
 
  protected:
   RepeatBlock GetPipelineRampUpSequence(
+      DriverGraph& graph,
       const poplar::DebugNameAndId& debug_name_and_id) const override;
-  poplar::program::Sequence GetPipelineRampDownSequence(
-      const poplar::DebugNameAndId& debug_name_and_id,
+  DriverProgramSequence GetPipelineRampDownSequence(
+      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& additional_iterations = 0) const override;
-  poplar::program::Sequence GetPipelineRepeatBlockSequence(
-      const poplar::DebugNameAndId& debug_name_and_id,
+  DriverProgramSequence GetPipelineRepeatBlockSequence(
+      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& iterations) const override;
 
   bool StageOutputsRequireCopies() const override { return true; }
@@ -255,19 +254,20 @@ class SequentialPipelineVisitor : public PipelineVisitor {
   Status HandleFifo(HloInstruction* hlo) override;
 
   static std::unique_ptr<PipelineVisitor> Create(
-      const HloInstruction* pipeline, CompilerResources& res,
-      const DeferredArgRBVectors& inputs,
+      DriverGraph& graph, const HloInstruction* pipeline,
+      CompilerResources& res, const DeferredArgRBVectors& inputs,
       const HloPoplarInplaceDescription& description,
       const poplar::DebugNameAndId& debug_name_and_id);
 
  protected:
   RepeatBlock GetPipelineRampUpSequence(
+      DriverGraph& graph,
       const poplar::DebugNameAndId& debug_name_and_id) const override;
-  poplar::program::Sequence GetPipelineRampDownSequence(
-      const poplar::DebugNameAndId& debug_name_and_id,
+  DriverProgramSequence GetPipelineRampDownSequence(
+      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& additional_iterations = 0) const override;
-  poplar::program::Sequence GetPipelineRepeatBlockSequence(
-      const poplar::DebugNameAndId& debug_name_and_id,
+  DriverProgramSequence GetPipelineRepeatBlockSequence(
+      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& iterations) const override;
 
   bool StageOutputsRequireCopies() const override { return false; }

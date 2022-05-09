@@ -172,6 +172,7 @@ ENTRY main {
   resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
+      *resources->main_graph,
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
@@ -180,7 +181,8 @@ ENTRY main {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(8).ValueOrDie();
+  auto program =
+      visitor.GetPipelineSequence(*resources->main_graph, 8).ValueOrDie();
 
   // Compile the graph
   poplar::Engine engine(*resources->main_graph, program);
@@ -315,6 +317,7 @@ ENTRY main {
   resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
+      *resources->main_graph,
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
@@ -323,7 +326,8 @@ ENTRY main {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(8).ValueOrDie();
+  auto program =
+      visitor.GetPipelineSequence(*resources->main_graph, 8).ValueOrDie();
 
   // Create unique reporting directory to avoid tests overwriting
   // eachother's reports.
@@ -527,6 +531,7 @@ ENTRY main {
   resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
+      *resources->main_graph,
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
@@ -535,7 +540,8 @@ ENTRY main {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(12).ValueOrDie();
+  auto program =
+      visitor.GetPipelineSequence(*resources->main_graph, 12).ValueOrDie();
 
   // Create unique reporting directory to avoid tests overwriting
   // eachother's reports.
@@ -733,6 +739,7 @@ ENTRY main {
   resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
+      *resources->main_graph,
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
@@ -741,7 +748,8 @@ ENTRY main {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(12).ValueOrDie();
+  auto program =
+      visitor.GetPipelineSequence(*resources->main_graph, 12).ValueOrDie();
 
   // Build and run the graph
   poplar::Engine engine(*resources->main_graph, program,
@@ -943,6 +951,7 @@ ENTRY main {
   resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
+      *resources->main_graph,
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
@@ -951,7 +960,8 @@ ENTRY main {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(8).ValueOrDie();
+  auto program =
+      visitor.GetPipelineSequence(*resources->main_graph, 8).ValueOrDie();
 
   // Compile the graph
   poplar::Engine engine(*resources->main_graph, program);

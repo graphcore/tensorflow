@@ -33,7 +33,7 @@ class PipelineStageVisitor : public InplaceDeferredVisitor {
                        const HloPoplarInplaceDescription& description,
                        const poplar::DebugNameAndId& debug_name_and_id);
 
-  poplar::program::Sequence GetCachedSequence();
+  DriverProgramSequence GetCachedSequence(DriverGraph& graph);
 
   // Returns whether the output needs a copy.
   virtual ShapeTree<bool> GetOutputCopies(const HloInstruction* inst) const;
@@ -41,7 +41,7 @@ class PipelineStageVisitor : public InplaceDeferredVisitor {
  private:
   // Caching fields for the GetSequence call
   bool has_function_ = false;
-  poplar::Function function_;
+  DriverFunction function_;
 };
 
 // Similar to PipelineStageVisitor, however it adds copies for any non-inplace
@@ -62,12 +62,12 @@ class ReusablePipelineStageVisitor : public PipelineStageVisitor {
 
   // Get the sequence for the forward stage, adding any copies for inplace
   // inputs.
-  poplar::program::Sequence GetForwardStageSequence(
+  DriverProgramSequence GetForwardStageSequence(
       const HloInstruction* callsite, const DeferredArgRBVectors& inputs,
       TensorMap& callsite_tensor_map);
 
   // Get the sequence for the recomputation stage.
-  poplar::program::Sequence GetRecomputationStageSequence(
+  DriverProgramSequence GetRecomputationStageSequence(
       const HloInstruction* callsite,
       const TensorOrRemoteBufferVectors& inputs);
 
@@ -75,7 +75,7 @@ class ReusablePipelineStageVisitor : public PipelineStageVisitor {
   ShapeTree<bool> GetOutputCopies(const HloInstruction* inst) const override;
 
  private:
-  poplar::program::Sequence GetCachedSequence(
+  DriverProgramSequence GetCachedSequence(
       const HloInstruction* callsite,
       const TensorOrRemoteBufferVectors& inputs);
 

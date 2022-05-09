@@ -65,8 +65,9 @@ FullVisitor::FullVisitor(CompilerResources& res,
 Status FullVisitor::HandleConcatenate(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
+  auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   int64 dimension(inst->concatenate_dimension());
   TF_ASSIGN_OR_RETURN(TensorVectors inputs,
@@ -74,14 +75,13 @@ Status FullVisitor::HandleConcatenate(HloInstruction* inst) {
                                                seq, debug_name_and_id, false));
   CHECK_EQ(inputs.size(), inst->operand_count());
 
-  std::vector<poplar::Tensor> tensors(inputs.size());
+  std::vector<DriverTensor> tensors(inputs.size());
   absl::c_transform(inputs, tensors.begin(), [](const TensorVector& ts) {
     CHECK_EQ(ts.size(), 1);
     return ts[0];
   });
-  poplar::Tensor out = poplar::concat(tensors, dimension);
+  DriverTensor out = ConcatenateTensors(tensors, dimension);
 
-  auto& graph = GetGraph(resources_, inst);
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
 
   return AddSequenceForInstruction(inst, seq);
@@ -91,7 +91,7 @@ Status FullVisitor::HandleDot(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Sequence prog,
+      DriverProgramSequence prog,
       CreateMatMulForDotOp(resources_, inst, GetOutputShape(inst), tensor_map,
                            debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -99,8 +99,9 @@ Status FullVisitor::HandleDot(HloInstruction* inst) {
 
 Status FullVisitor::HandleReverse(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, resources_, inst,
@@ -120,7 +121,7 @@ Status FullVisitor::HandleReduce(HloInstruction* inst) {
   if (IsReducibleArithmetic(inst->to_apply())) {
     poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
     TF_ASSIGN_OR_RETURN(
-        poplar::program::Sequence prog,
+        DriverProgramSequence prog,
         CreateSimpleReduction(resources_, inst, GetOutputShape(inst),
                               tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
@@ -132,7 +133,8 @@ Status FullVisitor::HandleBroadcast(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  auto& graph = GetGraph(resources_, inst);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, resources_, inst,
@@ -152,8 +154,9 @@ Status FullVisitor::HandleBroadcast(HloInstruction* inst) {
 Status FullVisitor::HandleReshape(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
+  auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(auto inputs,
                       FindInplaceOutputs(tensor_map, resources_, inst, seq,
@@ -175,8 +178,9 @@ Status FullVisitor::HandleReshape(HloInstruction* inst) {
 Status FullVisitor::HandleTranspose(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
+  auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, resources_, inst,
@@ -200,7 +204,7 @@ Status FullVisitor::HandleTranspose(HloInstruction* inst) {
 Status FullVisitor::HandleSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
+  TF_ASSIGN_OR_RETURN(DriverProgramSequence prog,
                       CreateSlice(resources_, inst, GetOutputShape(inst),
                                   tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -210,7 +214,7 @@ Status FullVisitor::HandleDynamicSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Sequence prog,
+      DriverProgramSequence prog,
       CreateDynamicSliceOp(resources_, inst, GetOutputShape(inst), tensor_map,
                            debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -220,7 +224,7 @@ Status FullVisitor::HandleDynamicUpdateSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Sequence prog,
+      DriverProgramSequence prog,
       CreateDynamicUpdateSliceOp(resources_, inst, GetOutputShape(inst),
                                  tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -231,14 +235,14 @@ Status FullVisitor::HandleReduceWindow(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   if (IsPoplibsPool(inst, inst->to_apply())) {
     TF_ASSIGN_OR_RETURN(
-        poplar::program::Sequence prog,
+        DriverProgramSequence prog,
         CreatePoplibsWindowReduction(resources_, inst, GetOutputShape(inst),
                                      tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
   }
   if (IsReducibleArithmetic(inst->to_apply())) {
     TF_ASSIGN_OR_RETURN(
-        poplar::program::Sequence prog,
+        DriverProgramSequence prog,
         CreateSimpleWindowReduction(resources_, inst, GetOutputShape(inst),
                                     tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
@@ -252,7 +256,7 @@ Status FullVisitor::HandleSelectAndScatter(HloInstruction* inst) {
     VLOG(1) << "Processing " << inst->name();
     poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
     TF_ASSIGN_OR_RETURN(
-        poplar::program::Sequence prog,
+        DriverProgramSequence prog,
         CreateSimpleSelectAndScatter(resources_, inst, GetOutputShape(inst),
                                      tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
@@ -265,7 +269,7 @@ Status FullVisitor::HandleWhile(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   // Version of the while operation which does not allow parameters to be
   // deferred.
-  TF_ASSIGN_OR_RETURN(poplar::program::Sequence prog,
+  TF_ASSIGN_OR_RETURN(DriverProgramSequence prog,
                       CreateWhileOp(resources_, inst, GetOutputShape(inst),
                                     tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
@@ -274,8 +278,9 @@ Status FullVisitor::HandleWhile(HloInstruction* inst) {
 Status FullVisitor::HandlePad(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
+  auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, resources_, inst,

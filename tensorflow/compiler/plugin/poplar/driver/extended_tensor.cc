@@ -103,5 +103,11 @@ std::ostream& operator<<(std::ostream& os, const ExtendedTensor& tensor) {
   return os;
 }
 
+std::vector<snap::Tensor> GetSnapTensors(std::vector<ExtendedTensor>& ets) {
+  std::vector<snap::Tensor> ts(ets.size());
+  absl::c_copy(ets, ts.begin());
+  return ts;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

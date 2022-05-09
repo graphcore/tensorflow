@@ -42,6 +42,11 @@ ExtendedGraph ExtendedGraph::createVirtualGraph(
   return {std::move(graph)};
 }
 
+ExtendedGraph ExtendedGraph::getTopLevelGraph() {
+  auto graph = snap::Graph::getTopLevelGraph();
+  return {std::move(graph)};
+}
+
 ExtendedTensor ExtendedGraph::addReplicationIndexConstant(
     const poplar::DebugContext& debugContext) {
   auto tensor = getPoplarGraph().addReplicationIndexConstant(debugContext);
@@ -76,6 +81,23 @@ ExtendedTensor ExtendedGraph::addVariable(
     const poplar::DebugContext& debugContext) {
   auto tensor =
       snap::Graph::addVariable(type, shape, mappingMethod, debugContext);
+  return {std::move(tensor)};
+}
+
+ExtendedTensor ExtendedGraph::addLinearlyMappedVariable(
+    const poplar::Type& type, poplar::ArrayRef<std::size_t> shape,
+    const poplar::DebugContext& debugContext) {
+  auto tensor =
+      snap::Graph::addLinearlyMappedVariable(type, shape, debugContext);
+  return {std::move(tensor)};
+}
+
+ExtendedTensor ExtendedGraph::addLinearlyMappedVariable(
+    const poplar::Type& type, poplar::ArrayRef<std::size_t> shape,
+    unsigned minElementsPerTile, unsigned grainSize,
+    const poplar::DebugContext& debugContext) {
+  auto tensor = snap::Graph::addLinearlyMappedVariable(
+      type, shape, minElementsPerTile, grainSize, debugContext);
   return {std::move(tensor)};
 }
 
@@ -115,11 +137,6 @@ poplar::Graph::TileToTensorMapping ExtendedGraph::getTileMapping(
 poplar::Graph::TileToTensorMapping ExtendedGraph::getTileMapping(
     poplar::Tensor t) const {
   return getPoplarGraph().getTileMapping(t);
-}
-
-poplar::Function ExtendedGraph::addFunction(
-    const poplar::program::Program& program) {
-  return getPoplarGraph().addFunction(program);
 }
 
 poplar::HostFunction ExtendedGraph::addHostFunction(

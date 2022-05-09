@@ -295,10 +295,10 @@ class DeferredVisitor : public FullVisitor {
       const std::vector<absl::optional<TensorOrRemoteBuffer>>& callsite_input,
       const poplar::DebugNameAndId& debug_name_and_id);
 
-  poplar::program::Sequence GetSequence(
-      bool copy_execution_counters = true) final;
+  DriverProgramSequence GetSequence(DriverGraph& graph,
+                                    bool copy_execution_counters = true) final;
 
-  poplar::program::Sequence GetFunctionCall();
+  DriverProgramSequence GetFunctionCall(DriverGraph& graph);
 
  protected:
   // Signal that we are entering a new variable scope, where zeroing and write
@@ -310,9 +310,8 @@ class DeferredVisitor : public FullVisitor {
   // this function.
   Status ExitVariableScope();
 
-  Status AddSequenceForInstruction(
-      const HloInstruction* inst,
-      const poplar::program::Sequence& seq) override;
+  Status AddSequenceForInstruction(const HloInstruction* inst,
+                                   const DriverProgramSequence& seq) override;
 
   // Get the inputs for a deferred instruction.
   StatusOr<DeferredArgRBVectors> GetInputsForDeferredRBInstruction(
@@ -397,14 +396,14 @@ class DeferredVisitor : public FullVisitor {
   // Called by AllocateInput when allocating an input for an infeed.
   StatusOr<DriverTensor> PostProcessInfeedAllocation(
       TensorLocation location, const Shape& shape,
-      poplar::program::Sequence& sequence, DriverTensor tensor,
+      DriverProgramSequence& sequence, DriverTensor tensor,
       const poplar::DebugNameAndId& debug_name_and_id);
 
   // Called by AllocateInput when allocating an input for a parameter.
   // By default, inplace evaluator does no post processing for parameters.
   virtual StatusOr<DriverTensor> PostProcessParameterAllocation(
       TensorLocation location, const Shape& shape,
-      poplar::program::Sequence& sequence, DriverTensor tensor,
+      DriverProgramSequence& sequence, DriverTensor tensor,
       const poplar::DebugNameAndId& debug_name_and_id) {
     return tensor;
   }
@@ -507,13 +506,13 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   // If the visitor operator is allowed to reallocate inputs, then copies from
   // the callsite to computation inputs might be required as they are different
   // tensors.
-  StatusOr<poplar::program::Sequence> GetPreambleCopies(
-      const poplar::DebugNameAndId& debug_name_and_id);
+  StatusOr<DriverProgramSequence> GetPreambleCopies(
+      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id);
 
  protected:
   // Add the given sequence to the correct sequence for aliasing copies.
   virtual void AddSequenceForAliasingCopy(const HloInstruction* inst,
-                                          const poplar::program::Sequence& seq);
+                                          const DriverProgramSequence& seq);
 
   // Given an output flat index get the corresponding parameter number and flat
   // index.

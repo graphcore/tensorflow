@@ -25,32 +25,34 @@ namespace poplarplugin {
 
 class RepeatLoopOverlapIOVisitor : public RepeatLoopVisitor {
  public:
-  using RepeatLoopVisitor::RepeatLoopVisitor;
+  // using RepeatLoopVisitor::RepeatLoopVisitor;
+  RepeatLoopOverlapIOVisitor(CompilerResources& res,
+                             const DeferredArgRBVectors& inputs,
+                             const HloPoplarInplaceDescription& description,
+                             const ReallocateInputsInfo& reallocate_inputs_info,
+                             const poplar::DebugNameAndId& debug_name_and_id);
 
   DriverProgramSequence GetRepeatLoopSequence(
       const HloInstruction* inst) override;
 
  protected:
-  Status AddSequenceForInstruction(
-      const HloInstruction* inst,
-      const poplar::program::Sequence& seq) override;
+  Status AddSequenceForInstruction(const HloInstruction* inst,
+                                   const DriverProgramSequence& seq) override;
 
   Status AppendSequenceGroupedByInstruction(
-      const HloInstruction* inst,
-      const poplar::program::Sequence& seq) override;
+      const HloInstruction* inst, const DriverProgramSequence& seq) override;
 
   Status PrependSequenceGroupedByInstruction(
-      const HloInstruction* inst,
-      const poplar::program::Sequence& seq) override;
+      const HloInstruction* inst, const DriverProgramSequence& seq) override;
 
  private:
-  StatusOr<poplar::program::Sequence*> GetSequenceForInstruction(
+  StatusOr<DriverProgramSequence*> GetSequenceForInstruction(
       const HloInstruction* inst);
 
-  poplar::program::Sequence infeed_sequence_;
-  poplar::program::Sequence outfeed_sequence_;
-  poplar::program::Sequence io_tile_copy_in_sequence_;
-  poplar::program::Sequence io_tile_copy_out_sequence_;
+  DriverProgramSequence infeed_sequence_;
+  DriverProgramSequence outfeed_sequence_;
+  DriverProgramSequence io_tile_copy_in_sequence_;
+  DriverProgramSequence io_tile_copy_out_sequence_;
 };
 }  // namespace poplarplugin
 }  // namespace xla

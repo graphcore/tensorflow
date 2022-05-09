@@ -37,7 +37,11 @@ RepeatLoopVisitor::RepeatLoopVisitor(
     const ReallocateInputsInfo& reallocate_inputs_info,
     const poplar::DebugNameAndId& debug_name_and_id)
     : InplaceDeferredVisitor(res, inputs, description, debug_name_and_id, {},
-                             reallocate_inputs_info) {
+                             reallocate_inputs_info),
+      // Temporary initializations, will be assigned later.
+      pre_loop_sequence_(*res.main_graph),
+      tensors_zeroing_sequence_(*res.main_graph),
+      resource_update_sequence_(*res.main_graph) {
   EnterVariableScope();
   loop_start_sr_method_ = GetStochasticRoundingMethod(resources_);
 }
@@ -92,10 +96,11 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   // Create the sequence which is only executed once before the loops is
   // executed.
   // Add any copies if the inputs were reallocated.
-  TF_ASSIGN_OR_RETURN(pre_loop_sequence_, GetPreambleCopies(dnai_));
+  auto& graph = GetGraph(resources_, inst);
+  TF_ASSIGN_OR_RETURN(pre_loop_sequence_, GetPreambleCopies(graph, dnai_));
 
   // Initialize the counters to zero once at the begining.
-  pre_loop_sequence_.add(execution_counters_.SetInitialValuesToZero());
+  pre_loop_sequence_.add(execution_counters_.SetInitialValuesToZero(graph));
 
   // Create a sequence for all the zeroing gradient accumulation buffers.
   auto& zeroing_tensors =
@@ -113,7 +118,6 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
 
   // Add the aliasing copies for the loop so that the outputs of one iteration
   // are aliased to the inputs of the next one.
-  auto& graph = GetGraph(resources_, inst);
   TF_ASSIGN_OR_RETURN(loop_state_, AddLoopInputOutputAliasingCopies(
                                        graph, inst->parent(), {dnai_}));
 
@@ -121,7 +125,7 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
 }
 
 Status RepeatLoopVisitor::AddSequenceForInstruction(
-    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+    const HloInstruction* inst, const DriverProgramSequence& seq) {
   switch (inst->opcode()) {
     case HloOpcode::kGetTupleElement: {
       if (IsResourceUpdate(inst->operand(0))) {
@@ -145,7 +149,7 @@ Status RepeatLoopVisitor::AddSequenceForInstruction(
 }
 
 void RepeatLoopVisitor::AddSequenceForAliasingCopy(
-    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+    const HloInstruction* inst, const DriverProgramSequence& seq) {
   if (has_resource_update_) {
     resource_update_sequence_.add(seq);
   } else {
@@ -161,17 +165,17 @@ DriverProgramSequence RepeatLoopVisitor::GetRepeatLoopSequence(
   auto& graph = GetGraph(resources_, inst);
   DriverProgramSequence seq(graph, debug_name_and_id);
   seq.add(pre_loop_sequence_);
-  poplar::program::Sequence repeat_seq({}, {debug_name_and_id, "repeat"});
+  DriverProgramSequence repeat_seq(graph, {debug_name_and_id, "repeat"});
 
   {
-    repeat_seq.add(GetSequence(/*copy_execution_counters*/ false));
+    repeat_seq.add(GetSequence(graph, /*copy_execution_counters*/ false));
     // We need to be in the loop_start_sr_method_ when the loop starts each
     // iteration as the seed state changes made during the loop are all done
     // relative to this.
     MaybeChangeStochasticRoundingMethod(resources_, inst->name() + "_iter_end",
                                         loop_start_sr_method_, repeat_seq);
     // Increase the local execution counters at the end of each iteration.
-    repeat_seq.add(execution_counters_.IncrementLiveCounters());
+    repeat_seq.add(execution_counters_.IncrementLiveCounters(graph));
   }
 
   if (has_resource_update_) {
@@ -180,7 +184,7 @@ DriverProgramSequence RepeatLoopVisitor::GetRepeatLoopSequence(
     // Create a double loop - the inner loop executes for
     // `num_mini_batches_to_accumulate_` iterations and then performs the
     // resource update.
-    poplar::program::Sequence inner_seq({}, {debug_name_and_id, "inner"});
+    DriverProgramSequence inner_seq(graph, {debug_name_and_id, "inner"});
     // Zero the gradient accumulation buffers.
     inner_seq.add(tensors_zeroing_sequence_);
     inner_seq.add(poplar::program::Repeat(num_mini_batches_to_accumulate_,

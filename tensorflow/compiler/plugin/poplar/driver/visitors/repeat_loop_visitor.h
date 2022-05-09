@@ -43,22 +43,20 @@ class RepeatLoopVisitor : public InplaceDeferredVisitor {
   const TensorOrRemoteBufferVector& GetLoopState() const;
 
  protected:
-  Status AddSequenceForInstruction(
-      const HloInstruction* inst,
-      const poplar::program::Sequence& seq) override;
+  Status AddSequenceForInstruction(const HloInstruction* inst,
+                                   const DriverProgramSequence& seq) override;
 
-  void AddSequenceForAliasingCopy(
-      const HloInstruction* inst,
-      const poplar::program::Sequence& seq) override;
+  void AddSequenceForAliasingCopy(const HloInstruction* inst,
+                                  const DriverProgramSequence& seq) override;
 
   // Sequence which is executed once before the loop starts executing.
-  poplar::program::Sequence pre_loop_sequence_;
+  DriverProgramSequence pre_loop_sequence_;
 
   // Information used for the resource update (if there is one).
   bool has_resource_update_ = false;
   int64 num_mini_batches_to_accumulate_ = -1;
-  poplar::program::Sequence tensors_zeroing_sequence_;
-  poplar::program::Sequence resource_update_sequence_;
+  DriverProgramSequence tensors_zeroing_sequence_;
+  DriverProgramSequence resource_update_sequence_;
 
  private:
   // The tensors representing the inputs/outputs of the loops (they have to

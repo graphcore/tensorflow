@@ -81,11 +81,11 @@ static Status VerifyPipelineArgumentsFixed(int64 iterations,
   return Status::OK();
 }
 
-static StatusOr<poplar::program::Sequence> VerifyPipelineArgumentsRuntime(
+static StatusOr<DriverProgramSequence> VerifyPipelineArgumentsRuntime(
     const HloInstruction* accumulation_count, int64 overlap_length,
-    poplar::Tensor accumulation_count_tensor, poplar::Graph& graph,
+    DriverTensor accumulation_count_tensor, DriverGraph& graph,
     const poplar::DebugContext& debug_context) {
-  poplar::program::Sequence prog({}, debug_context);
+  DriverProgramSequence prog(graph, debug_context);
   auto cond =
       popops::map(graph, popops::expr::_1 < (overlap_length + 2),
                   {std::move(accumulation_count_tensor)}, prog, debug_context);
@@ -101,17 +101,17 @@ static StatusOr<poplar::program::Sequence> VerifyPipelineArgumentsRuntime(
   return prog;
 }
 
-StatusOr<poplar::program::Sequence>
+StatusOr<DriverProgramSequence>
 GroupedOverlapPipelineVisitor::VerifyPipelineArguments(
     const HloInstruction* accumulation_count,
-    poplar::Tensor accumulation_count_tensor, poplar::Graph& graph) const {
+    DriverTensor accumulation_count_tensor, DriverGraph& graph) const {
   const auto iterations = GetAccumulationConstantsValue(accumulation_count);
   const int64 overlap_length =
       pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_).size();
   if (iterations) {
     TF_RETURN_IF_ERROR(
         VerifyPipelineArgumentsFixed(*iterations, overlap_length));
-    return poplar::program::Sequence({}, dnai_);
+    return DriverProgramSequence(graph, dnai_);
   }
   return VerifyPipelineArgumentsRuntime(
       accumulation_count, overlap_length, std::move(accumulation_count_tensor),
@@ -121,7 +121,7 @@ GroupedOverlapPipelineVisitor::VerifyPipelineArguments(
 PipelineVisitor::IterationsType
 GroupedOverlapPipelineVisitor::RampDownAdditionalIterations(
     PipelineVisitor::IterationsType iterations, const size_t overlap_length,
-    poplar::program::Sequence& program) const {
+    DriverProgramSequence& program) const {
   return absl::visit(
       make_visitor<PipelineVisitor::IterationsType>(
           [&](int64& i) {
@@ -131,46 +131,48 @@ GroupedOverlapPipelineVisitor::RampDownAdditionalIterations(
             return PipelineVisitor::IterationsType(
                 PipelineVisitor::CountAndGraph(
                     i.graph,
-                    popops::map(i.graph, popops::expr::_1 % overlap_length,
-                                {i.count}, program)));
+                    DriverTensor(
+                        popops::map(i.graph, popops::expr::_1 % overlap_length,
+                                    {i.count}, program),
+                        i.graph)));
           }),
       iterations);
 }
 
 PipelineVisitor::RepeatBlock
 GroupedOverlapPipelineVisitor::GetPipelineRampUpSequence(
-    const poplar::DebugNameAndId& debug_name_and_id) const {
+    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id) const {
   std::vector<int> offsets =
       pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_);
 
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
-  auto infeed_sequences =
-      util::ConstructRampUpScheduleOverlapIO(offsets, infeed_sequences_, 0);
-  auto program_sequences =
-      util::ConstructRampUpScheduleOverlapIO(offsets, program_sequences_, 1);
-  auto fifo_sequences =
-      util::ConstructRampUpScheduleOverlapIO(offsets, fifo_sequences_, 1);
+  auto infeed_sequences = util::ConstructRampUpScheduleOverlapIO(
+      offsets, infeed_sequences_, 0, {graph});
+  auto program_sequences = util::ConstructRampUpScheduleOverlapIO(
+      offsets, program_sequences_, 1, {graph});
+  auto fifo_sequences = util::ConstructRampUpScheduleOverlapIO(
+      offsets, fifo_sequences_, 1, {graph});
   auto recomputation_sequences =
       util::ConstructRecomputationRampUpScheduleOverlapIO(
-          offsets, recomputation_sequences_, num_backward_stages_, 1);
+          offsets, recomputation_sequences_, num_backward_stages_, 1, {graph});
   auto copy_sequences =
-      util::ConstructScheduleOverlapIO(offsets, copy_sequences_);
-  auto inter_ipu_copy_sequences =
-      util::ConstructScheduleOverlapIO(offsets, inter_ipu_copy_sequences_);
+      util::ConstructScheduleOverlapIO(offsets, copy_sequences_, {graph});
+  auto inter_ipu_copy_sequences = util::ConstructScheduleOverlapIO(
+      offsets, inter_ipu_copy_sequences_, {graph});
   auto inter_tileset_copy_in_sequences = util::ConstructScheduleOverlapIO(
-      offsets, inter_tileset_copy_in_sequences_);
+      offsets, inter_tileset_copy_in_sequences_, {graph});
   auto inter_tileset_copy_out_sequences = util::ConstructScheduleOverlapIO(
-      offsets, inter_tileset_copy_out_sequences_);
-  auto outfeed_sequences =
-      util::ConstructRampUpScheduleOverlapIO(offsets, outfeed_sequences_, 2);
+      offsets, inter_tileset_copy_out_sequences_, {graph});
+  auto outfeed_sequences = util::ConstructRampUpScheduleOverlapIO(
+      offsets, outfeed_sequences_, 2, {graph});
 
   // Concatenate the programs in the correct order.
   // For overlapped IO, we execute in following order:
   // inter-tileset-copy in, other copies, inter-tileset-copy out, outfeeds,
   // infeeds, programs, fifos, recomputation stages, and then inter-ipu-copies.
-  std::vector<std::vector<poplar::program::Sequence>> pipeline_sequences;
+  std::vector<std::vector<DriverProgramSequence>> pipeline_sequences;
   pipeline_sequences.insert(pipeline_sequences.end(),
                             inter_tileset_copy_out_sequences.begin(),
                             inter_tileset_copy_out_sequences.end());
@@ -195,14 +197,14 @@ GroupedOverlapPipelineVisitor::GetPipelineRampUpSequence(
                             inter_ipu_copy_sequences.end());
 
   auto repeat_block = util::DefaultScheduler().CreateRepeatBlock(
-      pipeline_sequences, debug_name_and_id, offsets.size());
+      graph, pipeline_sequences, debug_name_and_id, offsets.size());
 
   return {std::move(repeat_block), (offsets.size() / 2) + 1};
 }
 
-poplar::program::Sequence
+DriverProgramSequence
 GroupedOverlapPipelineVisitor::GetPipelineRampDownSequence(
-    const poplar::DebugNameAndId& debug_name_and_id,
+    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const IterationsType& additional_iterations) const {
   // Find the set of non-overlapping program offsets.
   std::vector<int> offsets =
@@ -211,31 +213,31 @@ GroupedOverlapPipelineVisitor::GetPipelineRampDownSequence(
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
-  auto infeed_sequences =
-      util::ConstructRampDownScheduleOverlapIO(offsets, infeed_sequences_, 0);
-  auto program_sequences =
-      util::ConstructRampDownScheduleOverlapIO(offsets, program_sequences_, 1);
+  auto infeed_sequences = util::ConstructRampDownScheduleOverlapIO(
+      offsets, infeed_sequences_, 0, {graph});
+  auto program_sequences = util::ConstructRampDownScheduleOverlapIO(
+      offsets, program_sequences_, 1, {graph});
   auto fifo_sequences =
-      util::ConstructScheduleOverlapIO(offsets, fifo_sequences_);
+      util::ConstructScheduleOverlapIO(offsets, fifo_sequences_, {graph});
   auto recomputation_sequences =
       util::ConstructRecomputationRampDownScheduleOverlapIO(
-          offsets, recomputation_sequences_, num_backward_stages_, 1);
+          offsets, recomputation_sequences_, num_backward_stages_, 1, {graph});
   auto copy_sequences =
-      util::ConstructScheduleOverlapIO(offsets, copy_sequences_);
-  auto inter_ipu_copy_sequences =
-      util::ConstructScheduleOverlapIO(offsets, inter_ipu_copy_sequences_);
+      util::ConstructScheduleOverlapIO(offsets, copy_sequences_, {graph});
+  auto inter_ipu_copy_sequences = util::ConstructScheduleOverlapIO(
+      offsets, inter_ipu_copy_sequences_, {graph});
   auto inter_tileset_copy_in_sequences = util::ConstructScheduleOverlapIO(
-      offsets, inter_tileset_copy_in_sequences_);
+      offsets, inter_tileset_copy_in_sequences_, {graph});
   auto inter_tileset_copy_out_sequences = util::ConstructScheduleOverlapIO(
-      offsets, inter_tileset_copy_out_sequences_);
-  auto outfeed_sequences =
-      util::ConstructRampDownScheduleOverlapIO(offsets, outfeed_sequences_, 2);
+      offsets, inter_tileset_copy_out_sequences_, {graph});
+  auto outfeed_sequences = util::ConstructRampDownScheduleOverlapIO(
+      offsets, outfeed_sequences_, 2, {graph});
 
   // Concatenate the programs in the correct order.
   // For overlapped IO, we execute in following order:
   // inter-tileset-copy in, other copies, inter-tileset-copy out, outfeeds,
   // infeeds, programs, fifos, recomputation stages, and then inter-ipu-copies.
-  std::vector<std::vector<poplar::program::Sequence>> pipeline_sequences;
+  std::vector<std::vector<DriverProgramSequence>> pipeline_sequences;
   pipeline_sequences.insert(pipeline_sequences.end(),
                             inter_tileset_copy_out_sequences.begin(),
                             inter_tileset_copy_out_sequences.end());
@@ -260,14 +262,14 @@ GroupedOverlapPipelineVisitor::GetPipelineRampDownSequence(
                             inter_ipu_copy_sequences.end());
 
   auto repeat_block = util::DefaultScheduler().CreateRepeatBlock(
-      pipeline_sequences, debug_name_and_id, offsets.size());
+      graph, pipeline_sequences, debug_name_and_id, offsets.size());
 
   return repeat_block;
 }
 
-poplar::program::Sequence
+DriverProgramSequence
 GroupedOverlapPipelineVisitor::GetPipelineRepeatBlockSequence(
-    const poplar::DebugNameAndId& debug_name_and_id,
+    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const IterationsType& iterations) const {
   // Find the set of non-overlapping program offsets.
   std::vector<int> offsets =
@@ -303,7 +305,7 @@ GroupedOverlapPipelineVisitor::GetPipelineRepeatBlockSequence(
   // For overlapped IO, we execute in following order:
   // inter-tileset-copy in, other copies, inter-tileset-copy out, outfeeds,
   // infeeds, programs, fifos, recomputation stages, and then inter-ipu-copies.
-  std::vector<std::vector<poplar::program::Sequence>> pipeline_sequences;
+  std::vector<std::vector<DriverProgramSequence>> pipeline_sequences;
   pipeline_sequences.insert(pipeline_sequences.end(),
                             inter_tileset_copy_out_sequences.begin(),
                             inter_tileset_copy_out_sequences.end());
@@ -328,26 +330,27 @@ GroupedOverlapPipelineVisitor::GetPipelineRepeatBlockSequence(
                             inter_ipu_copy_sequences.end());
 
   for (auto& seq : pipeline_sequences) {
-    seq.resize(1);
+    seq.resize(1, {graph});
   }
 
   auto repeat_block = util::DefaultScheduler().CreateRepeatBlock(
-      pipeline_sequences, debug_name_and_id, offsets.size());
+      graph, pipeline_sequences, debug_name_and_id, offsets.size());
 
   return absl::visit(
-      make_visitor<poplar::program::Sequence>(
+      make_visitor<DriverProgramSequence>(
           [&](const int64 i) {
             const int64 num_repeats = ((i / offsets.size()) - 1);
             if (num_repeats < 1) {
-              return poplar::program::Sequence({}, debug_name_and_id);
+              return DriverProgramSequence(graph, debug_name_and_id);
             }
 
-            return poplar::program::Sequence(
-                {poplar::program::Repeat(num_repeats * offsets.size() - 2,
-                                         repeat_block, {debug_name_and_id})});
+            return DriverProgramSequence(
+                {DriverProgramRepeat(num_repeats * offsets.size() - 2,
+                                     repeat_block, {debug_name_and_id})},
+                graph, {debug_name_and_id});
           },
           [&](const PipelineVisitor::CountAndGraph i) {
-            poplar::program::Sequence result({}, {debug_name_and_id});
+            DriverProgramSequence result(graph, {debug_name_and_id});
             auto expr =
                 (((popops::expr::_1 / offsets.size()) - 1) * offsets.size()) -
                 1;
@@ -362,12 +365,12 @@ GroupedOverlapPipelineVisitor::GetPipelineRepeatBlockSequence(
 }
 
 std::unique_ptr<PipelineVisitor> GroupedOverlapPipelineVisitor::Create(
-    const HloInstruction* pipeline, CompilerResources& res,
+    DriverGraph& graph, const HloInstruction* pipeline, CompilerResources& res,
     const DeferredArgRBVectors& inputs,
     const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id) {
   return absl::make_unique<GroupedOverlapPipelineVisitor>(
-      pipeline, res, inputs, description, debug_name_and_id);
+      graph, pipeline, res, inputs, description, debug_name_and_id);
 }
 }  // namespace poplarplugin
 }  // namespace xla

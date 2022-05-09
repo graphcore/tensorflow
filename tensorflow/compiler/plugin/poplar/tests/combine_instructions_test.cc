@@ -1001,7 +1001,8 @@ ENTRY cluster_1  {
     main_program.add(resources->preamble_sequence->getPoplarSequence());
   }
 
-  main_program.add(visitor.GetSequenceAndInitializeCounters());
+  main_program.add(
+      visitor.GetSequenceAndInitializeCounters(*resources->main_graph));
 
   poplar::Engine engine(*resources->main_graph, main_program);
 
@@ -1084,7 +1085,8 @@ ENTRY cluster_1  {
     main_program.add(resources->preamble_sequence->getPoplarSequence());
   }
 
-  main_program.add(visitor.GetSequenceAndInitializeCounters());
+  main_program.add(
+      visitor.GetSequenceAndInitializeCounters(*resources->main_graph));
 
   poplar::Engine engine(*resources->main_graph, main_program);
 

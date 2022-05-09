@@ -22,7 +22,7 @@ limitations under the License.
 #include <string>
 #include <utility>
 
-#include <popops/ElementWise.hpp>
+#include <snap/popops/ElementWise.hpp>
 
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
@@ -60,7 +60,7 @@ ArithmeticExprVisitor::FindExpressionInput(const HloInstruction* inst) {
   // actual expressions
   if (inst->opcode() == HloOpcode::kParameter) {
     // Find the input tensor - tuples are not supported
-    poplar::Tensor& in0 = inputs_[inst->parameter_number()][0];
+    DriverTensor& in0 = inputs_[inst->parameter_number()][0];
     // Check if an expression exists
     if (tensors_map_.count(&in0) == 0) {
       // If the tensor has not been mapped yet
@@ -180,14 +180,13 @@ Status ArithmeticExprVisitor::HandleParameter(HloInstruction* inst) {
 Status ArithmeticExprVisitor::FinishScopedVisit(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   auto& graph = GetGraph(resources_, caller_);
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   // get the expression
   TF_ASSIGN_OR_RETURN(auto expr, FindExpressionInput(inst));
   // map expression with the tensors
-  auto out = DriverTensor(
-      popops::map(graph, *expr, ts_, seq, {debug_name_and_id, "expression"}),
-      graph);
+  DriverTensor out = snap::popops::map(graph, *expr, GetSnapTensors(ts_), seq,
+                                       {debug_name_and_id, "expression"});
   outputs_.push_back(out);
 
   resources_.tensor_maps.AddTensorMapForComputation(inst->parent()->name(),

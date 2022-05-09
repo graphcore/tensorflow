@@ -37,6 +37,7 @@ limitations under the License.
 #include <popops/Loop.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
@@ -404,9 +405,10 @@ std::vector<std::vector<ElementType>> RightPadSchedule(
 
 template <typename ElementType>
 std::vector<std::vector<ElementType>> SliceSchedule(
-    std::vector<std::vector<ElementType>> input, std::size_t size) {
+    std::vector<std::vector<ElementType>> input, std::size_t size,
+    ElementType empty_element = {}) {
   for (auto& timestep : input) {
-    timestep.resize(size);
+    timestep.resize(size, empty_element);
   }
 
   return input;
@@ -468,10 +470,12 @@ std::vector<std::vector<ElementType>> ConstructSchedule(
  */
 template <typename ElementType>
 std::vector<std::vector<ElementType>> ConstructScheduleOverlapIO(
-    const std::vector<int>& offsets, const std::vector<ElementType>& input) {
+    const std::vector<int>& offsets, const std::vector<ElementType>& input,
+    ElementType empty_element = {}) {
   auto result = ForceInterleavedStageOrders(ConstructSchedule(offsets, input));
   auto right_padding = SliceSchedule(
-      ForceInterleavedStageOrders(ConstructSchedule(offsets, input)), 2);
+      ForceInterleavedStageOrders(ConstructSchedule(offsets, input)), 2,
+      empty_element);
 
   return ConcatSchedule(result, right_padding);
 }
@@ -534,7 +538,7 @@ std::vector<std::vector<ElementType>> ConstructRampUpScheduleOverlapIO(
 
   auto right_padding = SliceSchedule(
       ForceInterleavedStageOrders(ConstructSchedule(offsets, input)),
-      2 - offset);
+      2 - offset, empty_element);
   return ConcatSchedule(result, right_padding);
 }
 
@@ -704,7 +708,7 @@ ConstructRecomputationRampUpScheduleOverlapIO(
 
   auto right_padding = SliceSchedule(
       ForceInterleavedStageOrders(ConstructSchedule(offsets, input)),
-      2 - offset);
+      2 - offset, empty_element);
   return ConcatSchedule(result, right_padding);
 }
 
@@ -731,19 +735,19 @@ static std::vector<std::vector<ElementType>> MaskOutPastAdditional(
 }
 
 template <>
-std::vector<std::vector<poplar::program::Sequence>>
-MaskOutPastAdditional<poplar::program::Sequence>(
+std::vector<std::vector<DriverProgramSequence>>
+MaskOutPastAdditional<DriverProgramSequence>(
     const std::vector<int>& offsets,
-    std::vector<std::vector<poplar::program::Sequence>> input,
-    poplar::program::Sequence empty_element,
+    std::vector<std::vector<DriverProgramSequence>> input,
+    DriverProgramSequence empty_element,
     const PipelineVisitor::CountAndGraph& additional_iterations,
     const poplar::DebugContext& debug_context) {
   for (size_t i = 0; i < offsets.size(); ++i) {
     auto start = std::next(input[i].begin(), offsets[i]);
     std::transform(
-        start, input[i].end(), start,
-        [&](const poplar::program::Sequence& seq) {
-          poplar::program::Sequence result({}, debug_context);
+        start, input[i].end(), start, [&](const DriverProgramSequence& seq) {
+          DriverProgramSequence result(additional_iterations.graph,
+                                       debug_context);
           auto predicate =
               popops::map(additional_iterations.graph,
                           popops::expr::Const(i) < popops::expr::_1,
@@ -825,7 +829,8 @@ std::vector<std::vector<ElementType>> ConstructRampDownScheduleOverlapIO(
   }
 
   auto left_padding = SliceSchedule(
-      ForceInterleavedStageOrders(ConstructSchedule(offsets, input)), offset);
+      ForceInterleavedStageOrders(ConstructSchedule(offsets, input)), offset,
+      empty_element);
   return ConcatSchedule(left_padding, result);
 }
 
@@ -993,7 +998,8 @@ ConstructRecomputationRampDownScheduleOverlapIO(
   }
 
   auto left_padding = SliceSchedule(
-      ForceInterleavedStageOrders(ConstructSchedule(offsets, input)), offset);
+      ForceInterleavedStageOrders(ConstructSchedule(offsets, input)), offset,
+      empty_element);
   return ConcatSchedule(left_padding, result);
 }
 
@@ -1034,13 +1040,14 @@ struct DefaultScheduler {
   }
 
   template <typename ElementType>
-  poplar::program::Sequence CreateRepeatBlock(
+  DriverProgramSequence CreateRepeatBlock(
+      DriverGraph& graph,
       std::vector<std::vector<ElementType>>& infeed_sequences,
       const poplar::DebugNameAndId& debug_name_and_id,
       std::size_t offset_size) const {
     // Flatten the schedule to a linear sequence.
     auto repeat_block_sequences = FlattenSchedule(infeed_sequences);
-    poplar::program::Sequence repeat_block({}, debug_name_and_id);
+    DriverProgramSequence repeat_block(graph, debug_name_and_id);
     for (const auto& seq : repeat_block_sequences) {
       repeat_block.add(seq);
     }
@@ -1064,17 +1071,19 @@ struct GroupedScheduler : public DefaultScheduler {
   }
 
   template <typename ElementType>
-  poplar::program::Sequence CreateRepeatBlock(
+  DriverProgramSequence CreateRepeatBlock(
+      DriverGraph& graph,
       std::vector<std::vector<ElementType>>& infeed_sequences,
       const poplar::DebugNameAndId& debug_name_and_id,
       std::size_t offset_size) const {
     for (auto& seq : infeed_sequences) {
-      seq.resize(1);
+      seq.resize(1, {graph});
     }
     auto repeat_block = DefaultScheduler().CreateRepeatBlock(
-        infeed_sequences, debug_name_and_id, offset_size);
-    return poplar::program::Sequence({poplar::program::Repeat(
-        offset_size, repeat_block, {debug_name_and_id})});
+        graph, infeed_sequences, debug_name_and_id, offset_size);
+    return DriverProgramSequence(
+        {DriverProgramRepeat(offset_size, repeat_block, {debug_name_and_id})},
+        graph, {debug_name_and_id});
   }
 };
 
@@ -1140,43 +1149,49 @@ struct PipelineSchedulerUtil {
   }
 
   template <typename ElementType>
-  poplar::program::Sequence CreateRepeatBlock(
+  DriverProgramSequence CreateRepeatBlock(
+      DriverGraph& graph,
       std::vector<std::vector<ElementType>>& infeed_sequences,
       const poplar::DebugNameAndId& debug_name_and_id,
       std::size_t offset_size) const {
-    auto vis = make_visitor<poplar::program::Sequence>(
+    auto vis = make_visitor<DriverProgramSequence>(
         [&](const DefaultScheduler& scheduler) {
-          return scheduler.CreateRepeatBlock(infeed_sequences,
+          return scheduler.CreateRepeatBlock(graph, infeed_sequences,
                                              debug_name_and_id, offset_size);
         },
         [&](const GroupedScheduler& scheduler) {
-          return scheduler.CreateRepeatBlock(infeed_sequences,
+          return scheduler.CreateRepeatBlock(graph, infeed_sequences,
                                              debug_name_and_id, offset_size);
         },
         [&](const InterleavedScheduler& scheduler) {
-          return scheduler.CreateRepeatBlock(infeed_sequences,
+          return scheduler.CreateRepeatBlock(graph, infeed_sequences,
                                              debug_name_and_id, offset_size);
         });
     return absl::visit(vis, type);
   }
 };
 
-inline poplar::program::Sequence ForProgram(
+inline DriverProgramSequence ForProgram(
+    DriverGraph& graph,
     const absl::variant<int64, PipelineVisitor::CountAndGraph>& count,
-    const poplar::program::Sequence& body,
+    const DriverProgramSequence& body,
     const poplar::DebugContext& debug_context) {
-  return absl::visit(
-      make_visitor<poplar::program::Sequence>(
-          [&](const int64 i) -> poplar::program::Sequence {
-            return poplar::program::Sequence(
-                {poplar::program::Repeat(i, body, debug_context)});
-          },
-          [&](const PipelineVisitor::CountAndGraph i)
-              -> poplar::program::Sequence {
-            return popops::countedForLoop(i.graph, 0, i.count, 1, body,
-                                          debug_context);
-          }),
-      count);
+  auto for_loop =
+      absl::visit(make_visitor<poplar::program::Sequence>(
+                      [&](const int64 i) -> poplar::program::Sequence {
+                        return poplar::program::Sequence(
+                            {poplar::program::Repeat(i, body, debug_context)});
+                      },
+                      [&](const PipelineVisitor::CountAndGraph i)
+                          -> poplar::program::Sequence {
+                        return popops::countedForLoop(i.graph, 0, i.count, 1,
+                                                      body, debug_context);
+                      }),
+                  count);
+
+  DriverProgramSequence for_loop_container(graph, debug_context);
+  for_loop_container.add(for_loop);
+  return for_loop_container;
 }
 
 }  // namespace pipelinevisitorutils

@@ -33,29 +33,30 @@ class GroupedOverlapPipelineVisitor : public ParallelPipelineVisitor {
  public:
   using ParallelPipelineVisitor::ParallelPipelineVisitor;
 
-  StatusOr<poplar::program::Sequence> VerifyPipelineArguments(
+  StatusOr<DriverProgramSequence> VerifyPipelineArguments(
       const HloInstruction* accumulation_count,
-      poplar::Tensor accumulation_count_tensor,
-      poplar::Graph& graph) const override;
+      DriverTensor accumulation_count_tensor,
+      DriverGraph& graph) const override;
 
   PipelineVisitor::IterationsType RampDownAdditionalIterations(
       IterationsType iterations, const size_t overlap_length,
-      poplar::program::Sequence& program) const override;
+      DriverProgramSequence& program) const override;
 
   static std::unique_ptr<PipelineVisitor> Create(
-      const HloInstruction* pipeline, CompilerResources& res,
-      const DeferredArgRBVectors& inputs,
+      DriverGraph& graph, const HloInstruction* pipeline,
+      CompilerResources& res, const DeferredArgRBVectors& inputs,
       const HloPoplarInplaceDescription& description,
       const poplar::DebugNameAndId& debug_name_and_id);
 
  protected:
   RepeatBlock GetPipelineRampUpSequence(
+      DriverGraph& graph,
       const poplar::DebugNameAndId& debug_name_and_id) const override;
-  poplar::program::Sequence GetPipelineRampDownSequence(
-      const poplar::DebugNameAndId& debug_name_and_id,
+  DriverProgramSequence GetPipelineRampDownSequence(
+      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& additional_iterations = 0) const override;
-  poplar::program::Sequence GetPipelineRepeatBlockSequence(
-      const poplar::DebugNameAndId& debug_name_and_id,
+  DriverProgramSequence GetPipelineRepeatBlockSequence(
+      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& iterations) const override;
 };
 

@@ -184,7 +184,7 @@ struct CompilerResources : public HloResources {
 
   std::stack<std::vector<poplar::Tensor>> gradient_accumulation_zeroing_tensors;
 
-  std::stack<std::vector<poplar::program::Sequence>>
+  std::stack<std::vector<DriverProgramSequence>>
       pipelining_write_undef_sequences;
 
   std::stack<DeferredAllocations> deferred_allocation_scopes;

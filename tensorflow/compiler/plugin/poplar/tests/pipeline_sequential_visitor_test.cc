@@ -125,14 +125,15 @@ ENTRY e {
   resources->main_graph->setTileMapping(p1, 0);
 
   SequentialPipelineVisitor visitor(
-      pipeline, *resources,
+      *resources->main_graph, pipeline, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{p0}},
                            {TensorOrRemoteBuffer{p1}}},
       GetInplaceDescription(entry_computation->root_instruction()), "visitor");
   TF_EXPECT_OK(pipeline_comp->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(6).ValueOrDie();
+  auto program =
+      visitor.GetPipelineSequence(*resources->main_graph, 6).ValueOrDie();
 
   // Compile the graph
   poplar::Engine engine(*resources->main_graph, program);
