@@ -146,7 +146,18 @@ if _running_from_pip_package():
 # correct Keras package being installed.
 class _KerasLazyLoader(_LazyLoader):
   def _load(self):
-    module = super()._load()
+    try:
+      module = super()._load()
+    except ModuleNotFoundError as _error:
+      message = """No Keras package has been detected.
+Please install the Keras package from the Poplar SDK using:
+
+  pip install /path/to/the/poplar_sdk/keras*.whl
+
+Where "/path/to/the/poplar_sdk" is the path to the Poplar SDK which contains the IPU optimized Keras Python wheel file.
+"""
+      raise ModuleNotFoundError(message) from _error
+
     # Require the IPU built package when using TF from a pip package. In local
     # test builds upstream Keras can be used as it's not being tested as part
     # of this package.
@@ -154,7 +165,7 @@ class _KerasLazyLoader(_LazyLoader):
       message = """Detected a non-IPU optimized installation of the Keras package.
 Please install the Keras package from the Poplar SDK using:
 
-  pip install /path/to/the/poplar_sdk/keras* --force-reinstall --no-deps
+  pip install /path/to/the/poplar_sdk/keras*.whl --force-reinstall --no-deps
 
 Where "/path/to/the/poplar_sdk" is the path to the Poplar SDK which contains the IPU optimized Keras Python wheel file.
 """

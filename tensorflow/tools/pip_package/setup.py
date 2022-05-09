@@ -105,7 +105,9 @@ REQUIRED_PACKAGES = [
     # When updating these, please also update the nightly versions below
     'tensorboard >= 2.6.0, < 2.7',
     'tensorflow_estimator >= 2.6.0, < 2.7',
-    'keras >= 2.6.0, < 2.7',
+    # IPU specific change - we don't require Keras so that users don't have to
+    # reinstall it.
+    # 'keras >= 2.6.0, < 2.7',
 ]
 
 
