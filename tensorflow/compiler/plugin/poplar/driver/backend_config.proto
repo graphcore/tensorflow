@@ -143,6 +143,7 @@ message PoplarBackendConfig {
     int64 batch_group_count = 4;
 
     repeated PoplarUseDescription inplace_descriptions = 5;
+    bool allow_non_inplace = 6;
   };
 
   // Instruction config for a Call instruction

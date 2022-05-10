@@ -534,9 +534,9 @@ REGISTER_HLO_INST_EXTENSIONS(kFusion, [](HloOpcode opcode) {
               default:
                 LOG(FATAL) << "Invalid buffer use kind.";
             }
-            return HloPoplarInplaceDescription(inplace_type,
-                                               std::move(inplace_operands),
-                                               /*allow_non_inplace=*/false);
+            bool allow_non_inplace = fusion_config.allow_non_inplace();
+            return HloPoplarInplaceDescription(
+                inplace_type, std::move(inplace_operands), allow_non_inplace);
           } else {
             return HloPoplarInplaceDescription();
           }
