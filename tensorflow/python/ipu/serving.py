@@ -346,7 +346,7 @@ def export_pipeline(computational_stages,
   return _export_saved_model(defunc, export_dir, input_signature)
 
 
-def export_keras(model, export_dir):
+def export_keras(model, export_dir, batch_size=None):
   """Export Keras model using the SavedModel format for TensorFlow serving.
 
   Wrap model's ``call`` function inside a ``while`` loop, add an infeed for the
@@ -358,6 +358,11 @@ def export_keras(model, export_dir):
     model (tf.keras.Model): The Keras model to export.
     export_dir (str): The path to the directory where the SavedModel will be
       written.
+    batch_size (int, optional): The batch size value to be used in the exported
+      model. If not specified and the model was built with a specified batch
+      size (different than None), the exported model will use the currently set
+      batch size. This argument must be specified if the model's batch size is
+      `None`.
 
   Returns:
     tf.function: A reference to the same predict function that was exported
@@ -378,4 +383,4 @@ def export_keras(model, export_dir):
         "Provided model was not created inside an IPU strategy, so it "
         "does not contain IPU-specific functions. Please wrap its "
         "creation inside an IPU strategy.")
-  return model.export_for_ipu_serving(export_dir)
+  return model.export_for_ipu_serving(export_dir, batch_size)
