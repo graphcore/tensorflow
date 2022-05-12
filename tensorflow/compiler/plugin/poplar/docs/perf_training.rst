@@ -470,7 +470,10 @@ is used.
 It can be disabled by setting the ``offload_weight_update_variables`` argument
 of :func:`~tensorflow.python.ipu.pipelining_ops.pipeline` or
 :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2`
-to ``False``.
+to ``False``. In Keras, this is done as a keyword argument to 
+:func:`~keras.ipu.extensions.FunctionalExtension.set_pipelining_options` and
+:func:`~keras.ipu.extensions.FunctionalExtension.set_gradient_accumulation_options`
+respectively.
 
 This feature requires the machine to be configured with support for
 Poplar remote buffers and if the machine does not support it, it is disabled.
