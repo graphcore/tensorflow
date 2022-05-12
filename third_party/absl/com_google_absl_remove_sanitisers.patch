@@ -1,0 +1,55 @@
+--- a/absl/base/config.h.orig	2021-03-25 13:27:44.000000000 +0000
++++ a/absl/base/config.h	2022-05-13 14:52:21.457792618 +0100
+@@ -684,52 +684,6 @@
+ #define ABSL_DLL
+ #endif  // defined(_MSC_VER)
+ 
+-// ABSL_HAVE_MEMORY_SANITIZER
+-//
+-// MemorySanitizer (MSan) is a detector of uninitialized reads. It consists of
+-// a compiler instrumentation module and a run-time library.
+-#ifdef ABSL_HAVE_MEMORY_SANITIZER
+-#error "ABSL_HAVE_MEMORY_SANITIZER cannot be directly set."
+-#elif defined(MEMORY_SANITIZER)
+-// The MEMORY_SANITIZER macro is deprecated but we will continue to honor it
+-// for now.
+-#define ABSL_HAVE_MEMORY_SANITIZER 1
+-#elif defined(__SANITIZE_MEMORY__)
+-#define ABSL_HAVE_MEMORY_SANITIZER 1
+-#elif !defined(__native_client__) && ABSL_HAVE_FEATURE(memory_sanitizer)
+-#define ABSL_HAVE_MEMORY_SANITIZER 1
+-#endif
+-
+-// ABSL_HAVE_THREAD_SANITIZER
+-//
+-// ThreadSanitizer (TSan) is a fast data race detector.
+-#ifdef ABSL_HAVE_THREAD_SANITIZER
+-#error "ABSL_HAVE_THREAD_SANITIZER cannot be directly set."
+-#elif defined(THREAD_SANITIZER)
+-// The THREAD_SANITIZER macro is deprecated but we will continue to honor it
+-// for now.
+-#define ABSL_HAVE_THREAD_SANITIZER 1
+-#elif defined(__SANITIZE_THREAD__)
+-#define ABSL_HAVE_THREAD_SANITIZER 1
+-#elif ABSL_HAVE_FEATURE(thread_sanitizer)
+-#define ABSL_HAVE_THREAD_SANITIZER 1
+-#endif
+-
+-// ABSL_HAVE_ADDRESS_SANITIZER
+-//
+-// AddressSanitizer (ASan) is a fast memory error detector.
+-#ifdef ABSL_HAVE_ADDRESS_SANITIZER
+-#error "ABSL_HAVE_ADDRESS_SANITIZER cannot be directly set."
+-#elif defined(ADDRESS_SANITIZER)
+-// The ADDRESS_SANITIZER macro is deprecated but we will continue to honor it
+-// for now.
+-#define ABSL_HAVE_ADDRESS_SANITIZER 1
+-#elif defined(__SANITIZE_ADDRESS__)
+-#define ABSL_HAVE_ADDRESS_SANITIZER 1
+-#elif ABSL_HAVE_FEATURE(address_sanitizer)
+-#define ABSL_HAVE_ADDRESS_SANITIZER 1
+-#endif
+-
+ // ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION
+ //
+ // Class template argument deduction is a language feature added in C++17.
