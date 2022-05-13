@@ -756,7 +756,7 @@ static StatusOr<DriverTensor> AddLeftMatMul(
       poplin::createMatMulGroupedInputLHS(
           graph, type, type, PoplarShapeFromXlaShape(a_shape),
           PoplarShapeFromXlaShape(b_shape), {debug_name_and_id, "lhs"}, opts,
-          &resources.matmul_cache),
+          &resources.planning_cache),
       graph);
 
   // Unpack matrix
@@ -825,7 +825,7 @@ static StatusOr<DriverTensor> AddRightMatMul(
     result = DriverTensor(
         poplin::createMatMulGroupedInputRHS(
             graph, type, type, poplar_a_shape, poplar_b_shape,
-            {debug_name_and_id, "rhs"}, opts, &resources.matmul_cache),
+            {debug_name_and_id, "rhs"}, opts, &resources.planning_cache),
         graph);
 
     // Move the contracting dimension and output dimension into the right
@@ -835,7 +835,7 @@ static StatusOr<DriverTensor> AddRightMatMul(
     result = DriverTensor(
         poplin::createMatMulGroupedInputRHS(
             graph, type, type, poplar_a_shape, poplar_b_shape,
-            {debug_name_and_id, "rhs"}, opts, &resources.matmul_cache),
+            {debug_name_and_id, "rhs"}, opts, &resources.planning_cache),
         graph);
   }
 

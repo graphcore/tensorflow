@@ -47,7 +47,7 @@ StatusOr<poplar::Tensor> AddConvWeightsTransposeChansFlipXY(
   poplar::Tensor out_weights = poplin::createWeights(
       graph, conv_params,
       {debug_name_and_id, "createWeights_TransposeChansFlipXY"}, opts,
-      &resources.convolution_cache);
+      &resources.planning_cache);
 
   out_weights = RemoveGroupsDimensionFromWeights(conv_params, out_weights);
 
@@ -91,7 +91,7 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
 
     poplar::Tensor out_weights =
         poplin::createWeights(graph, conv_params, {debug_info, "CreateWeights"},
-                              opts, &res.convolution_cache);
+                              opts, &res.planning_cache);
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
     auto func = [&graph, &res, inst, debug_name_and_id](

@@ -64,7 +64,7 @@ class CholeskyOp : public PoplarOpDef {
                     poplar::program::Sequence& prog) {
       auto a = args[0];
       auto x = poplin::cholesky(graph, a, lower, prog, {dnai, "Cholesky"},
-                                poplar_options, &res.matmul_cache);
+                                poplar_options, &res.planning_cache);
       args[1] = x;
     };
 
@@ -107,7 +107,7 @@ class CholeskyOp : public PoplarOpDef {
 
     auto out = poplin::createCholeskyInput(graph, type, shape, lower,
                                            {debug_context, "createInput"},
-                                           poplar_options, &res.matmul_cache);
+                                           poplar_options, &res.planning_cache);
 
     MappingHelper::RemapTensor(res.linear_mapping_state, graph, out);
 

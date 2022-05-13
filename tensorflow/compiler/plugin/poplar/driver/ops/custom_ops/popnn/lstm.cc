@@ -122,17 +122,17 @@ class LstmLayerBaseOp : public PoplarOpDef {
       case 0: {
         // Allocate LSTM input tensor
         return popnn::lstm::createInput(graph, lstm_params, {debug_info},
-                                        lstm_opts, &res.matmul_cache);
+                                        lstm_opts, &res.planning_cache);
       }
       case 1: {
         // Allocate initial output (h) tensor
         return popnn::lstm::createInitialOutput(
-            graph, lstm_params, {debug_info}, lstm_opts, &res.matmul_cache);
+            graph, lstm_params, {debug_info}, lstm_opts, &res.planning_cache);
       }
       case 2: {
         // Allocate initial cell state (c) tensor
         return popnn::lstm::createInitialCellState(
-            graph, lstm_params, {debug_info}, lstm_opts, &res.matmul_cache);
+            graph, lstm_params, {debug_info}, lstm_opts, &res.planning_cache);
       }
       case 3: {
         // Allocate LSTM weights kernel
@@ -140,13 +140,13 @@ class LstmLayerBaseOp : public PoplarOpDef {
         poplar::Tensor output_weights;
         std::tie(input_weights, output_weights) =
             popnn::lstm::createWeightsKernel(graph, lstm_params, {debug_info},
-                                             lstm_opts, &res.matmul_cache);
+                                             lstm_opts, &res.planning_cache);
         return PackLstmKernel(input_weights, output_weights);
       }
       case 4: {
         // Allocate LSTM weights biases
         return popnn::lstm::createWeightsBiases(
-            graph, lstm_params, {debug_info}, lstm_opts, &res.matmul_cache);
+            graph, lstm_params, {debug_info}, lstm_opts, &res.planning_cache);
       }
       case 5: {
         // Allocate DynamicLSTM seq_len
@@ -302,7 +302,7 @@ class LstmLayerFwdOp : public LstmLayerBaseOp {
 
     std::tie(args[5], args[6]) = popnn::lstm::lstmFwd(
         graph, lstm_params, init_state, input_seq, weights, intermediates_ptr,
-        prog, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
+        prog, {debug_name_and_id}, lstm_opts, &res.planning_cache);
   }
 };
 REGISTER_POPLAR_OP(LstmLayerFwd, LstmLayerFwdOp);
@@ -368,7 +368,7 @@ class LstmLayerBwdOp : public LstmLayerBaseOp {
     popnn::lstm::LstmState init_state_backprop = popnn::lstm::lstmBwdWithWU(
         graph, lstm_params, prog, init_state, intermediates, weights, input_seq,
         output, output_backprop, &output_c_state_backprop, &args[10],
-        weights_backprop, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
+        weights_backprop, {debug_name_and_id}, lstm_opts, &res.planning_cache);
     args[11] = init_state_backprop.output;
     args[12] = init_state_backprop.cellState;
     args[13] = PackLstmKernel(weights_backprop.inputWeights,
@@ -430,7 +430,7 @@ class DynamicLstmLayerFwdOp : public LstmLayerFwdOp {
 
     std::tie(args[6], args[7]) = popnn::lstm::lstmFwd(
         graph, lstm_params, init_state, input_seq, weights, intermediates_ptr,
-        prog, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
+        prog, {debug_name_and_id}, lstm_opts, &res.planning_cache);
   }
 };
 REGISTER_POPLAR_OP(DynamicLstmLayerFwd, DynamicLstmLayerFwdOp);
@@ -503,7 +503,7 @@ class DynamicLstmLayerBwdOp : public LstmLayerBwdOp {
     popnn::lstm::LstmState init_state_backprop = popnn::lstm::lstmBwdWithWU(
         graph, lstm_params, prog, init_state, intermediates, weights, input_seq,
         output, output_backprop, &output_c_state_backprop, &args[11],
-        weights_backprop, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
+        weights_backprop, {debug_name_and_id}, lstm_opts, &res.planning_cache);
     args[12] = init_state_backprop.output;
     args[13] = init_state_backprop.cellState;
     args[14] = PackLstmKernel(weights_backprop.inputWeights,

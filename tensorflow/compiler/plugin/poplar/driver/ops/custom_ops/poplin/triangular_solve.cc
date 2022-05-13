@@ -102,7 +102,7 @@ class TriangularSolveOp : public PoplarOpDef {
       auto x_f = poplin::triangularSolve(graph, a_f, b_f, options.left_side(),
                                          lower, options.unit_diagonal(), prog,
                                          {debug_name_and_id, "TriangularSolve"},
-                                         poplar_options, &res.matmul_cache);
+                                         poplar_options, &res.planning_cache);
       args[2] = x_f;
     };
 
@@ -169,13 +169,13 @@ class TriangularSolveOp : public PoplarOpDef {
       case 0: {
         out = poplin::createTriangularSolveInputLHS(
             graph, type_a, type_b, poplar_shape_a, poplar_shape_b, left_side,
-            {debug_info, "lhs"}, poplar_options, &res.matmul_cache);
+            {debug_info, "lhs"}, poplar_options, &res.planning_cache);
         break;
       }
       case 1: {
         out = poplin::createTriangularSolveInputRHS(
             graph, type_a, type_b, poplar_shape_a, poplar_shape_b, left_side,
-            {debug_info, "rhs"}, poplar_options, &res.matmul_cache);
+            {debug_info, "rhs"}, poplar_options, &res.planning_cache);
         break;
       }
       default:

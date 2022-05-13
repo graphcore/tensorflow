@@ -5,17 +5,20 @@ licenses(["restricted"])
 package(default_visibility = ["//tensorflow/compiler/plugin/poplar:__subpackages__"])
 
 poplar_cc_library(
-    name = "convolution_preplanning",
+    name = "poplin_preplanning",
     srcs = [
-        "convolution_preplanning.cc",
+        "poplin_preplanning.cc",
     ],
     hdrs = [
-        "convolution_preplanning.h",
+        "poplin_preplanning.h",
     ],
     deps = [
         "//tensorflow/compiler/plugin/poplar/driver/tools:conv_poplar_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:matcher_predicates",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:matmul_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:ml_type_helper",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:poplar_util",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:rnn_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:util",
         "@local_config_poplar//poplar:poplar_libs",
     ],
@@ -63,31 +66,11 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
-    name = "matmul_preplanning",
-    srcs = [
-        "matmul_preplanning.cc",
-    ],
-    hdrs = [
-        "matmul_preplanning.h",
-    ],
-    deps = [
-        "//tensorflow/compiler/plugin/poplar/driver/tools:matcher_predicates",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:matmul_util",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:ml_type_helper",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:poplar_util",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:rnn_util",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:util",
-        "@local_config_poplar//poplar:poplar_libs",
-    ],
-)
-
-poplar_cc_library(
     name = "poplar_passes",
     deps = [
-        ":convolution_preplanning",
         ":ctc_preplanning",
         ":embedding_plans_preplanning",
         ":map_hlo_instruction_to_debug_id",
-        ":matmul_preplanning",
+        ":poplin_preplanning",
     ],
 )

@@ -1,4 +1,4 @@
-/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,14 +13,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_MATMUL_PREPLANNING_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_MATMUL_PREPLANNING_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_POPLIN_PREPLANNING_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_POPLIN_PREPLANNING_H_
 
 #include <list>
 #include <set>
+#include <tuple>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
+
+#include <poplin/ConvPreplan.hpp>
 
 namespace xla {
 
@@ -29,24 +32,32 @@ class HloModule;
 
 namespace poplarplugin {
 
-/**
- * Memoization of matmul parameters.
+/*
+ * Visit all non-fused operations in the whole module looking for convolutions
+ * and matmuls, and add the parameters and the options for that convolution to
+ * the set of things to pass to the poplin pre-planner.
  */
-class MatMulPreplanning : public HloModulePass {
+class PoplinPreplanning : public HloModulePass {
  public:
-  explicit MatMulPreplanning(CompilerResources& resources)
+  explicit PoplinPreplanning(CompilerResources& resources)
       : resources_(resources) {}
 
-  absl::string_view name() const override { return "matmul-preplanning"; }
+  absl::string_view name() const override { return "poplin-preplanning"; }
 
   StatusOr<bool> Run(HloModule* module) override;
 
  private:
+  // Store convolution parameters.
+  std::set<poplin::ConvPlanParams> preplan_convs;
+
   // Store matmul parameters.
   std::set<poplin::MatMulPlanParams> preplan_matmuls;
 
   // OptionsFlags storage location.
   std::list<poplar::OptionFlags> option_flags_store;
+
+  Status StorePreplanConv(const HloInstruction* inst, int64 input_index,
+                          int64 kernel_index);
 
   Status StorePreplanMatMulsLSTM(const HloInstruction* inst);
 
@@ -64,4 +75,4 @@ class MatMulPreplanning : public HloModulePass {
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_MATMUL_PREPLANNING_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_POPLIN_PREPLANNING_H_
