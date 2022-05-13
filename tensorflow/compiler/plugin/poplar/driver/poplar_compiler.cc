@@ -154,11 +154,10 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable_cache.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/convolution_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/ctc_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/embedding_plans_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/map_hlo_instruction_to_debug_id.h"
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/matmul_preplanning.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/poplin_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
@@ -1454,8 +1453,7 @@ StatusOr<poplar::program::Program> ConstructGraphAndMainProgram(
     HloPassPipeline pipeline("PoplarPipeline",
                              poplar_pipline_compiler_stats.get());
     pipeline.AddPass<EmbeddingPlansPreplanning>(resources);
-    pipeline.AddPass<ConvolutionPreplanning>(resources);
-    pipeline.AddPass<MatMulPreplanning>(resources);
+    pipeline.AddPass<PoplinPreplanning>(resources);
     pipeline.AddPass<CTCPreplanning>(resources);
     pipeline.AddPass<MapHloInstructionToDebugIdPass>(
         resources.hlo_instruction_to_debug_id_mapping);

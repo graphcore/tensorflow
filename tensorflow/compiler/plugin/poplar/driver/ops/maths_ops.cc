@@ -426,7 +426,7 @@ StatusOr<DriverProgramSequence> CreateMatMulForDotOp(
       std::stringstream stream;
       poplin::matMulGroupedReportPlan(stream, graph, lhs.elementType(),
                                       lhs.elementType(), lhs.shape(),
-                                      rhs.shape(), opts, &res.matmul_cache);
+                                      rhs.shape(), opts, &res.planning_cache);
       VLOG(2) << "MatMul " << debug_name_and_id.getPathName() << ". Type "
               << dot_type_s << (res.clear_matmul_pass_type ? " (cleared)" : "")
               << ". Plan " << stream.str();
@@ -437,7 +437,7 @@ StatusOr<DriverProgramSequence> CreateMatMulForDotOp(
 
     args[2] =
         poplin::matMulGrouped(graph, lhs, rhs, prog, lhs.elementType(),
-                              {debug_name_and_id}, opts, &res.matmul_cache);
+                              {debug_name_and_id}, opts, &res.planning_cache);
     // Reshape to XLA shape
     args[2] = args[2].reshape(PoplarShapeFromXlaShape(output_shape));
   };

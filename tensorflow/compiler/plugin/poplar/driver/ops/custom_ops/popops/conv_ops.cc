@@ -49,7 +49,7 @@ StatusOr<poplar::Tensor> AddConvolutionInput(
                       GetConvolutionOptionsForInst(target, resources));
 
   poplar::Tensor out = poplin::createInput(graph, params, {debug_info, "input"},
-                                           opts, &resources.convolution_cache);
+                                           opts, &resources.planning_cache);
 
   auto o = ShuffleConvolutionInputToTensorflow(target, out);
 
@@ -65,9 +65,8 @@ StatusOr<poplar::Tensor> AddConvolutionWeights(
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                       GetConvolutionOptionsForInst(target, resources));
 
-  poplar::Tensor out =
-      poplin::createWeights(graph, params, {debug_info, "weights"}, opts,
-                            &resources.convolution_cache);
+  poplar::Tensor out = poplin::createWeights(
+      graph, params, {debug_info, "weights"}, opts, &resources.planning_cache);
 
   out = RemoveGroupsDimensionFromWeights(params, out);
 
@@ -115,9 +114,9 @@ class Conv2DOp : public PoplarOpDef {
 
       kernel_f = AddGroupsDimensionToWeights(params, kernel_f, false);
 
-      poplar::Tensor out_f = poplin::convolution(
-          graph, in_f, kernel_f, params, false, prog, {debug_name_and_id}, opts,
-          &res.convolution_cache);
+      poplar::Tensor out_f =
+          poplin::convolution(graph, in_f, kernel_f, params, false, prog,
+                              {debug_name_and_id}, opts, &res.planning_cache);
 
       out_f = ShuffleConvolutionOutputToTensorflow(conv_dims, out_f);
 
@@ -216,9 +215,9 @@ class Conv2DReverseOp : public PoplarOpDef {
 
       kernel_f = AddGroupsDimensionToWeights(params, kernel_f, true);
 
-      poplar::Tensor out_f = poplin::convolution(
-          graph, in_f, kernel_f, params, true, prog, {debug_name_and_id}, opts,
-          &res.convolution_cache);
+      poplar::Tensor out_f =
+          poplin::convolution(graph, in_f, kernel_f, params, true, prog,
+                              {debug_name_and_id}, opts, &res.planning_cache);
 
       out_f = ShuffleConvolutionOutputToTensorflow(conv_dims, out_f);
 
@@ -303,9 +302,9 @@ class ConvScaledInplaceOp : public PoplarOpDef {
       deltas = ShuffleConvolutionWeightsToPoplar(conv_dims, deltas, false);
       deltas = AddGroupsDimensionToWeights(params, deltas, false);
 
-      auto c_out = poplin::convolution(graph, in, deltas, params, false, prog,
-                                       {debug_name_and_id}, opts,
-                                       &res.convolution_cache);
+      auto c_out =
+          poplin::convolution(graph, in, deltas, params, false, prog,
+                              {debug_name_and_id}, opts, &res.planning_cache);
 
       TF_CHECK_OK(ScaledInplaceConstantOrTensor(
           graph, weights, c_out, scale, prog, op_type, {debug_name_and_id}));
@@ -393,13 +392,13 @@ class MultiConvOp : public PoplarOpDef {
         if (is_conv_input) {
           out = poplin::multiconv::createInput(
               graph, create_args, conv_index, multi_conv_options,
-              &res.convolution_cache);  /// T32699 add missing debug info
+              &res.planning_cache);  /// T32699 add missing debug info
           out = ShuffleConvolutionInputToTensorflow(
               convolution_spec.batch_group_count, convolution_spec.dims, out);
         } else {
           out = poplin::multiconv::createWeights(
               graph, create_args, conv_index, multi_conv_options,
-              &res.convolution_cache);  ///  T32699 add missing debug info
+              &res.planning_cache);  ///  T32699 add missing debug info
           out = RemoveGroupsDimensionFromWeights(create_args[conv_index].params,
                                                  out);
           out =
@@ -488,7 +487,7 @@ class MultiConvOp : public PoplarOpDef {
               poplar::Tensor new_kernel = poplin::createWeights(
                   graph, create_args[i].params,
                   {debug_name_and_id, absl::StrCat(i, "/BwdWeights")},
-                  create_args[i].options, &res.convolution_cache);
+                  create_args[i].options, &res.planning_cache);
               flip_args.push_back({input, new_kernel, create_args[i].params,
                                    create_args[i].options});
               flip_weights.push_back(kernel);
@@ -505,7 +504,7 @@ class MultiConvOp : public PoplarOpDef {
         CHECK_EQ(flip_args.size(), flip_weights.size());
         poplin::multiconv::weightsTransposeChansFlipXY(
             graph, flip_args, flip_weights, prog, {}, debug_name_and_id,
-            &res.convolution_cache);
+            &res.planning_cache);
 
         for (std::size_t i = 0, flip_index = 0; i != convolution_specs.size();
              ++i) {
@@ -519,7 +518,7 @@ class MultiConvOp : public PoplarOpDef {
 
       std::vector<poplar::Tensor> outputs = poplin::multiconv::convolution(
           graph, conv_args, all_transpose_and_flip_weights, prog,
-          {debug_name_and_id}, multi_conv_options, &res.convolution_cache);
+          {debug_name_and_id}, multi_conv_options, &res.planning_cache);
 
       for (int64 i = 0; i != convolution_specs.size(); ++i) {
         poplar::Tensor output = outputs[i];

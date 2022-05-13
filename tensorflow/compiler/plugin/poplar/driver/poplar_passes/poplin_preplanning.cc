@@ -1,4 +1,4 @@
-/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -12,20 +12,25 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/matmul_preplanning.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/poplin_preplanning.h"
 
 #include <utility>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/lstm.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/rnn_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
+#include <poplar/Target.hpp>
 #include <poplin/Cholesky.hpp>
 #include <poplin/TriangularSolve.hpp>
 #include <popnn/Recurrent.hpp>
@@ -115,7 +120,24 @@ Status GetGruOptsForMatMulPreplanning(const HloInstruction* inst,
 
 }  // namespace
 
-Status MatMulPreplanning::StorePreplanMatMulsLSTM(const HloInstruction* inst) {
+Status PoplinPreplanning::StorePreplanConv(const HloInstruction* inst,
+                                           int64 input_index,
+                                           int64 kernel_index) {
+  const poplar::Target& target = GetGraph(resources_, inst).getTarget();
+  TF_ASSIGN_OR_RETURN(
+      const poplin::ConvParams conv_params,
+      GetConvolutionParameters(inst, input_index, kernel_index));
+
+  TF_ASSIGN_OR_RETURN(poplar::OptionFlags option_flags,
+                      GetConvolutionOptionsForInst(inst, resources_));
+
+  option_flags_store.push_back(option_flags);
+  preplan_convs.insert(
+      std::make_tuple(&target, conv_params, &(option_flags_store.back())));
+  return Status::OK();
+}
+
+Status PoplinPreplanning::StorePreplanMatMulsLSTM(const HloInstruction* inst) {
   const poplar::Target& target = GetGraph(resources_, inst).getTarget();
 
   TF_ASSIGN_OR_RETURN(popnn::lstm::LstmParams lstm_params,
@@ -136,7 +158,7 @@ Status MatMulPreplanning::StorePreplanMatMulsLSTM(const HloInstruction* inst) {
   return Status::OK();
 }
 
-Status MatMulPreplanning::StorePreplanMatMulsGRU(const HloInstruction* inst) {
+Status PoplinPreplanning::StorePreplanMatMulsGRU(const HloInstruction* inst) {
   const poplar::Target& target = GetGraph(resources_, inst).getTarget();
 
   TF_ASSIGN_OR_RETURN(popnn::gru::GruParams gru_params, GetGruParameters(inst));
@@ -161,7 +183,7 @@ Status MatMulPreplanning::StorePreplanMatMulsGRU(const HloInstruction* inst) {
   return Status::OK();
 }
 
-Status MatMulPreplanning::StorePreplanMatMulsCholesky(
+Status PoplinPreplanning::StorePreplanMatMulsCholesky(
     const HloInstruction* inst) {
   const poplar::Target& target = GetGraph(resources_, inst).getTarget();
   const HloCholeskyInstruction* as_solve = Cast<HloCholeskyInstruction>(inst);
@@ -187,7 +209,7 @@ Status MatMulPreplanning::StorePreplanMatMulsCholesky(
   return Status::OK();
 }
 
-Status MatMulPreplanning::StorePreplanMatMulsTriangularSolve(
+Status PoplinPreplanning::StorePreplanMatMulsTriangularSolve(
     const HloInstruction* inst) {
   const poplar::Target& target = GetGraph(resources_, inst).getTarget();
   const HloTriangularSolveInstruction* as_solve =
@@ -223,7 +245,7 @@ Status MatMulPreplanning::StorePreplanMatMulsTriangularSolve(
   return Status::OK();
 }
 
-Status MatMulPreplanning::StorePreplanMatMuls(const HloInstruction* inst) {
+Status PoplinPreplanning::StorePreplanMatMuls(const HloInstruction* inst) {
   const poplar::Target& target = GetGraph(resources_, inst).getTarget();
 
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags option_flags,
@@ -239,36 +261,46 @@ Status MatMulPreplanning::StorePreplanMatMuls(const HloInstruction* inst) {
   return Status::OK();
 }
 
-/*
- * Visit all non-fused operations in the whole module looking for matmul,
- * and add the parameters and the options for that matmul to the set
- * of things to pass to the poplibs matmul pre-planner.
- */
-StatusOr<bool> MatMulPreplanning::Run(HloModule* module) {
+StatusOr<bool> PoplinPreplanning::Run(HloModule* module) {
+  VLOG(2) << "Preplanning convolution and matmul operations.";
+  preplan_convs.clear();
   preplan_matmuls.clear();
   option_flags_store.clear();
 
   for (auto* comp : module->computations()) {
     if (!IsPopOpsFusion(comp)) {
       for (HloInstruction* inst : comp->instructions()) {
-        if (inst->opcode() == HloOpcode::kDot) {
-          StorePreplanMatMuls(inst);
+        if (inst->opcode() == HloOpcode::kConvolution) {
+          TF_RETURN_IF_ERROR(StorePreplanConv(inst, 0, 1));
+
+        } else if (IsPopOpsConvolution(inst)) {
+          TF_RETURN_IF_ERROR(StorePreplanConv(inst, 0, 1));
+
+        } else if (IsPopOpsFusion(inst, "conv_scaled_inplace")) {
+          TF_RETURN_IF_ERROR(StorePreplanConv(inst, 1, 2));
+
+        } else if (inst->opcode() == HloOpcode::kDot) {
+          TF_RETURN_IF_ERROR(StorePreplanMatMuls(inst));
+
         } else if (inst->opcode() == HloOpcode::kCholesky) {
-          StorePreplanMatMulsCholesky(inst);
+          TF_RETURN_IF_ERROR(StorePreplanMatMulsCholesky(inst));
+
         } else if (inst->opcode() == HloOpcode::kTriangularSolve) {
-          StorePreplanMatMulsTriangularSolve(inst);
+          TF_RETURN_IF_ERROR(StorePreplanMatMulsTriangularSolve(inst));
+
         } else if (IsPoplarInstruction(PoplarOp::LstmLayerFwd)(inst) ||
                    IsPoplarInstruction(PoplarOp::LstmLayerBwd)(inst)) {
-          StorePreplanMatMulsLSTM(inst);
+          TF_RETURN_IF_ERROR(StorePreplanMatMulsLSTM(inst));
+
         } else if (IsPoplarInstruction(PoplarOp::GRULayerFwd)(inst) ||
                    IsPoplarInstruction(PoplarOp::GRULayerBwd)(inst)) {
-          StorePreplanMatMulsGRU(inst);
+          TF_RETURN_IF_ERROR(StorePreplanMatMulsGRU(inst));
         }
       }
     }
   }
 
-  poplin::preplanMatMuls(preplan_matmuls, resources_.matmul_cache);
+  poplin::preplan(preplan_convs, preplan_matmuls, resources_.planning_cache);
   return false;
 }
 

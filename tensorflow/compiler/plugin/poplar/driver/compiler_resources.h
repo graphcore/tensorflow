@@ -155,9 +155,7 @@ struct CompilerResources : public HloResources {
 
   absl::flat_hash_map<const HloInstruction*, const popnn::ctc::Plan> ctc_plans;
 
-  poplin::PlanningCache convolution_cache;
-
-  poplin::matmul::PlanningCache matmul_cache;
+  poplin::PlanningCache planning_cache;
 
   const poplar::OptionFlags default_conv_options;
 
