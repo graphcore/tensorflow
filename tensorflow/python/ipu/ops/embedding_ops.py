@@ -469,6 +469,7 @@ def create_host_embedding(name,
                           partition_strategy="TOKEN",
                           optimizer_spec=None,
                           initializer=None):
+  # pylint: disable=line-too-long
   """ Create a HostEmbedding.
 
       Args:
@@ -476,11 +477,11 @@ def create_host_embedding(name,
         shape: The shape for the tensor which will hold the embedding.
         dtype: The dtype for the tensor which will hold the embedding.
         partition_strategy: When the IPU system is configured with an IPUConfig
-          instance that has its `experimental.enable_remote_buffer_embedding`
-          option set to `True`, and when using
-          replication, the embedding must be distributed across the replicas.
-          This option decides on which axis the embedding will be split. Options
-          are "TOKEN" or "ENCODING".
+          instance that has its
+          :py:attr:`~tensorflow.python.ipu.config.IPUConfig.experimental.enable_remote_buffer_embedding`
+          option set to `True` and uses replication, the embedding must be
+          distributed across the replicas. This option specifies on which axis
+          the embedding will be split. Options are "TOKEN" or "ENCODING".
         optimizer_spec: A description of how the embedding will be optimized.
           When `None`, the embedding is assumed to not be trainable.
         initializer: The initializer to use when creating the embedding tensor.
@@ -489,6 +490,7 @@ def create_host_embedding(name,
         A `HostEmbedding` object that wraps the created embedding tensor.
 
   """
+  # pylint: enable=line-too-long
   if initializer is None:
     initializer = array_ops.zeros(shape, dtype)
   with ops.device('cpu'):
