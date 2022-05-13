@@ -142,6 +142,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/seed_hoisting.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/serialize_gradient_accumulation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/slice_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/slice_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/suggest_recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/variables_offload_and_partition.h"
@@ -1419,6 +1420,7 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
     pipeline.AddPass<IpuScheduler>(SizeFunction, std::move(scheduler),
                                    &resources.annotations);
     pipeline.AddPass<ModuleFlatten>(resources.annotations);
+    pipeline.AddPass<SliceCopyInserter>(resources.annotations);
     pipeline.AddPass<LowerFrontendAttributes>();
     pipeline.AddPass<MarkReplicaIdenticalInstructions>();
     pipeline.AddPass<AddStochasticRoundingOptions>(

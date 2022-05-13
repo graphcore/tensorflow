@@ -1559,6 +1559,20 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "slice_copy_inserter",
+    srcs = [
+        "slice_copy_inserter.cc",
+    ],
+    hdrs = [
+        "slice_copy_inserter.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_poplar_dataflow_analysis",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_poplar_liveness",
+    ],
+)
+
+poplar_cc_library(
     name = "slice_optimizer",
     srcs = [
         "slice_optimizer.cc",
@@ -1781,6 +1795,7 @@ poplar_cc_library(
         ":seed_hoisting",
         ":serialize_gradient_accumulation",
         ":sharding_pass",
+        ":slice_copy_inserter",
         ":slice_optimizer",
         ":suggest_recompute",
         ":variables_offload_and_partition",
