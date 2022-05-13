@@ -50,6 +50,7 @@ from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu import gradient_accumulation as ga
+from tensorflow.python.ipu.ops import functional_ops_grad
 from tensorflow.python.ipu.optimizers import map_gradient_optimizer
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
@@ -2881,6 +2882,74 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           ValueError, f"Cannot parse {reduction_method} as one of "
           "GradientAccumulationReductionMethod."):
         ipu_compiler.compile(my_net, inputs=[])
+
+  @test_util.deprecated_graph_mode_only
+  def testSharedWeightsDecompose(self):
+    dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
+    dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def stage1(x):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+        return x
+
+    def stage2(x):
+      return x
+
+    def stage3(x):
+      # Ruse the weight here.
+      with variable_scope.variable_scope("vs", use_resource=True, reuse=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+        logits = math_ops.reduce_mean(x)
+        return logits
+
+    def optimizer_function(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01)
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+    def my_net():
+      return pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          10,
+          inputs=[],
+          device_mapping=[0, 1, 0],
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped,
+          optimizer_function=optimizer_function,
+          reduction_method='running_mean')
+
+    with ops.device("/device:IPU:0"):
+      r = ipu_compiler.compile(my_net)
+
+    def get_single_op_from_graph(graph, type_name):
+      ops = [op for op in graph.get_operations() if op.type == type_name]
+      self.assertEquals(len(ops), 1)
+      return ops[0]
+
+    # Check that the gradients were broken up and scaled individually.
+    pipeline_op = get_single_op_from_graph(ops.get_default_graph(), "Pipeline")
+    pipeline_graph = functional_ops_grad._get_func_graph(pipeline_op)  # pylint: disable=protected-access
+    ga_add = get_single_op_from_graph(pipeline_graph,
+                                      "GradientAccumulatorAddWithScale")
+    add_n = ga_add.inputs[1].op
+    self.assertEquals(add_n.type, "AddN")
+    self.assertEquals(len(add_n.inputs), 2)
+    for grad in add_n.inputs:
+      self.assertEquals(grad.op.type, "Mul")
 
 
 if __name__ == "__main__":
