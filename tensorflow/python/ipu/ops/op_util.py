@@ -329,15 +329,35 @@ def accumulate_gradients(grads_and_vars,
 
         # Add the gradients to the accumulator.
         if grad_scale is not None:
-          if grad.dtype == dtypes.float32:
-            grad = grad * grad_scale
-          else:
-            grad_dtype = grad.dtype
-            grad = math_ops.cast(
-                math_ops.cast(grad, dtypes.float32) * grad_scale, grad_dtype)
-            # These casts are used to leave the gradient scale in float32, and will be removed
-            # in case 4/10 in SerializeGradientAccumulate before being passed to the
-            # ScaledInplaceXbY and ScaledInplaceaXbY ops
+          grad_scale = ops.convert_to_tensor(grad_scale,
+                                             dtype_hint=dtypes.float32)
+
+          # Scale the individual gradients before the AddN operation to:
+          # 1. Make sure the add n operation doesn't cause an overflow.
+          # 2. This also allows HLO passes to optimise the gradient accumulation
+          #    when a variable has multiple gradients in different pipeline
+          #    stages as it should be able to accumulate individual gradients.
+          def get_individual_grads(x):
+            if any(x.op.type == op_name
+                   for op_name in ["AddN", "Add", "AddV2", "Identity"]):
+              output = []
+              for operand in x.op.inputs:
+                output += get_individual_grads(operand)
+              return output
+            return [x]
+
+          individual_grads = get_individual_grads(grad)
+
+          # Scale all the individual gradients.
+          def scale_gradient(x):
+            scale = grad_scale if grad_scale.dtype == x.dtype \
+                               else math_ops.cast(grad_scale, x.dtype)
+            return x * scale
+
+          individual_grads = [scale_gradient(x) for x in individual_grads]
+
+          # Combine all the scaled gradients.
+          grad = math_ops.add_n(individual_grads)
 
         accumulator = gen_poputil_ops.gradient_accumulator_add_with_scale(
             accumulator, grad, accum_scale)
