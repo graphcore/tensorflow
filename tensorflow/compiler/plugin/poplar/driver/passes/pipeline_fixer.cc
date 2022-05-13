@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
 
+#include <functional>
 #include <list>
 #include <memory>
 #include <queue>
@@ -257,6 +258,194 @@ StatusOr<bool> PipelineFixer::BreakUpElementwiseOperations() {
   }
 
   return changed;
+}
+
+StatusOr<bool> PipelineFixer::BreakUpGradientAccumulationOperations() {
+  HloComputation* comp = stages_.forward[0]->parent();
+  TF_ASSIGN_OR_RETURN(auto analysis,
+                      PipelineDataflowAnalysis::GetAnalysis(stages_));
+
+  // A function which detects outputs backward pipeline stages (producers) being
+  // accumulated to create a gradient. This usually occurs when a resource
+  // variable is used by multiple stages.
+  //
+  // This can be optimized by accumulating the gradients into the accumulation
+  // buffer separately (note that this breaks SSA).
+  //
+  // For example:
+  // bps2 = (...) bwd_pipeline_stage_2(...) stage_id = 2
+  // bps2_grad = gte(bps2)
+  // ...
+  // bps0 = (...) bwd_pipeline_stage_0(...) stage_id = 0
+  // bps0_grad = gte(bps0)
+  //
+  // gradient_buffer = gradient-accumulator-creator()
+  // add = add(bsp0, bsp2)
+  // gradient = gradient-accumulation-add(gradient_buffer, buffer)
+  // accumulated_sink = gradient-accumulator-sink(gradient)
+  //
+  // Here the `add` operation means that `bps2_grad` will eventually have to be
+  // passed as an input into `bwd_pipeline_stage_0` so that it can be
+  // accumulated. Instead we create separate accumulation instructions (using
+  // the same gradient accumulation buffer) as below:
+  // bps2 = (...) bwd_pipeline_stage_2(...) stage_id = 2
+  // bps2_grad = gte(bps2)
+  // ...
+  // bps0 = (...) bwd_pipeline_stage_0(...) stage_id = 0
+  // bps0_grad = gte(bps0)
+  //
+  // gradient_buffer = gradient-accumulator-creator()
+  // gradient2 = gradient-accumulation-add(gradient_buffer, bps2_grad)
+  // gradient0 = gradient-accumulation-add(gradient_buffer, bps0_grad)
+  // accumulated_sink = gradient-accumulator-sink(gradient2, gradient0)
+
+  // Stores all the individual gradients which are accumulated to form a single
+  // gradient from different pipeline stages.
+  // Note that they are stored in the descending order because the last backward
+  // stage is executed first and that stage needs to scale the gradient
+  // accumulation buffer.
+  using GradientSourcesInfo =
+      std::map<int64, std::vector<HloInstruction*>, std::greater<int64>>;
+
+  // Find all the gradient accumulation add operations which have gradients
+  // originating from different pipeline stages.
+  HloInstructionMap<GradientSourcesInfo> gradient_adds_to_break_up;
+  for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
+    if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale, inst)) {
+      continue;
+    }
+
+    VLOG(3) << "Trying to break up gradient accumulation for "
+            << inst->ToString();
+
+    // Traverse through all the adds and get all the individual gradients.
+    GradientSourcesInfo info;
+
+    std::queue<HloInstruction*> to_visit;
+    absl::flat_hash_set<const HloInstruction*> visited;
+    to_visit.push(inst->mutable_operand(1));
+
+    bool valid_to_break_up = true;
+    while (to_visit.size()) {
+      HloInstruction* gradient = to_visit.front();
+      to_visit.pop();
+
+      if (visited.contains(gradient)) {
+        continue;
+      }
+
+      visited.insert(gradient);
+      if (gradient->opcode() == HloOpcode::kAdd) {
+        to_visit.push(gradient->mutable_operand(0));
+        to_visit.push(gradient->mutable_operand(1));
+      } else {
+        auto value_set = analysis->GetValueSet(gradient);
+        // Make sure the value set contains only one backward pipeline stage.
+        absl::flat_hash_set<HloInstruction*> pipeline_stages;
+        for (auto value : value_set.values()) {
+          HloInstruction* defining_instruction = value->defining_instruction();
+          if (IsPipelineStageBackward(defining_instruction)) {
+            pipeline_stages.insert(defining_instruction);
+          }
+        }
+
+        if (pipeline_stages.size() != 1) {
+          VLOG(3) << "Cannot break up accumulation as " << gradient->ToString()
+                  << " has " << pipeline_stages.size()
+                  << " pipeline stage sources.";
+          valid_to_break_up = false;
+          break;
+        }
+
+        HloInstruction* pipeline_stage = *std::begin(pipeline_stages);
+        TF_ASSIGN_OR_RETURN(auto stage_id,
+                            analysis->GetStageID(pipeline_stage));
+
+        info[stage_id.id].push_back(gradient);
+      }
+    }
+
+    if (valid_to_break_up && info.size() > 1) {
+      gradient_adds_to_break_up[inst] = info;
+    } else {
+      VLOG(3) << "Cannot breakup gradients for " << inst->ToString();
+    }
+  }
+
+  if (gradient_adds_to_break_up.empty()) {
+    return false;
+  }
+
+  // Create the addition trees for gradients spanning from the same pipeline
+  // stage and combine.
+  for (auto& gradient_pair : gradient_adds_to_break_up) {
+    HloInstruction* accumulation_add = gradient_pair.first;
+    HloInstruction* accumulation_buffer = accumulation_add->mutable_operand(0);
+    HloInstruction* accumulation_scale = accumulation_add->mutable_operand(2);
+
+    // Find the GradientAccumulatorSink instruction.
+    if (accumulation_add->user_count() != 1) {
+      return InternalErrorStrCat(
+          "Expected the gradient accumulation add to have a single user, but "
+          "has ",
+          accumulation_add->user_count(), " users.");
+    }
+
+    HloInstruction* accumulation_sink = accumulation_add->users()[0];
+    if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(
+            accumulation_sink)) {
+      return InternalErrorStrCat(
+          "Expected the gradient accumulation buffer to be used by a "
+          "gradient accumulation sink, but it is used by ",
+          accumulation_sink->ToString(), " instead.");
+    }
+
+    const GradientSourcesInfo& info = gradient_pair.second;
+    VLOG(3) << "Breaking up " << accumulation_add->ToString();
+
+    std::vector<HloInstruction*> new_accumulation_adds;
+    for (auto& stage_pair : info) {
+      const int64 stage_id = stage_pair.first;
+      std::vector<HloInstruction*> gradients = stage_pair.second;
+      // Reverse the order of the gradients so that they are combined in the
+      // same order as before to prevent changes to the liveness of the graph.
+      absl::c_reverse(gradients);
+      HloInstruction* gradient_tail = nullptr;
+      for (HloInstruction* gradient : gradients) {
+        if (gradient_tail) {
+          TF_ASSIGN_OR_RETURN(
+              gradient_tail,
+              MakeBinaryHlo(HloOpcode::kAdd, gradient_tail, gradient));
+        } else {
+          gradient_tail = gradient;
+        }
+      }
+
+      // Note that the accumulator should only be scaled once.
+      HloInstruction* scale = accumulation_scale;
+      if (new_accumulation_adds.size()) {
+        scale = comp->AddInstruction(HloInstruction::CreateConstant(
+            LiteralUtil::One(scale->shape().element_type())));
+      }
+
+      // Create a new add.
+      HloInstruction* new_accumulation_add =
+          comp->AddInstruction(CreateGradientAccumulatorAddWithScale(
+              accumulation_buffer, gradient_tail, scale));
+      new_accumulation_adds.push_back(new_accumulation_add);
+      VLOG(3) << "Created partial add " << new_accumulation_add->ToString()
+              << " for stage " << stage_id;
+    }
+
+    // Create a new sink.
+    HloInstruction* new_accumulation_sink = comp->AddInstruction(
+        CreateGradientAccumulatorSink(new_accumulation_adds));
+    VLOG(3) << "Created a new sink " << new_accumulation_sink->ToString();
+    TF_RETURN_IF_ERROR(
+        comp->ReplaceInstruction(accumulation_sink, new_accumulation_sink));
+  }
+
+  return true;
 }
 
 // Lowers any outputs of the stage into the stage.
@@ -569,7 +758,11 @@ StatusOr<bool> PipelineFixer::LowerParameterUsagesIntoStages() {
 StatusOr<bool> PipelineFixer::LowerOpsIntoPipelineStages() {
   // Breakup elementwise operations where the inputs originate from different
   // stages.
-  TF_ASSIGN_OR_RETURN(bool breakup_gradients, BreakUpElementwiseOperations());
+  TF_ASSIGN_OR_RETURN(bool breakup_elementwise, BreakUpElementwiseOperations());
+  // Breakup gradient accumulation operations where the inputs originate from
+  // different stages.
+  TF_ASSIGN_OR_RETURN(bool breakup_gradients,
+                      BreakUpGradientAccumulationOperations());
   // Lower any outputs from stages into stages if possible.
   TF_ASSIGN_OR_RETURN(bool lowered_outputs, LowerPipelineStagesOutputs());
   // Lower any inputs into stages if possible.
@@ -578,8 +771,8 @@ StatusOr<bool> PipelineFixer::LowerOpsIntoPipelineStages() {
   TF_ASSIGN_OR_RETURN(bool lowered_params_uses,
                       LowerParameterUsagesIntoStages());
 
-  return breakup_gradients || lowered_inputs || lowered_outputs ||
-         lowered_params_uses;
+  return breakup_elementwise || breakup_gradients || lowered_inputs ||
+         lowered_outputs || lowered_params_uses;
 }
 
 Status PipelineFixer::RemovePipelineWrapper(HloComputation* pipeline_comp) {
@@ -615,6 +808,7 @@ StatusOr<bool> PipelineFixer::FixConstantGradients(
   TF_ASSIGN_OR_RETURN(auto analysis,
                       PipelineDataflowAnalysis::GetAnalysis(stages_));
   bool changed = false;
+
   // Go through all the gradient accumulator sinks.
   for (int64 op_idx = 0; op_idx != resource_update->operand_count(); ++op_idx) {
     HloInstruction* operand = resource_update->mutable_operand(op_idx);
@@ -625,8 +819,11 @@ StatusOr<bool> PipelineFixer::FixConstantGradients(
     CHECK_EQ(resource_update->OperandIndices(operand).size(), 1);
     HloGradientAccumulatorSink* sink =
         Cast<HloGradientAccumulatorSink>(operand);
-    // We expect the sink to only have a single input at this point.
-    CHECK_EQ(sink->operand_count(), 1);
+    // If the sink has multiple operands, then the gradients cannot be constant
+    // as they come from multiple pipeline stages.
+    if (sink->operand_count() != 1) {
+      continue;
+    }
     HloInstruction* sink_input = operand->mutable_operand(0);
     if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
             sink_input)) {

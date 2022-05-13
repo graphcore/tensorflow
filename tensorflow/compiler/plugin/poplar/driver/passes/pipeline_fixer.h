@@ -62,6 +62,11 @@ class PipelineFixer : public HloModulePass {
   // different pipeline stages as much as possible.
   StatusOr<bool> BreakUpElementwiseOperations();
 
+  // Breaks up gradient accumulation operations such that the gradient
+  // results originating from different pipeline stages are applied in those
+  // stages instead of passing them between pipeline stages.
+  StatusOr<bool> BreakUpGradientAccumulationOperations();
+
   // Performs the lowering (if possible) of any operations which need to be
   // lowered for this pipeline to be correct.
   StatusOr<bool> LowerOpsIntoPipelineStages();

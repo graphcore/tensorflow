@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -1186,6 +1187,139 @@ ENTRY e {
   auto scale_fac = ru->operand(1)->operand(0)->operand(0)->operand(0);
   ASSERT_EQ(scale_fac->operand(0)->name(), "constant");
   ASSERT_EQ(scale_fac->operand(1)->name(), "p2");
+}
+
+TEST_F(PipelineFixerTest, TestSplitGradientAccumulation) {
+  std::string hlo = R"(
+HloModule top
+
+stage_0_fwd {
+  stage_0_fwd_p0 = f32[2] parameter(0)
+  ROOT stage_0_fwd_tuple = (f32[2]) tuple(stage_0_fwd_p0)
+}
+
+stage_1_fwd {
+  stage_1_fwd_p0 = f32[2] parameter(0)
+  ROOT stage_1_fwd_tuple = (f32[2]) tuple(stage_1_fwd_p0)
+}
+
+stage_2_fwd {
+  stage_2_fwd_p0 = f32[2] parameter(0)
+  ROOT stage_2_fwd_tuple = (f32[2]) tuple(stage_2_fwd_p0)
+}
+
+stage_2_bwd {
+  stage_2_bwd_p0 = f32[2] parameter(0)
+  l = f32[2] log(stage_2_bwd_p0)
+  ROOT stage_2_bwd_tuple = (f32[2], f32[2]) tuple(stage_2_bwd_p0, l)
+}
+
+stage_1_bwd {
+  stage_1_bwd_p0 = f32[2] parameter(0)
+  l = f32[2] log(stage_1_bwd_p0)
+  ROOT stage_1_bwd_tuple = (f32[2], f32[2]) tuple(stage_1_bwd_p0, l)
+}
+
+stage_0_bwd {
+  stage_0_bwd_p0 = f32[2] parameter(0)
+  ROOT stage_0_bwd_tuple = (f32[2]) tuple(stage_0_bwd_p0)
+}
+
+resource_update {
+  p0 = f32[2] parameter(0)
+  ROOT tuple = (f32[2]) tuple(p0)
+}
+
+pipeline_wrapper {
+  p0 = f32[2] parameter(0)
+  fwd_stage_0 = (f32[2]) call(p0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  fwd_stage_0.0 = f32[2] get-tuple-element(fwd_stage_0), index=0
+  fwd_stage_1 = (f32[2]) call(fwd_stage_0.0), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
+  fwd_stage_1.0 = f32[2] get-tuple-element(fwd_stage_1), index=0
+  fwd_stage_2 = (f32[2]) call(fwd_stage_1.0), to_apply=stage_2_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}", sharding={maximal device=0}
+  fwd_stage_2.0 = f32[2] get-tuple-element(fwd_stage_2), index=0
+  bwd_stage_2 = (f32[2], f32[2]) call(fwd_stage_2.0), to_apply=stage_2_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
+  bwd_stage_2.0 = f32[2] get-tuple-element(bwd_stage_2), index=0
+  bwd_stage_2.1 = f32[2] get-tuple-element(bwd_stage_2), index=1
+  bwd_stage_1 = (f32[2], f32[2]) call(bwd_stage_2.0), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  bwd_stage_1.0 = f32[2] get-tuple-element(bwd_stage_1), index=0
+  bwd_stage_1.1 = f32[2] get-tuple-element(bwd_stage_1), index=1
+  bwd_stage_0 = (f32[2]) call(bwd_stage_1.0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  bwd_stage_0.0 = f32[2] get-tuple-element(bwd_stage_0), index=0
+
+  add_grads_partial = f32[2] add(bwd_stage_1.1, bwd_stage_0.0)
+  add_grads = f32[2] add(add_grads_partial, bwd_stage_2.1)
+
+  acc_scale = f32[] constant(0.1)
+  create = f32[2] custom-call(p0), custom_call_target="GradientAccumulatorCreate", backend_config="{}"
+  add = f32[2] custom-call(create, add_grads, acc_scale), custom_call_target="GradientAccumulatorAddWithScale", backend_config="{}"
+  sink = f32[2] custom-call(add), custom_call_target="GradientAccumulatorSink", backend_config="{}"
+  
+  ru = (f32[2]) call(sink), to_apply=resource_update, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  ru.0 = f32[2] get-tuple-element(ru), index=0
+
+  ROOT pipeline_tuple = (f32[2]) tuple(ru.0)
+}
+
+pipeline {
+  p0 = f32[2] parameter(0)
+  call = (f32[2]) call(p0), to_apply=pipeline_wrapper
+  gte = f32[2] get-tuple-element(call), index=0
+  ROOT pipeline_tuple = (f32[2]) tuple(gte)
+}
+
+ENTRY e {
+  e.weights0 = f32[2] parameter(0), parameter_replication={false}
+  e.call = (f32[2]) call(e.weights0), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  ROOT gte = f32[2] get-tuple-element(e.call), index=0
+}
+)";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  TF_ASSERT_OK_AND_ASSIGN(bool custom_op_replaced,
+                          CustomOpReplacer().Run(module.get()));
+  ASSERT_TRUE(custom_op_replaced);
+
+  PipelineFixer fixer;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, fixer.Run(module.get()));
+  EXPECT_TRUE(changed);
+  HloComputation* pipeline_computation =
+      FindComputation(module.get(), "pipeline");
+
+  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
+  EXPECT_TRUE(stages.resource_update);
+  const HloInstruction* resource_update = *stages.resource_update;
+  const HloInstruction* gradient_accumulator_sink = resource_update->operand(0);
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(
+      gradient_accumulator_sink));
+  ASSERT_EQ(gradient_accumulator_sink->operand_count(), 3);
+
+  EXPECT_TRUE(Match(
+      gradient_accumulator_sink,
+      m::CustomCall(m::GetTupleElement(m::Op().Is(stages.backward[2]), 2),
+                    m::GetTupleElement(m::Op().Is(stages.backward[1]), 2),
+                    m::GetTupleElement(m::Op().Is(stages.backward[0]), 1))));
+
+  EXPECT_TRUE(
+      Match(stages.backward[2]->to_apply()->root_instruction(),
+            m::Tuple(m::Parameter(0), m::Log(m::Parameter(0)),
+                     m::CustomCall(m::Parameter(1), m::Log(m::Parameter(0)),
+                                   m::ConstantScalar(0.1f)))));
+
+  EXPECT_TRUE(
+      Match(stages.backward[1]->to_apply()->root_instruction(),
+            m::Tuple(m::Parameter(0), m::Log(m::Parameter(0)),
+                     m::CustomCall(m::Parameter(1), m::Log(m::Parameter(0)),
+                                   m::ConstantScalar(1.f)))));
+
+  EXPECT_TRUE(Match(
+      stages.backward[0]->to_apply()->root_instruction(),
+      m::Tuple(m::Parameter(0), m::CustomCall(m::Parameter(1), m::Parameter(0),
+                                              m::ConstantScalar(1.f)))));
 }
 
 }  // namespace

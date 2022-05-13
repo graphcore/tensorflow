@@ -1102,21 +1102,6 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
-    name = "pipeline_gradient_accumulation_optimizer",
-    srcs = [
-        "pipeline_gradient_accumulation_optimizer.cc",
-    ],
-    hdrs = [
-        "pipeline_gradient_accumulation_optimizer.h",
-    ],
-    deps = [
-        "//tensorflow/compiler/plugin/poplar/driver/tools:util",
-        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:hlo_remote_buffer_info",
-        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:stateful_gradient_accumulate",
-    ],
-)
-
-poplar_cc_library(
     name = "pipeline_optimizer",
     srcs = [
         "pipeline_optimizer.cc",
@@ -1763,7 +1748,6 @@ poplar_cc_library(
         ":pipeline_feed_hoisting",
         ":pipeline_fifo_inserter",
         ":pipeline_fixer",
-        ":pipeline_gradient_accumulation_optimizer",
         ":pipeline_optimizer",
         ":pipeline_recomputation",
         ":pipeline_recomputation_stage_inserter",

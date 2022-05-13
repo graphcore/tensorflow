@@ -1667,20 +1667,6 @@ xla_test(
 )
 
 xla_test(
-    name = "pipeline_gradient_accumulation_optimizer_test",
-    size = "small",
-    srcs = ["tests/pipeline_gradient_accumulation_optimizer_test.cc"],
-    backends = ["poplar"],
-    copts = ["-fexceptions"],
-    deps = [
-        "//tensorflow/compiler/xla/service:hlo_matchers",
-        "//tensorflow/compiler/xla/service:hlo_query",
-        "//tensorflow/compiler/xla/service:shape_inference",
-        "//tensorflow/compiler/xla/tests:hlo_test_base",
-    ],
-)
-
-xla_test(
     name = "multi_update_apply_test",
     size = "small",
     srcs = ["tests/multi_update_apply_test.cc"],
