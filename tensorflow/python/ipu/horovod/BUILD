@@ -51,6 +51,7 @@ cc_library(
         ":lbfgspp_headers",
         "//tensorflow/core:framework",
         "@flatbuffers",
+        "@local_config_poplar//poplar:mpi_lib",
         "@local_config_poplar//poplar:poplar_headers",
     ],
     alwayslink = True,
