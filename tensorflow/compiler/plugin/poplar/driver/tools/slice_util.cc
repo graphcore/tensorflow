@@ -32,21 +32,21 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
+void ShuffleSpan(absl::Span<int64> values, int64 dim, bool reverse = false) {
+  auto front_index = reverse ? 1 : dim;
+  std::rotate(values.begin(), values.begin() + front_index,
+              values.begin() + dim + 1);
+}
+
 std::unique_ptr<HloInstruction> CreateShuffledInput(HloInstruction* input,
                                                     int64 dim,
                                                     bool reverse = false) {
-  const auto Shuffle = [&](absl::Span<int64> values) {
-    auto front_index = reverse ? 1 : dim;
-    std::rotate(values.begin(), values.begin() + front_index,
-                values.begin() + dim + 1);
-  };
-
   auto shuffled_shape = input->shape();
-  Shuffle(shuffled_shape.mutable_dimensions());
+  ShuffleSpan(shuffled_shape.mutable_dimensions(), dim, reverse);
 
   std::vector<int64> shuffled_dim_order(shuffled_shape.dimensions_size(), 0);
   std::iota(shuffled_dim_order.begin(), shuffled_dim_order.end(), 0);
-  Shuffle(absl::MakeSpan(shuffled_dim_order));
+  ShuffleSpan(absl::MakeSpan(shuffled_dim_order), dim, reverse);
 
   return HloInstruction::CreateTranspose(shuffled_shape, input,
                                          shuffled_dim_order);
@@ -61,72 +61,110 @@ std::unique_ptr<HloInstruction> CreateFlattened2DInput(HloInstruction* input) {
   return HloInstruction::CreateReshape(flattened_2d_shape, input);
 }
 
-Shape GetMultiSliceShape(Shape shape, int64 slice_dim_size) {
-  // MultiSlice is always 2d and it slices the outer dimension.
-  // Patch slice dim with provided value.
-  shape.set_dimensions(0, slice_dim_size);
-  return shape;
-}
-
-StatusOr<HloInstruction*> Replace1DDynamicWithMultiSlice(
-    HloDynamicIndexInstruction* dynamic_slice, int64 slice_dim) {
-  auto comp = dynamic_slice->parent();
-  // Shuffle the dimension being sliced to the front, since
-  // HloMultiSliceInstruction is hard coded to slice dim 0.
-  auto input = dynamic_slice->mutable_operand(0);
-  auto shuffled_input =
+HloInstruction* Transform1DSliceInput(HloComputation* comp,
+                                      HloInstruction* input, int64 slice_dim) {
+  // Shuffle⋅the⋅dimension⋅being⋅sliced⋅to⋅the⋅front,⋅since
+  // the multi slice ops⋅are⋅hard⋅coded⋅to⋅slice⋅dim⋅0.
+  auto* shuffled_input =
       comp->AddInstruction(CreateShuffledInput(input, slice_dim));
   // Flatten since the HloMultiSliceInstruction planner
   // (EmbeddingPlansPreplanning) expects a 2D input tensor.
-  auto flattened_2d_input =
+  // Additionally popops::multiUpdateAdd requires input tensors
+  // to be rank2.
+  auto* flattened_2d_input =
       comp->AddInstruction(CreateFlattened2DInput(shuffled_input));
+  return flattened_2d_input;
+}
+
+HloInstruction* Transform1DSliceOffset(HloComputation* comp,
+                                       HloDynamicIndexInstruction* inst,
+                                       int64 slice_dim) {
   // Reshape the offset since dynamic-slice offsets are scalar.
-  auto dim_offset = dynamic_slice->mutable_operand(
-      dynamic_slice->first_index_operand_number() + slice_dim);
-  auto offset = comp->AddInstruction(HloInstruction::CreateReshape(
+  auto* dim_offset =
+      inst->mutable_operand(inst->first_index_operand_number() + slice_dim);
+  // Hardcoded offset shape since we're always doing a single slice
+  // of a 2D input.
+  auto* offset = comp->AddInstruction(HloInstruction::CreateReshape(
       ShapeUtil::MakeShape(S32, {1, 1}), dim_offset));
+  return offset;
+}
+
+HloInstruction* Restore1DSliceOutput(HloComputation* comp,
+                                     HloInstruction* replacement,
+                                     const HloDynamicIndexInstruction* instr,
+                                     int64 slice_dim) {
+  // Undo the input transformation to get back a tensor of the original
+  // shape.
+  auto shuffled_output_shape = instr->shape();
+  ShuffleSpan(shuffled_output_shape.mutable_dimensions(), slice_dim);
+
+  auto* unflatten = comp->AddInstruction(
+      HloInstruction::CreateReshape(shuffled_output_shape, replacement));
+  auto* unshuffle = comp->AddInstruction(
+      CreateShuffledInput(unflatten, slice_dim, /*reverse=*/true));
+  return unshuffle;
+}
+
+HloInstruction* Create1DMultiSlice(HloComputation* comp,
+                                   HloInstruction* input_tensor,
+                                   HloInstruction* offset) {
+  // MultiSlice is always 2d and it slices the outer dimension.
+  // Patch slice dim with provided value.
+  auto multislice_shape = input_tensor->shape();
+  multislice_shape.set_dimensions(0, 1);
+
+  auto multislice = comp->AddInstruction(
+      CreateMultiSlice(multislice_shape, input_tensor, offset));
+  return multislice;
+}
+
+HloInstruction* CreateMultiUpdate(HloComputation* comp,
+                                  HloInstruction* input_tensor,
+                                  HloInstruction* update_slice,
+                                  HloInstruction* offset) {
+  auto* multiupdate = comp->AddInstruction(xla::poplarplugin::CreateMultiUpdate(
+      input_tensor->shape(), {input_tensor, offset, update_slice}));
+
+  return multiupdate;
+}
+
+Status ReplaceAndCleanup(HloComputation* comp, HloInstruction* replacement,
+                         HloInstruction* original,
+                         std::vector<HloInstruction*> to_remove) {
+  TF_RETURN_IF_ERROR(original->ReplaceAllUsesWith(replacement));
+  original->SetupDerivedInstruction(replacement);
+
+  for (auto* inst : to_remove) {
+    TF_RETURN_IF_ERROR(comp->RemoveInstruction(inst));
+  }
+
+  return Status::OK();
+}
+StatusOr<HloInstruction*> Replace1DDynamicWithMultiSlice(
+    HloDynamicIndexInstruction* dynamic_slice, int64 slice_dim) {
+  auto comp = dynamic_slice->parent();
+
+  auto* transformed_input =
+      Transform1DSliceInput(comp, dynamic_slice->mutable_operand(0), slice_dim);
+  auto* offset = Transform1DSliceOffset(comp, dynamic_slice, slice_dim);
 
   HloInstruction* multislice = nullptr;
   if (dynamic_slice->opcode() == HloOpcode::kDynamicSlice) {
-    int64 slice_dim_size = dynamic_slice->shape().dimensions(slice_dim);
-    multislice = comp->AddInstruction(CreateMultiSlice(
-        GetMultiSliceShape(flattened_2d_input->shape(), slice_dim_size),
-        flattened_2d_input, offset));
-    // Restore the input to its original shape..
-    auto unflatten = comp->AddInstruction(HloInstruction::CreateReshape(
-        GetMultiSliceShape(shuffled_input->shape(), slice_dim_size),
-        multislice));
-    auto unshuffle = comp->AddInstruction(
-        CreateShuffledInput(unflatten, slice_dim, /*reverse=*/true));
-    TF_RETURN_IF_ERROR(dynamic_slice->ReplaceAllUsesWith(unshuffle));
+    const int64 slice_dim_size = dynamic_slice->shape().dimensions(slice_dim);
+    CHECK_EQ(slice_dim_size, 1);
+    multislice = Create1DMultiSlice(comp, transformed_input, offset);
   } else {
     CHECK_EQ(dynamic_slice->opcode(), HloOpcode::kDynamicUpdateSlice);
-    auto slice = dynamic_slice->mutable_operand(1);
-    // For the slice to fit into the input it must be shuffled
-    // in the same way.
-    auto shuffled_slice =
-        comp->AddInstruction(CreateShuffledInput(slice, slice_dim));
-    // HloMultiUpdateInstruction expects the slice operand to be 2D, in our case
-    // the outer dimension will always be 1 though, since we're replacing a
-    // size 1 update.
-    auto flattened_slice =
-        comp->AddInstruction(CreateFlattened2DInput(shuffled_slice));
-    CHECK_EQ(flattened_slice->shape().dimensions(0), 1);
-
-    multislice = comp->AddInstruction(
-        CreateMultiUpdate(flattened_2d_input->shape(),
-                          {flattened_2d_input, offset, flattened_slice}));
-
-    // Restore the input to its original shape..
-    auto unflatten = comp->AddInstruction(
-        HloInstruction::CreateReshape(shuffled_input->shape(), multislice));
-    auto unshuffle = comp->AddInstruction(
-        CreateShuffledInput(unflatten, slice_dim, /*reverse=*/true));
-    TF_RETURN_IF_ERROR(dynamic_slice->ReplaceAllUsesWith(unshuffle));
+    auto* update_slice = Transform1DSliceInput(
+        comp, dynamic_slice->mutable_operand(1), slice_dim);
+    multislice =
+        CreateMultiUpdate(comp, transformed_input, update_slice, offset);
   }
 
-  dynamic_slice->SetupDerivedInstruction(multislice);
-  TF_RETURN_IF_ERROR(comp->RemoveInstruction(dynamic_slice));
+  auto* output =
+      Restore1DSliceOutput(comp, multislice, dynamic_slice, slice_dim);
+  TF_RETURN_IF_ERROR(
+      ReplaceAndCleanup(comp, output, dynamic_slice, {dynamic_slice}));
   return multislice;
 }
 
