@@ -24,14 +24,32 @@ namespace xla {
 
 class HloInstruction;
 class HloDynamicIndexInstruction;
+class HloDynamicSliceInstruction;
+class HloDynamicUpdateSliceInstruction;
 
 namespace poplarplugin {
+// Utility type for grouping an appropriately setup
+// dynamic_update/add/dynamic_slice together as a DynamicUpdateAdd;
+struct DynamicUpdateAdd {
+  static bool IsDynamicUpdateAdd(
+      const HloDynamicUpdateSliceInstruction* dynamic_update);
+
+  explicit DynamicUpdateAdd(HloDynamicUpdateSliceInstruction* dynamic_update);
+
+  HloDynamicUpdateSliceInstruction* update;
+  HloInstruction* add;
+  HloDynamicSliceInstruction* slice;
+};
 
 // Try and replace dynamic-slice with multi-slice instructions, since
 // multi-slice can be planned and dynamic-slice can't be. Returns multi-slice
 // instruction or nullptr if no replacement occurred.
-StatusOr<HloInstruction*> TryReplaceDynamicWithMultiSlice(
-    HloDynamicIndexInstruction* dynamic_slice);
+StatusOr<HloInstruction*> TryReplaceDynamicSliceWithMultiSlice(
+    HloDynamicSliceInstruction* dynamic_slice);
+StatusOr<HloInstruction*> TryReplaceDynamicUpdateWithMultiUpdate(
+    HloDynamicUpdateSliceInstruction* dynamic_update);
+StatusOr<HloInstruction*> TryReplaceDynamicUpdateAddWithMultiUpdateAdd(
+    DynamicUpdateAdd dynamic_update_add);
 
 // Helper for Dynamic(Update)Slice where we recognize dynamic and constant slice
 // dimensions.

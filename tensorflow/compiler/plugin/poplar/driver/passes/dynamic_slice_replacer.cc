@@ -30,12 +30,25 @@ StatusOr<bool> DynamicSliceReplacer::Run(HloModule* module) {
     for (auto* inst : comp->MakeInstructionPostOrder()) {
       if (auto dynamic_slice = DynCast<HloDynamicIndexInstruction>(inst)) {
         const auto old_instr_str = dynamic_slice->ToString();
-        TF_ASSIGN_OR_RETURN(auto replaced,
-                            TryReplaceDynamicWithMultiSlice(dynamic_slice));
-        if (replaced) {
+
+        HloInstruction* replacement = nullptr;
+        if (inst->opcode() == HloOpcode::kDynamicSlice) {
+          TF_ASSIGN_OR_RETURN(
+              replacement,
+              TryReplaceDynamicSliceWithMultiSlice(
+                  Cast<HloDynamicSliceInstruction>(dynamic_slice)));
+        } else {
+          CHECK_EQ(inst->opcode(), HloOpcode::kDynamicUpdateSlice);
+          TF_ASSIGN_OR_RETURN(
+              replacement,
+              TryReplaceDynamicUpdateWithMultiUpdate(
+                  Cast<HloDynamicUpdateSliceInstruction>(dynamic_slice)));
+        }
+
+        if (replacement) {
           changed = true;
           VLOG(3) << "Replaced " << old_instr_str << " with "
-                  << replaced->ToString();
+                  << replacement->ToString();
         }
       }
     }
