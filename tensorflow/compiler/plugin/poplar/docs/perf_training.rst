@@ -14,6 +14,8 @@ The Graphcore IPU support for TensorFlow provides three mechanisms to
 improve the training performance: training loops, data set feeds, and
 replicated graphs.
 
+.. _training_loops:
+
 Training loops, data sets and feed queues
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
