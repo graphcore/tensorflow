@@ -433,12 +433,17 @@ poplar_cc_library(
 
 poplar_cc_library(
     name = "xla_ipu_common",
+    srcs = [
+        "xla_ipu_common.cc",
+    ],
     hdrs = [
         "xla_ipu_common.h",
     ],
     deps = [
         "//tensorflow/compiler/plugin/poplar/driver/tools:flags",
         "//tensorflow/compiler/tf2xla:tf2xla_proto_cc_impl",
+        "//tensorflow/compiler/tf2xla:tf2xla_util",
+        "//tensorflow/compiler/tf2xla:xla_compiler",
     ],
 )
 

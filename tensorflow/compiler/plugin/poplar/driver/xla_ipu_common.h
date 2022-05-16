@@ -15,7 +15,10 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_XLA_IPU_COMMON_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_XLA_IPU_COMMON_H_
 
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/core/framework/kernel_def.pb.h"
 #include "tensorflow/core/framework/types.h"
 
 namespace tensorflow {
@@ -24,24 +27,13 @@ const char* const DEVICE_XLA_IPU = "IPU";
 const char* const DEVICE_IPU_XLA_JIT = "XLA_IPU_JIT";
 const char* const PLATFORM_NAME = "Poplar";
 
-static std::vector<DataType> GetIPUSupportedTypes() {
-  // Supress the unused warning.
-  (void)GetIPUSupportedTypes;
+const char* const DEVICE_XLA_POPIT = "POPIT";
+const char* const DEVICE_POPIT_XLA_JIT = "XLA_POPIT_JIT";
+const char* const POPIT_PLATFORM_NAME = "PopIt";
 
-  // Lambda which will get all the supported types given the flags.
-  auto get_types = [] {
-    std::vector<DataType> supported = {DT_INT32, DT_INT64, DT_FLOAT, DT_HALF,
-                                       DT_BOOL};
-    if (getenv("TF_POPLAR_GFLOAT") != nullptr) {
-      supported.push_back(DT_INT8);
-      supported.push_back(DT_INT16);
-    }
-    return supported;
-  };
+std::vector<DataType> GetIPUSupportedTypes();
 
-  static std::vector<DataType> supported_types = get_types();
-  return supported_types;
-};
+bool OpFilter(KernelDef* kdef);
 
 }  // namespace tensorflow
 

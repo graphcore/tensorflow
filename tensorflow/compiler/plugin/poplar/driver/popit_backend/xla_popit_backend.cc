@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,6 +18,5 @@ limitations under the License.
 
 namespace tensorflow {
 
-REGISTER_XLA_BACKEND(DEVICE_IPU_XLA_JIT, GetIPUSupportedTypes(), OpFilter);
-
-}  // namespace tensorflow
+REGISTER_XLA_BACKEND(DEVICE_POPIT_XLA_JIT, GetIPUSupportedTypes(), OpFilter);
+}
