@@ -145,7 +145,8 @@ StatusOr<poplar::Engine> HloPoplarTestBase::Compile(
 
   DriverProgramSequence main_program(*resources.main_graph);
   main_program.add(*resources.preamble_sequence);
-  main_program.add(visitor.GetSequenceAndInitializeCounters());
+  main_program.add(
+      visitor.GetSequenceAndInitializeCounters(*resources.main_graph));
 
   return poplar::Engine(*resources.main_graph, main_program);
 }

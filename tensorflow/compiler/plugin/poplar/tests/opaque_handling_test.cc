@@ -299,6 +299,7 @@ ENTRY pipeline {
                                  {TensorOrRemoteBuffer{absl::any{2}}}};
 
   ParallelPipelineVisitor visitor(
+      *res->main_graph,
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *res, inputs,
       GetInplaceDescription(entry->root_instruction()), "visitor");

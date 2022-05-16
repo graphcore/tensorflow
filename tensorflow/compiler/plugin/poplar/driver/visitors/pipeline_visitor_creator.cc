@@ -69,21 +69,22 @@ StatusOr<std::unique_ptr<PipelineVisitor>> GetPipelineVisitor(
     const DeferredArgRBVectors& inputs,
     const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id) {
+  auto& graph = GetGraph(res, pipeline);
   TF_ASSIGN_OR_RETURN(auto schedule, GetPipelineSchedule(pipeline));
   switch (schedule) {
     case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
       if (HasIOTiles(res)) {
         return GroupedOverlapPipelineVisitor::Create(
-            pipeline, res, inputs, description, debug_name_and_id);
+            graph, pipeline, res, inputs, description, debug_name_and_id);
       } else {
-        return ParallelPipelineVisitor::Create(pipeline, res, inputs,
+        return ParallelPipelineVisitor::Create(graph, pipeline, res, inputs,
                                                description, debug_name_and_id);
       }
     case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved:
-      return ParallelPipelineVisitor::Create(pipeline, res, inputs, description,
-                                             debug_name_and_id);
+      return ParallelPipelineVisitor::Create(graph, pipeline, res, inputs,
+                                             description, debug_name_and_id);
     case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
-      return SequentialPipelineVisitor::Create(pipeline, res, inputs,
+      return SequentialPipelineVisitor::Create(graph, pipeline, res, inputs,
                                                description, debug_name_and_id);
     default:
       return FailedPrecondition("Unknown pipeline schedule.");

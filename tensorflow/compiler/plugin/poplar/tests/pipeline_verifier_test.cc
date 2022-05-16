@@ -177,6 +177,7 @@ ENTRY main {
     resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
     ParallelPipelineVisitor visitor(
+        *resources->main_graph,
         PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved,
         stage_count, {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
         DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
@@ -194,9 +195,11 @@ ENTRY main {
                 grad_acc_placeholder, *(resources->main_graph))
             .ValueOrDie();
     // Get the pipeline program
-    auto program = visitor.GetPipelineSequence(count).ValueOrDie();
+    auto program =
+        visitor.GetPipelineSequence(*resources->main_graph, count).ValueOrDie();
 
-    poplar::program::Sequence seq({verify_program, program});
+    DriverProgramSequence seq({verify_program, program},
+                              *resources->main_graph);
 
     // Compile the graph
     poplar::Engine engine(*resources->main_graph, seq);

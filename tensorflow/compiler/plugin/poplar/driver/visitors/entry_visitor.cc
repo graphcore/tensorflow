@@ -41,10 +41,9 @@ DeferredArgRBVectors MakeArgRBVector(const HloComputation* comp) {
   return output;
 }
 
-Status AddHostToDeviceCopy(const poplar::DataStream& stream, poplar::Tensor dst,
-                           bool rearrange_on_host, poplar::Graph& graph,
-                           CompilerResources& res,
-                           poplar::program::Sequence& seq,
+Status AddHostToDeviceCopy(const poplar::DataStream& stream, DriverTensor dst,
+                           bool rearrange_on_host, DriverGraph& graph,
+                           CompilerResources& res, DriverProgramSequence& seq,
                            const InputOutputAliasingMap::InputInfo& info,
                            const HloInstruction* inst,
                            const poplar::DebugNameAndId& debug_name_and_id) {
@@ -53,10 +52,9 @@ Status AddHostToDeviceCopy(const poplar::DataStream& stream, poplar::Tensor dst,
   return Status::OK();
 }
 
-Status AddDeviceToHostCopy(const poplar::Tensor src, poplar::DataStream& stream,
-                           bool rearrange_on_host, poplar::Graph& graph,
-                           CompilerResources& res,
-                           poplar::program::Sequence& seq,
+Status AddDeviceToHostCopy(const DriverTensor src, poplar::DataStream& stream,
+                           bool rearrange_on_host, DriverGraph& graph,
+                           CompilerResources& res, DriverProgramSequence& seq,
                            const InputOutputAliasingMap::OutputInfo& info,
                            const HloInstruction* inst,
                            const poplar::DebugNameAndId& debug_name_and_id) {
@@ -89,11 +87,11 @@ Status CheckNoOpaqueTypes(const HloInstruction* root) {
 EntryVisitor::EntryVisitor(CompilerResources& resources,
                            const HloComputation* comp)
     : DeferredVisitor(resources, MakeArgRBVector(comp), "Entry"),
-      host_to_device({}, dnai_),
-      device_to_host({}, dnai_) {}
+      host_to_device(*resources.main_graph, dnai_),
+      device_to_host(*resources.main_graph, dnai_) {}
 
 Status EntryVisitor::AddSequenceForInstruction(
-    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+    const HloInstruction* inst, const DriverProgramSequence& seq) {
   // Use the right sequence for stream copies, otherwise fallback to the
   // default.
   if (inst->opcode() == HloOpcode::kParameter) {
@@ -116,7 +114,7 @@ Status EntryVisitor::PreProcessParameter(HloInstruction* parameter) {
 
 StatusOr<DriverTensor> EntryVisitor::PostProcessParameterAllocation(
     TensorLocation location, const Shape& shape,
-    poplar::program::Sequence& stream_copy_seq, DriverTensor tensor,
+    DriverProgramSequence& stream_copy_seq, DriverTensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
   const HloInstruction* inst = location.instruction;
   const int64 flat_tuple_index = location.flattened_output_tuple_index;
@@ -138,7 +136,7 @@ StatusOr<DriverTensor> EntryVisitor::PostProcessParameterAllocation(
   const auto use_synthetic_data =
       UseSyntheticDataFor(SyntheticDataCategory::Parameters);
   if (!use_synthetic_data) {
-    poplar::Tensor tensor_destination = tensor;
+    DriverTensor tensor_destination = tensor;
     if (!LayoutUtil::IsMonotonicWithDim0Major(
             module_shapes[flat_tuple_index].layout())) {
       // Host tensor needs to be host layout.
@@ -172,7 +170,7 @@ StatusOr<DriverTensor> EntryVisitor::PostProcessParameterAllocation(
   // a value, then add a clone/copy to make sure it does not get overwritten
   // between runs
   if (in_info.IsResourceNotModified()) {
-    poplar::Tensor non_modified_tensor = tensor;
+    DriverTensor non_modified_tensor = tensor;
     auto& graph = GetGraphWithOutputIndex(resources_, inst, flat_tuple_index);
     tensor = graph.clone(non_modified_tensor,
                          {debug_name_and_id, "resource_not_modified_clone"});
@@ -180,17 +178,20 @@ StatusOr<DriverTensor> EntryVisitor::PostProcessParameterAllocation(
     // Call the base class since we do not want our own handling of
     // parameters for this special case.
     TF_RETURN_IF_ERROR(DeferredVisitor::AddSequenceForInstruction(
-        inst, poplar::program::Sequence({poplar::program::Copy(
-                  non_modified_tensor, tensor, false, {debug_name_and_id})})));
+        inst, DriverProgramSequence(
+                  {DriverProgramCopy(non_modified_tensor, tensor, false,
+                                     {debug_name_and_id})},
+                  graph, {debug_name_and_id, "resource_not_modified_copy"})));
   }
   return tensor;
 }
 
-const poplar::program::Sequence
-EntryVisitor::GetSequenceAndInitializeCounters() {
-  poplar::program::Sequence seq({}, "InitializeCounters");
-  seq.add(execution_counters_.SetInitialValuesToZero());
-  seq.add(DeferredVisitor::GetSequence(/*copy_execution_counters*/ false));
+const DriverProgramSequence EntryVisitor::GetSequenceAndInitializeCounters(
+    DriverGraph& graph) {
+  DriverProgramSequence seq(graph, "InitializeCounters");
+  seq.add(execution_counters_.SetInitialValuesToZero(graph));
+  seq.add(
+      DeferredVisitor::GetSequence(graph, /*copy_execution_counters*/ false));
   return seq;
 }
 
@@ -221,7 +222,7 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
        ++idx) {
     auto& out_info = entry_outputs[idx];
 
-    poplar::program::Sequence seq({}, debug_name_and_id);
+    DriverProgramSequence seq(graph, debug_name_and_id);
 
     // Flatten the tuple tensor (if required) and iterate over all of them
     const Shape layout_sub_shape =
@@ -273,9 +274,11 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
            ++tuple_index) {
         if (in_tensors[tuple_index] != out_tensors[tuple_index]) {
           TF_RETURN_IF_ERROR(AddSequenceForInstruction(
-              root, poplar::program::Sequence({poplar::program::Copy(
-                        out_tensors[tuple_index], in_tensors[tuple_index],
-                        false, debug_name_and_id)})));
+              root, DriverProgramSequence(
+                        {DriverProgramCopy(out_tensors[tuple_index],
+                                           in_tensors[tuple_index], false,
+                                           debug_name_and_id)},
+                        graph, debug_name_and_id)));
         }
       }
     }
@@ -321,11 +324,11 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
   return Status::OK();
 }
 
-const poplar::program::Sequence EntryVisitor::GetHostToDevice() const {
+const DriverProgramSequence EntryVisitor::GetHostToDevice() const {
   return host_to_device;
 }
 
-const poplar::program::Sequence EntryVisitor::GetDeviceToHost() const {
+const DriverProgramSequence EntryVisitor::GetDeviceToHost() const {
   return device_to_host;
 }
 

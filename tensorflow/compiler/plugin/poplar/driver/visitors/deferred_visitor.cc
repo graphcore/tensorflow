@@ -338,7 +338,7 @@ Status DeferredVisitor::ExitVariableScope() {
 }
 
 Status DeferredVisitor::AddSequenceForInstruction(
-    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+    const HloInstruction* inst, const DriverProgramSequence& seq) {
   if (inst->opcode() == HloOpcode::kInfeed) {
     return BaseVisitor::AppendSequenceGroupedByInstruction(inst, seq);
   } else {
@@ -626,7 +626,7 @@ Status DeferredVisitor::HandleGetTupleElement(HloInstruction* inst) {
         TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocationUser(
             input_location, output_location));
       } else {
-        poplar::program::Sequence seq({}, debug_name_and_id);
+        DriverProgramSequence seq(graph, debug_name_and_id);
 
         // Cannot defer the use of this tensor, hence get the input tensor and
         // set it as output.
@@ -758,7 +758,7 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
 
   auto dnai = GetDebugNameAndId(inst);
   auto& graph = GetGraphWithOutputIndex(resources_, inst, 0);
-  poplar::program::Sequence seq({}, dnai);
+  DriverProgramSequence seq(graph, dnai);
 
   TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
   TF_ASSIGN_OR_RETURN(auto clone_method_tree, GetCopyCloneMethod(inst));
@@ -809,7 +809,7 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
       DeferredAllocateFunction allocate_fn =
           [this, &graph, inst, op, clone_method, tuple_idx, dnai, op_dnai](
               TensorLocation allocation_location) -> StatusOr<DriverTensor> {
-        poplar::program::Sequence seq(dnai);
+        DriverProgramSequence seq(graph, dnai);
         auto inputs = FindInstructionInputsInRange(
             tensor_map, resources_, inst, /*input=*/0,
             {tuple_idx, tuple_idx + 1}, seq, dnai,
@@ -840,12 +840,12 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
       // Now we have destination tensor, and we want to copy input to it.
       // In case of bypass, just return input tensor.
       DeferredPostProcessFunction postprocess_fn =
-          [this, inst, op, tuple_idx, clone_method, dnai,
+          [this, &graph, inst, op, tuple_idx, clone_method, dnai,
            op_dnai](const DriverTensor& tensor) -> StatusOr<DriverTensor> {
         if (clone_method == CloneMethod_Bypass) {
           return tensor;
         }
-        poplar::program::Sequence seq(dnai);
+        DriverProgramSequence seq(graph, dnai);
         auto inputs = FindInstructionInputsInRange(
             tensor_map, resources_, inst, /*input=*/0,
             {tuple_idx, tuple_idx + 1}, seq, op_dnai,
@@ -893,7 +893,7 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
         case CloneMethod_PreserveOrderUnlessAliases: {
           out = TensorCloneAndRebalanceAliasing(graph, resources_, tensor_input,
                                                 {dnai});
-          seq.add(poplar::program::Copy(tensor_input, out, false, {dnai}));
+          seq.add(DriverProgramCopy(tensor_input, out, false, {dnai}));
           break;
         }
         case CloneMethod_DeduceNewOrderOrBypass:
@@ -953,7 +953,7 @@ Status DeferredVisitor::HandleConditional(HloInstruction* inst) {
   TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
 
   TF_ASSIGN_OR_RETURN(
-      poplar::program::Sequence seq,
+      DriverProgramSequence seq,
       CreateConditionalOp(resources_, inst, inputs, GetOutputShape(inst),
                           tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, seq);
@@ -1054,8 +1054,8 @@ Status AddGradientAccumulationZeroing(CompilerResources& res,
   return Status::OK();
 }
 
-Status AddGradientAccumulationZeroing(
-    CompilerResources& res, const poplar::program::Sequence& sequence) {
+Status AddGradientAccumulationZeroing(CompilerResources& res,
+                                      const DriverProgramSequence& sequence) {
   if (res.gradient_accumulation_zeroing_remote_buffers.empty()) {
     return FailedPrecondition("Cannot zero gradient accumulation buffer.");
   }
@@ -1098,7 +1098,7 @@ Status DeferredVisitor::HandleDeferredWideConst(HloInstruction* inst) {
     TF_ASSIGN_OR_RETURN(DriverTensor layout,
                         AddTensor(graph, output_location, output_shape,
                                   resources_, tensor_map, {dnai, "layout"}));
-    poplar::program::Sequence seq(dnai);
+    DriverProgramSequence seq(graph, dnai);
     seq.add(poplar::program::Copy(broadcasted_tensor, layout, false, dnai));
     TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
     TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, layout));
@@ -1114,13 +1114,13 @@ Status DeferredVisitor::HandleDeferredWideConst(HloInstruction* inst) {
     };
 
     DeferredPostProcessFunction postprocess_fn =
-        [inst, this, broadcasted_tensor,
+        [inst, this, &graph, broadcasted_tensor,
          dnai](const DriverTensor& tensor) -> StatusOr<DriverTensor> {
       if (tensor == broadcasted_tensor) {
         // This is the original tensor we allocated, do not fill it.
         return tensor;
       }
-      poplar::program::Sequence seq(dnai);
+      DriverProgramSequence seq(graph, dnai);
       seq.add(poplar::program::Copy(broadcasted_tensor, tensor));
       TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
       return tensor;
@@ -1148,9 +1148,9 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
   if (create->IsRemote()) {
     CHECK(inst->shape().IsArray());
 
-    poplar::program::Sequence zeroing_seq({}, {debug_name_and_id, "zeroing"});
-
     auto& graph = GetGraphWithOutputIndex(resources_, inst, 0);
+    DriverProgramSequence zeroing_seq(graph, {debug_name_and_id, "zeroing"});
+
     const int64 element_count = ShapeUtil::ElementsIn(inst->shape());
 
     auto info = create->RemoteBufferInfo();
@@ -1254,9 +1254,9 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
   const Shape& shape = inst->shape();
   CHECK(!shape.IsTuple());
 
+  auto& graph = GetGraph(resources_, inst);
   TensorLocation output_location(inst, 0);
   if (create_buffer->IsRemoteBuffer()) {
-    auto& graph = GetGraph(resources_, inst);
     TF_ASSIGN_OR_RETURN(poplar::Type element_type, PoplarDataType(shape));
     std::size_t num_repeats = ShapeUtil::GetDimension(shape, 0);
     std::size_t element_count =
@@ -1289,13 +1289,14 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
 
     // Function which is called after the tensor has been created.
     DeferredPostProcessFunction post_process_fn =
-        [this, inst](DriverTensor tensor) -> StatusOr<DriverTensor> {
+        [this, &graph, inst,
+         debug_name_and_id](DriverTensor tensor) -> StatusOr<DriverTensor> {
       if (IsInPipeline(inst, resources_)) {
         // The create buffer is inside of the pipeline which means it's used
         // as a stash.
         TF_RETURN_IF_ERROR(AddSequenceForInstruction(
-            inst,
-            poplar::program::Sequence({poplar::program::WriteUndef(tensor)})));
+            inst, DriverProgramSequence({DriverProgramWriteUndef(tensor)},
+                                        graph, debug_name_and_id)));
       }
       return tensor;
     };
@@ -1312,14 +1313,13 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
 namespace {
 // TODO(T28772): Work around to make sure remote buffers can be rearranged on
 // host.
-std::pair<poplar::program::Sequence, poplar::program::Sequence>
-AddRemoteBufferLoadCopy(DriverGraph& graph, CompilerResources& res,
-                        poplar::RemoteBuffer remote_buffer,
-                        DriverTensor destination,
-                        const poplar::DebugNameAndId& debug_name_and_id,
-                        absl::optional<DriverTensor> offset = absl::nullopt) {
-  poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
-  poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
+std::pair<DriverProgramSequence, DriverProgramSequence> AddRemoteBufferLoadCopy(
+    DriverGraph& graph, CompilerResources& res,
+    DriverRemoteBuffer remote_buffer, DriverTensor destination,
+    const poplar::DebugNameAndId& debug_name_and_id,
+    absl::optional<DriverTensor> offset = absl::nullopt) {
+  DriverProgramSequence stream_copy_seq(graph, debug_name_and_id);
+  DriverProgramSequence temporary_copy_seq(graph, debug_name_and_id);
 
   const auto& handle = remote_buffer.handle();
   DriverTensor layout_tensor;
@@ -1333,15 +1333,15 @@ AddRemoteBufferLoadCopy(DriverGraph& graph, CompilerResources& res,
   DriverTensor copy_tensor = graph.clone(layout_tensor, {debug_name_and_id});
 
   if (offset) {
-    stream_copy_seq.add(poplar::program::Copy(remote_buffer, copy_tensor,
-                                              *offset, {debug_name_and_id}));
+    stream_copy_seq.add(DriverProgramCopy(remote_buffer, copy_tensor, *offset,
+                                          {debug_name_and_id}));
   } else {
     stream_copy_seq.add(
-        poplar::program::Copy(remote_buffer, copy_tensor, {debug_name_and_id}));
+        DriverProgramCopy(remote_buffer, copy_tensor, {debug_name_and_id}));
   }
-  temporary_copy_seq.add(poplar::program::Copy(copy_tensor.flatten(),
-                                               destination.flatten(), false,
-                                               {debug_name_and_id}));
+  temporary_copy_seq.add(DriverProgramCopy(copy_tensor.flatten(),
+                                           destination.flatten(), false,
+                                           {debug_name_and_id}));
   return {stream_copy_seq, temporary_copy_seq};
 }
 }  // namespace
@@ -1378,8 +1378,8 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
          debug_name_and_id](DriverTensor tensor) -> StatusOr<DriverTensor> {
       auto& shard_graph = GetGraphWithOutputIndex(resources_, load_inst, i);
 
-      poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
-      poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
+      DriverProgramSequence stream_copy_seq(shard_graph, debug_name_and_id);
+      DriverProgramSequence temporary_copy_seq(shard_graph, debug_name_and_id);
       if (UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
         if (UseSyntheticDataInitializer()) {
           // Initialize the tensor to a constant value.
@@ -1410,7 +1410,7 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
               GetDebugName(load_inst));
         }
 
-        poplar::RemoteBuffer remote_buffer = input.AsRemoteBuffer();
+        auto remote_buffer = input.AsRemoteBuffer();
         auto pair_seq = AddRemoteBufferLoadCopy(
             shard_graph, resources_, remote_buffer, tensor, debug_name_and_id);
         stream_copy_seq.add(pair_seq.first);
@@ -1470,8 +1470,8 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
          debug_name_and_id](DriverTensor tensor) -> StatusOr<DriverTensor> {
       auto& shard_graph = GetGraphWithOutputIndex(resources_, load_inst, i);
 
-      poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
-      poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
+      DriverProgramSequence stream_copy_seq(shard_graph, debug_name_and_id);
+      DriverProgramSequence temporary_copy_seq(shard_graph, debug_name_and_id);
       if (UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
         if (UseSyntheticDataInitializer()) {
           // Initialize the tensor to a constant value.
@@ -1496,7 +1496,7 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
         CHECK_EQ(load_inst->GetReplicationFactor(i), load_replication_factor)
             << load_inst->ToString();
 
-        poplar::RemoteBuffer remote_buffer = input.AsRemoteBuffer();
+        auto remote_buffer = input.AsRemoteBuffer();
 
         TF_ASSIGN_OR_RETURN(
             DriverTensor offset,
@@ -1696,7 +1696,8 @@ StatusOr<DriverTensor> DeferredVisitor::AllocateInput(
 StatusOr<DriverTensor> DeferredVisitor::PostProcessInputTensor(
     DriverTensor tensor, TensorLocation input_location, const Shape& shape,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  auto& graph = GetGraph(resources_, input_location.instruction);
+  DriverProgramSequence seq(graph, debug_name_and_id);
 
   // Each visitor might need to post process the allocation, for example change
   // add copies to a sequence. Use the input location for that information.
@@ -1730,7 +1731,7 @@ StatusOr<DriverTensor> DeferredVisitor::PostProcessInputTensor(
 
 StatusOr<DriverTensor> DeferredVisitor::PostProcessInfeedAllocation(
     TensorLocation location, const Shape& shape,
-    poplar::program::Sequence& sequence, DriverTensor tensor,
+    DriverProgramSequence& sequence, DriverTensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
   TF_ASSIGN_OR_RETURN(auto progs,
                       CreateInfeed(resources_, location.instruction,
@@ -1795,28 +1796,28 @@ bool DeferredVisitor::InputIsUsedInDependentComputations(
   return false;
 }
 
-poplar::program::Sequence DeferredVisitor::GetSequence(
-    bool copy_execution_counters) {
-  poplar::program::Sequence seq({}, dnai_);
+DriverProgramSequence DeferredVisitor::GetSequence(
+    DriverGraph& graph, bool copy_execution_counters) {
+  DriverProgramSequence seq(graph, dnai_);
   if (copy_execution_counters) {
-    TF_CHECK_OK(
-        CopyExecutionCountersFromScope(resources_, execution_counters_, seq));
+    TF_CHECK_OK(CopyExecutionCountersFromScope(graph, resources_,
+                                               execution_counters_, seq));
   }
-  seq.add(FullVisitor::GetRawSequence());
+  seq.add(FullVisitor::GetRawSequence(graph));
   return seq;
 }
 
-poplar::program::Sequence DeferredVisitor::GetFunctionCall() {
+DriverProgramSequence DeferredVisitor::GetFunctionCall(DriverGraph& graph) {
   if (!function_) {
     // Do not copy the execution counters as part of the function - the
     // callsites might be different.
-    poplar::program::Sequence func_seq = GetSequence(false);
+    DriverProgramSequence func_seq = GetSequence(graph, false);
     function_ = GetMasterGraph(resources_).addFunction(func_seq);
   }
 
-  poplar::program::Sequence seq({}, dnai_);
-  TF_CHECK_OK(
-      CopyExecutionCountersFromScope(resources_, execution_counters_, seq));
+  DriverProgramSequence seq(graph, dnai_);
+  TF_CHECK_OK(CopyExecutionCountersFromScope(graph, resources_,
+                                             execution_counters_, seq));
   seq.add(poplar::program::Call(*function_, {dnai_}));
   return seq;
 }
@@ -1861,11 +1862,11 @@ Status InplaceDeferredVisitor::PropagateDeferredAllocationsOperand(
       /*add_clone=*/false, debug_name_and_id);
 }
 
-StatusOr<poplar::program::Sequence> InplaceDeferredVisitor::GetPreambleCopies(
-    const poplar::DebugNameAndId& debug_name_and_id) {
+StatusOr<DriverProgramSequence> InplaceDeferredVisitor::GetPreambleCopies(
+    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id) {
   CHECK_EQ(callsite_inputs_.size(), computation_inputs_.size());
   CHECK_EQ(callsite_inputs_.size(), reallocate_inputs_info_.size());
-  poplar::program::Sequence seq({}, debug_name_and_id);
+  DriverProgramSequence seq(graph, debug_name_and_id);
   for (uint64 i = 0; i != callsite_inputs_.size(); ++i) {
     CHECK_EQ(callsite_inputs_[i].size(), computation_inputs_[i].size());
     CHECK_EQ(callsite_inputs_[i].size(), reallocate_inputs_info_[i].size());
@@ -1881,9 +1882,9 @@ StatusOr<poplar::program::Sequence> InplaceDeferredVisitor::GetPreambleCopies(
           return FailedPrecondition("Input should have not been reallocated.");
         }
         VLOG(3) << "Adding a copy for input (" << i << ", " << j << ").";
-        seq.add(poplar::program::Copy(callsite_input->AsTensor(),
-                                      computation_inputs_[i][j].AsTensor(),
-                                      false, debug_name_and_id));
+        seq.add(DriverProgramCopy(callsite_input->AsTensor(),
+                                  computation_inputs_[i][j].AsTensor(), false,
+                                  debug_name_and_id));
       } else if (callsite_input->IsOpaque()) {
         *callsite_input = computation_inputs_[i][j].AsOpaque();
       }
@@ -2067,10 +2068,11 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
                          std::string("bodyout_temp_") + std::to_string(i)});
         AddSequenceForAliasingCopy(
             computation->root_instruction(),
-            poplar::program::Sequence(
-                {poplar::program::Copy(loop_outputs[i].AsTensor(),
-                                       unaliased_loop_outputs[i].AsTensor(),
-                                       false, {debug_name_and_id})}));
+            DriverProgramSequence(
+                {DriverProgramCopy(loop_outputs[i].AsTensor(),
+                                   unaliased_loop_outputs[i].AsTensor(), false,
+                                   {debug_name_and_id})},
+                graph, debug_name_and_id));
         break;
       }
       default:
@@ -2098,9 +2100,11 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
           // Get the input ready for the next iteration.
           AddSequenceForAliasingCopy(
               computation->root_instruction(),
-              poplar::program::Sequence({poplar::program::Copy(
-                  unaliased_loop_outputs[i].AsTensor(),
-                  loop_inputs[i].AsTensor(), false, {debug_name_and_id})}));
+              DriverProgramSequence(
+                  {DriverProgramCopy(unaliased_loop_outputs[i].AsTensor(),
+                                     loop_inputs[i].AsTensor(), false,
+                                     {debug_name_and_id})},
+                  graph, debug_name_and_id));
         }
         break;
       }
@@ -2122,7 +2126,7 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
 }
 
 void InplaceDeferredVisitor::AddSequenceForAliasingCopy(
-    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+    const HloInstruction* inst, const DriverProgramSequence& seq) {
   // By default just add the copies as a regular sequence for the instruction.
   TF_CHECK_OK(FullVisitor::AddSequenceForInstruction(inst, seq));
 }

@@ -33,7 +33,20 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-StatusOr<poplar::program::Sequence*>
+RepeatLoopOverlapIOVisitor::RepeatLoopOverlapIOVisitor(
+    CompilerResources& res, const DeferredArgRBVectors& inputs,
+    const HloPoplarInplaceDescription& description,
+    const ReallocateInputsInfo& reallocate_inputs_info,
+    const poplar::DebugNameAndId& debug_name_and_id)
+    : RepeatLoopVisitor(res, inputs, description, reallocate_inputs_info,
+                        debug_name_and_id),
+      // Temporary initializations, will be assigned later.
+      infeed_sequence_(*res.main_graph),
+      outfeed_sequence_(*res.main_graph),
+      io_tile_copy_in_sequence_(*res.main_graph),
+      io_tile_copy_out_sequence_(*res.main_graph) {}
+
+StatusOr<DriverProgramSequence*>
 RepeatLoopOverlapIOVisitor::GetSequenceForInstruction(
     const HloInstruction* inst) {
   switch (inst->opcode()) {
@@ -48,22 +61,23 @@ RepeatLoopOverlapIOVisitor::GetSequenceForInstruction(
 }
 
 Status RepeatLoopOverlapIOVisitor::AppendSequenceGroupedByInstruction(
-    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+    const HloInstruction* inst, const DriverProgramSequence& seq) {
   TF_ASSIGN_OR_RETURN(auto to_update, GetSequenceForInstruction(inst));
   to_update->add(seq);
   return Status::OK();
 }
 
 Status RepeatLoopOverlapIOVisitor::PrependSequenceGroupedByInstruction(
-    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+    const HloInstruction* inst, const DriverProgramSequence& seq) {
   TF_ASSIGN_OR_RETURN(auto to_update, GetSequenceForInstruction(inst));
+  auto& graph = GetGraph(resources_, inst);
   *to_update =
-      poplar::program::Sequence({seq, *to_update}, GetDebugNameAndId(inst));
+      DriverProgramSequence({seq, *to_update}, graph, GetDebugNameAndId(inst));
   return Status::OK();
 }
 
 Status RepeatLoopOverlapIOVisitor::AddSequenceForInstruction(
-    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+    const HloInstruction* inst, const DriverProgramSequence& seq) {
   switch (inst->opcode()) {
     case HloOpcode::kInfeed:
       infeed_sequence_.add(seq);
@@ -122,12 +136,12 @@ DriverProgramSequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
   DriverProgramSequence seq(graph, debug_name_and_id);
   seq.add(pre_loop_sequence_);
 
-  poplar::program::Sequence call_seq({}, {debug_name_and_id, "call"});
+  DriverProgramSequence call_seq(graph, {debug_name_and_id, "call"});
   {
-    poplar::program::Sequence compute_seq({}, {debug_name_and_id, "compute"});
-    compute_seq.add(GetSequence(/*copy_execution_counters*/ false));
+    DriverProgramSequence compute_seq(graph, {debug_name_and_id, "compute"});
+    compute_seq.add(GetSequence(graph, /*copy_execution_counters*/ false));
     // Increase the local execution counters at the end of each iteration.
-    compute_seq.add(execution_counters_.IncrementLiveCounters());
+    compute_seq.add(execution_counters_.IncrementLiveCounters(graph));
     call_seq.add(poplar::program::Call(graph.addFunction(compute_seq)));
   }
 
@@ -140,7 +154,7 @@ DriverProgramSequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
   // IO, assuming they are using non-overlapping tiles. Because we have 2
   // additional compute-batches in the device in any given iteration, we must
   // unroll the loop to fill and flush this.
-  poplar::program::Sequence repeat_seq({}, {debug_name_and_id, "repeat"});
+  DriverProgramSequence repeat_seq(graph, {debug_name_and_id, "repeat"});
   // Copy from the IO tiles the nth compute-batch of data.
   repeat_seq.add(io_tile_copy_in_sequence_);
   // Copy to the IO tiles the n-1th compute-batch of data.
@@ -158,7 +172,7 @@ DriverProgramSequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
     // Create a double loop - the inner loop executes for
     // `num_mini_batches_to_accumulate_` iterations and then performs the
     // resource update.
-    poplar::program::Sequence inner_seq({}, {debug_name_and_id, "inner"});
+    DriverProgramSequence inner_seq(graph, {debug_name_and_id, "inner"});
     // Zero the gradient accumulation buffers.
     inner_seq.add(tensors_zeroing_sequence_);
     // Load in initial data.

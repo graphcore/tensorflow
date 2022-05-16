@@ -25,21 +25,22 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+using ExtendedProgram = snap::program::Program;
 using ExtendedProgramCopy = snap::program::Copy;
 using ExtendedProgramSync = snap::program::Sync;
+using ExtendedProgramRepeat = snap::program::Repeat;
+using ExtendedProgramCall = snap::program::Call;
 using ExtendedProgramWriteUndef = snap::program::WriteUndef;
 
 // Wrapper class to abstract migration from poplar to snap
 class ExtendedProgramSequence : public snap::program::Sequence {
  public:
-  ExtendedProgramSequence(snap::Graph& graph)  // NOLINT
-      : snap::program::Sequence(graph) {}
-  explicit ExtendedProgramSequence(snap::Graph& graph,
-                                   const poplar::DebugContext& debugContext)
+  ExtendedProgramSequence(snap::Graph& graph,
+                          const poplar::DebugContext& debugContext = {})
       : snap::program::Sequence(debugContext, graph) {}
-  explicit ExtendedProgramSequence(
-      poplar::ArrayRef<snap::program::Program> programs, snap::Graph& graph,
-      const poplar::DebugContext& debugContext)
+  ExtendedProgramSequence(poplar::ArrayRef<snap::program::Program> programs,
+                          snap::Graph& graph,
+                          const poplar::DebugContext& debugContext = {})
       : snap::program::Sequence(programs, debugContext, graph) {}
 
   operator poplar::program::Sequence&() { return getPoplarSequence(); }

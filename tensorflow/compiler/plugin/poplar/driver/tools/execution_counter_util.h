@@ -18,11 +18,8 @@ limitations under the License.
 #include <string>
 #include <vector>
 
-#include <poplar/Graph.hpp>
-#include <poplar/Program.hpp>
-#include <poplar/Tensor.hpp>
-
 #include "absl/container/flat_hash_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
@@ -96,24 +93,24 @@ class ExecutionCounters {
   ExecutionCounters Clone(const poplar::DebugNameAndId& debug_name_and_id);
 
   // Get a counter for a particular shard and mark it as live.
-  StatusOr<poplar::Tensor> GetCounter(int64 shard);
+  StatusOr<DriverTensor> GetCounter(int64 shard);
 
   // Copy counters from `source`. Any counters which are live in `this` are
   // marked as live in `source`.
-  StatusOr<poplar::program::Sequence> SetInitialValuesFrom(
-      ExecutionCounters* source);
+  StatusOr<DriverProgramSequence> SetInitialValuesFrom(
+      DriverGraph& graph, ExecutionCounters* source);
 
   // Create a sequence which sets the values of live counters to zero.
-  poplar::program::Sequence SetInitialValuesToZero();
+  DriverProgramSequence SetInitialValuesToZero(DriverGraph& graph);
 
   // Update counters in `destination` by copying the values of current counters.
   // Any counters which are live in `this` are expected to also be live in
   // `destination`
-  StatusOr<poplar::program::Sequence> UpdateCounters(
-      ExecutionCounters* destination);
+  StatusOr<DriverProgramSequence> UpdateCounters(
+      DriverGraph& graph, ExecutionCounters* destination);
 
   // Increment all the live counters by one.
-  poplar::program::Sequence IncrementLiveCounters() const;
+  DriverProgramSequence IncrementLiveCounters(DriverGraph& graph) const;
 
   const std::vector<bool>& GetLiveCounters() const;
 
@@ -121,7 +118,7 @@ class ExecutionCounters {
 
  private:
   // Tensors for each shard which requires an execution counter.
-  std::vector<poplar::Tensor> counters_;
+  std::vector<DriverTensor> counters_;
 
   // Track which tensors are actually live.
   std::vector<bool> live_counters_;
@@ -135,14 +132,15 @@ class ExecutionCounters {
 
 // Get the execution counter tensor given an instruction and its sharding.
 // Expects the instruction to either have no sharding or single device sharding.
-StatusOr<poplar::Tensor> GetExecutionCounter(CompilerResources& resources,
-                                             const HloInstruction* inst);
+StatusOr<DriverTensor> GetExecutionCounter(CompilerResources& resources,
+                                           const HloInstruction* inst);
 
 // Add copy programs to the sequence which set the counter values from the
 // current scope currently at the top of the stack.
-Status CopyExecutionCountersFromScope(CompilerResources& resources,
+Status CopyExecutionCountersFromScope(DriverGraph& graph,
+                                      CompilerResources& resources,
                                       ExecutionCounters& counters,
-                                      poplar::program::Sequence& sequence);
+                                      DriverProgramSequence& sequence);
 
 }  // namespace poplarplugin
 }  // namespace xla

@@ -17,7 +17,9 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_VISITOR_ARITHMETIC_EXPR_H_
 
 #include <map>
+#include <memory>
 #include <string>
+#include <vector>
 
 #include <popops/Expr.hpp>
 
@@ -99,9 +101,9 @@ class ArithmeticExprVisitor : public BaseVisitor {
   TensorVector outputs_;
   std::map<const HloInstruction*, std::unique_ptr<popops::expr::Expr>>
       expressions_map_;
-  std::map<const poplar::Tensor*, std::unique_ptr<popops::expr::Expr>>
+  std::map<const DriverTensor*, std::unique_ptr<popops::expr::Expr>>
       tensors_map_;
-  std::vector<poplar::Tensor> ts_;
+  std::vector<DriverTensor> ts_;
   const HloInstruction* caller_;
 };
 

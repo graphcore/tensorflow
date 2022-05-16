@@ -31,10 +31,15 @@ using DriverTensor = ExtendedTensor;
 using DriverDataStream = ExtendedDataStream;
 using DriverRemoteBuffer = ExtendedRemoteBuffer;
 
+using DriverProgram = ExtendedProgram;
 using DriverProgramSequence = ExtendedProgramSequence;
 using DriverProgramCopy = ExtendedProgramCopy;
 using DriverProgramSync = ExtendedProgramSync;
+using DriverProgramRepeat = ExtendedProgramRepeat;
+using DriverProgramCall = ExtendedProgramCall;
 using DriverProgramWriteUndef = ExtendedProgramWriteUndef;
+
+using DriverFunction = ExtendedFunction;
 
 }  // namespace poplarplugin
 }  // namespace xla

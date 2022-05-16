@@ -50,15 +50,16 @@ uint32 find_powerof2_mask(uint32 v) {
 }
 
 Status AddWriteUndefToFIFOBuffer(
-    const HloInstruction* inst, const poplar::Tensor& buffer,
-    CompilerResources& res, const poplar::DebugNameAndId& debug_name_and_id) {
+    DriverGraph& graph, const HloInstruction* inst,
+    const poplar::Tensor& buffer, CompilerResources& res,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   if (IsInPipeline(inst, res)) {
     // We need to write undef the FIFO buffer otherwise it will be marked as
     // always live in Poplar as we never write to it fully in the pipeline.
     if (res.pipelining_write_undef_sequences.empty()) {
       return FailedPrecondition("Cannot WriteUndef a FIFO buffer.");
     }
-    poplar::program::Sequence seq({}, debug_name_and_id);
+    DriverProgramSequence seq(graph, debug_name_and_id);
     seq.add(poplar::program::WriteUndef(buffer, {debug_name_and_id}));
     res.pipelining_write_undef_sequences.top().push_back(seq);
   }
@@ -262,8 +263,8 @@ class FifoOp : public PoplarOpDef {
                 {debug_info,
                  absl::StrCat("buffer/", tuple_idx, "/", partition_idx)},
                 poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-            TF_RETURN_IF_ERROR(
-                AddWriteUndefToFIFOBuffer(inst, buffer, res, {debug_info}));
+            TF_RETURN_IF_ERROR(AddWriteUndefToFIFOBuffer(graph, inst, buffer,
+                                                         res, {debug_info}));
 
             // Copy the content of the buffer to the output.
             seq.add(poplar::program::Copy(buffer, output_flat[partition_idx],
@@ -333,8 +334,8 @@ class FifoOp : public PoplarOpDef {
               *graphs[partition_idx], input_flat.expand({0}), {0}, {fifo_depth},
               {debug_info,
                absl::StrCat("buffer/", tuple_idx, "/", partition_idx)});
-          TF_RETURN_IF_ERROR(
-              AddWriteUndefToFIFOBuffer(inst, buffer, res, {debug_info}));
+          TF_RETURN_IF_ERROR(AddWriteUndefToFIFOBuffer(graph, inst, buffer, res,
+                                                       {debug_info}));
 
           // Slice the element into the output.
           popops::dynamicSliceWithOutput(

@@ -29,10 +29,11 @@ limitations under the License.
 #include <poplar/CodeletFileType.hpp>
 #include <poplar/CycleCount.hpp>
 #include <poplar/exceptions.hpp>
-#include <poplar/replication_factor.hpp>
 #include <popops/Cast.hpp>
 #include <random>
 #include <string>
+
+#include <snap/CompileGraph.hpp>
 
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_set.h"
@@ -1436,7 +1437,7 @@ std::string GetTargetArch(const poplar::Target& target) {
              : "";
 }
 
-StatusOr<poplar::program::Program> ConstructGraphAndMainProgram(
+StatusOr<DriverProgram> ConstructGraphAndMainProgram(
     HloModule* module, CompilerResources& resources, EntryVisitor& visitor) {
   Tracepoint tracepoint("PoplarGraphConstruction");
   auto& main_graph = GetMasterGraph(resources);
@@ -1471,7 +1472,7 @@ StatusOr<poplar::program::Program> ConstructGraphAndMainProgram(
   } catch (const std::exception& e) {
     return PoplarExceptionToTensorflowStatus("[Build graph]", e);
   }
-  return visitor.GetSequenceAndInitializeCounters();
+  return visitor.GetSequenceAndInitializeCounters(main_graph);
 }
 
 StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
@@ -1802,8 +1803,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   resources.module_call_graph = CallGraph::Build(module);
 
   std::unique_ptr<poplar::Engine> engine;
-  std::vector<poplar::program::Program>
-      progs;  // TODO(T58443) - Convert to snap API
+  std::vector<DriverProgram> progs;
   bool logging_cycle_count = false;
 
   if (compile) {
@@ -1888,7 +1888,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     // poplar_executor.h
     // =======================================================================
     progs.push_back(visitor.GetHostToDevice());
-    progs.push_back(main_program);  // TODO(T58443) - Convert to snap API
+    progs.push_back(main_program);
     progs.push_back(visitor.GetDeviceToHost());
 
     std::string map_json = "";
@@ -1923,10 +1923,9 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       std::string executable_debug_name =
           poplar_executor->GetModuleReportDirectory(module->name());
 
-      // TODO(T58443) - Convert to snap API
-      poplar::Executable exec =
-          poplar::compileGraph(std::move(main_graph), progs, opt_flags,
-                               progress_logging, executable_debug_name);
+      auto exec = snap::compileGraph(main_graph, progs, opt_flags,
+                                     progress_logging, executable_debug_name)
+                      .releaseExecutable();
 
       if (is_cacheable) {
         // If we have the lock, serialize the result to the executable cache.

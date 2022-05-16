@@ -108,7 +108,7 @@ StatusOr<DriverProgramSequence> CreateParallelMap(
   MapVisitor visitor(res, inputs, output, debug_name_and_id);
   TF_RETURN_IF_ERROR(inst->to_apply()->Accept(&visitor));
 
-  seq.add(visitor.GetSequence());
+  seq.add(visitor.GetSequence(graph));
 
   auto outputs = visitor.outputs();
   for (size_t i = 0; i < outputs.size(); i++) {
@@ -183,7 +183,7 @@ StatusOr<DriverProgramSequence> CreateFusionOp(
       res, deferred_inputs, GetInplaceDescription(inst), debug_name_and_id);
   TF_RETURN_IF_ERROR(comp->Accept(&inplace_visitor));
 
-  seq.add(inplace_visitor.GetSequence());
+  seq.add(inplace_visitor.GetSequence(graph));
   const TensorOrRemoteBufferVector& outputs = inplace_visitor.outputs();
 
   for (size_t i = 0; i < outputs.size(); i++) {
@@ -296,14 +296,14 @@ StatusOr<DriverProgramSequence> CreateWhileOp(
   DriverProgramSequence main_seq(graph, {debug_name_and_id, "main"});
   // Add copies for any inputs which were reallocated.
   TF_ASSIGN_OR_RETURN(poplar::program::Sequence copy_seq,
-                      body_visitor.GetPreambleCopies(debug_name_and_id));
+                      body_visitor.GetPreambleCopies(graph, debug_name_and_id));
   main_seq.add(copy_seq);
 
   // Only add the zeroing for the execution counters in the condition and body
   // visitors once before the execution of the loop so that they are not reset
   // at the beginning of each iteration.
-  main_seq.add(cond_counters.SetInitialValuesToZero());
-  main_seq.add(body_counters.SetInitialValuesToZero());
+  main_seq.add(cond_counters.SetInitialValuesToZero(graph));
+  main_seq.add(body_counters.SetInitialValuesToZero(graph));
 
   // Create a sequence and predicate for the condition.
   DriverProgramSequence cond_seq(graph, {debug_name_and_id, "condition"});
@@ -318,13 +318,13 @@ StatusOr<DriverProgramSequence> CreateWhileOp(
                                            {debug_name_and_id}));
       }
     }
-    cond_seq.add(
-        condition_visitor.GetSequence(/*copy_execution_counters*/ false));
+    cond_seq.add(condition_visitor.GetSequence(
+        graph, /*copy_execution_counters*/ false));
 
     predicate = popops::allTrue(graph, cond_outputs[0].AsTensor(), cond_seq,
                                 {debug_name_and_id});
     // Increase the local execution counters at the end of each iteration.
-    cond_seq.add(cond_counters.IncrementLiveCounters());
+    cond_seq.add(cond_counters.IncrementLiveCounters(graph));
   }
   // Add the aliasing copies for the loop so that the outputs of one iteration
   // are aliased to the inputs of the next one.
@@ -334,14 +334,15 @@ StatusOr<DriverProgramSequence> CreateWhileOp(
   // Create a sequence for the body.
   DriverProgramSequence body_seq(graph, {debug_name_and_id, "body"});
   {
-    body_seq.add(body_visitor.GetSequence(/*copy_execution_counters*/ false));
+    body_seq.add(
+        body_visitor.GetSequence(graph, /*copy_execution_counters*/ false));
     // After each loop iteration the condition is run again, so we need to make
     // sure that we're using SR method for the condition before it's executed.
     MaybeChangeStochasticRoundingMethod(res, inst->name() + "_iter_end",
                                         condition_start_method, body_seq);
 
     // Increase the local execution counters at the end of each iteration.
-    body_seq.add(body_counters.IncrementLiveCounters());
+    body_seq.add(body_counters.IncrementLiveCounters(graph));
   }
 
   // We always run the condition block after the while body, so the actual SR
@@ -750,7 +751,7 @@ StatusOr<DriverProgramSequence> CreateFunctionOp(
   }
 
   // Add the function.
-  seq.add(subcomp_visitor->GetFunctionCall());
+  seq.add(subcomp_visitor->GetFunctionCall(graph));
 
   // Propagate the outputs.
   auto& outputs = subcomp_visitor->outputs();
@@ -815,7 +816,7 @@ StatusOr<DriverProgramSequence> CreatePipelineOp(
   return seq;
 }
 
-static poplar::Tensor GetGradientAccumulationCountTensor(
+static DriverTensor GetGradientAccumulationCountTensor(
     const HloInstruction* inst, DeferredArgRBVectors& inputs) {
   int64 index = GetAccumulationCountOperandIndex(inst);
   const auto& input = inputs[index];
@@ -825,7 +826,7 @@ static poplar::Tensor GetGradientAccumulationCountTensor(
 }
 
 static PipelineVisitor::IterationsType GetIterationsArgument(
-    const HloInstruction* inst, poplar::Graph& graph,
+    const HloInstruction* inst, DriverGraph& graph,
     DeferredArgRBVectors& inputs) {
   auto count = GetGradientAccumulationCount(inst);
   if (count) {
@@ -867,11 +868,12 @@ StatusOr<DriverProgramSequence> CreatePipelineOp(
     // of the pipeline graph. Provide dummy tensor as won't be used.
     // If not known at compile time we can't create the sequence yet as
     // need to call PropagateDeferredAllocations first
-    TF_RETURN_IF_ERROR(visitor
-                           ->VerifyPipelineArguments(
-                               GetGradientAccumulationCountInstruction(inst),
-                               poplar::Tensor(), graph)
-                           .status());
+    auto dummy = graph.addLinearlyMappedVariable(poplar::FLOAT, {});
+    TF_RETURN_IF_ERROR(
+        visitor
+            ->VerifyPipelineArguments(
+                GetGradientAccumulationCountInstruction(inst), dummy, graph)
+            .status());
   }
 
   auto order = pipeline_computation->parent()
@@ -890,7 +892,7 @@ StatusOr<DriverProgramSequence> CreatePipelineOp(
                           graph, pipeline_computation, debug_name_and_id));
   ExecutionCounters& execution_counters = visitor->GetExecutionCounters();
   // Initialize the counters.
-  seq.add(execution_counters.SetInitialValuesToZero());
+  seq.add(execution_counters.SetInitialValuesToZero(graph));
 
   TF_ASSIGN_OR_RETURN(
       poplar::program::Sequence verification_prog,
@@ -899,11 +901,11 @@ StatusOr<DriverProgramSequence> CreatePipelineOp(
           GetGradientAccumulationCountTensor(inst, inputs), graph));
 
   // Get the pipeline sequence.
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Sequence pipeline_prog,
-      visitor->GetPipelineSequence(GetIterationsArgument(inst, graph, inputs)));
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence pipeline_prog,
+                      visitor->GetPipelineSequence(
+                          graph, GetIterationsArgument(inst, graph, inputs)));
   // Increase the counters at the end of each pipeline execution.
-  pipeline_prog.add(execution_counters.IncrementLiveCounters());
+  pipeline_prog.add(execution_counters.IncrementLiveCounters(graph));
 
   seq.add(verification_prog);
   seq.add(
@@ -1041,7 +1043,7 @@ StatusOr<DriverProgramSequence> CreateConditionalOp(
     }
 
     // Add the actual body.
-    seqs[b].add(bodies[b]->GetSequence());
+    seqs[b].add(bodies[b]->GetSequence(graph));
 
     // Make sure all branches end on the same SR method.
     MaybeSetStochasticRoundingMethod(res, bodies_end_sr_methods[b]);
@@ -1109,8 +1111,8 @@ StatusOr<DriverProgramSequence> CreateResourceUpdateOp(
   TF_RETURN_IF_ERROR(
       visitor.PropagateDeferredAllocations(inst, inputs, debug_name_and_id));
   // Add to the sequence.
-  seq.add(visitor.GetSequence());
-  seq.add(visitor.GetExecutionCounters().IncrementLiveCounters());
+  seq.add(visitor.GetSequence(graph));
+  seq.add(visitor.GetExecutionCounters().IncrementLiveCounters(graph));
   // Set up the outputs.
   const TensorOrRemoteBufferVector& outputs = visitor.outputs();
   for (size_t i = 0; i < outputs.size(); i++) {

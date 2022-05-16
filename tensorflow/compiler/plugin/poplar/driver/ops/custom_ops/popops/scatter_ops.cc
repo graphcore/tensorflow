@@ -175,7 +175,7 @@ class ScatterOp : public PoplarOpDef {
           }
 
           // Add the sequence.
-          p.add(update_comp_visitor->GetSequence());
+          p.add(update_comp_visitor->GetSequence(graph));
 
           // Copy the output out
           p.add(poplar::program::Copy(
