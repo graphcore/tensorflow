@@ -91,6 +91,21 @@ popit_cc_library(
 )
 
 popit_cc_library(
+    name = "xla_popit_backend",
+    srcs = [
+        "xla_popit_backend.cc",
+    ],
+    visibility = ["//tensorflow/compiler/plugin:__subpackages__"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver:xla_ipu_common",
+        "//tensorflow/compiler/tf2xla:tf2xla_util",
+        "//tensorflow/compiler/tf2xla:xla_compiler",
+        "//tensorflow/stream_executor/lib",
+    ],
+    alwayslink = True,
+)
+
+popit_cc_library(
     name = "popit_backend",
     deps = [
         ":popit_compiler",
@@ -98,5 +113,6 @@ popit_cc_library(
         ":popit_executor",
         ":popit_platform",
         ":popit_transfer_manager",
+        ":xla_popit_backend",
     ],
 )
