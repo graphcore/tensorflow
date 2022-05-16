@@ -33,9 +33,6 @@ class HloPoplarTestBase : public HloTestBase {
   // Returns the number of IPUs a test is allowed to use.
   static StatusOr<int32> GetMaxIpuCount();
 
- protected:
-  using HloTestBase::HloTestBase;
-
   static std::unique_ptr<CompilerResources> GetMockResources(HloModule* module);
 
   static std::unique_ptr<CompilerResources> GetMockResources(
@@ -53,8 +50,11 @@ class HloPoplarTestBase : public HloTestBase {
   static StatusOr<poplar::Device> CreateIpuDevice(int32 num_ipus = 1,
                                                   int32 num_tiles = 0);
 
-  StatusOr<poplar::Engine> Compile(CompilerResources& resources,
-                                   HloModule* module);
+  static StatusOr<poplar::Engine> Compile(CompilerResources& resources,
+                                          HloModule* module);
+
+ protected:
+  using HloTestBase::HloTestBase;
 };
 
 }  // namespace poplarplugin

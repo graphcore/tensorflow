@@ -128,6 +128,21 @@ HloInstruction* CreateMultiUpdate(HloComputation* comp,
   return multiupdate;
 }
 
+HloInstruction* CreateMultiUpdateAdd(HloComputation* comp,
+                                     HloInstruction* input_tensor,
+                                     HloInstruction* add_slice,
+                                     HloInstruction* offset) {
+  auto* identity_scale = comp->AddInstruction(HloInstruction::CreateConstant(
+      LiteralUtil::One(input_tensor->shape().element_type())));
+
+  auto* multiupdate =
+      comp->AddInstruction(xla::poplarplugin::CreateMultiUpdateAdd(
+          input_tensor->shape(),
+          {input_tensor, offset, add_slice, identity_scale}));
+
+  return multiupdate;
+}
+
 Status ReplaceAndCleanup(HloComputation* comp, HloInstruction* replacement,
                          HloInstruction* original,
                          std::vector<HloInstruction*> to_remove) {
@@ -140,39 +155,108 @@ Status ReplaceAndCleanup(HloComputation* comp, HloInstruction* replacement,
 
   return Status::OK();
 }
+
+// Utility type to query whats being replaced through a single
+// interface.
+struct ReplacementDescription {
+  ReplacementDescription() = delete;
+  ReplacementDescription(HloDynamicSliceInstruction* slice)  // NOLINT
+      : dynamic_slice(slice) {}
+  ReplacementDescription(HloDynamicUpdateSliceInstruction* update)  //  NOLINT
+      : dynamic_update(update) {}
+  ReplacementDescription(DynamicUpdateAdd dynamic_update_add)  //  NOLINT
+      : dynamic_slice(dynamic_update_add.slice),
+        dynamic_update(dynamic_update_add.update),
+        add(dynamic_update_add.add) {
+    add_slice = add->mutable_operand(1);
+    if (add_slice == dynamic_slice) {
+      add_slice = add->mutable_operand(0);
+    }
+  }
+
+  HloDynamicIndexInstruction* root() const {
+    if (ReplaceDynamicSlice()) {
+      return dynamic_slice;
+    }
+    if (ReplaceDynamicUpdate() || ReplaceDynamicUpdateAdd()) {
+      return dynamic_update;
+    }
+    return nullptr;
+  }
+
+  std::vector<HloInstruction*> replaced_instructions() const {
+    if (ReplaceDynamicUpdateAdd()) {
+      return {dynamic_update, add, dynamic_slice};
+    } else {
+      return {root()};
+    }
+  }
+
+  bool ReplaceDynamicSlice() const {
+    return dynamic_slice && !dynamic_update && !add;
+  }
+  bool ReplaceDynamicUpdate() const {
+    return dynamic_update && !dynamic_slice && !add;
+  }
+  bool ReplaceDynamicUpdateAdd() const {
+    return dynamic_update && dynamic_slice && add;
+  }
+
+  HloDynamicSliceInstruction* dynamic_slice = nullptr;
+  HloDynamicUpdateSliceInstruction* dynamic_update = nullptr;
+  HloInstruction* add = nullptr;
+  HloInstruction* add_slice = nullptr;
+};
+
 StatusOr<HloInstruction*> Replace1DDynamicWithMultiSlice(
-    HloDynamicIndexInstruction* dynamic_slice, int64 slice_dim) {
-  auto comp = dynamic_slice->parent();
+    ReplacementDescription replacement_desc, int64 slice_dim) {
+  auto* dynamic_slice = replacement_desc.root();
+  auto* comp = dynamic_slice->parent();
 
   auto* transformed_input =
       Transform1DSliceInput(comp, dynamic_slice->mutable_operand(0), slice_dim);
   auto* offset = Transform1DSliceOffset(comp, dynamic_slice, slice_dim);
 
   HloInstruction* multislice = nullptr;
-  if (dynamic_slice->opcode() == HloOpcode::kDynamicSlice) {
+  if (replacement_desc.ReplaceDynamicSlice()) {
     const int64 slice_dim_size = dynamic_slice->shape().dimensions(slice_dim);
     CHECK_EQ(slice_dim_size, 1);
     multislice = Create1DMultiSlice(comp, transformed_input, offset);
   } else {
-    CHECK_EQ(dynamic_slice->opcode(), HloOpcode::kDynamicUpdateSlice);
-    auto* update_slice = Transform1DSliceInput(
-        comp, dynamic_slice->mutable_operand(1), slice_dim);
-    multislice =
-        CreateMultiUpdate(comp, transformed_input, update_slice, offset);
+    if (replacement_desc.ReplaceDynamicUpdate()) {
+      auto* update_slice = Transform1DSliceInput(
+          comp, dynamic_slice->mutable_operand(1), slice_dim);
+      multislice =
+          CreateMultiUpdate(comp, transformed_input, update_slice, offset);
+    } else {
+      CHECK(replacement_desc.ReplaceDynamicUpdateAdd());
+      auto* add_slice =
+          Transform1DSliceInput(comp, replacement_desc.add_slice, slice_dim);
+      multislice =
+          CreateMultiUpdateAdd(comp, transformed_input, add_slice, offset);
+    }
   }
 
   auto* output =
       Restore1DSliceOutput(comp, multislice, dynamic_slice, slice_dim);
-  TF_RETURN_IF_ERROR(
-      ReplaceAndCleanup(comp, output, dynamic_slice, {dynamic_slice}));
+  TF_RETURN_IF_ERROR(ReplaceAndCleanup(
+      comp, output, dynamic_slice, replacement_desc.replaced_instructions()));
   return multislice;
 }
 
-}  // namespace
-
 StatusOr<HloInstruction*> TryReplaceDynamicWithMultiSlice(
-    HloDynamicIndexInstruction* dynamic_slice) {
-  const auto dynamic_slice_helper = DynamicSliceHelper(dynamic_slice);
+    ReplacementDescription replacement_desc) {
+  if (replacement_desc.ReplaceDynamicUpdateAdd()) {
+    // We cant replace the dynamic_update_add if the slice/add
+    // instructions are used outside it.
+    const auto used_outside_dynamic_update_add =
+        replacement_desc.add->user_count() > 1 ||
+        replacement_desc.dynamic_slice->user_count() > 1;
+    if (used_outside_dynamic_update_add) {
+      return nullptr;
+    }
+  }
+  const auto dynamic_slice_helper = DynamicSliceHelper(replacement_desc.root());
   if (dynamic_slice_helper.has_dynamic_slice) {
     const auto& slice_info = dynamic_slice_helper.dynamic_slice_info;
     const auto& slice_dims = slice_info.sliced_dims;
@@ -184,11 +268,65 @@ StatusOr<HloInstruction*> TryReplaceDynamicWithMultiSlice(
     const auto can_replace = slice_dims.size() == 1 && slice_sizes.front() == 1;
     if (can_replace) {
       const auto slice_dim = slice_dims.front();
-      return Replace1DDynamicWithMultiSlice(dynamic_slice, slice_dim);
+      return Replace1DDynamicWithMultiSlice(replacement_desc, slice_dim);
     }
   }
 
   return nullptr;
+}
+}  // namespace
+
+/*static*/ bool DynamicUpdateAdd::IsDynamicUpdateAdd(
+    const HloDynamicUpdateSliceInstruction* dynamic_update) {
+  auto* slice = dynamic_update->operand(1);
+  if (slice->opcode() == HloOpcode::kAdd) {
+    auto* add = slice;
+
+    const auto& add_operands = add->operands();
+    auto dynamic_slice_it =
+        absl::c_find_if(add_operands, [](const HloInstruction* inst) {
+          return inst->opcode() == HloOpcode::kDynamicSlice;
+        });
+    if (dynamic_slice_it != add_operands.end()) {
+      auto* dynamic_slice = Cast<HloDynamicSliceInstruction>(*dynamic_slice_it);
+
+      const auto slice_updating_same_tensor =
+          dynamic_slice->operand(0) == dynamic_update->operand(0);
+      const auto updating_same_slice =
+          dynamic_update->index_operands() == dynamic_slice->index_operands();
+      return slice_updating_same_tensor && updating_same_slice;
+    }
+  }
+  return false;
+}
+
+DynamicUpdateAdd::DynamicUpdateAdd(
+    HloDynamicUpdateSliceInstruction* dynamic_update) {
+  CHECK(IsDynamicUpdateAdd(dynamic_update));
+
+  update = dynamic_update;
+  add = dynamic_update->mutable_operand(1);
+
+  auto* maybe_dynamic_slice = add->mutable_operand(0);
+  if (maybe_dynamic_slice->opcode() != HloOpcode::kDynamicSlice) {
+    maybe_dynamic_slice = add->mutable_operand(1);
+  }
+  slice = Cast<HloDynamicSliceInstruction>(maybe_dynamic_slice);
+}
+
+StatusOr<HloInstruction*> TryReplaceDynamicSliceWithMultiSlice(
+    HloDynamicSliceInstruction* dynamic_slice) {
+  return TryReplaceDynamicWithMultiSlice(dynamic_slice);
+}
+
+StatusOr<HloInstruction*> TryReplaceDynamicUpdateWithMultiUpdate(
+    HloDynamicUpdateSliceInstruction* dynamic_update) {
+  return TryReplaceDynamicWithMultiSlice(dynamic_update);
+}
+
+StatusOr<HloInstruction*> TryReplaceDynamicUpdateAddWithMultiUpdateAdd(
+    DynamicUpdateAdd dynamic_update_add) {
+  return TryReplaceDynamicWithMultiSlice(dynamic_update_add);
 }
 
 DynamicSliceHelper::DynamicSliceHelper(const HloDynamicIndexInstruction* inst) {

@@ -22,12 +22,14 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/slice_util.h"
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dynamic_slice_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/embedding_plans_preplanning.h"
 
+#include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
+
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 
 #include <poplar/Device.hpp>
 #include <poplar/Engine.hpp>
@@ -41,131 +43,106 @@ void ConnectStream(poplar::Engine& engine, const std::string& name,
   engine.connectStream(name, values.data(), values.data() + values.size());
 }
 
-PoplarOp MultiSliceType(HloOpcode opcode) {
-  return opcode == HloOpcode::kDynamicSlice ? PoplarOp::MultiSlice
-                                            : PoplarOp::MultiUpdate;
+StatusOr<std::vector<int>> RunModule(HloModule* module,
+                                     std::vector<int> offsets) {
+  auto device = HloPoplarTestBase::CreateIpuModel(1, /*num_tiles*/ 8);
+  auto resources = HloPoplarTestBase::GetMockResources(device, module);
+  ModuleFlatten(resources->annotations).Run(module);
+  // EmbeddingPlansPreplanning requires flattened modules.
+  EmbeddingPlansPreplanning(*resources).Run(module);
+
+  poplar::Engine engine =
+      HloPoplarTestBase::Compile(*resources, module).ValueOrDie();
+  HloDescheduler().Run(module);
+
+  engine.load(device);
+
+  auto* entry = module->entry_computation();
+
+  auto* input = entry->parameter_instruction(0);
+  auto input_tensor =
+      std::vector<int>(ShapeUtil::ElementsIn(input->shape()), 0);
+  std::iota(input_tensor.begin(), input_tensor.end(), 0);
+
+  ConnectStream(engine, "0.0", input_tensor);
+  ConnectStream(engine, "1.0", offsets);
+
+  auto* root = entry->root_instruction();
+  auto out_element_count = ShapeUtil::ElementsIn(root->shape());
+  std::vector<int> out(out_element_count, 0);
+
+  ConnectStream(engine, "out_0.0", out);
+
+  engine.run(0);
+
+  return out;
 }
 
 using HloAndSliceOffsets = std::pair<std::string, std::vector<int>>;
-struct DynamicSliceHloTest : HloPoplarTestBase,
-                             ::testing::WithParamInterface<HloAndSliceOffsets> {
+struct DynamicSliceReplacementHloTest
+    : HloTestFixture,
+      ::testing::WithParamInterface<HloAndSliceOffsets> {
   void SetUp() override {
-    TF_ASSERT_OK_AND_ASSIGN(auto ipu_count, GetMaxIpuCount());
-    if (ipu_count == 0) {
-      GTEST_SKIP() << "Skipping tests as we need 1 ipu but have none."
-                   << "Make sure TF_IPU_COUNT is set.";
+    const auto hlo = GetParam().first;
+    ASSERT_TRUE(SetUpHloModule(hlo, 1));
+
+    offsets_ = GetParam().second;
+  }
+
+  ::testing::AssertionResult InstructionRemoved(const std::string& inst_name) {
+    if (FindInstruction(hlo_module_, inst_name)) {
+      return ::testing::AssertionFailure()
+             << "'" << inst_name
+             << "' instruction should be removed but it's still present in "
+                "module.";
     }
 
-    TF_ASSERT_OK_AND_ASSIGN(device_, CreateIpuDevice(1, /*num_tiles*/ 1200));
-    TF_ASSERT_OK_AND_ASSIGN(module_,
-                            ParseAndReturnVerifiedModule(GetParam().first));
-
-    auto input = FindInstruction(module_.get(), "input_tensor");
-    ASSERT_TRUE(input);
-    input_matrix_ = std::vector<int>(ShapeUtil::ElementsIn(input->shape()), 0);
-
-    auto offsets = FindInstruction(module_.get(), "offsets");
-    ASSERT_TRUE(offsets);
-
-    offsets_vector_ = GetParam().second;
-    ASSERT_EQ(offsets_vector_.size(), ShapeUtil::ElementsIn(offsets->shape()));
+    return ::testing::AssertionSuccess();
   }
 
-  std::pair<std::vector<int>, std::vector<int>> RunEngine(
-      poplar::Engine& engine) {
-    engine.load(device_);
-
-    // Setup matrix with incrementing values.
-    std::iota(input_matrix_.begin(), input_matrix_.end(), 0);
-    ConnectStream(engine, "0.0", input_matrix_);
-
-    ConnectStream(engine, "1.0", offsets_vector_);
-
-    const auto root = module_->entry_computation()->root_instruction();
-
-    const auto& root_output0 = root->shape().tuple_shapes(0);
-    std::vector<int> multislice_out(ShapeUtil::ElementsIn(root_output0), 0);
-    ConnectStream(engine, "out_0.0", multislice_out);
-
-    const auto& root_output1 = root->shape().tuple_shapes(1);
-    std::vector<int> dynamicslice_out(ShapeUtil::ElementsIn(root_output1), 0);
-    ConnectStream(engine, "out_1.0", dynamicslice_out);
-
-    engine.run(0);
-
-    return {multislice_out, dynamicslice_out};
-  }
-
-  poplar::Device device_;
-  std::unique_ptr<VerifiedHloModule> module_;
-
-  std::vector<int> input_matrix_;
-  std::vector<int> offsets_vector_;
-
-  std::string slice_being_replaced_ = "replace_dynamic_slice";
+  std::vector<int> offsets_;
 };
 
-using DynamicSliceSupportedHloTest = DynamicSliceHloTest;
+using DynamicSliceSupportedHloTest = DynamicSliceReplacementHloTest;
+TEST_P(DynamicSliceSupportedHloTest, CanReplace) {
+  auto instr = FindRootInstruction();
+  auto dynamic_slice = Cast<HloDynamicSliceInstruction>(instr);
+  auto dynamic_slice_name = dynamic_slice->name();
 
-TEST_P(DynamicSliceSupportedHloTest, CheckCanReplaceSlice) {
-  auto instr = FindInstruction(module_.get(), slice_being_replaced_);
-  ASSERT_TRUE(instr);
-
-  auto dynamic_slice = Cast<HloDynamicIndexInstruction>(instr);
   const auto expected_parent = dynamic_slice->parent();
-  const auto expected_poplar_op = MultiSliceType(dynamic_slice->opcode());
   TF_ASSERT_OK_AND_ASSIGN(auto multi_slice,
-                          TryReplaceDynamicWithMultiSlice(dynamic_slice));
+                          TryReplaceDynamicSliceWithMultiSlice(dynamic_slice));
   ASSERT_TRUE(multi_slice);
-
-  // Check that the slice has been removed.
-  ASSERT_FALSE(FindInstruction(module_.get(), slice_being_replaced_));
-
-  ASSERT_TRUE(IsPoplarInstruction(expected_poplar_op, multi_slice));
+  ASSERT_TRUE(IsPoplarInstruction(PoplarOp::MultiSlice, multi_slice));
   ASSERT_EQ(multi_slice->parent(), expected_parent);
-  if (expected_poplar_op == PoplarOp::MultiSlice) {
-    ASSERT_EQ(multi_slice->shape().dimensions(0), 1);
-  }
+  ASSERT_EQ(multi_slice->shape().dimensions(0), 1);
+
+  ASSERT_TRUE(InstructionRemoved(dynamic_slice_name));
 }
 
 TEST_P(DynamicSliceSupportedHloTest, CompareReplacedSlice) {
-  auto instr = FindInstruction(module_.get(), slice_being_replaced_);
-  ASSERT_TRUE(instr);
+  auto instr = FindRootInstruction();
+  auto dynamic_slice = Cast<HloDynamicSliceInstruction>(instr);
 
-  auto dynamic_slice = Cast<HloDynamicIndexInstruction>(instr);
-  TryReplaceDynamicWithMultiSlice(dynamic_slice);
+  TF_ASSERT_OK_AND_ASSIGN(auto expected_output,
+                          RunModule(hlo_module_, offsets_));
 
-  // EmbeddingPlansPreplanning requires flattened modules.
-  auto resources = GetMockResources(device_, module_.get(), 1);
-  ASSERT_TRUE(
-      ModuleFlatten(resources->annotations).Run(module_.get()).ValueOrDie());
-  // Not asserting anything since EmbeddingPlansPreplanning always returns
-  // False.
-  EmbeddingPlansPreplanning(*resources).Run(module_.get());
+  TryReplaceDynamicSliceWithMultiSlice(dynamic_slice);
+  TF_ASSERT_OK_AND_ASSIGN(auto replaced_output,
+                          RunModule(hlo_module_, offsets_));
 
-  TF_ASSERT_OK_AND_ASSIGN(poplar::Engine engine,
-                          Compile(*resources, module_.get()));
-
-  // The hlo ouputs 2 equal dynamic slices. Check that the output of our
-  // replacement matches the remaining one.
-  auto results = RunEngine(engine);
-  auto multislice_out = results.first;
-  auto dynamicslice_out = results.second;
-  ASSERT_EQ(multislice_out, dynamicslice_out);
+  ASSERT_EQ(replaced_output, expected_output);
 }
 
-using DynamicSliceUnsupportedHloTest = DynamicSliceHloTest;
-
+using DynamicSliceUnsupportedHloTest = DynamicSliceReplacementHloTest;
 TEST_P(DynamicSliceUnsupportedHloTest, CantReplace) {
-  auto instr = FindInstruction(module_.get(), slice_being_replaced_);
-  ASSERT_TRUE(instr);
+  auto instr = FindRootInstruction();
+  auto dynamic_slice = Cast<HloDynamicSliceInstruction>(instr);
 
-  auto dynamic_slice = Cast<HloDynamicIndexInstruction>(instr);
   TF_ASSERT_OK_AND_ASSIGN(auto multi_slice,
-                          TryReplaceDynamicWithMultiSlice(dynamic_slice));
+                          TryReplaceDynamicSliceWithMultiSlice(dynamic_slice));
   ASSERT_FALSE(multi_slice);
-  // Check that the original slice hasn't been removed.
-  ASSERT_TRUE(FindInstruction(module_.get(), slice_being_replaced_));
+  ASSERT_EQ(FindRootInstruction(), dynamic_slice);
 }
 
 HloAndSliceOffsets Slice3DInputTestCase(const std::string& tensor_size,
@@ -187,10 +164,7 @@ ENTRY test {
   slice.9 = s32[1] slice(offsets), slice={[2:3]}, metadata={op_type="Slice" op_name="Slice"}
   zOffset = s32[] reshape(slice.9), metadata={op_type="Slice" op_name="Slice"}
 
-  replace_dynamic_slice = s32[$1] dynamic-slice(input_tensor, xOffset, yOffset, zOffset), dynamic_slice_sizes={$1}, metadata={op_type="Slice" op_name="Slice"}
-  ref_dynamic_slice = s32[$1] dynamic-slice(input_tensor, xOffset, yOffset, zOffset), dynamic_slice_sizes={$1}, metadata={op_type="Slice" op_name="Slice"}
-
-  ROOT result = (s32[$1], s32[$1]) tuple(ref_dynamic_slice, replace_dynamic_slice)
+  ROOT replace_dynamic_slice = s32[$1] dynamic-slice(input_tensor, xOffset, yOffset, zOffset), dynamic_slice_sizes={$1}, metadata={op_type="Slice" op_name="Slice"}
 }
 )";
   return std::make_pair(absl::Substitute(template_hlo, tensor_size, slice_size),
@@ -214,10 +188,7 @@ ENTRY test {
   slice.7 = s32[1] slice(offsets), slice={[1:2]}, metadata={op_type="Slice" op_name="lice"}
   yOffset = s32[] reshape(slice.7), metadata={op_type="Slice" op_name="Slice"}
 
-  replace_dynamic_slice = s32[$1] dynamic-slice(input_tensor, xOffset, yOffset), dynamic_slice_sizes={$1}, metadata={op_type="Slice" op_name="Slice"}
-  ref_dynamic_slice = s32[$1] dynamic-slice(input_tensor, xOffset, yOffset), dynamic_slice_sizes={$1}, metadata={op_type="Slice" op_name="Slice"}
-
-  ROOT result = (s32[$1], s32[$1]) tuple(ref_dynamic_slice, replace_dynamic_slice)
+  ROOT replace_dynamic_slice = s32[$1] dynamic-slice(input_tensor, xOffset, yOffset), dynamic_slice_sizes={$1}, metadata={op_type="Slice" op_name="Slice"}
 }
 )";
   return std::make_pair(absl::Substitute(template_hlo, tensor_size, slice_size),
@@ -236,98 +207,7 @@ ENTRY test {
   slice.5 = s32[1] slice(offsets), slice={[0:1]}, metadata={op_type="Slice" op_name="Slice"}
   xOffset = s32[] reshape(slice.5), metadata={op_type="Slice" op_name="Slice"}
 
-  replace_dynamic_slice = s32[1] dynamic-slice(input_tensor, xOffset), dynamic_slice_sizes={1}, metadata={op_type="Slice" op_name="Slice"}
-  ref_dynamic_slice = s32[1] dynamic-slice(input_tensor, xOffset), dynamic_slice_sizes={1}, metadata={op_type="Slice" op_name="Slice"}
-
-  ROOT result = (s32[1], s32[1]) tuple(ref_dynamic_slice, replace_dynamic_slice)
-}
-)";
-  return std::make_pair(absl::Substitute(template_hlo, tensor_size), offsets);
-}
-
-HloAndSliceOffsets UpdateSlice3DInputTestCase(
-    const std::string& tensor_size, const std::string& slice_size,
-    const std::vector<int>& offsets = {0, 0, 0}) {
-  const char* template_hlo = R"(
-HloModule test
-ENTRY test {
-  input_tensor = s32[$0] parameter(0)
-  offsets = s32[3] parameter(1)
-
-  slice.5 = s32[1] slice(offsets), slice={[0:1]}, metadata={op_type="Slice" op_name="Slice"}
-  xOffset = s32[] reshape(slice.5), metadata={op_type="Slice" op_name="Slice"}
-
-  slice.7 = s32[1] slice(offsets), slice={[1:2]}, metadata={op_type="Slice" op_name="Slice"}
-  yOffset = s32[] reshape(slice.7), metadata={op_type="Slice" op_name="Slice"}
-
-  slice.9 = s32[1] slice(offsets), slice={[2:3]}, metadata={op_type="Slice" op_name="Slice"}
-  zOffset = s32[] reshape(slice.9), metadata={op_type="Slice" op_name="Slice"}
-
-  update_base = s32[] constant(1)
-  update = s32[$1] broadcast(update_base), dimensions={}
-
-  replace_dynamic_slice = s32[$0] dynamic-update-slice(input_tensor, update, xOffset, yOffset, zOffset)
-
-  input_tensor_copy = s32[$0] copy(input_tensor)
-  ref_dynamic_slice = s32[$0] dynamic-update-slice(input_tensor_copy, update, xOffset, yOffset, zOffset)
-
-  ROOT result = (s32[$0], s32[$0]) tuple(ref_dynamic_slice, replace_dynamic_slice)
-}
-)";
-  return std::make_pair(absl::Substitute(template_hlo, tensor_size, slice_size),
-                        offsets);
-}
-HloAndSliceOffsets UpdateSlice2DInputTestCase(
-    const std::string& tensor_size, const std::string& slice_size,
-    const std::vector<int>& offsets = {0, 0}) {
-  const char* template_hlo = R"(
-HloModule test
-
-ENTRY test {
-  input_tensor = s32[$0] parameter(0)
-  offsets = s32[2] parameter(1)
-
-  slice.5 = s32[1] slice(offsets), slice={[0:1]}, metadata={op_type="Slice" op_name="Slice"}
-  xOffset = s32[] reshape(slice.5), metadata={op_type="Slice" op_name="Slice"}
-
-  slice.7 = s32[1] slice(offsets), slice={[1:2]}, metadata={op_type="Slice" op_name="lice"}
-  yOffset = s32[] reshape(slice.7), metadata={op_type="Slice" op_name="Slice"}
-
-  update_base = s32[] constant(1)
-  update = s32[$1] broadcast(update_base), dimensions={}
-
-  replace_dynamic_slice = s32[$0] dynamic-update-slice(input_tensor, update, xOffset, yOffset)
-
-  input_tensor_copy = s32[$0] copy(input_tensor)
-  ref_dynamic_slice = s32[$0] dynamic-update-slice(input_tensor_copy, update, xOffset, yOffset)
-
-  ROOT result = (s32[$0], s32[$0]) tuple(ref_dynamic_slice, replace_dynamic_slice)
-}
-)";
-  return std::make_pair(absl::Substitute(template_hlo, tensor_size, slice_size),
-                        offsets);
-}
-
-HloAndSliceOffsets UpdateSlice1DInputTestCase(
-    const std::string& tensor_size, const std::vector<int>& offsets = {0}) {
-  const char* template_hlo = R"(
-HloModule test
-
-ENTRY test {
-  input_tensor = s32[$0] parameter(0)
-  offsets = s32[1] parameter(1)
-
-  slice.5 = s32[1] slice(offsets), slice={[0:1]}, metadata={op_type="Slice" op_name="Slice"}
-  xOffset = s32[] reshape(slice.5), metadata={op_type="Slice" op_name="Slice"}
-
-  update = s32[1] constant(2)
-
-  replace_dynamic_slice = s32[$0] dynamic-update-slice(input_tensor, update, xOffset)
-
-  input_tensor_copy = s32[$0] copy(input_tensor)
-  ref_dynamic_slice = s32[$0] dynamic-update-slice(input_tensor_copy, update, xOffset)
-
-  ROOT result = (s32[$0], s32[$0]) tuple(ref_dynamic_slice, replace_dynamic_slice)
+  ROOT replace_dynamic_slice = s32[1] dynamic-slice(input_tensor, xOffset), dynamic_slice_sizes={1}, metadata={op_type="Slice" op_name="Slice"}
 }
 )";
   return std::make_pair(absl::Substitute(template_hlo, tensor_size), offsets);
@@ -356,9 +236,130 @@ std::vector<HloAndSliceOffsets> SupportedDynamicSliceTestCases() {
 
   return test_cases;
 }
-
 INSTANTIATE_TEST_SUITE_P(DynamicSliceReplacements, DynamicSliceSupportedHloTest,
                          ::testing::ValuesIn(SupportedDynamicSliceTestCases()));
+
+std::vector<HloAndSliceOffsets> UnsupportedDynamicSliceTestCases() {
+  std::vector<HloAndSliceOffsets> test_cases = {
+      // Slice that are across multiple dimensions.
+      Slice3DInputTestCase("3,4,5", "1,1,5"),
+      Slice3DInputTestCase("3,4,5", "1,1,1"),
+      Slice2DInputTestCase("4,5", "1,1"),
+      // Slices with a size > 1.
+      Slice3DInputTestCase("3,4,5", "2,4,5"),
+      Slice3DInputTestCase("3,4,5", "1,1,1"),
+      Slice2DInputTestCase("4,5", "2,1"),
+  };
+
+  return test_cases;
+}
+INSTANTIATE_TEST_SUITE_P(
+    DynamicSliceReplacements, DynamicSliceUnsupportedHloTest,
+    ::testing::ValuesIn(UnsupportedDynamicSliceTestCases()));
+
+using DynamicUpdateSupportedHloTest = DynamicSliceReplacementHloTest;
+TEST_P(DynamicUpdateSupportedHloTest, CanReplace) {
+  auto instr = FindRootInstruction();
+  auto dynamic_update = Cast<HloDynamicUpdateSliceInstruction>(instr);
+  auto dynamic_update_name = dynamic_update->name();
+
+  const auto expected_parent = dynamic_update->parent();
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto multi_update,
+      TryReplaceDynamicUpdateWithMultiUpdate(dynamic_update));
+  ASSERT_TRUE(multi_update);
+  ASSERT_TRUE(IsPoplarInstruction(PoplarOp::MultiUpdate, multi_update));
+  ASSERT_EQ(multi_update->parent(), expected_parent);
+
+  ASSERT_TRUE(InstructionRemoved(dynamic_update_name));
+}
+
+TEST_P(DynamicUpdateSupportedHloTest, CompareReplacedUpdate) {
+  auto instr = FindRootInstruction();
+  auto dynamic_update = Cast<HloDynamicUpdateSliceInstruction>(instr);
+
+  TF_ASSERT_OK_AND_ASSIGN(auto expected_output,
+                          RunModule(hlo_module_, offsets_));
+
+  TryReplaceDynamicUpdateWithMultiUpdate(dynamic_update);
+  TF_ASSERT_OK_AND_ASSIGN(auto replaced_output,
+                          RunModule(hlo_module_, offsets_));
+
+  ASSERT_EQ(replaced_output, expected_output);
+}
+
+HloAndSliceOffsets UpdateSlice3DInputTestCase(
+    const std::string& tensor_size, const std::string& slice_size,
+    const std::vector<int>& offsets = {0, 0, 0}) {
+  const char* template_hlo = R"(
+HloModule test
+ENTRY test {
+  input_tensor = s32[$0] parameter(0)
+  offsets = s32[3] parameter(1)
+
+  slice.5 = s32[1] slice(offsets), slice={[0:1]}, metadata={op_type="Slice" op_name="Slice"}
+  xOffset = s32[] reshape(slice.5), metadata={op_type="Slice" op_name="Slice"}
+
+  slice.7 = s32[1] slice(offsets), slice={[1:2]}, metadata={op_type="Slice" op_name="Slice"}
+  yOffset = s32[] reshape(slice.7), metadata={op_type="Slice" op_name="Slice"}
+
+  slice.9 = s32[1] slice(offsets), slice={[2:3]}, metadata={op_type="Slice" op_name="Slice"}
+  zOffset = s32[] reshape(slice.9), metadata={op_type="Slice" op_name="Slice"}
+
+  update_base = s32[] constant(1)
+  update = s32[$1] broadcast(update_base), dimensions={}
+
+  ROOT replace_dynamic_slice = s32[$0] dynamic-update-slice(input_tensor, update, xOffset, yOffset, zOffset)
+}
+)";
+  return std::make_pair(absl::Substitute(template_hlo, tensor_size, slice_size),
+                        offsets);
+}
+HloAndSliceOffsets UpdateSlice2DInputTestCase(
+    const std::string& tensor_size, const std::string& slice_size,
+    const std::vector<int>& offsets = {0, 0}) {
+  const char* template_hlo = R"(
+HloModule test
+
+ENTRY test {
+  input_tensor = s32[$0] parameter(0)
+  offsets = s32[2] parameter(1)
+
+  slice.5 = s32[1] slice(offsets), slice={[0:1]}, metadata={op_type="Slice" op_name="Slice"}
+  xOffset = s32[] reshape(slice.5), metadata={op_type="Slice" op_name="Slice"}
+
+  slice.7 = s32[1] slice(offsets), slice={[1:2]}, metadata={op_type="Slice" op_name="lice"}
+  yOffset = s32[] reshape(slice.7), metadata={op_type="Slice" op_name="Slice"}
+
+  update_base = s32[] constant(1)
+  update = s32[$1] broadcast(update_base), dimensions={}
+
+  ROOT replace_dynamic_slice = s32[$0] dynamic-update-slice(input_tensor, update, xOffset, yOffset)
+}
+)";
+  return std::make_pair(absl::Substitute(template_hlo, tensor_size, slice_size),
+                        offsets);
+}
+
+HloAndSliceOffsets UpdateSlice1DInputTestCase(
+    const std::string& tensor_size, const std::vector<int>& offsets = {0}) {
+  const char* template_hlo = R"(
+HloModule test
+
+ENTRY test {
+  input_tensor = s32[$0] parameter(0)
+  offsets = s32[1] parameter(1)
+
+  slice.5 = s32[1] slice(offsets), slice={[0:1]}, metadata={op_type="Slice" op_name="Slice"}
+  xOffset = s32[] reshape(slice.5), metadata={op_type="Slice" op_name="Slice"}
+
+  update = s32[1] constant(2)
+
+  ROOT replace_dynamic_slice = s32[$0] dynamic-update-slice(input_tensor, update, xOffset)
+}
+)";
+  return std::make_pair(absl::Substitute(template_hlo, tensor_size), offsets);
+}
 
 std::vector<HloAndSliceOffsets> SupportedDynamicUpdateTestCases() {
   std::vector<HloAndSliceOffsets> test_cases = {
@@ -384,90 +385,309 @@ std::vector<HloAndSliceOffsets> SupportedDynamicUpdateTestCases() {
 
   return test_cases;
 }
-
 INSTANTIATE_TEST_SUITE_P(
-    DynamicUpdateReplacements, DynamicSliceSupportedHloTest,
+    DynamicUpdateReplacements, DynamicUpdateSupportedHloTest,
     ::testing::ValuesIn(SupportedDynamicUpdateTestCases()));
 
-std::vector<HloAndSliceOffsets> UnsupportedTestCases() {
+using DynamicUpdateUnsupportedHloTest = DynamicSliceReplacementHloTest;
+TEST_P(DynamicUpdateUnsupportedHloTest, CantReplace) {
+  auto instr = FindRootInstruction();
+  auto dynamic_update = Cast<HloDynamicUpdateSliceInstruction>(instr);
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto multi_update,
+      TryReplaceDynamicUpdateWithMultiUpdate(dynamic_update));
+  ASSERT_FALSE(multi_update);
+  ASSERT_EQ(FindRootInstruction(), dynamic_update);
+}
+
+std::vector<HloAndSliceOffsets> UnsupportedDynamicUpdateTestCases() {
   std::vector<HloAndSliceOffsets> test_cases = {
       // Slice that are across multiple dimensions.
-      Slice3DInputTestCase("3,4,5", "1,1,5"),
-      Slice3DInputTestCase("3,4,5", "1,1,1"),
-      Slice2DInputTestCase("4,5", "1,1"),
       UpdateSlice3DInputTestCase("10, 5, 8", "1, 1, 8"),
       UpdateSlice3DInputTestCase("10, 5, 8", "1, 1, 1"),
       UpdateSlice2DInputTestCase("10, 8", "1, 1"),
       // Slices with a size > 1.
-      Slice3DInputTestCase("3,4,5", "2,4,5"),
-      Slice3DInputTestCase("3,4,5", "1,1,1"),
-      Slice2DInputTestCase("4,5", "2,1"),
       UpdateSlice3DInputTestCase("10, 5, 8", "2, 5, 8"),
       UpdateSlice2DInputTestCase("10, 8", "2, 1"),
   };
 
   return test_cases;
 }
+INSTANTIATE_TEST_SUITE_P(
+    DynamicUpdateReplacements, DynamicUpdateUnsupportedHloTest,
+    ::testing::ValuesIn(UnsupportedDynamicUpdateTestCases()));
 
-INSTANTIATE_TEST_SUITE_P(DynamicSliceReplacements,
-                         DynamicSliceUnsupportedHloTest,
-                         ::testing::ValuesIn(UnsupportedTestCases()));
+using DynamicUpdateAddSuportedHloTest = DynamicSliceReplacementHloTest;
+TEST_P(DynamicUpdateAddSuportedHloTest, CanReplace) {
+  auto instr = FindRootInstruction();
+  auto dynamic_update = Cast<HloDynamicUpdateSliceInstruction>(instr);
+  auto dynamic_update_name = dynamic_update->name();
+  auto expected_parent = dynamic_update->parent();
 
-using DynamicSliceReplacedByPassTest = DynamicSliceHloTest;
-TEST_P(DynamicSliceReplacedByPassTest, Replaces) {
-  TF_ASSERT_OK_AND_ASSIGN(bool replaced,
-                          DynamicSliceReplacer().Run(module_.get()));
-  ASSERT_TRUE(replaced);
+  auto dynamic_update_add = DynamicUpdateAdd(dynamic_update);
 
-  auto resources = GetMockResources(device_, module_.get(), 1);
-  ASSERT_TRUE(
-      ModuleFlatten(resources->annotations).Run(module_.get()).ValueOrDie());
-  // Not asserting anything since EmbeddingPlansPreplanning always returns
-  // False.
-  EmbeddingPlansPreplanning(*resources).Run(module_.get());
+  Cast<HloDynamicSliceInstruction>(FindInstruction(hlo_module_, "slice"));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto multi_update_add,
+      TryReplaceDynamicUpdateAddWithMultiUpdateAdd(dynamic_update_add));
+  ASSERT_TRUE(multi_update_add);
+  ASSERT_TRUE(IsPoplarInstruction(PoplarOp::MultiUpdateAdd, multi_update_add));
+  ASSERT_EQ(multi_update_add->parent(), expected_parent);
+  ASSERT_NE(multi_update_add->operand(1), dynamic_update_add.add);
 
-  // Throws if we go OOM.
-  ASSERT_NO_THROW(Compile(*resources, module_.get()));
+  ASSERT_TRUE(InstructionRemoved(dynamic_update_name));
+  ASSERT_TRUE(InstructionRemoved("add"));
+  ASSERT_TRUE(InstructionRemoved("slice"));
 }
 
-using DynamicSliceSkippedByPassTest = DynamicSliceHloTest;
-TEST_P(DynamicSliceSkippedByPassTest, Skips) {
-  TF_ASSERT_OK_AND_ASSIGN(bool replaced,
-                          DynamicSliceReplacer().Run(module_.get()));
-  ASSERT_FALSE(replaced);
+TEST_P(DynamicUpdateAddSuportedHloTest, CompareReplacedUpdateAdd) {
+  auto instr = FindRootInstruction();
+  auto dynamic_update = Cast<HloDynamicUpdateSliceInstruction>(instr);
 
-  auto resources = GetMockResources(device_, module_.get(), 1);
+  TF_ASSERT_OK_AND_ASSIGN(auto expected_output,
+                          RunModule(hlo_module_, offsets_));
 
-  // Setup the dynamicSlices so they get allocated with
-  // popops::createSliceTensor.
+  auto dynamic_update_add = DynamicUpdateAdd(dynamic_update);
   TF_ASSERT_OK_AND_ASSIGN(
-      bool success, AllocationFinder(resources->annotations,
-                                     resources->always_rearrange_copies_on_host)
-                        .Run(module_.get()));
-  ASSERT_TRUE(success);
+      auto multi_update_add,
+      TryReplaceDynamicUpdateAddWithMultiUpdateAdd(dynamic_update_add));
+  ASSERT_TRUE(multi_update_add);
 
-  // Throws if we go OOM.
-  ASSERT_NO_THROW(Compile(*resources, module_.get()));
+  TF_ASSERT_OK_AND_ASSIGN(auto replaced_output,
+                          RunModule(hlo_module_, offsets_));
+
+  ASSERT_EQ(expected_output, replaced_output);
+}
+
+HloAndSliceOffsets UpdateAdd3DInputTestCase(
+    const std::string& tensor_size, const std::string& slice_size,
+    bool lhs_add = true, const std::vector<int>& offsets = {0, 0, 0}) {
+  const char* template_hlo = R"(
+HloModule test
+
+ENTRY test {
+  input_tensor = s32[$0] parameter(0)
+  offsets = s32[3] parameter(1)
+
+  slice.5 = s32[1] slice(offsets), slice={[0:1]}, metadata={op_type="Slice" op_name="Slice"}
+  xOffset = s32[] reshape(slice.5), metadata={op_type="Slice" op_name="Slice"}
+
+  slice.7 = s32[1] slice(offsets), slice={[1:2]}, metadata={op_type="Slice" op_name="Slice"}
+  yOffset = s32[] reshape(slice.7), metadata={op_type="Slice" op_name="Slice"}
+
+  slice.8 = s32[1] slice(offsets), slice={[2:3]}, metadata={op_type="Slice" op_name="Slice"}
+  zOffset = s32[] reshape(slice.8), metadata={op_type="Slice" op_name="Slice"}
+
+  ones_base = s32[] constant(1)
+  ones = s32[$1] broadcast(ones_base), dimensions={}
+
+  slice = s32[$1] dynamic-slice(input_tensor, xOffset, yOffset, zOffset), dynamic_slice_sizes={$1}, metadata={op_type="Slice" op_name="Slice"}
+  add = s32[$1] add($2)
+  ROOT update = s32[$0] dynamic-update-slice(input_tensor, add, xOffset, yOffset, zOffset)
+}
+)";
+  const auto add_operands = lhs_add ? "slice, ones" : "ones, slice";
+  return std::make_pair(
+      absl::Substitute(template_hlo, tensor_size, slice_size, add_operands),
+      offsets);
+}
+
+HloAndSliceOffsets UpdateAdd2DInputTestCase(
+    const std::string& tensor_size, const std::string& slice_size,
+    bool lhs_add = true, const std::vector<int>& offsets = {0, 0}) {
+  const char* template_hlo = R"(
+HloModule test
+
+ENTRY test {
+  input_tensor = s32[$0] parameter(0)
+  offsets = s32[2] parameter(1)
+
+  slice.5 = s32[1] slice(offsets), slice={[0:1]}, metadata={op_type="Slice" op_name="Slice"}
+  xOffset = s32[] reshape(slice.5), metadata={op_type="Slice" op_name="Slice"}
+
+  slice.7 = s32[1] slice(offsets), slice={[1:2]}, metadata={op_type="Slice" op_name="Slice"}
+  yOffset = s32[] reshape(slice.7), metadata={op_type="Slice" op_name="Slice"}
+
+  ones_base = s32[] constant(1)
+  ones = s32[$1] broadcast(ones_base), dimensions={}
+
+  slice = s32[$1] dynamic-slice(input_tensor, xOffset, yOffset), dynamic_slice_sizes={$1}, metadata={op_type="Slice" op_name="Slice"}
+  add = s32[$1] add($2)
+  ROOT update = s32[$0] dynamic-update-slice(input_tensor, add, xOffset, yOffset)
+}
+)";
+  const auto add_operands = lhs_add ? "slice, ones" : "ones, slice";
+  return std::make_pair(
+      absl::Substitute(template_hlo, tensor_size, slice_size, add_operands),
+      offsets);
+}
+
+HloAndSliceOffsets UpdateAdd1DInputTestCase(const std::string& tensor_size,
+                                            bool lhs_add = true,
+                                            const std::vector<int>& offsets = {
+                                                0}) {
+  const char* template_hlo = R"(
+HloModule test
+
+ENTRY test {
+  input_tensor = s32[$0] parameter(0)
+  offsets = s32[1] parameter(1)
+
+  slice.5 = s32[1] slice(offsets), slice={[0:1]}, metadata={op_type="Slice" op_name="Slice"}
+  xOffset = s32[] reshape(slice.5), metadata={op_type="Slice" op_name="Slice"}
+
+  ones_base = s32[] constant(1)
+  ones = s32[$1] broadcast(ones_base), dimensions={}
+
+  slice = s32[1] dynamic-slice(input_tensor, xOffset), dynamic_slice_sizes={1}, metadata={op_type="Slice" op_name="Slice"}
+  add = s32[1] add($1)
+  ROOT update = s32[$0] dynamic-update-slice(input_tensor, add, xOffset)
+}
+)";
+  const auto add_operands = lhs_add ? "slice, ones" : "ones, slice";
+  return std::make_pair(
+      absl::Substitute(template_hlo, tensor_size, add_operands), offsets);
+}
+
+std::vector<HloAndSliceOffsets> SupportedDynamicUpdateAddTestCases() {
+  std::vector<HloAndSliceOffsets> test_cases;
+
+  for (int i = 0; i < 2; ++i) {
+    const bool lhs_add = i;
+    test_cases.push_back(
+        UpdateAdd3DInputTestCase("10, 5, 2", "1, 5, 2", lhs_add));
+    test_cases.push_back(
+        UpdateAdd3DInputTestCase("10, 5, 2", "10, 1, 2", lhs_add));
+    test_cases.push_back(
+        UpdateAdd3DInputTestCase("10, 5, 2", "10, 5, 1", lhs_add));
+    test_cases.push_back(UpdateAdd2DInputTestCase("10, 5", "1, 5", lhs_add));
+    test_cases.push_back(UpdateAdd2DInputTestCase("5, 5", "5, 1", lhs_add));
+    test_cases.push_back(
+        UpdateAdd3DInputTestCase("10, 5, 2", "1, 5, 2", lhs_add, {4, 0, 0}));
+    test_cases.push_back(
+        UpdateAdd3DInputTestCase("10, 5, 2", "10, 1, 2", lhs_add, {0, 3, 0}));
+    test_cases.push_back(
+        UpdateAdd3DInputTestCase("10, 5, 2", "10, 5, 1", lhs_add, {0, 0, 1}));
+    test_cases.push_back(
+        UpdateAdd2DInputTestCase("10, 5", "1, 5", lhs_add, {5, 0}));
+    test_cases.push_back(
+        UpdateAdd2DInputTestCase("5, 5", "5, 1", lhs_add, {0, 2}));
+  }
+
+  return test_cases;
+}
+INSTANTIATE_TEST_SUITE_P(
+    DynamicUpdateAddReplacements, DynamicUpdateAddSuportedHloTest,
+    ::testing::ValuesIn(SupportedDynamicUpdateAddTestCases()));
+
+using DynamicUpdateAddUnsupportedHloTest = DynamicSliceReplacementHloTest;
+TEST_P(DynamicUpdateAddUnsupportedHloTest, CantReplace) {
+  auto instr = FindInstruction(hlo_module_, "update");
+  auto dynamic_update = Cast<HloDynamicUpdateSliceInstruction>(instr);
+
+  auto dynamic_update_add = DynamicUpdateAdd(dynamic_update);
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto multi_update,
+      TryReplaceDynamicUpdateAddWithMultiUpdateAdd(dynamic_update_add));
+  ASSERT_FALSE(multi_update);
+  ASSERT_TRUE(FindInstruction(hlo_module_, "update"));
+  ASSERT_TRUE(FindInstruction(hlo_module_, "slice"));
+  ASSERT_TRUE(FindInstruction(hlo_module_, "add"));
+}
+
+std::vector<HloAndSliceOffsets> UnsupportedDynamicUpdateAddTestCases() {
+  // This dynamic_update_add is not replaceable since the add/slice
+  // are being used outside of the dynamic_update.
+  const char* unreplacable_dynamic_update_add = R"(
+HloModule test
+
+ENTRY test {
+  input_tensor = s32[$0] parameter(0)
+  offsets = s32[2] parameter(1)
+
+  slice.5 = s32[1] slice(offsets), slice={[0:1]}, metadata={op_type="Slice" op_name="Slice"}
+  xOffset = s32[] reshape(slice.5), metadata={op_type="Slice" op_name="Slice"}
+
+  slice.7 = s32[1] slice(offsets), slice={[1:2]}, metadata={op_type="Slice" op_name="Slice"}
+  yOffset = s32[] reshape(slice.7), metadata={op_type="Slice" op_name="Slice"}
+
+  ones_base = s32[] constant(1)
+  ones = s32[$1] broadcast(ones_base), dimensions={}
+
+  slice = s32[$1] dynamic-slice(input_tensor, xOffset, yOffset), dynamic_slice_sizes={$1}, metadata={op_type="Slice" op_name="Slice"}
+  add = s32[$1] add(slice, ones)
+  update = s32[$0] dynamic-update-slice(input_tensor, add, xOffset, yOffset)
+  ROOT output = (s32[$0], s32[$1]) tuple(update, $2)
+}
+)";
+  const auto using_add_outside_dynamic_update_add =
+      absl::Substitute(unreplacable_dynamic_update_add, "20,10", "1,10", "add");
+  const auto using_slice_outside_dynamic_update_add = absl::Substitute(
+      unreplacable_dynamic_update_add, "20,10", "1,10", "slice");
+
+  std::vector<HloAndSliceOffsets> test_cases;
+  test_cases.emplace_back(using_add_outside_dynamic_update_add,
+                          std::vector<int>{0, 0});
+  test_cases.emplace_back(using_slice_outside_dynamic_update_add,
+                          std::vector<int>{0, 0});
+
+  for (int i = 0; i < 2; ++i) {
+    const bool lhs_add = i;
+    test_cases.push_back(
+        UpdateAdd3DInputTestCase("10, 5, 2", "2, 5, 2", lhs_add));
+    test_cases.push_back(UpdateAdd2DInputTestCase("10, 5", "2, 5", lhs_add));
+    test_cases.push_back(
+        UpdateAdd3DInputTestCase("10, 5, 2", "2, 5, 2", lhs_add, {4, 0, 0}));
+    test_cases.push_back(
+        UpdateAdd3DInputTestCase("10, 5, 2", "10, 2, 2", lhs_add, {0, 3, 0}));
+    test_cases.push_back(
+        UpdateAdd2DInputTestCase("5, 5", "5, 2", lhs_add, {0, 2}));
+  }
+
+  return test_cases;
+}
+INSTANTIATE_TEST_SUITE_P(
+    DynamicUpdateAddReplacements, DynamicUpdateAddUnsupportedHloTest,
+    ::testing::ValuesIn(UnsupportedDynamicUpdateAddTestCases()));
+
+using DynamicSliceReplacementPassHloTest = DynamicSliceReplacementHloTest;
+TEST_P(DynamicSliceReplacementPassHloTest, Replaces) {
+  TF_ASSERT_OK_AND_ASSIGN(auto expected_output,
+                          RunModule(hlo_module_, offsets_));
+
+  TF_ASSERT_OK_AND_ASSIGN(bool replaced,
+                          DynamicSliceReplacer().Run(hlo_module_));
+  ASSERT_TRUE(replaced);
+  TF_ASSERT_OK_AND_ASSIGN(auto replaced_output,
+                          RunModule(hlo_module_, offsets_));
+
+  ASSERT_EQ(replaced_output, expected_output);
+}
+
+using DynamicSliceSkippedByPassHloTest = DynamicSliceReplacementHloTest;
+TEST_P(DynamicSliceSkippedByPassHloTest, Skips) {
+  TF_ASSERT_OK_AND_ASSIGN(bool replaced,
+                          DynamicSliceReplacer().Run(hlo_module_));
+  ASSERT_FALSE(replaced);
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    DynamicSliceReplacements, DynamicSliceReplacedByPassTest,
-    ::testing::Values(Slice2DInputTestCase("20000, 5", "1,5"),
-                      Slice3DInputTestCase("20000, 2, 5", "1,2,5"),
-                      UpdateSlice2DInputTestCase("20000, 10", "1,10"),
-                      UpdateSlice3DInputTestCase("20000, 2, 5", "1,2,5"),
+    DynamicSliceReplacements, DynamicSliceReplacementPassHloTest,
+    ::testing::Values(Slice2DInputTestCase("2000, 5", "1,5"),
+                      Slice3DInputTestCase("2000, 2, 5", "1,2,5"),
+                      UpdateSlice2DInputTestCase("2000, 10", "1,10"),
+                      UpdateSlice3DInputTestCase("2000, 2, 5", "1,2,5"),
                       Slice2DInputTestCase("100,2", "1,2"),
                       Slice3DInputTestCase("5,2,16", "1,2,16"),
                       Slice3DInputTestCase("5,2,512", "1,2,512"),
-                      Slice3DInputTestCase("5,512,512", "1,512,512"),
                       Slice1DInputTestCase("10"),
                       UpdateSlice3DInputTestCase("5,2,512", "1,2,512"),
-                      UpdateSlice3DInputTestCase("5,512,512", "1,512,512"),
                       UpdateSlice1DInputTestCase("10")));
 
 // We want these to be skipped since they're not a 1d slice.
 INSTANTIATE_TEST_SUITE_P(
-    DynamicSliceReplacements, DynamicSliceSkippedByPassTest,
+    DynamicSliceReplacements, DynamicSliceSkippedByPassHloTest,
     ::testing::Values(Slice3DInputTestCase("5,2,16", "2,2,16"),
                       Slice3DInputTestCase("20000,1,16", "1,0,16"),
                       UpdateSlice2DInputTestCase("100,5", "1,2")));
