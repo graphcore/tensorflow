@@ -822,7 +822,10 @@ xla_test(
 xla_test(
     name = "sharding_pass_test",
     size = "small",
-    srcs = ["tests/sharding_pass_test.cc"],
+    srcs = [
+        "tests/T62382_hlo.h",
+        "tests/sharding_pass_test.cc",
+    ],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [

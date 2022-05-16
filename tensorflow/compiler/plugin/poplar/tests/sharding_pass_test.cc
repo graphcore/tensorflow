@@ -2502,6 +2502,22 @@ ENTRY main {
   ASSERT_EQ(root_sharding_tree.element({1}).GetUniqueDevice(), 0);
 }
 
+TEST_F(ShardingPassTest, T62382) {
+#include "tensorflow/compiler/plugin/poplar/tests/T62382_hlo.h"
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(T62382_hlo, config);
+  ASSERT_TRUE(module_or_status.ok())
+      << module_or_status.status().error_message();
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
+}
+
 struct WithinReplicaOpSharingPassTest : ParameterizedHloTestFixture<> {
   // Empty override as the default tries to setup the hlo module, which we cant
   // since the hlo string is just a template and needs to be filled in.

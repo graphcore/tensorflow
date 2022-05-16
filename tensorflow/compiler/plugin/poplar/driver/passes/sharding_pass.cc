@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <utility>
@@ -401,6 +402,28 @@ bool CopyShardingToCalledComputations(const CallSite& site,
   return made_progress;
 }
 
+// Apply sharding to an instruction from the given comp, with the provided
+// filter applied, which can unblock ProcessComputation.
+template <typename Callable>
+void TryUnblockShardingProgress(HloComputation* comp, Callable&& filter_pred) {
+  std::vector<HloInstruction*> candidates;
+  absl::c_copy_if(comp->instructions(), std::back_inserter(candidates),
+                  filter_pred);
+
+  // Sort so instructions with the highest number of users are at the front. The
+  // hope is that we get a better chance of unblocking progress if we apply
+  // default sharding to an instruction with more users.
+  std::sort(candidates.begin(), candidates.end(),
+            [](const HloInstruction* a, const HloInstruction* b) {
+              return a->user_count() > b->user_count();
+            });
+  CHECK(!candidates.empty());
+
+  auto* inst = candidates.front();
+  VLOG(3) << "Setting default sharding on " << inst->name();
+  SetDefaultSharding(inst);
+}
+
 StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
   VLOG(2) << "Sharding pass processing computation " << comp->name();
   bool done = false;
@@ -496,28 +519,24 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
       switch (attempt) {
         case 0:
           return false;
-        case 1:
+        case 1: {
           // If an input passes through the whole computation and cannot assign
           // some of the nodes, then we pick off a non-Tuple nodes and assign it
           // default sharding.  Tuple nodes are not included because they might
           // be mostly ok, but with only one part preventing them from sharding
           // properly.
-          for (auto* inst : comp->instructions()) {
-            if (!inst->has_sharding() && !inst->shape().IsTuple()) {
-              SetDefaultSharding(inst);
-              break;
-            }
-          }
+          TryUnblockShardingProgress(comp, [](const HloInstruction* inst) {
+            return !inst->has_sharding() && !inst->shape().IsTuple();
+          });
           return false;
-        case 2:
+        }
+        case 2: {
           // Tuples which are passed through are now considered too
-          for (auto* inst : comp->instructions()) {
-            if (!inst->has_sharding()) {
-              SetDefaultSharding(inst);
-              break;
-            }
-          }
+          TryUnblockShardingProgress(comp, [](const HloInstruction* inst) {
+            return !inst->has_sharding();
+          });
           return false;
+        }
         default:
           // We need an attempt after the others so that the changes in case 2
           // can be used by the functions called before this step
