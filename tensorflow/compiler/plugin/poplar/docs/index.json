@@ -60,6 +60,10 @@
     "order" : 0
   },
   {
+    "name" : "exporting_model_for_tfserving",
+    "order" : 0
+  },
+  {
     "name" : "logging",
     "order" : 0
   },
