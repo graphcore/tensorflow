@@ -64,7 +64,7 @@ DriverTensor CreateInputFromSlice(
 
 // All the slice apply ops allocate on the first two operands.
 class SliceApplyAllocatorOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -87,7 +87,7 @@ class SliceApplyAllocatorOp : public PoplarOpDef {
     DriverTensor other_side = outputs[layout_output_idx];
     const HloSliceApplyBase* slice_apply = Cast<HloSliceApplyBase>(inst);
 
-    poplar::Tensor result =
+    DriverTensor result =
         input_index == 0 ? CreateInputFromSlice(graph, slice_apply, other_side,
                                                 res, {debug_info})
                          : CreateSliceFromInput(graph, slice_apply, other_side,

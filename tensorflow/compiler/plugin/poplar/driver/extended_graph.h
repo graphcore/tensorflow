@@ -134,6 +134,9 @@ class ExtendedGraph : public snap::Graph {
 
   void setTileMapping(const poplar::Tensor& t, unsigned tileNum);
 
+  void setTileMapping(const ExtendedTensor& t,
+                      const poplar::Graph::TileToTensorMapping& mapping);
+
   poplar::Graph::TileToTensorMapping getTileMapping(ExtendedTensor t) const;
   poplar::Graph::TileToTensorMapping getTileMapping(poplar::Tensor t) const;
 
@@ -170,6 +173,11 @@ class ExtendedGraph : public snap::Graph {
   template <typename T>
   void setInitialValue(const ExtendedTensor& t, poplar::ArrayRef<T> values) {
     getPoplarGraph().setInitialValue<T>(t, values);
+  }
+
+  template <typename T>
+  void setInitialValue(const poplar::FieldRef field, T value) {
+    getPoplarGraph().setInitialValue<T>(field, value);
   }
 
   void setInitialValueHalf(const poplar::Tensor& t,

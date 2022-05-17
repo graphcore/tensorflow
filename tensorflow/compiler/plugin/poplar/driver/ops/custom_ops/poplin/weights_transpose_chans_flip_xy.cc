@@ -28,8 +28,8 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-StatusOr<poplar::Tensor> AddConvWeightsTransposeChansFlipXY(
-    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<DriverTensor> AddConvWeightsTransposeChansFlipXY(
+    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const HloInstruction* inst, CompilerResources& resources) {
   const HloWeightsTransposeChansFlipXYInstruction* weights_transpose_inst =
       Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
@@ -44,10 +44,12 @@ StatusOr<poplar::Tensor> AddConvWeightsTransposeChansFlipXY(
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                       GetConvolutionOptionsForInst(inst, resources));
 
-  poplar::Tensor out_weights = poplin::createWeights(
-      graph, conv_params,
-      {debug_name_and_id, "createWeights_TransposeChansFlipXY"}, opts,
-      &resources.planning_cache);
+  DriverTensor out_weights = DriverTensor(
+      poplin::createWeights(
+          graph, conv_params,
+          {debug_name_and_id, "createWeights_TransposeChansFlipXY"}, opts,
+          &resources.planning_cache),
+      graph);
 
   out_weights = RemoveGroupsDimensionFromWeights(conv_params, out_weights);
 
@@ -89,9 +91,10 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
     in_weights = AddGroupsDimensionToWeights(conv_params, in_weights,
                                              /* swap_features= */ true);
 
-    poplar::Tensor out_weights =
+    DriverTensor out_weights = DriverTensor(
         poplin::createWeights(graph, conv_params, {debug_info, "CreateWeights"},
-                              opts, &res.planning_cache);
+                              opts, &res.planning_cache),
+        graph);
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
     auto func = [&graph, &res, inst, debug_name_and_id](
@@ -127,7 +130,7 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -136,7 +139,7 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
     const int64_t input_index = tensor_target.input_index;
     const HloInstruction* inst = tensor_target.tgt;
 
-    poplar::Tensor out;
+    DriverTensor out;
     switch (input_index) {
       case 0: {
         TF_ASSIGN_OR_RETURN(out, AddConvWeightsTransposeChansFlipXY(

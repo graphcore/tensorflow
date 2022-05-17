@@ -28,34 +28,41 @@ namespace pe = popops::expr;
 namespace xla {
 namespace poplarplugin {
 
-Status RangeSampler::Sample(poplar::Graph& graph, poplar::Tensor& samples,
-                            poplar::program::Sequence& seq) {
+Status RangeSampler::Sample(DriverGraph& graph, DriverTensor& samples,
+                            DriverProgramSequence& seq) {
   const poplar::DebugNameAndId debug_name_and_id = {GetDebugNameAndId(),
                                                     "Sample"};
-  poplar::Tensor out;
+  DriverTensor out;
   switch (distribution_) {
     case DistributionType::UNIFORM:
-      out = poprand::uniform(graph, &seed_, 0, samples, poplar::INT, 0.0,
-                             range_max_ - 1, seq, {debug_name_and_id});
+      out = DriverTensor(
+          poprand::uniform(graph, &seed_.getPoplarTensor(), 0, samples,
+                           poplar::INT, 0.0, range_max_ - 1, seq,
+                           {debug_name_and_id}),
+          graph);
       break;
     case DistributionType::LOG_UNIFORM:
-      out = poprand::logUniform(graph, &seed_, 0, samples, poplar::INT, 1.0,
-                                range_max_, seq, M_E, {debug_name_and_id});
+      out = DriverTensor(
+          poprand::logUniform(graph, &seed_.getPoplarTensor(), 0, samples,
+                              poplar::INT, 1.0, range_max_, seq, M_E,
+                              {debug_name_and_id}),
+          graph);
       popops::mapInPlace(graph, pe::Sub(pe::_1, pe::Const(1)), {out}, seq,
                          {debug_name_and_id, "Minus1"});
       break;
     default:
       return xla::Unimplemented("Distribution not supported.");
   }
-  seq.add(poplar::program::Copy(out, samples, false, {debug_name_and_id}));
+  seq.add(DriverProgramCopy(out, samples, false, {debug_name_and_id}));
   return Status::OK();
 }
 
-StatusOr<poplar::Tensor> RangeSampler::Expectation(
-    poplar::Graph& graph, const poplar::Tensor& samples, const uint64 k,
-    poplar::program::Sequence& seq) {
+StatusOr<DriverTensor> RangeSampler::Expectation(DriverGraph& graph,
+                                                 const DriverTensor& samples,
+                                                 const uint64 k,
+                                                 DriverProgramSequence& seq) {
   // E[X] = k*P[X=x]
-  TF_ASSIGN_OR_RETURN(poplar::Tensor probabilities,
+  TF_ASSIGN_OR_RETURN(DriverTensor probabilities,
                       Probabilities(graph, samples, seq));
   pe::Any expect_fn = pe::Mul(pe::_1, pe::Const(static_cast<float>(k)));
   popops::mapInPlace(graph, expect_fn, {probabilities}, seq,
@@ -63,15 +70,15 @@ StatusOr<poplar::Tensor> RangeSampler::Expectation(
   return probabilities;
 }
 
-StatusOr<poplar::Tensor> RangeSampler::Probabilities(
-    poplar::Graph& graph, const poplar::Tensor& samples,
-    poplar::program::Sequence& seq) {
+StatusOr<DriverTensor> RangeSampler::Probabilities(DriverGraph& graph,
+                                                   const DriverTensor& samples,
+                                                   DriverProgramSequence& seq) {
   const poplar::DebugNameAndId debug_name_and_id = {GetDebugNameAndId(),
                                                     "Probabilities"};
   switch (distribution_) {
     case DistributionType::UNIFORM: {
       // X~U[0, N-1], P[X=x] = 1/N
-      poplar::Tensor probabilities =
+      DriverTensor probabilities =
           graph.clone(poplar::FLOAT, samples, {debug_name_and_id});
       float prob = 1.0f / static_cast<float>(range_max_);
       popops::fill(graph, probabilities, seq, prob, {debug_name_and_id});
@@ -84,16 +91,17 @@ StatusOr<poplar::Tensor> RangeSampler::Probabilities(
               pe::Add(pe::Cast(pe::_1, poplar::FLOAT), pe::Const(2.0f)),
               pe::Add(pe::Cast(pe::_1, poplar::FLOAT), pe::Const(1.0f)))),
           pe::Const(static_cast<float>(std::log1p(range_max_))));
-      return popops::map(graph, log_uniform_pdf, {samples}, seq,
-                         {debug_name_and_id});
+      return DriverTensor(popops::map(graph, log_uniform_pdf, {samples}, seq,
+                                      {debug_name_and_id}),
+                          graph);
     }
     default:
       return xla::Unimplemented("Distribution not supported.");
   }
 }
 
-Status UniqueRangeSampler::Sample(poplar::Graph& graph, poplar::Tensor& samples,
-                                  poplar::program::Sequence& seq) {
+Status UniqueRangeSampler::Sample(DriverGraph& graph, DriverTensor& samples,
+                                  DriverProgramSequence& seq) {
   const poplar::DebugNameAndId debug_name_and_id = {GetDebugNameAndId(),
                                                     "Sample"};
 
@@ -146,15 +154,15 @@ Status UniqueRangeSampler::Sample(poplar::Graph& graph, poplar::Tensor& samples,
   return Status::OK();
 }
 
-StatusOr<poplar::Tensor> UniqueRangeSampler::Expectation(
-    poplar::Graph& graph, const poplar::Tensor& samples, const uint64 k,
-    poplar::program::Sequence& seq) {
+StatusOr<DriverTensor> UniqueRangeSampler::Expectation(
+    DriverGraph& graph, const DriverTensor& samples, const uint64 k,
+    DriverProgramSequence& seq) {
   const poplar::DebugNameAndId debug_name_and_id = {GetDebugNameAndId(),
                                                     "Expectation"};
   // In unique case, estimate expectation from num_tries calculated from last
   // usage of Sample()
   // E[X] = -expm1(num_tries * log1p(-P[X=x]))
-  TF_ASSIGN_OR_RETURN(poplar::Tensor probabilities,
+  TF_ASSIGN_OR_RETURN(DriverTensor probabilities,
                       Probabilities(graph, samples, seq));
   pe::Any expect_fn = pe::Neg(pe::Expm1(
       pe::Mul(pe::Log1p(pe::Neg(pe::_1)), pe::Cast(pe::_2, poplar::FLOAT))));
@@ -177,7 +185,7 @@ StatusOr<DistributionType> DistributionStringToEnum(
 StatusOr<std::unique_ptr<RangeSampler>> RangeSamplerFactory(
     const std::string distribution,
     const poplar::DebugNameAndId& debug_name_and_id, const uint64 range_max,
-    const uint64 tile, const poplar::Tensor& seed, bool unique) {
+    const uint64 tile, const DriverTensor& seed, bool unique) {
   TF_ASSIGN_OR_RETURN(const DistributionType dist_type,
                       DistributionStringToEnum(distribution));
   std::unique_ptr<RangeSampler> sampler;

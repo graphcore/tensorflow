@@ -247,7 +247,7 @@ class UserOpImpl : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -275,9 +275,10 @@ class UserOpImpl : public PoplarOpDef {
     const std::string attributes = user_op->GetAttributes();
 
     // Return the tensor via user specified function.
-    return allocatorSig(graph, input_index, poplar_shape, poplar_type,
-                        attributes,
-                        absl::StrCat(GetDebugName(inst), ":", input_index));
+    return DriverTensor(
+        allocatorSig(graph, input_index, poplar_shape, poplar_type, attributes,
+                     absl::StrCat(GetDebugName(inst), ":", input_index)),
+        graph);
   }
 };
 

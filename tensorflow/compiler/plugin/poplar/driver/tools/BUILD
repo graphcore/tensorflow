@@ -558,6 +558,7 @@ poplar_cc_library(
         "mapping_helper.h",
     ],
     deps = [
+        "//tensorflow/compiler/plugin/poplar/driver:driver_backend",
         "//tensorflow/core:framework_headers_lib",
         "@com_google_absl//absl/container:flat_hash_map",
         "@local_config_poplar//poplar:poplar_libs",

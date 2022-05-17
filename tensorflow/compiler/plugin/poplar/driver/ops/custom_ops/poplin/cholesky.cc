@@ -86,7 +86,7 @@ class CholeskyOp : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -105,9 +105,11 @@ class CholeskyOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags poplar_options,
                         GetCholeskyOptionsForInst(inst, res));
 
-    auto out = poplin::createCholeskyInput(graph, type, shape, lower,
-                                           {debug_context, "createInput"},
-                                           poplar_options, &res.planning_cache);
+    auto out = DriverTensor(
+        poplin::createCholeskyInput(graph, type, shape, lower,
+                                    {debug_context, "createInput"},
+                                    poplar_options, &res.planning_cache),
+        graph);
 
     MappingHelper::RemapTensor(res.linear_mapping_state, graph, out);
 

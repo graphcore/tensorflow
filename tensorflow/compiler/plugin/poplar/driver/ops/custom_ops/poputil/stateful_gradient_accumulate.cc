@@ -71,18 +71,17 @@ class StatefulGradientAccumulateOp : public PoplarOpDef {
       input_tensors[i] = inputs[i][0];
     }
     // Create a concatenated and flattened tensor of the input tensors.
-    poplar::Tensor input = FlattenAndConcatenateTensors(input_tensors);
-    poplar::Tensor counter =
+    auto input = FlattenAndConcatenateTensors(input_tensors);
+    auto counter =
         graph.addVariable(poplar::UNSIGNED_INT, {}, {debug_info, "Counter"});
     // Map counter to the next tile.
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, counter);
     AddZeroTensorToPreamble(res, counter, {debug_info});
 
-    poplar::Tensor accumulator =
-        graph.clone(input, {debug_info, "Accumulator"});
+    auto accumulator = graph.clone(input, {debug_info, "Accumulator"});
     AddZeroTensorToPreamble(res, accumulator, {debug_info});
     // Accumulate the input into the buffer.
-    popops::addInPlace(graph, accumulator, input, seq,
+    popops::addInPlace(graph, accumulator, input.getPoplarTensor(), seq,
                        {debug_info, "Accumulate"});
 
     // Output the accumulated gradients if counter == MiniBatchesToAccumulate -
@@ -136,7 +135,7 @@ REGISTER_POPLAR_OP(StatefulGradientAccumulateAndAllReduce,
                    StatefulGradientAccumulateOp);
 
 class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -161,8 +160,7 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
       return xla::FailedPrecondition("Could not find layout input for %s",
                                      GetDebugName(inst));
     }
-    // TODO(T58509) - Remove cast
-    return (poplar::Tensor)graph.clone(outputs[0], {debug_info});
+    return graph.clone(outputs[0], {debug_info});
   }
 
   StatusOr<DriverProgramSequence> Creator(
@@ -201,16 +199,15 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
       CHECK_EQ(inputs[num_grads + i].size(), 1);
       grad_tensors[i] = inputs[num_grads + i][0];
     }
-    poplar::Tensor accumulator =
-        FlattenAndConcatenateTensors(accumulator_tensors);
-    poplar::Tensor grad = FlattenAndConcatenateTensors(grad_tensors);
+    auto accumulator = FlattenAndConcatenateTensors(accumulator_tensors);
+    auto grad = FlattenAndConcatenateTensors(grad_tensors);
 
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor momentum,
+        auto momentum,
         FindInstructionInput(tensor_map, res, inst, inst->operand_count() - 1,
                              seq, {debug_info}, false));
 
-    poplar::Tensor counter =
+    auto counter =
         graph.addVariable(poplar::UNSIGNED_INT, {}, {debug_info, "Counter"});
     // Map counter to the next tile.
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, counter);
@@ -224,8 +221,8 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
       poplar::program::Sequence if_true({}, debug_info);
       {
         // Apply the momentum.
-        popops::mulInPlace(graph, accumulator, momentum, if_true,
-                           {debug_info, "ApplyMomentum"});
+        popops::mulInPlace(graph, accumulator, momentum.getPoplarTensor(),
+                           if_true, {debug_info, "ApplyMomentum"});
       }
       // Do nothing in false case.
       poplar::program::Sequence if_false({}, debug_info);
@@ -234,7 +231,7 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
     }
 
     // Add the gradient.
-    popops::addInPlace(graph, accumulator, grad, seq,
+    popops::addInPlace(graph, accumulator, grad.getPoplarTensor(), seq,
                        {debug_info, "MomentumAddGrad"});
 
     poplar::Tensor output = grad;

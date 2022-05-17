@@ -100,7 +100,7 @@ class TopKOp : public PoplarOpDef {
   }
 
  public:
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -114,9 +114,10 @@ class TopKOp : public PoplarOpDef {
     switch (tensor_target.input_index) {
       case 0: {
         // Create the tensor in 2D.
-        poplar::Tensor tensor =
+        auto tensor = DriverTensor(
             popops::createTopKInput(graph, type, Get2DDimensions(xla_shape),
-                                    GetParams(tensor_target.tgt), debug_info);
+                                    GetParams(tensor_target.tgt), debug_info),
+            graph);
 
         // Unflatten the tensor.
         return tensor.reshape(PoplarShapeFromXlaShape(xla_shape));

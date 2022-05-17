@@ -39,8 +39,8 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-StatusOr<poplar::Tensor> AddConvolutionInput(
-    poplar::Graph& graph, const HloInstruction* target,
+StatusOr<DriverTensor> AddConvolutionInput(
+    DriverGraph& graph, const HloInstruction* target,
     CompilerResources& resources, const poplar::DebugInfo& debug_info) {
   TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                       GetConvolutionParameters(target, 0, 1));
@@ -48,16 +48,18 @@ StatusOr<poplar::Tensor> AddConvolutionInput(
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                       GetConvolutionOptionsForInst(target, resources));
 
-  poplar::Tensor out = poplin::createInput(graph, params, {debug_info, "input"},
-                                           opts, &resources.planning_cache);
+  auto out =
+      DriverTensor(poplin::createInput(graph, params, {debug_info, "input"},
+                                       opts, &resources.planning_cache),
+                   graph);
 
   auto o = ShuffleConvolutionInputToTensorflow(target, out);
 
   return o;
 }
 
-StatusOr<poplar::Tensor> AddConvolutionWeights(
-    poplar::Graph& graph, const HloInstruction* target,
+StatusOr<DriverTensor> AddConvolutionWeights(
+    DriverGraph& graph, const HloInstruction* target,
     CompilerResources& resources, const poplar::DebugInfo& debug_info) {
   TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                       GetConvolutionParameters(target, 0, 1));
@@ -65,8 +67,10 @@ StatusOr<poplar::Tensor> AddConvolutionWeights(
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                       GetConvolutionOptionsForInst(target, resources));
 
-  poplar::Tensor out = poplin::createWeights(
-      graph, params, {debug_info, "weights"}, opts, &resources.planning_cache);
+  auto out =
+      DriverTensor(poplin::createWeights(graph, params, {debug_info, "weights"},
+                                         opts, &resources.planning_cache),
+                   graph);
 
   out = RemoveGroupsDimensionFromWeights(params, out);
 
@@ -141,7 +145,7 @@ class Conv2DOp : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -150,7 +154,7 @@ class Conv2DOp : public PoplarOpDef {
 
     const HloInstruction* inst = tensor_target.tgt;
 
-    poplar::Tensor out;
+    DriverTensor out;
     switch (input_index) {
       case 0: {
         TF_ASSIGN_OR_RETURN(out,
@@ -364,7 +368,7 @@ GetMultiConvCreateArgs(const HloMultiConvInstruction* inst,
 }
 
 class MultiConvOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -386,19 +390,21 @@ class MultiConvOp : public PoplarOpDef {
         GetMultiConvCreateArgs(inst, res, debug_info.getPathName()));
 
     const poplar::OptionFlags multi_conv_options = GetMultiConvOptions(inst);
-    poplar::Tensor out;
+    DriverTensor out;
     switch (convolution_spec.type) {
       case ConvType::Conv: {
         if (is_conv_input) {
-          out = poplin::multiconv::createInput(
-              graph, create_args, conv_index, multi_conv_options,
-              &res.planning_cache);  /// T32699 add missing debug info
+          out = DriverTensor(poplin::multiconv::createInput(
+                                 graph, create_args, conv_index,
+                                 multi_conv_options, &res.planning_cache),
+                             graph);  /// T32699 add missing debug info
           out = ShuffleConvolutionInputToTensorflow(
               convolution_spec.batch_group_count, convolution_spec.dims, out);
         } else {
-          out = poplin::multiconv::createWeights(
-              graph, create_args, conv_index, multi_conv_options,
-              &res.planning_cache);  ///  T32699 add missing debug info
+          out = DriverTensor(poplin::multiconv::createWeights(
+                                 graph, create_args, conv_index,
+                                 multi_conv_options, &res.planning_cache),
+                             graph);  ///  T32699 add missing debug info
           out = RemoveGroupsDimensionFromWeights(create_args[conv_index].params,
                                                  out);
           out =

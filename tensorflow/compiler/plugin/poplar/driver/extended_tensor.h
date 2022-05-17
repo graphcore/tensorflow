@@ -39,6 +39,9 @@ class ExtendedTensor : public snap::Tensor {
 
   ExtendedTensor reshape(poplar::ArrayRef<std::size_t> shape) const;
 
+  ExtendedTensor reshapePartial(unsigned beginIndex, unsigned endIndex,
+                                poplar::ArrayRef<std::size_t> newDims) const;
+
   ExtendedTensor flatten() const;
 
   ExtendedTensor flatten(unsigned dimBegin, unsigned dimEnd) const;
@@ -63,6 +66,12 @@ class ExtendedTensor : public snap::Tensor {
   bool containsAliases() const { return getPoplarTensor().containsAliases(); }
 
   bool containsConstant() const { return getPoplarTensor().containsConstant(); }
+
+  ExtendedTensor dimShuffle(poplar::ArrayRef<unsigned> permutation) const;
+
+  ExtendedTensor dimShufflePartial(
+      poplar::ArrayRef<unsigned> source,
+      poplar::ArrayRef<unsigned> destination) const;
 
   ExtendedTensor dimRoll(unsigned dimIdx, unsigned newIdx = 0) const;
 

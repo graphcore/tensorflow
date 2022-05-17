@@ -218,7 +218,7 @@ StatusOr<DriverTensor> BroadcastImplicitNaryOutputTensor(
 }
 
 class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -275,9 +275,10 @@ class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
     other_side = other_side.flatten(0, non_broadcast_dimensions.size());
 
     // Allocate the tensor.
-    poplar::Tensor output =
+    auto output = DriverTensor(
         poputil::createBroadcastOperand(graph, other_side, type, 0,
-                                        /*ditherMapping*/ false, {debug_info});
+                                        /*ditherMapping*/ false, {debug_info}),
+        graph);
 
     // Reshape back for all the non-broadcasted dimensions.
     output = output.reshape(PoplarShapeFromXlaShape(allocation_shape));

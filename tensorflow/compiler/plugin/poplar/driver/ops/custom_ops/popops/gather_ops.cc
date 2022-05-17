@@ -29,16 +29,18 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-StatusOr<poplar::Tensor> AddGatherTensor(
-    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+StatusOr<DriverTensor> AddGatherTensor(
+    DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape_xla, std::vector<std::size_t> slice_sizes,
     std::vector<unsigned> start_index_map) {
   const auto shape = PoplarShapeFromXlaShape(shape_xla);
 
   TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(shape_xla));
 
-  return popops::createGatherInput(graph, poplar_type, shape, slice_sizes,
-                                   start_index_map, {debug_name_and_id});
+  return DriverTensor(
+      popops::createGatherInput(graph, poplar_type, shape, slice_sizes,
+                                start_index_map, {debug_name_and_id}),
+      graph);
 }
 
 StatusOr<DriverTensor> AddIndicesTensor(
@@ -49,7 +51,7 @@ StatusOr<DriverTensor> AddIndicesTensor(
 }
 
 class GatherOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& resources, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -57,7 +59,7 @@ class GatherOp : public PoplarOpDef {
     const auto* target = tensor_target.tgt;
     const auto input_index = tensor_target.input_index;
     const auto shape = target->operand(input_index)->shape();
-    poplar::Tensor out;
+    DriverTensor out;
 
     switch (input_index) {
       case 0: {
