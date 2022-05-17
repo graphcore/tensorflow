@@ -116,7 +116,6 @@ ENTRY main {
 
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
-
   auto root = module->entry_computation()->root_instruction();
   auto accumulator_add = root->operand(0);
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAddWithScale)(
@@ -466,69 +465,88 @@ ENTRY main {
   const auto* p2 = entry->parameter_instruction(2);
   const auto* p3 = entry->parameter_instruction(3);
 
+  const PoplarOp slice_op = param.acc_scale == 1.f ? PoplarOp::SliceApplyabY
+                                                   : PoplarOp::SliceApplyaXbY;
+  const int64 grad_scale_index = param.acc_scale == 1.f ? 2 : 3;
   HloInstruction* next = accumulator_add->fused_expression_root();
   {
-    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApplyabY)(next));
+    EXPECT_TRUE(IsPoplarInstruction(slice_op)(next));
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
     const auto* added = UnwrapConvert(next->operand(1));
     EXPECT_EQ(added->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(added->parameter_number(), accumulator_add->operand_index(p3));
-    const auto* scale = UnwrapConvert(next->operand(2));
+    const auto* scale = next->operand(grad_scale_index);
     EXPECT_EQ(scale->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(accumulator_add->operand(scale->parameter_number())->opcode(),
               HloOpcode::kConstant);
+    if (param.acc_scale != 1.f) {
+      const auto* accum_scale = next->operand(2);
+      EXPECT_EQ(accum_scale->opcode(), HloOpcode::kParameter);
+      EXPECT_EQ(
+          accumulator_add->operand(accum_scale->parameter_number())->opcode(),
+          HloOpcode::kConstant);
+    }
   }
   next = next->mutable_operand(0);
   {
-    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApplyabY)(next));
+    EXPECT_TRUE(IsPoplarInstruction(slice_op)(next));
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
     const auto* added = UnwrapConvert(next->operand(1));
     EXPECT_EQ(added->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(added->parameter_number(), accumulator_add->operand_index(p2));
-    const auto* scale = UnwrapConvert(next->operand(2));
+    const auto* scale = next->operand(grad_scale_index);
     EXPECT_EQ(scale->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(accumulator_add->operand(scale->parameter_number())->opcode(),
               HloOpcode::kConstant);
+    if (param.acc_scale != 1.f) {
+      const auto* accum_scale = next->operand(2);
+      EXPECT_EQ(accum_scale->opcode(), HloOpcode::kParameter);
+      EXPECT_EQ(
+          accumulator_add->operand(accum_scale->parameter_number())->opcode(),
+          HloOpcode::kConstant);
+    }
   }
   next = next->mutable_operand(0);
   {
-    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApplyabY)(next));
+    EXPECT_TRUE(IsPoplarInstruction(slice_op)(next));
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
     const auto* added = UnwrapConvert(next->operand(1));
     EXPECT_EQ(added->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(added->parameter_number(), accumulator_add->operand_index(p1));
-    const auto* scale = UnwrapConvert(next->operand(2));
+    const auto* scale = next->operand(grad_scale_index);
     EXPECT_EQ(scale->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(accumulator_add->operand(scale->parameter_number())->opcode(),
               HloOpcode::kConstant);
+    if (param.acc_scale != 1.f) {
+      const auto* accum_scale = next->operand(2);
+      EXPECT_EQ(accum_scale->opcode(), HloOpcode::kParameter);
+      EXPECT_EQ(
+          accumulator_add->operand(accum_scale->parameter_number())->opcode(),
+          HloOpcode::kConstant);
+    }
   }
   next = next->mutable_operand(0);
   {
-    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApplyabY)(next));
+    EXPECT_TRUE(IsPoplarInstruction(slice_op)(next));
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
     const auto* added = UnwrapConvert(next->operand(1));
     EXPECT_EQ(added->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(added->parameter_number(), accumulator_add->operand_index(p0));
-    const auto* scale = UnwrapConvert(next->operand(2));
+    const auto* scale = next->operand(grad_scale_index);
     EXPECT_EQ(scale->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(accumulator_add->operand(scale->parameter_number())->opcode(),
               HloOpcode::kConstant);
+    if (param.acc_scale != 1.f) {
+      const auto* accum_scale = next->operand(2);
+      EXPECT_EQ(accum_scale->opcode(), HloOpcode::kParameter);
+      EXPECT_EQ(
+          accumulator_add->operand(accum_scale->parameter_number())->opcode(),
+          HloOpcode::kConstant);
+    }
   }
   next = next->mutable_operand(0);
-  {
-    if (param.acc_scale == 1) {
-      EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
-      EXPECT_EQ(next->parameter_number(), 0);
-    } else {
-      const auto accumulator_scale_index =
-          accumulator_add->operand_index(accumulator_scale);
-      EXPECT_TRUE(Match(
-          next, m::Multiply(m::Parameter(0), m::Broadcast(m::Parameter(
-                                                 accumulator_scale_index)))));
-      EXPECT_EQ(next->operand(0)->parameter_number(), 0);
-    }
-    EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
-  }
+  EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
+  EXPECT_EQ(next->parameter_number(), 0);
 }
 
 TEST_P(SerializeGradientAccumulationTest, AddsWithZero) {
@@ -787,57 +805,61 @@ ENTRY main {
   EXPECT_EQ(p2_t->opcode(), HloOpcode::kTranspose);
   EXPECT_EQ(p3_t->opcode(), HloOpcode::kTranspose);
 
+  const PoplarOp slice_op = param.acc_scale == 1.f ? PoplarOp::SliceApplyabY
+                                                   : PoplarOp::SliceApplyaXbY;
+  const int64 grad_scale_index = param.acc_scale == 1.f ? 2 : 3;
+
   HloInstruction* next = accumulator_add->fused_expression_root();
   {
-    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApplyabY)(next));
+    EXPECT_TRUE(IsPoplarInstruction(slice_op)(next));
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
     const auto* added = UnwrapConvert(next->operand(1));
     EXPECT_EQ(added->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(added->parameter_number(), accumulator_add->operand_index(p3_t));
-    EXPECT_EQ(UnwrapConvert(next->operand(2))->opcode(), HloOpcode::kParameter);
+    EXPECT_EQ(next->operand(grad_scale_index)->opcode(), HloOpcode::kParameter);
+    if (param.acc_scale != 1.f) {
+      EXPECT_EQ(next->operand(2)->opcode(), HloOpcode::kParameter);
+    }
   }
   next = next->mutable_operand(0);
   {
-    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApplyabY)(next));
+    EXPECT_TRUE(IsPoplarInstruction(slice_op)(next));
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
     const auto* added = UnwrapConvert(next->operand(1));
     EXPECT_EQ(added->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(added->parameter_number(), accumulator_add->operand_index(p2_t));
-    EXPECT_EQ(UnwrapConvert(next->operand(2))->opcode(), HloOpcode::kParameter);
+    EXPECT_EQ(next->operand(grad_scale_index)->opcode(), HloOpcode::kParameter);
+    if (param.acc_scale != 1.f) {
+      EXPECT_EQ(next->operand(2)->opcode(), HloOpcode::kParameter);
+    }
   }
   next = next->mutable_operand(0);
   {
-    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApplyabY)(next));
+    EXPECT_TRUE(IsPoplarInstruction(slice_op)(next));
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
     const auto* added = UnwrapConvert(next->operand(1));
     EXPECT_EQ(added->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(added->parameter_number(), accumulator_add->operand_index(p1_t));
-    EXPECT_EQ(UnwrapConvert(next->operand(2))->opcode(), HloOpcode::kParameter);
+    EXPECT_EQ(next->operand(grad_scale_index)->opcode(), HloOpcode::kParameter);
+    if (param.acc_scale != 1.f) {
+      EXPECT_EQ(next->operand(2)->opcode(), HloOpcode::kParameter);
+    }
   }
   next = next->mutable_operand(0);
   {
-    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApplyabY)(next));
+    EXPECT_TRUE(IsPoplarInstruction(slice_op)(next));
     EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
     const auto* added = UnwrapConvert(next->operand(1));
     EXPECT_EQ(added->opcode(), HloOpcode::kParameter);
     EXPECT_EQ(added->parameter_number(), accumulator_add->operand_index(p0_t));
-    EXPECT_EQ(UnwrapConvert(next->operand(2))->opcode(), HloOpcode::kParameter);
+    EXPECT_EQ(next->operand(grad_scale_index)->opcode(), HloOpcode::kParameter);
+    if (param.acc_scale != 1.f) {
+      EXPECT_EQ(next->operand(2)->opcode(), HloOpcode::kParameter);
+    }
   }
   next = next->mutable_operand(0);
-  {
-    if (param.acc_scale == 1) {
-      EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
-      EXPECT_EQ(next->parameter_number(), 0);
-    } else {
-      const auto accumulator_scale_index =
-          accumulator_add->operand_index(accumulator_scale);
-      EXPECT_TRUE(Match(
-          next, m::Multiply(m::Parameter(0), m::Broadcast(m::Parameter(
-                                                 accumulator_scale_index)))));
-      EXPECT_EQ(next->operand(0)->parameter_number(), 0);
-    }
-    EXPECT_EQ(next->shape().element_type(), param.accumulator_type);
-  }
+  EXPECT_EQ(next->opcode(), HloOpcode::kParameter);
+  EXPECT_EQ(next->parameter_number(), 0);
 }
 
 TEST_P(SerializeGradientAccumulationTest, TransposeAdds) {
@@ -997,7 +1019,6 @@ ENTRY main {
     scaled_add_0_p1_idx++;
     scaled_add_0_p2_idx++;
   }
-
   if (param.gradient_type == param.accumulator_type) {
     if (param.acc_scale == 1.0f) {
       // This creates a fusion operation within which we match against
