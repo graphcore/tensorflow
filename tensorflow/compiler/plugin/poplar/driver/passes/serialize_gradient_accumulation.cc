@@ -89,8 +89,6 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
             accumulator->shape(), HloOpcode::kMultiply, accumulator,
             broadcasted_accumulator_scale));
 
-    to_outline.push_back(broadcasted_accumulator_scale);
-
     add = comp->AddInstruction(HloInstruction::CreateBinary(
         accumulator->shape(), HloOpcode::kAdd, scaled_accumulator, gradient));
   }
@@ -108,9 +106,29 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
   // to be outlined later.
   std::vector<HloInstruction*> convert_instructions;
 
+  // Helper lambda for looking through FP32 casts.
+  auto look_through_fp32_cast = [](HloInstruction* scalar) -> HloInstruction* {
+    if (scalar->opcode() == HloOpcode::kConvert && IsF32ToF16Convert(scalar)) {
+      scalar = scalar->mutable_operand(0);
+    }
+    return scalar;
+  };
+
   // Try and serialize the gradient accumulation application.
   HloInstruction* output = add;
   while (output != accumulator) {
+    if (output->opcode() == HloOpcode::kMultiply) {
+      CHECK(Match(
+          output,
+          m::Multiply(m::Op().Is(accumulator),
+                      m::Broadcast(m::Op().WithShape(m::Shape().IsScalar())))));
+      // Outline the broadcast.
+      to_outline.push_back(output->mutable_operand(1));
+      output = accumulator;
+      continue;
+    }
+
+    CHECK_EQ(output->opcode(), HloOpcode::kAdd);
     // When trying to serialize the gradients, handle the following
     // patterns:
     // ( 1) Add(a, MultiUpdateAdd(b, c, idx)) =>
@@ -119,21 +137,24 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
     //      SliceApply(SliceApply(a, b), c) ...
     // ( 3) Add(a, Multiply(Concat(b, c, ...), Broadcast(d)) =>
     //      SliceApplyabY(SliceApplyabY(a, b, d), c, d) ...
-    // (10) Add(Multiply(a, Broadcast(b)), Multiply(c, Broadcast(d))) =>
+    // ( 4) Add(Multiply(a, Broadcast(b)),
+    //          Multiply(Concat(c, d, ...), Broadcast(e)) =>
+    //      SliceApplyaXbY(SliceApplyaXbY(a, b, c, e), b, d, e) ...
+    // ( 5) Add(Multiply(a, Broadcast(b)), Multiply(c, Broadcast(d))) =>
     //      ScaledInplaceaXbY(a, c, b, d)
-    // ( 4) Add(a, Multiply(b, Broadcast(c))) =>
+    // ( 6) Add(a, Multiply(b, Broadcast(c))) =>
     //      ScaledInplaceXbY(a, b, c)
-    // ( 5) Add(a, Add(b, c)) =>
+    // ( 7) Add(a, Add(b, c)) =>
     //      Add(Add(a, b), c)
-    // ( 6) Add(a, 0) =>
+    // ( 8) Add(a, 0) =>
     //      a
     // Following patterns also handle the RHS being a transpose.
-    // ( 7) Add(a, Transpose(Concat(b, c, ...))) =>
+    // ( 9) Add(a, Transpose(Concat(b, c, ...))) =>
     //      Add(a, Concat(Transpose(b), Transpose(c), ...)
-    // ( 8) Add(a, Transpose(Multiply(Concat(b, c, ...), Broadcast(d))) =>
+    // (10) Add(a, Transpose(Multiply(Concat(b, c, ...), Broadcast(d))) =>
     //      Add(a, Multiply(Concat(Transpose(b), Transpose(c), ...),
     //                      Broadcast(d))
-    // ( 9) Add(a, Transpose(Add(b, c))) =>
+    // (11) Add(a, Transpose(Add(b, c))) =>
     //      Add(a, Add(Transpose(b), Transpose(c)))
     // These patterns try and move the transpose so that patterns 1-5 can be
     // applied.
@@ -209,6 +230,10 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       // Case 3:
       // Add(a, Multiply(Concat(b, c, ...), Broadcast(d)) =>
       // SliceApplyabY(SliceApplyabY(a, b, d), c, d)
+      // Case 4:
+      // Add(Multiply(a, Broadcast(b)),
+      //     Multiply(Concat(c, d, ...), Broadcast(e)) =>
+      // SliceApplyaXbY(SliceApplyaXbY(a, b, c, e), b, d, e) ...
       HloInstruction* mul = rhs;
       HloInstruction* concat = mul->mutable_operand(0);
 
@@ -220,34 +245,38 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
         }
       }
 
-      HloInstruction* scalar = mul->mutable_operand(1)->mutable_operand(0);
-      if (scalar->shape().element_type() != accumulator_type) {
-        scalar = MakeConvertToHlo(scalar, accumulator_type);
-        convert_instructions.push_back(scalar);
+      HloInstruction* rhs_scalar =
+          look_through_fp32_cast(mul->mutable_operand(1)->mutable_operand(0));
+      HloInstruction* lhs_input;
+      if (Match(lhs,
+                m::Multiply(m::Op(&lhs_input), m::Broadcast(m::Op().WithShape(
+                                                   m::Shape().IsScalar()))))) {
+        // Handle case 4 where the accumulator is also scaled.
+        HloInstruction* lhs_scalar =
+            look_through_fp32_cast(lhs->mutable_operand(1)->mutable_operand(0));
+        TF_ASSIGN_OR_RETURN(
+            HloInstruction * new_output,
+            SliceOptimizer::ConvertToSliceApplyaXbY(
+                HloOpcode::kAdd, lhs_input, concat, lhs_scalar, rhs_scalar));
+        TF_RETURN_IF_ERROR(comp->ReplaceInstruction(output, new_output));
+        output = lhs_input;
+      } else {
+        // Case 3: No scaling on the accumulator.
+        TF_ASSIGN_OR_RETURN(HloInstruction * new_output,
+                            SliceOptimizer::ConvertToSliceApplyabY(
+                                HloOpcode::kAdd, lhs, concat, rhs_scalar));
+        TF_RETURN_IF_ERROR(comp->ReplaceInstruction(output, new_output));
+        output = lhs;
       }
 
-      TF_ASSIGN_OR_RETURN(HloInstruction * new_output,
-                          SliceOptimizer::ConvertToSliceApplyabY(
-                              HloOpcode::kAdd, lhs, concat, scalar));
-      TF_RETURN_IF_ERROR(comp->ReplaceInstruction(output, new_output));
-      output = lhs;
-
     } else if (Match(output, m::Add(m::Op(), m::Op())) &&
-               (Match(output->mutable_operand(0),
-                      m::Multiply(m::Op(), m::Broadcast(m::Op().WithShape(
-                                               m::Shape().IsScalar())))) ||
-                Match(output->mutable_operand(0),
-                      m::Multiply(m::Op(),
-                                  m::Broadcast(m::Convert(m::Op().WithShape(
-                                      m::Shape().IsScalar())))))) &&
-               (Match(output->mutable_operand(1),
-                      m::Multiply(m::Op(), m::Broadcast(m::Op().WithShape(
-                                               m::Shape().IsScalar())))) ||
-                Match(output->mutable_operand(1),
-                      m::Convert(m::Multiply(m::Convert(m::Op()),
-                                             m::Broadcast(m::Op().WithShape(
-                                                 m::Shape().IsScalar()))))))) {
-      // Case 10:
+               Match(output->mutable_operand(0),
+                     m::Multiply(m::Op(), m::Broadcast(m::Op().WithShape(
+                                              m::Shape().IsScalar())))) &&
+               Match(output->mutable_operand(1),
+                     m::Multiply(m::Op(), m::Broadcast(m::Op().WithShape(
+                                              m::Shape().IsScalar()))))) {
+      // Case 5:
       // Add(Multiply(a, Broadcast(b)), Multiply(c, Broadcast(d))) =>
       // ScaledInplaceaXbY(a, c, b, d)
 
@@ -261,26 +290,13 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       // ScaleB -> Scalar
 
       HloInstruction* a = lhs->mutable_operand(0);
-      HloInstruction* scale_a = lhs->mutable_operand(1)->mutable_operand(0);
-      if (scale_a->opcode() == HloOpcode::kConvert &&
-          IsF32ToF16Convert(scale_a)) {
-        scale_a = scale_a->mutable_operand(0);
-      }
+      HloInstruction* scale_a =
+          look_through_fp32_cast(lhs->mutable_operand(1)->mutable_operand(0));
 
-      HloInstruction* b;
-      if (rhs->opcode() == HloOpcode::kConvert && IsF32ToF16Convert(rhs)) {
-        rhs = rhs->mutable_operand(0);
-        b = rhs->mutable_operand(0)->mutable_operand(0);
-      } else {
-        b = rhs->mutable_operand(0);
-      }
-      HloInstruction* scale_b = rhs->mutable_operand(1)->mutable_operand(0);
-      if (scale_b->opcode() == HloOpcode::kConvert &&
-          IsF32ToF16Convert(scale_a)) {
-        scale_b = scale_b->mutable_operand(0);
-      }
-
-      to_outline.erase(to_outline.begin());
+      rhs = look_through_fp32_cast(rhs);
+      HloInstruction* b = look_through_fp32_cast(rhs->mutable_operand(0));
+      HloInstruction* scale_b =
+          look_through_fp32_cast(rhs->mutable_operand(1)->mutable_operand(0));
 
       if (b->shape().element_type() != accumulator_type) {
         b = MakeConvertToHlo(b, accumulator_type);
@@ -297,7 +313,7 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
                      m::Convert(m::Multiply(m::Convert(m::Op()),
                                             m::Broadcast(m::Op().WithShape(
                                                 m::Shape().IsScalar())))))) {
-      // Case 4:
+      // Case 6:
       // Add(a, Multiply(b, Broadcast(c))) =>
       // ScaledInplaceXbY(a, b, c)
 
@@ -324,7 +340,7 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       output = lhs;
 
     } else if (rhs->opcode() == HloOpcode::kAdd) {
-      // Case 5:
+      // Case 7:
       // Add(lhs, Add(a, b)) =>
       // Add(Add(lhs, a), b)
       HloInstruction* a = rhs->mutable_operand(0);
@@ -343,7 +359,7 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       rhs->mutable_shape()->set_element_type(accumulator_type);
 
     } else if (IsWideConstantZero(rhs)) {
-      // Case 6:
+      // Case 8:
       // Add(lhs, zeros) =>
       // lhs
       TF_RETURN_IF_ERROR(comp->ReplaceInstruction(output, lhs));
@@ -353,17 +369,17 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
                Match(rhs, m::Transpose(m::Multiply(
                               m::Concatenate(),
                               m::Broadcast(m::ConstantScalar()))))) {
-      // Case 7:
+      // Case 9:
       // Add(a, Transpose(Concat(b, c, ...))) =>
       // Add(a, Concat(Transpose(b), Transpose(c), ...)
-      // Case 8:
+      // Case 10:
       // Add(a, Transpose(Multiply(Concat(b, c, ...), Broadcast(d))) =>
       // Add(a, Multiply(Concat(Transpose(b), Transpose(c), ...),
       //                 Broadcast(d))
       HloInstruction* transpose = rhs;
       HloInstruction* concat = transpose->mutable_operand(0);
 
-      // Get the scalar for case 7.
+      // Get the scalar for case 10.
       HloInstruction* scalar = nullptr;
       if (concat->opcode() == HloOpcode::kMultiply) {
         scalar = concat->mutable_operand(1)->mutable_operand(0);
@@ -414,7 +430,7 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       TF_RETURN_IF_ERROR(comp->ReplaceInstruction(rhs, new_output));
 
     } else if (Match(rhs, m::Transpose(m::Add()))) {
-      // Case 9:
+      // Case 11:
       // Add(a, Transpose(Add(b, c))) =>
       // Add(a, Add(Transpose(b), Transpose(c)))
       HloInstruction* add = rhs->mutable_operand(0);
