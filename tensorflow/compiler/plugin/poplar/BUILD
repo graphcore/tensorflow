@@ -5,6 +5,7 @@ load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test", "p
 load("//tensorflow:tensorflow.bzl", "py_binary", "tf_cc_binary", "tf_cc_test")
 load("//tensorflow/core/platform:build_config.bzl", "tf_proto_library")
 load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")
+load("//tensorflow/compiler/plugin/poplar/docs/tf_docs_py_test:tf_docs_py_test.bzl", "tf_docs_py_test")
 
 licenses(["restricted"])
 
@@ -3364,11 +3365,11 @@ tf_xla_py_test(
     ],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "perf_training_example",
     size = "large",
     srcs = ["docs/perf_training_example.py"],
-    enabled_backends = ["poplar"],
+    main = "docs/perf_training_example.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -3381,34 +3382,34 @@ py_binary(
     python_version = "PY3",
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "pre_compile_example_runner",
     size = "large",
     srcs = ["docs/pre_compile_example_runner.py"],
     data = [":pre_compile_example"],
-    enabled_backends = ["poplar"],
+    main = "docs/pre_compile_example_runner.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "outfeed_example",
     size = "large",
     srcs = ["docs/outfeed_example.py"],
-    enabled_backends = ["poplar"],
+    main = "docs/outfeed_example.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "outfeed_iterator_example",
     size = "large",
     srcs = ["docs/outfeed_iterator_example.py"],
-    enabled_backends = ["poplar"],
+    main = "docs/outfeed_iterator_example.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -3428,11 +3429,12 @@ tf_xla_py_test(
     ],
 )
 
-py_test(
+tf_docs_py_test(
     name = "distributed_training_example",
     size = "large",
     srcs = ["docs/distributed_training_example.py"],
     args = ["--num-steps=10"],
+    main = "docs/distributed_training_example.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -3452,7 +3454,7 @@ horovod_py_test(
     ],
 )
 
-py_test(
+tf_docs_py_test(
     name = "ipu_estimator_example",
     size = "large",
     srcs = ["docs/ipu_estimator_example.py"],
@@ -3460,6 +3462,7 @@ py_test(
         "--iterations-per-loop=1",
         "--training-steps=1",
     ],
+    main = "docs/ipu_estimator_example.py",
     tags = ["isolated_poplar_tests"],
     deps = [
         "//tensorflow:tensorflow_py",
@@ -3467,7 +3470,7 @@ py_test(
     ],
 )
 
-py_test(
+tf_docs_py_test(
     name = "ipu_estimator_example_replicated",
     size = "large",
     srcs = ["docs/ipu_estimator_example.py"],
@@ -3476,15 +3479,14 @@ py_test(
         "--training-steps=1",
         "--replicas=2",
     ],
-    main = "ipu_estimator_example.py",
-    tags = ["hw_poplar_test_2_ipus"],
+    main = "docs/ipu_estimator_example.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
-py_test(
+tf_docs_py_test(
     name = "ipu_pipeline_estimator_example",
     size = "large",
     srcs = ["docs/ipu_pipeline_estimator_example.py"],
@@ -3493,6 +3495,7 @@ py_test(
         "--iterations-per-loop=4",
         "--training-steps=4",
     ],
+    main = "docs/ipu_pipeline_estimator_example.py",
     tags = ["isolated_poplar_tests"],
     deps = [
         "//tensorflow:tensorflow_py",
@@ -3545,7 +3548,7 @@ cc_binary(
     deps = ["@local_config_poplar//poplar:poplar_libs"],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "tutorial_custom_codelet",
     size = "large",
     srcs = ["docs/tutorial_custom_codelet.py"],
@@ -3553,7 +3556,7 @@ tf_xla_py_test(
         ":custom_codelet_example",
         ":libcustom_rotate_op.so",
     ],
-    enabled_backends = ["poplar"],
+    main = "docs/tutorial_custom_codelet.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -3568,14 +3571,14 @@ cc_binary(
     deps = ["@local_config_poplar//poplar:poplar_libs"],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "custom_add_inplace",
     size = "large",
     srcs = ["docs/custom_add_inplace.py"],
     data = [
         ":libcustom_add_inplace.so",
     ],
-    enabled_backends = ["poplar"],
+    main = "docs/custom_add_inplace.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -3622,55 +3625,55 @@ tf_xla_py_test(
     ],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "function_example1",
     size = "large",
     srcs = ["docs/function_example1.py"],
-    enabled_backends = ["poplar"],
+    main = "docs/function_example1.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "function_example2",
     size = "large",
     srcs = ["docs/function_example2.py"],
-    enabled_backends = ["poplar"],
+    main = "docs/function_example2.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "function_block1",
     size = "large",
     srcs = ["docs/function_block1.py"],
-    enabled_backends = ["poplar"],
+    main = "docs/function_block1.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "function_block2",
     size = "large",
     srcs = ["docs/function_block2.py"],
-    enabled_backends = ["poplar"],
+    main = "docs/function_block2.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "function_block3",
     size = "large",
     srcs = ["docs/function_block3.py"],
-    enabled_backends = ["poplar"],
+    main = "docs/function_block3.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -3688,14 +3691,14 @@ cc_binary(
     ],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "tutorial_attributes_example",
     size = "large",
     srcs = ["docs/tutorial_attributes_example.py"],
     data = [
         ":libtutorial_attributes_example.so",
     ],
-    enabled_backends = ["poplar"],
+    main = "docs/tutorial_attributes_example.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -3735,33 +3738,33 @@ tf_xla_py_test(
     ],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "targeting_tf2_example1",
     size = "large",
     srcs = ["docs/targeting_tf2_example1.py"],
-    enabled_backends = ["poplar"],
+    main = "docs/targeting_tf2_example1.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "targeting_tf2_example2",
     size = "large",
     srcs = ["docs/targeting_tf2_example2.py"],
-    enabled_backends = ["poplar"],
+    main = "docs/targeting_tf2_example2.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
-tf_xla_py_test(
+tf_docs_py_test(
     name = "targeting_tf2_example3",
     size = "large",
     srcs = ["docs/targeting_tf2_example3.py"],
-    enabled_backends = ["poplar"],
+    main = "docs/targeting_tf2_example3.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
