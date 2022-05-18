@@ -172,6 +172,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
+#include "tensorflow/compiler/xla/service/all_reduce_reassociate.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/compilation_stats.h"
 #include "tensorflow/compiler/xla/service/computation_placer.h"
@@ -1241,9 +1242,9 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
     if (poplar_executor->EnableMatmulCombiner()) {
       pipeline.AddPass<MatmulCombiner>(resources.annotations);
     }
-    pipeline.AddPass<AllReduceSimplifier>(
-        resources.replication_factor);  // This must be after all calls to
-                                        // PoplarAlgebraicSimplifier
+    pipeline.AddPass<AllReduceSimplifier>(resources.replication_factor);
+    pipeline.AddPass<AllReduceReassociate>();
+    // This must be after all calls to PoplarAlgebraicSimplifier.
     pipeline.AddPass<SerializeGradientAccumulation>();
     pipeline.AddPass<SliceOptimizer>(resources.annotations);
     pipeline.AddPass<MultiSliceSimplifier>(resources.annotations);

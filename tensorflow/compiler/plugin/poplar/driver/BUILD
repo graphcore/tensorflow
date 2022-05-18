@@ -242,6 +242,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/kernels:ops_proto_cc",
         "//tensorflow/compiler/plugin/poplar/vertices:tf_graph_sources",
         "//tensorflow/compiler/xla:executable_run_options",
+        "//tensorflow/compiler/xla/service:all_reduce_reassociate",
         "//tensorflow/compiler/xla/service:compiler",
         "//tensorflow/compiler/xla/service:dynamic_dimension_inference",
         "//tensorflow/compiler/xla/service:dynamic_index_splitter",
