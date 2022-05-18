@@ -16,72 +16,70 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_convolution.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_utils.h"
+#include "tensorflow/compiler/xla/service/pattern_matcher.h"
 
-namespace xla::poplarplugin::algebraic_simplifier::convolution {
+namespace xla {
+namespace poplarplugin::algebraic_simplifier::convolution {
+namespace {
+namespace m = match;
+}
 StatusOr<std::unique_ptr<HloInstruction>> FoldConvInputPad(
-    const PoplarAlgebraicSimplifier* simplifier, HloInstruction* convolution) {
-  auto* lhs = convolution->mutable_operand(0);
-  auto* rhs = convolution->mutable_operand(1);
-  const auto& window = convolution->window();
-  const ConvolutionDimensionNumbers& dnums =
-      convolution->convolution_dimension_numbers();
+    HloInstruction* convolution) {
+  HloInstruction *lhs, *a, *b;
+  if (Match(convolution,
+            m::Convolution(m::Pad(&lhs, m::Op(&a), m::ConstantScalar(0)),
+                           m::Op(&b)))) {
+    const auto& window = convolution->window();
+    const ConvolutionDimensionNumbers& dnums =
+        convolution->convolution_dimension_numbers();
 
-  if (lhs->opcode() != HloOpcode::kPad) {
-    return {nullptr};
-  }
+    const auto& padding = lhs->padding_config();
 
-  // Convolution's padding is always zero, so bail if the kPad is adding
-  // something other than zero.
-  if (!util::IsAll(lhs->operand(1), 0)) {
-    return {nullptr};
-  }
-
-  const auto& padding = lhs->padding_config();
-
-  // Can't pad batch or feature dims.
-  for (int64 dim :
-       {dnums.input_batch_dimension(), dnums.input_feature_dimension()}) {
-    const auto& p = padding.dimensions(dim);
-    if (p.edge_padding_low() != 0 || p.edge_padding_high() != 0 ||
-        p.interior_padding() != 0) {
-      return {nullptr};
-    }
-  }
-
-  // Compute the window which is the result of merging the kPad and the
-  // convolution's existing window.
-  Window new_window = window;
-  for (int64 dim = 0; dim < dnums.input_spatial_dimensions_size(); ++dim) {
-    auto& w = *new_window.mutable_dimensions(dim);
-    const auto& p = padding.dimensions(dnums.input_spatial_dimensions(dim));
-    // Edge padding composes with itself in the straightforward way, but
-    // composing interior padding is nontrivial, and we cowardly refuse to
-    // think about it. If we see interior padding in either the kPad or conv,
-    // bail if there's any sort of padding in the other.
-    if (p.interior_padding() != 0 &&
-        (w.padding_low() != 0 || w.padding_high() != 0 ||
-         w.base_dilation() != 1)) {
-      return {nullptr};
-    }
-    if (w.base_dilation() != 1 &&
-        (p.edge_padding_low() != 0 || p.edge_padding_high() != 0 ||
-         p.interior_padding() != 0)) {
-      return {nullptr};
+    // Can't pad batch or feature dims.
+    for (int64 dim :
+         {dnums.input_batch_dimension(), dnums.input_feature_dimension()}) {
+      const auto& p = padding.dimensions(dim);
+      if (p.edge_padding_low() != 0 || p.edge_padding_high() != 0 ||
+          p.interior_padding() != 0) {
+        return {nullptr};
+      }
     }
 
-    w.set_padding_low(w.padding_low() + p.edge_padding_low());
-    w.set_padding_high(w.padding_high() + p.edge_padding_high());
-    if (p.interior_padding() != 0) {
-      CHECK_EQ(w.base_dilation(), 1);
-      w.set_base_dilation(1 + p.interior_padding());
+    // Compute the window which is the result of merging the kPad and the
+    // convolution's existing window.
+    Window new_window = window;
+    for (int64 dim = 0; dim < dnums.input_spatial_dimensions_size(); ++dim) {
+      auto& w = *new_window.mutable_dimensions(dim);
+      const auto& p = padding.dimensions(dnums.input_spatial_dimensions(dim));
+      // Edge padding composes with itself in the straightforward way, but
+      // composing interior padding is nontrivial, and we cowardly refuse to
+      // think about it. If we see interior padding in either the kPad or conv,
+      // bail if there's any sort of padding in the other.
+      if (p.interior_padding() != 0 &&
+          (w.padding_low() != 0 || w.padding_high() != 0 ||
+           w.base_dilation() != 1)) {
+        return {nullptr};
+      }
+      if (w.base_dilation() != 1 &&
+          (p.edge_padding_low() != 0 || p.edge_padding_high() != 0 ||
+           p.interior_padding() != 0)) {
+        return {nullptr};
+      }
+
+      w.set_padding_low(w.padding_low() + p.edge_padding_low());
+      w.set_padding_high(w.padding_high() + p.edge_padding_high());
+      if (p.interior_padding() != 0) {
+        CHECK_EQ(w.base_dilation(), 1);
+        w.set_base_dilation(1 + p.interior_padding());
+      }
     }
+
+    auto new_conv =
+        convolution->CloneWithNewOperands(convolution->shape(), {a, b});
+    new_conv->set_window(new_window);
+    return new_conv;
   }
-
-  auto new_conv = convolution->CloneWithNewOperands(
-      convolution->shape(), {lhs->mutable_operand(0), rhs});
-  new_conv->set_window(new_window);
-
-  return new_conv;
+  return {nullptr};
 }
 
 StatusOr<std::unique_ptr<HloInstruction>> FoldConvFilterPad(
@@ -148,4 +146,5 @@ StatusOr<std::unique_ptr<HloInstruction>> FoldConvFilterPad(
 
   return new_conv;
 }
-}  // namespace xla::poplarplugin::algebraic_simplifier::convolution
+}  // namespace poplarplugin::algebraic_simplifier::convolution
+}  // namespace xla

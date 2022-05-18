@@ -149,7 +149,7 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
 
   Status HandleReduce(HloInstruction* hlo) override;
 
-  Status HandleReduceWindow(HloInstruction* reduce_window) override;
+  Status HandleReduceWindow(HloInstruction* hlo) override;
 
   Status HandleReverse(HloInstruction* reverse) override;
   Status HandleSlice(HloInstruction* slice) override;
@@ -214,7 +214,6 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
 
   // Tries to fold a kPad in the input or filter into the convolution
   // instruction's window.
-  StatusOr<bool> FoldConvInputPad(HloInstruction* convolution);
   StatusOr<bool> FoldConvFilterPad(HloInstruction* convolution);
 
   // Tries to simplify a slice where the result of the slice is a scalar.

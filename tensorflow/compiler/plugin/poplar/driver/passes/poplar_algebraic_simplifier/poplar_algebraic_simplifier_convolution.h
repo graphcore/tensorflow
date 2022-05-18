@@ -23,7 +23,7 @@ limitations under the License.
 
 namespace xla::poplarplugin::algebraic_simplifier::convolution {
 StatusOr<std::unique_ptr<HloInstruction>> FoldConvInputPad(
-    const PoplarAlgebraicSimplifier* simplifier, HloInstruction* convolution);
+    HloInstruction* convolution);
 
 StatusOr<std::unique_ptr<HloInstruction>> FoldConvFilterPad(
     const PoplarAlgebraicSimplifier* simplifier, HloInstruction* convolution);
