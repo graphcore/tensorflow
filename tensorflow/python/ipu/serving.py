@@ -151,8 +151,8 @@ def _export_saved_model(defunc, export_dir, variable_initializer,
   """
   with tempfile.TemporaryDirectory() as tmp_folder:
     unique_name = str(uuid.uuid4())
-    # Compile poplar_exec
-    exec_filename = f'application_{unique_name}.poplar_exec'
+    # Compile the Poplar executable
+    exec_filename = f'application_{unique_name}.popef'
     poplar_exec_filepath = os.path.join(tmp_folder, exec_filename)
     g = ops.Graph()
     with g.as_default(), session_lib.Session(graph=g) as sess:
