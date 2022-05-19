@@ -19,10 +19,7 @@ limitations under the License.
 #include <memory>
 #include <string>
 
-#include <poplar/Graph.hpp>
-#include <poplar/Program.hpp>
-#include <poplar/Tensor.hpp>
-
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/xla/statusor.h"
 
@@ -36,7 +33,7 @@ class RangeSampler {
   RangeSampler(const DistributionType distribution,
                const poplar::DebugNameAndId& debug_name_and_id,
                const uint64 range_max, const uint64 tile,
-               const poplar::Tensor& seed)
+               const DriverTensor& seed)
       : distribution_(distribution),
         dnai_(debug_name_and_id),
         range_max_(range_max),
@@ -45,31 +42,31 @@ class RangeSampler {
 
   virtual ~RangeSampler() = default;
 
-  virtual Status Sample(poplar::Graph& graph, poplar::Tensor& samples,
-                        poplar::program::Sequence& seq);
+  virtual Status Sample(DriverGraph& graph, DriverTensor& samples,
+                        DriverProgramSequence& seq);
 
-  virtual StatusOr<poplar::Tensor> Expectation(poplar::Graph& graph,
-                                               const poplar::Tensor& samples,
-                                               const uint64 k,
-                                               poplar::program::Sequence& seq);
+  virtual StatusOr<DriverTensor> Expectation(DriverGraph& graph,
+                                             const DriverTensor& samples,
+                                             const uint64 k,
+                                             DriverProgramSequence& seq);
 
   const poplar::DebugNameAndId& GetDebugNameAndId() const { return dnai_; }
   const DistributionType Distribution() const { return distribution_; }
   const uint64 RangeMax() const { return range_max_; }
   const uint64 Tile() const { return tile_; }
-  const poplar::Tensor Seed() const { return seed_; }
+  const DriverTensor Seed() const { return seed_; }
 
  protected:
-  StatusOr<poplar::Tensor> Probabilities(poplar::Graph& graph,
-                                         const poplar::Tensor& samples,
-                                         poplar::program::Sequence& seq);
+  StatusOr<DriverTensor> Probabilities(DriverGraph& graph,
+                                       const DriverTensor& samples,
+                                       DriverProgramSequence& seq);
 
  private:
   const DistributionType distribution_;
   const poplar::DebugNameAndId dnai_;
   const uint64 range_max_;
   const uint64 tile_;
-  const poplar::Tensor seed_;
+  const DriverTensor seed_;
 };
 
 class UniqueRangeSampler : public RangeSampler {
@@ -77,19 +74,19 @@ class UniqueRangeSampler : public RangeSampler {
   UniqueRangeSampler(const DistributionType distribution,
                      const poplar::DebugNameAndId& debug_name_and_id,
                      const uint64 range_max, const uint64 tile,
-                     const poplar::Tensor& seed)
+                     const DriverTensor& seed)
       : RangeSampler(distribution, debug_name_and_id, range_max, tile, seed) {}
 
-  Status Sample(poplar::Graph& graph, poplar::Tensor& samples,
-                poplar::program::Sequence& seq) override;
+  Status Sample(DriverGraph& graph, DriverTensor& samples,
+                DriverProgramSequence& seq) override;
 
-  StatusOr<poplar::Tensor> Expectation(poplar::Graph& graph,
-                                       const poplar::Tensor& samples,
-                                       const uint64 k,
-                                       poplar::program::Sequence& seq) override;
+  StatusOr<DriverTensor> Expectation(DriverGraph& graph,
+                                     const DriverTensor& samples,
+                                     const uint64 k,
+                                     DriverProgramSequence& seq) override;
 
  private:
-  poplar::Tensor num_tries_;
+  DriverTensor num_tries_;
 };
 
 StatusOr<DistributionType> DistributionStringToEnum(
@@ -99,7 +96,7 @@ StatusOr<DistributionType> DistributionStringToEnum(
 StatusOr<std::unique_ptr<RangeSampler>> RangeSamplerFactory(
     const std::string distribution,
     const poplar::DebugNameAndId& debug_name_and_id, const uint64 range_max,
-    const uint64 tile, const poplar::Tensor& seed, bool unique);
+    const uint64 tile, const DriverTensor& seed, bool unique);
 
 }  // namespace poplarplugin
 }  // namespace xla

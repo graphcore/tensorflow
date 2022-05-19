@@ -113,7 +113,7 @@ class GRULayerBaseOp : public PoplarOpDef {
   }
 
  public:
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -127,13 +127,17 @@ class GRULayerBaseOp : public PoplarOpDef {
     switch (input_index) {
       case 0: {
         // Allocate GRU input tensor.
-        return popnn::gru::createInput(graph, gru_params, {debug_info},
-                                       gru_opts, &res.planning_cache);
+        return DriverTensor(
+            popnn::gru::createInput(graph, gru_params, {debug_info}, gru_opts,
+                                    &res.planning_cache),
+            graph);
       }
       case 1: {
         // Allocate initial state tensor.
-        return popnn::gru::createInitialState(graph, gru_params, {debug_info},
-                                              gru_opts, &res.planning_cache);
+        return DriverTensor(
+            popnn::gru::createInitialState(graph, gru_params, {debug_info},
+                                           gru_opts, &res.planning_cache),
+            graph);
       }
       case 2: {
         // Allocate GRU weights kernel.
@@ -142,22 +146,28 @@ class GRULayerBaseOp : public PoplarOpDef {
         std::tie(input_weights, output_weights) =
             popnn::gru::createWeightsKernel(graph, gru_params, {debug_info},
                                             gru_opts, &res.planning_cache);
-        return PackGruKernel(input_weights, output_weights);
+        return DriverTensor(PackGruKernel(input_weights, output_weights),
+                            graph);
       }
       case 3: {
         // Allocate GRU weights biases.
-        return popnn::gru::createWeightsBiases(graph, gru_params, {debug_info},
-                                               gru_opts, &res.planning_cache);
+        return DriverTensor(
+            popnn::gru::createWeightsBiases(graph, gru_params, {debug_info},
+                                            gru_opts, &res.planning_cache),
+            graph);
       }
       case 4: {
         // Allocate AUGRU seq_len
-        return popops::createSliceableTensor(
-            graph, poplar::INT, {gru_params.rnn.batchSize}, {0}, {1}, 0, name);
+        return DriverTensor(popops::createSliceableTensor(
+                                graph, poplar::INT, {gru_params.rnn.batchSize},
+                                {0}, {1}, 0, name),
+                            graph);
       }
       case 5: {
         // Allocate AUGRU attention
-        return popnn::gru::createAttention(graph, gru_params, name)
-            .dimShuffle({1, 0});
+        return DriverTensor(popnn::gru::createAttention(graph, gru_params, name)
+                                .dimShuffle({1, 0}),
+                            graph);
       }
       default: {
         return xla::FailedPrecondition(

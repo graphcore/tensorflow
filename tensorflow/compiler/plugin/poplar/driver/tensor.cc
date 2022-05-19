@@ -1059,11 +1059,11 @@ void Set64BitInitialTensorValueImpl(DriverGraph& graph, DriverTensor& tensor,
 DriverTensor TensorCloneAndRebalanceAliasing(
     DriverGraph& graph, CompilerResources& res, const DriverTensor& tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  uint64 offset = res.linear_mapping_state[&graph.getPoplarGraph()];
+  uint64 offset = res.linear_mapping_state[&graph];
   poplar::Tensor dst;
   std::tie(dst, offset) = poputil::cloneAndExpandAliasing(
       graph.getPoplarGraph(), tensor, offset, debug_name_and_id);
-  res.linear_mapping_state[&graph.getPoplarGraph()] = offset;
+  res.linear_mapping_state[&graph] = offset;
   return {dst, graph};
 }
 

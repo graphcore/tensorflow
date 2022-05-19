@@ -19,6 +19,7 @@ limitations under the License.
 
 #include <poplin/Convolution.hpp>
 
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
 namespace xla {
@@ -56,19 +57,19 @@ poplar::Tensor ShuffleConvolutionWeightsToPoplar(
     const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor,
     bool swap_features);
 
-StatusOr<poplar::Tensor> ShuffleConvolutionInputToTensorflow(
-    const HloInstruction* inst, const poplar::Tensor& tensor);
+StatusOr<DriverTensor> ShuffleConvolutionInputToTensorflow(
+    const HloInstruction* inst, const DriverTensor& tensor);
 
-poplar::Tensor ShuffleConvolutionInputToTensorflow(
+DriverTensor ShuffleConvolutionInputToTensorflow(
     int64 group_count, const ConvolutionDimensionNumbers& dims,
-    const poplar::Tensor& tensor);
+    const DriverTensor& tensor);
 
-StatusOr<poplar::Tensor> ShuffleConvolutionWeightsToTensorflow(
-    const HloInstruction* inst, const poplar::Tensor& tensor,
+StatusOr<DriverTensor> ShuffleConvolutionWeightsToTensorflow(
+    const HloInstruction* inst, const DriverTensor& tensor,
     bool swap_features = false);
 
-poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
-    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor,
+DriverTensor ShuffleConvolutionWeightsToTensorflow(
+    const ConvolutionDimensionNumbers& dims, const DriverTensor& tensor,
     bool swap_features = false);
 
 StatusOr<poplar::Tensor> ShuffleConvolutionOutputToTensorflow(
@@ -81,8 +82,8 @@ poplar::Tensor AddGroupsDimensionToWeights(const poplin::ConvParams& p,
                                            const poplar::Tensor& t,
                                            bool flipped);
 
-poplar::Tensor RemoveGroupsDimensionFromWeights(const poplin::ConvParams& p,
-                                                const poplar::Tensor& t);
+DriverTensor RemoveGroupsDimensionFromWeights(const poplin::ConvParams& p,
+                                              const DriverTensor& t);
 }  // namespace poplarplugin
 }  // namespace xla
 

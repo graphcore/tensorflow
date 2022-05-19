@@ -96,14 +96,15 @@ absl::optional<std::vector<unsigned>> GetConstantIndices(
   return absl::optional<std::vector<unsigned>>(value.ValueOrDie());
 }
 
-StatusOr<poplar::Tensor> CreateInputTensor(
-    poplar::Graph& graph, const popops::SlicePlan& plan,
+StatusOr<DriverTensor> CreateInputTensor(
+    DriverGraph& graph, const popops::SlicePlan& plan,
     const Shape& xla_input_shape,
     const poplar::DebugNameAndId& debug_name_and_id) {
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(xla_input_shape));
-  return popops::createSliceableTensor(graph, type,
-                                       PoplarShapeFromXlaShape(xla_input_shape),
-                                       {0}, {1}, plan, {}, {debug_name_and_id});
+  return DriverTensor(popops::createSliceableTensor(
+                          graph, type, PoplarShapeFromXlaShape(xla_input_shape),
+                          {0}, {1}, plan, {}, {debug_name_and_id}),
+                      graph);
 }
 
 StatusOr<poplar::Tensor> CreateReallocatedInputTensor(
@@ -115,8 +116,8 @@ StatusOr<poplar::Tensor> CreateReallocatedInputTensor(
                                        debug_name_and_id);
 }
 
-StatusOr<poplar::Tensor> CreateUpdatesTensor(
-    poplar::Graph& graph, const popops::SlicePlan& plan,
+StatusOr<DriverTensor> CreateUpdatesTensor(
+    DriverGraph& graph, const popops::SlicePlan& plan,
     const Shape& xla_input_shape, const Shape& xla_updates_shape,
     const Shape& xla_indices_shape,
     const poplar::DebugNameAndId& debug_name_and_id) {
@@ -125,9 +126,11 @@ StatusOr<poplar::Tensor> CreateUpdatesTensor(
       PoplarShapeFromXlaShape(xla_indices_shape);
   const auto num_indices = absl::c_accumulate(indices_shape, std::size_t(1),
                                               std::multiplies<std::size_t>());
-  poplar::Tensor out = popops::createSliceTensor(
-      graph, type, PoplarShapeFromXlaShape(xla_input_shape), {0}, {1},
-      num_indices, plan, {}, {debug_name_and_id});
+  auto out =
+      DriverTensor(popops::createSliceTensor(
+                       graph, type, PoplarShapeFromXlaShape(xla_input_shape),
+                       {0}, {1}, num_indices, plan, {}, {debug_name_and_id}),
+                   graph);
   out = out.reshape(PoplarShapeFromXlaShape(xla_updates_shape));
   return out;
 }
@@ -189,7 +192,7 @@ class MultiSliceOp : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -359,7 +362,7 @@ class MultiUpdateOp : public PoplarOpDef {
     return prog;
   }
 
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -487,7 +490,7 @@ class StaticMultiUpdateAddOp : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

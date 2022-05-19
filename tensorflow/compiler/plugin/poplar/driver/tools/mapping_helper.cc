@@ -30,7 +30,7 @@ void rotate_right(T& t, std::size_t spaces) {
 }
 
 void MapTensorLinearlyImpl(
-    LinearMapperState& state, poplar::Graph& graph, poplar::Tensor& tensor,
+    LinearMapperState& state, DriverGraph& graph, DriverTensor& tensor,
     std::vector<std::vector<poplar::Interval>>& mapping) {
   uint64& next_tile_to_map_from = state[&graph];
 
@@ -49,22 +49,21 @@ void MapTensorLinearlyImpl(
 }
 }  // namespace
 
-void MappingHelper::RemapTensor(LinearMapperState& state, poplar::Graph& graph,
-                                poplar::Tensor& tensor) {
+void MappingHelper::RemapTensor(LinearMapperState& state, DriverGraph& graph,
+                                DriverTensor& tensor) {
   auto mapping = graph.getTileMapping(tensor);
   MapTensorLinearlyImpl(state, graph, tensor, mapping);
 }
 
 void MappingHelper::MapTensorLinearly(LinearMapperState& state,
-                                      poplar::Graph& graph,
-                                      poplar::Tensor& tensor) {
+                                      DriverGraph& graph,
+                                      DriverTensor& tensor) {
   auto mapping = poputil::calcLinearTileMapping(graph, tensor);
   MapTensorLinearlyImpl(state, graph, tensor, mapping);
 }
 
 void MappingHelper::MapTensorLinearly(LinearMapperState& state,
-                                      poplar::Graph& graph,
-                                      poplar::Tensor& tensor,
+                                      DriverGraph& graph, DriverTensor& tensor,
                                       uint32 min_elements_per_tile,
                                       uint32 grain_size) {
   auto mapping = poputil::calcLinearTileMapping(
@@ -73,7 +72,7 @@ void MappingHelper::MapTensorLinearly(LinearMapperState& state,
 }
 
 const uint64 MappingHelper::YieldNextTile(LinearMapperState& state,
-                                          poplar::Graph& graph) {
+                                          DriverGraph& graph) {
   uint64& next_tile = state[&graph];
   const uint64 tile = next_tile;
   next_tile += 1;

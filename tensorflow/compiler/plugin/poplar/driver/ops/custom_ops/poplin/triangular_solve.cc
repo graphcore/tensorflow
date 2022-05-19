@@ -124,7 +124,7 @@ class TriangularSolveOp : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -164,18 +164,22 @@ class TriangularSolveOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags poplar_options,
                         GetTriangularSolveOptionsForInst(inst, res));
 
-    poplar::Tensor out;
+    DriverTensor out;
     switch (input_index) {
       case 0: {
-        out = poplin::createTriangularSolveInputLHS(
-            graph, type_a, type_b, poplar_shape_a, poplar_shape_b, left_side,
-            {debug_info, "lhs"}, poplar_options, &res.planning_cache);
+        out = DriverTensor(poplin::createTriangularSolveInputLHS(
+                               graph, type_a, type_b, poplar_shape_a,
+                               poplar_shape_b, left_side, {debug_info, "lhs"},
+                               poplar_options, &res.planning_cache),
+                           graph);
         break;
       }
       case 1: {
-        out = poplin::createTriangularSolveInputRHS(
-            graph, type_a, type_b, poplar_shape_a, poplar_shape_b, left_side,
-            {debug_info, "rhs"}, poplar_options, &res.planning_cache);
+        out = DriverTensor(poplin::createTriangularSolveInputRHS(
+                               graph, type_a, type_b, poplar_shape_a,
+                               poplar_shape_b, left_side, {debug_info, "rhs"},
+                               poplar_options, &res.planning_cache),
+                           graph);
         break;
       }
       default:

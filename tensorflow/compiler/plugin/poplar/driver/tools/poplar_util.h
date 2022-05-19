@@ -251,9 +251,9 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const poplar::OptionFlags& engine_opts, const poplar::Target& target);
 
 // Zero the given remote buffer at the given repeat offset.
-void ZeroRemoteBuffer(CompilerResources& res, poplar::Graph& graph,
-                      poplar::RemoteBuffer& remote_buffer, int64 offset,
-                      poplar::program::Sequence& sequence,
+void ZeroRemoteBuffer(CompilerResources& res, DriverGraph& graph,
+                      DriverRemoteBuffer& remote_buffer, int64 offset,
+                      DriverProgramSequence& sequence,
                       const poplar::DebugNameAndId& debug_name_and_id);
 
 // Zero the given tensors efficiently.

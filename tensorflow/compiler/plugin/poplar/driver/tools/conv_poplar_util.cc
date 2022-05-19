@@ -287,12 +287,12 @@ StatusOr<poplar::Tensor> ShuffleConvolutionWeightsToPoplar(
   return ShuffleConvolutionWeightsToPoplar(d, tensor, swap_features);
 }
 
-poplar::Tensor ShuffleConvolutionInputToTensorflow(
+DriverTensor ShuffleConvolutionInputToTensorflow(
     int64 group_count, const ConvolutionDimensionNumbers& dims,
-    const poplar::Tensor& tensor) {
+    const DriverTensor& tensor) {
   // Move 'G' parts of the B back to I
   const unsigned n_g = group_count;
-  poplar::Tensor out = tensor.reshapePartial(1, 2, {n_g, tensor.dim(1) / n_g});
+  DriverTensor out = tensor.reshapePartial(1, 2, {n_g, tensor.dim(1) / n_g});
   out = out.dimShufflePartial({1}, {0});
   out = out.reshapePartial(0, 2, {out.dim(0) * out.dim(1)});
 
@@ -306,15 +306,15 @@ poplar::Tensor ShuffleConvolutionInputToTensorflow(
   return out.dimShuffle(shuffle);
 }
 
-StatusOr<poplar::Tensor> ShuffleConvolutionInputToTensorflow(
-    const HloInstruction* inst, const poplar::Tensor& tensor) {
+StatusOr<DriverTensor> ShuffleConvolutionInputToTensorflow(
+    const HloInstruction* inst, const DriverTensor& tensor) {
   TF_ASSIGN_OR_RETURN(int64 group_count, GetBatchGroupCount(inst));
   TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers d, GetConvolutionDims(inst));
   return ShuffleConvolutionInputToTensorflow(group_count, d, tensor);
 }
 
-poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
-    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor,
+DriverTensor ShuffleConvolutionWeightsToTensorflow(
+    const ConvolutionDimensionNumbers& dims, const DriverTensor& tensor,
     bool swap_features) {
   std::vector<unsigned int> shuffle(2 + dims.kernel_spatial_dimensions_size());
   int out_dim = dims.kernel_output_feature_dimension();
@@ -327,8 +327,8 @@ poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
   return tensor.dimShuffle(shuffle);
 }
 
-StatusOr<poplar::Tensor> ShuffleConvolutionWeightsToTensorflow(
-    const HloInstruction* inst, const poplar::Tensor& tensor,
+StatusOr<DriverTensor> ShuffleConvolutionWeightsToTensorflow(
+    const HloInstruction* inst, const DriverTensor& tensor,
     bool swap_features) {
   TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers d, GetConvolutionDims(inst));
   return ShuffleConvolutionWeightsToTensorflow(d, tensor, swap_features);
@@ -383,10 +383,9 @@ poplar::Tensor AddGroupsDimensionToWeights(const poplin::ConvParams& p,
 }
 
 // This function operates on the poplibs format weights (GOI...)
-poplar::Tensor RemoveGroupsDimensionFromWeights(const poplin::ConvParams& p,
-                                                const poplar::Tensor& t) {
-  poplar::Tensor out = t;
-  return out.reshapePartial(0, 2, {out.dim(0) * out.dim(1)});
+DriverTensor RemoveGroupsDimensionFromWeights(const poplin::ConvParams& p,
+                                              const DriverTensor& t) {
+  return t.reshapePartial(0, 2, {t.dim(0) * t.dim(1)});
 }
 
 }  // namespace poplarplugin

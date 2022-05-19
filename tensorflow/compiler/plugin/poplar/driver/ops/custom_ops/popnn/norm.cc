@@ -138,6 +138,11 @@ poplar::Tensor ShuffleNormInputToPoplar(const poplar::Tensor& input,
   return input.dimShufflePartial({feature_index}, {1});
 }
 
+DriverTensor ShuffleNormInputToPoplar(const DriverTensor& input,
+                                      uint32 feature_index) {
+  return input.dimShufflePartial({feature_index}, {1});
+}
+
 poplar::Tensor ShuffleNormOutputToTensorflow(const poplar::Tensor& output,
                                              uint32 feature_index) {
   return output.dimShufflePartial({1}, {feature_index});
@@ -177,8 +182,8 @@ poplar::Tensor BatchNormalise(poplar::Graph& graph,
                                    {debug_name_and_id});
 }
 
-StatusOr<poplar::Tensor> AddNormScaleTensor(
-    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
+StatusOr<DriverTensor> AddNormScaleTensor(
+    DriverGraph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
     uint32 feature_index, const TensorMap& tensor_map,
     const HloInstruction* inst,
@@ -196,11 +201,12 @@ StatusOr<poplar::Tensor> AddNormScaleTensor(
   auto shuffled = ShuffleNormInputToPoplar(acts, feature_index);
 
   // `gamma` is appended to the name by the createNorm function
-  return poplin::createNormGamma(graph, shuffled, {debug_name_and_id});
+  return DriverTensor(
+      poplin::createNormGamma(graph, shuffled, {debug_name_and_id}), graph);
 }
 
-StatusOr<poplar::Tensor> AddNormOffsetTensor(
-    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
+StatusOr<DriverTensor> AddNormOffsetTensor(
+    DriverGraph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
     uint32 feature_index, const TensorMap& tensor_map,
     const HloInstruction* inst,
@@ -218,7 +224,8 @@ StatusOr<poplar::Tensor> AddNormOffsetTensor(
   auto shuffled = ShuffleNormInputToPoplar(acts, feature_index);
 
   // `beta` is appended to the name by the createNorm function
-  return poplin::createNormBeta(graph, shuffled, {debug_name_and_id});
+  return DriverTensor(
+      poplin::createNormBeta(graph, shuffled, {debug_name_and_id}), graph);
 }
 
 int64 CalculateNormBatchSize(const poplar::Tensor& t,
@@ -248,7 +255,7 @@ poplin::DistributedNormReduceCallback GetDistributedNormReduceCallback(
 }
 
 class NormInferenceAndTrainingOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {

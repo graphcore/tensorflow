@@ -29,6 +29,13 @@ ExtendedTensor ExtendedTensor::reshape(
   return {std::move(t)};
 }
 
+ExtendedTensor ExtendedTensor::reshapePartial(
+    unsigned beginIndex, unsigned endIndex,
+    poplar::ArrayRef<std::size_t> newDims) const {
+  auto t = snap::Tensor::reshapePartial(beginIndex, endIndex, newDims);
+  return {std::move(t)};
+}
+
 ExtendedTensor ExtendedTensor::flatten() const {
   auto t = snap::Tensor::flatten();
   return {std::move(t)};
@@ -86,6 +93,19 @@ std::vector<ExtendedTensor> ExtendedTensor::slices(
     return ExtendedTensor(t, *this);
   });
   return ets;
+}
+
+ExtendedTensor ExtendedTensor::dimShuffle(
+    poplar::ArrayRef<unsigned> permutation) const {
+  auto t = snap::Tensor::dimShuffle(permutation);
+  return {std::move(t)};
+}
+
+ExtendedTensor ExtendedTensor::dimShufflePartial(
+    poplar::ArrayRef<unsigned> source,
+    poplar::ArrayRef<unsigned> destination) const {
+  auto t = snap::Tensor::dimShufflePartial(source, destination);
+  return {std::move(t)};
 }
 
 ExtendedTensor ExtendedTensor::dimRoll(unsigned dimIdx, unsigned newIdx) const {

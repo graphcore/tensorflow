@@ -107,7 +107,7 @@ class LstmLayerBaseOp : public PoplarOpDef {
   }
 
  public:
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -121,18 +121,24 @@ class LstmLayerBaseOp : public PoplarOpDef {
     switch (input_index) {
       case 0: {
         // Allocate LSTM input tensor
-        return popnn::lstm::createInput(graph, lstm_params, {debug_info},
-                                        lstm_opts, &res.planning_cache);
+        return DriverTensor(
+            popnn::lstm::createInput(graph, lstm_params, {debug_info},
+                                     lstm_opts, &res.planning_cache),
+            graph);
       }
       case 1: {
         // Allocate initial output (h) tensor
-        return popnn::lstm::createInitialOutput(
-            graph, lstm_params, {debug_info}, lstm_opts, &res.planning_cache);
+        return DriverTensor(
+            popnn::lstm::createInitialOutput(graph, lstm_params, {debug_info},
+                                             lstm_opts, &res.planning_cache),
+            graph);
       }
       case 2: {
         // Allocate initial cell state (c) tensor
-        return popnn::lstm::createInitialCellState(
-            graph, lstm_params, {debug_info}, lstm_opts, &res.planning_cache);
+        return DriverTensor(popnn::lstm::createInitialCellState(
+                                graph, lstm_params, {debug_info}, lstm_opts,
+                                &res.planning_cache),
+                            graph);
       }
       case 3: {
         // Allocate LSTM weights kernel
@@ -141,17 +147,22 @@ class LstmLayerBaseOp : public PoplarOpDef {
         std::tie(input_weights, output_weights) =
             popnn::lstm::createWeightsKernel(graph, lstm_params, {debug_info},
                                              lstm_opts, &res.planning_cache);
-        return PackLstmKernel(input_weights, output_weights);
+        return DriverTensor(PackLstmKernel(input_weights, output_weights),
+                            graph);
       }
       case 4: {
         // Allocate LSTM weights biases
-        return popnn::lstm::createWeightsBiases(
-            graph, lstm_params, {debug_info}, lstm_opts, &res.planning_cache);
+        return DriverTensor(
+            popnn::lstm::createWeightsBiases(graph, lstm_params, {debug_info},
+                                             lstm_opts, &res.planning_cache),
+            graph);
       }
       case 5: {
         // Allocate DynamicLSTM seq_len
-        return popops::createSliceableTensor(
-            graph, poplar::INT, {lstm_params.rnn.batchSize}, {0}, {1}, 0, name);
+        return DriverTensor(popops::createSliceableTensor(
+                                graph, poplar::INT, {lstm_params.rnn.batchSize},
+                                {0}, {1}, 0, name),
+                            graph);
       }
       default: {
         return xla::FailedPrecondition(

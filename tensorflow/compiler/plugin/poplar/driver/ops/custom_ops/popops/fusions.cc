@@ -132,7 +132,7 @@ class ConvBiasAddOp : public PoplarOpDef {
   }
 
   // We want the accumulation tensor to be the same layout as the input tensor.
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -158,7 +158,8 @@ class ConvBiasAddOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(
         acts, ReversePathTransform(graph, acts, forward_path, {debug_info}));
 
-    return poplin::createBiases(graph, acts, {debug_info, "biases"});
+    return DriverTensor(
+        poplin::createBiases(graph, acts, {debug_info, "biases"}), graph);
   }
 };
 
@@ -198,7 +199,7 @@ class MatMulBiasAddOp : public PoplarOpDef {
   }
 
   // We want the accumulation tensor to be the same layout as the input tensor.
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -223,9 +224,10 @@ class MatMulBiasAddOp : public PoplarOpDef {
 
     // Flatten activations into 2D.
     acts = acts.flatten(0, acts.rank() - 1);
-    return poputil::createBroadcastOperand(
-        graph, acts, acts.elementType(), acts.rank() - 1,
-        /*ditherMapping*/ false, {debug_info, "biases"});
+    return DriverTensor(poputil::createBroadcastOperand(
+                            graph, acts, acts.elementType(), acts.rank() - 1,
+                            /*ditherMapping*/ false, {debug_info, "biases"}),
+                        graph);
   }
 };
 

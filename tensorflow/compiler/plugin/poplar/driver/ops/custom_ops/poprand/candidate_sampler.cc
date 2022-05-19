@@ -50,17 +50,17 @@ class CandidateSamplerOp : public PoplarOpDef {
 
     // Get inputs
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor true_classes,
+        DriverTensor true_classes,
         FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info}));
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor seed,
+        DriverTensor seed,
         FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));
     // Seed must be unsigned for the later call to poprand::setSeed
-    poplar::Tensor seed_unsigned = seed.reinterpret(poplar::UNSIGNED_INT);
+    auto seed_unsigned = seed.reinterpret(poplar::UNSIGNED_INT);
     const Shape sample_shape = output_shape.tuple_shapes()[0];
     // Note: Map each sample onto a single tile with grain size 1
     TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(sample_shape));
-    poplar::Tensor samples =
+    auto samples =
         graph.addVariable(poplar_type, PoplarShapeFromXlaShape(sample_shape),
                           {debug_info, "samples"});
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, samples,
@@ -73,18 +73,16 @@ class CandidateSamplerOp : public PoplarOpDef {
         RangeSamplerFactory(distribution, {debug_info}, range_max, tile,
                             seed_unsigned, unique));
     sampler->Sample(graph, samples, seq);
-    TF_ASSIGN_OR_RETURN(poplar::Tensor sampled_expectation,
+    TF_ASSIGN_OR_RETURN(DriverTensor sampled_expectation,
                         sampler->Expectation(graph, samples, k, seq));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor true_expectation,
+    TF_ASSIGN_OR_RETURN(DriverTensor true_expectation,
                         sampler->Expectation(graph, true_classes, k, seq));
 
     // Add the output tensors to the graph
     TF_CHECK_OK(
         AddOutputTensor(tensor_map, inst, 0, DriverTensor(samples, graph)));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1,
-                                DriverTensor(true_expectation, graph)));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2,
-                                DriverTensor(sampled_expectation, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, true_expectation));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, sampled_expectation));
     return seq;
   }
 };

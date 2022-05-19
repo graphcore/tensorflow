@@ -96,7 +96,7 @@ class CTCLossOpBase : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -128,15 +128,17 @@ class CTCLossOpBase : public PoplarOpDef {
         }
         const int64 max_time = ShapeUtil::GetDimension(data_shape, 0);
         const int64 num_classes = ShapeUtil::GetDimension(data_shape, 2);
-        return popnn::ctc::createDataInput(graph, dtype, batch_size, max_time,
-                                           num_classes, *plan,
-                                           {debug_info, "data"});
+        return DriverTensor(popnn::ctc::createDataInput(
+                                graph, dtype, batch_size, max_time, num_classes,
+                                *plan, {debug_info, "data"}),
+                            graph);
       }
       case 1: {
         const int64 max_label_length = ShapeUtil::GetDimension(labels_shape, 1);
-        return popnn::ctc::createLabelsInput(graph, dtype, batch_size,
-                                             max_label_length, *plan,
-                                             {debug_info, "labels"});
+        return DriverTensor(popnn::ctc::createLabelsInput(
+                                graph, dtype, batch_size, max_label_length,
+                                *plan, {debug_info, "labels"}),
+                            graph);
       }
       default: {
         return FailedPrecondition(
@@ -242,7 +244,7 @@ class CTCBeamSearchOpBase : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -271,9 +273,10 @@ class CTCBeamSearchOpBase : public PoplarOpDef {
           "input dtype (%s)",
           dtype.toString(), in_dtype.toString());
     }
-    return popnn::ctc_infer::createDataInput(graph, dtype, batch_size, max_time,
-                                             num_classes, *plan,
-                                             {debug_info, "data"});
+    return DriverTensor(popnn::ctc_infer::createDataInput(
+                            graph, dtype, batch_size, max_time, num_classes,
+                            *plan, {debug_info, "data"}),
+                        graph);
   }
 };
 

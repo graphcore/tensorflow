@@ -43,7 +43,7 @@ class PoplarOpDef {
  public:
   PoplarOpDef() = default;
   // By default the op is not allocating.
-  virtual StatusOr<poplar::Tensor> Allocator(
+  virtual StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {

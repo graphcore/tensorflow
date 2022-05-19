@@ -937,12 +937,12 @@ DeferredArgRBVectors ConvertInputsToDeferredInputs(
   return deferred_inputs;
 }
 
-void ZeroRemoteBuffer(CompilerResources& res, poplar::Graph& graph,
-                      poplar::RemoteBuffer& remote_buffer, int64 offset,
-                      poplar::program::Sequence& sequence,
+void ZeroRemoteBuffer(CompilerResources& res, DriverGraph& graph,
+                      DriverRemoteBuffer& remote_buffer, int64 offset,
+                      DriverProgramSequence& sequence,
                       const poplar::DebugNameAndId& debug_name_and_id) {
-  poplar::Tensor zero = graph.addConstant(remote_buffer.elementType(), {1}, 0,
-                                          {debug_name_and_id, "zero"});
+  auto zero = graph.addConstant(remote_buffer.elementType(), {1}, 0,
+                                {debug_name_and_id, "zero"});
   MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, zero);
 
   // Broadcast up to the number of elements in the remote buffer.
@@ -951,15 +951,14 @@ void ZeroRemoteBuffer(CompilerResources& res, poplar::Graph& graph,
   // Copy the zero into the remote buffer at the right offset.
   CHECK_LT(offset, remote_buffer.getRepeats());
   if (offset == 0) {
-    sequence.add(
-        poplar::program::Copy(zero, remote_buffer, {debug_name_and_id}));
+    sequence.add(DriverProgramCopy(zero, remote_buffer, {debug_name_and_id}));
   } else {
-    poplar::Tensor offset_tensor = graph.addConstant(
-        poplar::UNSIGNED_INT, {1}, offset, {debug_name_and_id, "offset"});
+    auto offset_tensor = graph.addConstant(poplar::UNSIGNED_INT, {1}, offset,
+                                           {debug_name_and_id, "offset"});
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph,
                                      offset_tensor);
-    sequence.add(poplar::program::Copy(zero, remote_buffer, offset_tensor,
-                                       debug_name_and_id));
+    sequence.add(DriverProgramCopy(zero, remote_buffer, offset_tensor,
+                                   debug_name_and_id));
   }
 }
 

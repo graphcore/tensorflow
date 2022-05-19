@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_MAPPING_HELPER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_MAPPING_HELPER_H_
 
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/core/platform/default/integral_types.h"
 
 #include "absl/container/flat_hash_map.h"
@@ -33,28 +34,28 @@ class Tensor;
 namespace xla {
 namespace poplarplugin {
 
-using LinearMapperState = absl::flat_hash_map<poplar::Graph*, uint64>;
+using LinearMapperState = absl::flat_hash_map<DriverGraph*, uint64>;
 // A helper class for mapping tensors to the IPU which takes previous
 // allocations into account.
 class MappingHelper {
  public:
   // Maps the tensor linearly, however the starting tile is dependent on
   // previous allocations.
-  static void MapTensorLinearly(LinearMapperState& state, poplar::Graph& graph,
-                                poplar::Tensor& tensor);
-  static void MapTensorLinearly(LinearMapperState& state, poplar::Graph& graph,
-                                poplar::Tensor& tensor,
+  static void MapTensorLinearly(LinearMapperState& state, DriverGraph& graph,
+                                DriverTensor& tensor);
+  static void MapTensorLinearly(LinearMapperState& state, DriverGraph& graph,
+                                DriverTensor& tensor,
                                 uint32 min_elements_per_tile,
                                 uint32 grain_size);
   // Remaps existing tensor mapping so its starting tile is dependent on
   // previous allocations.
-  static void RemapTensor(LinearMapperState& state, poplar::Graph& graph,
-                          poplar::Tensor& tensor);
+  static void RemapTensor(LinearMapperState& state, DriverGraph& graph,
+                          DriverTensor& tensor);
   // Return the next tile to be mapped to. When allocating the next tensor, the
   // mapping helper starts allocating after the tile returned.
   // Useful for e.g. spreading vertex mapping based on previous allocations.
   static const uint64 YieldNextTile(LinearMapperState& state,
-                                    poplar::Graph& graph);
+                                    DriverGraph& graph);
 };
 
 }  // namespace poplarplugin

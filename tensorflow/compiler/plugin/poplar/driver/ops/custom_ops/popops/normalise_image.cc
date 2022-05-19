@@ -55,7 +55,7 @@ class NormaliseImageOp : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -66,8 +66,10 @@ class NormaliseImageOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(auto type, PoplarDataType(xla_shape));
     auto shape = PoplarShapeFromXlaShape(xla_shape);
 
-    auto out = popops::createNormaliseImageInput(
-        graph, type, shape, {debug_context, "CreateInput"});
+    auto out =
+        DriverTensor(popops::createNormaliseImageInput(
+                         graph, type, shape, {debug_context, "CreateInput"}),
+                     graph);
     return out;
   }
 };

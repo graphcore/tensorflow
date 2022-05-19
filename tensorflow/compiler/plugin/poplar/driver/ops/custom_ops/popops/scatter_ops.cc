@@ -41,7 +41,7 @@ StatusOr<DriverTensor> AddIndicesTensor(
 }
 
 class ScatterOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(
+  StatusOr<DriverTensor> Allocator(
       DriverGraph& graph, CompilerResources& resources, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
@@ -49,7 +49,7 @@ class ScatterOp : public PoplarOpDef {
     const auto* target = tensor_target.tgt;
     const auto input_index = tensor_target.input_index;
     const auto shape = target->operand(input_index)->shape();
-    poplar::Tensor out;
+    DriverTensor out;
 
     switch (input_index) {
       case 0: {

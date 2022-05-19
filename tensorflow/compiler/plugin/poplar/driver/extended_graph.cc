@@ -129,6 +129,12 @@ void ExtendedGraph::setTileMapping(const poplar::Tensor& t, unsigned tileNum) {
   getPoplarGraph().setTileMapping(t, tileNum);
 }
 
+void ExtendedGraph::setTileMapping(
+    const ExtendedTensor& t,
+    const poplar::Graph::TileToTensorMapping& mapping) {
+  getPoplarGraph().setTileMapping(t, mapping);
+}
+
 poplar::Graph::TileToTensorMapping ExtendedGraph::getTileMapping(
     ExtendedTensor t) const {
   return getPoplarGraph().getTileMapping(t);
