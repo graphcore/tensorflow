@@ -36,9 +36,9 @@ class HloCandidateSampler : public HloPoplarInstruction {
         range_max_(range_max),
         dist_(dist) {}
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
@@ -47,7 +47,7 @@ class HloCandidateSampler : public HloPoplarInstruction {
   bool IsPopOpsElementwise() const override;
 
   bool Unique() const { return unique_; }
-  const int64 RangeMax() const { return range_max_; }
+  const int64_t RangeMax() const { return range_max_; }
   const std::string Distribution() const { return dist_; }
 
  protected:

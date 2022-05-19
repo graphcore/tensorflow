@@ -66,7 +66,7 @@ const HloInstruction* GetElementwiseOp(const HloInstruction* inst);
 // Get all the elementwise input expression and tensors.
 StatusOr<ExpressionInputs> GetElementwiseInputs(
     CompilerResources& res, const HloInstruction* inst,
-    const std::vector<int64>& inputs_permutation, TensorMap& tensor_map,
+    const std::vector<int64_t>& inputs_permutation, TensorMap& tensor_map,
     DriverProgramSequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id);
 

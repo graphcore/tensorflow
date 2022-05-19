@@ -70,7 +70,7 @@ HloInstruction* PrepareRHS(HloInstruction* rhs,
                            const DotDimensionNumbers& dot_dims,
                            HloComputation* computation) {
   const auto shape = rhs->shape();
-  std::vector<int64> permutations;
+  std::vector<int64_t> permutations;
   Shape shuffled_shape, packed_shape;
   std::tie(packed_shape, shuffled_shape, permutations) =
       RightMatMulPrepare(shape, dot_dims);
@@ -90,7 +90,7 @@ HloInstruction* PrepareLHS(HloInstruction* lhs,
                            const DotDimensionNumbers& dot_dims,
                            HloComputation* computation) {
   const auto shape = lhs->shape();
-  std::vector<int64> permutations;
+  std::vector<int64_t> permutations;
   Shape shuffled_shape, packed_shape;
   std::tie(packed_shape, shuffled_shape, permutations) =
       LeftMatMulPrepare(shape, dot_dims);
@@ -111,7 +111,7 @@ MatmulCombiner::MatmulCombiner(struct CompilerAnnotations& annotations)
     : HloMatcher(patterns, annotations, false, true) {}
 
 StatusOr<bool> MatmulCombiner::HandleMatch(
-    HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
+    HloMatcherMatched& match, const absl::optional<int64_t> sharding_device) {
   const auto& pattern = match.pattern;
   HloComputation* computation = match.computation;
 
@@ -153,11 +153,11 @@ StatusOr<bool> MatmulCombiner::HandleMatch(
     // Reshape to [Batch, M, Contracting]
     lhs = PrepareLHS(lhs, dot_dims1, computation);
 
-    const int64 output_width1 = rhs1->shape().dimensions(2);
-    const int64 output_width2 = rhs2->shape().dimensions(2);
-    const int64 output_width = output_width1 + output_width2;
-    const int64 output_height = lhs->shape().dimensions(1);
-    const int64 output_batch = lhs->shape().dimensions(0);
+    const int64_t output_width1 = rhs1->shape().dimensions(2);
+    const int64_t output_width2 = rhs2->shape().dimensions(2);
+    const int64_t output_width = output_width1 + output_width2;
+    const int64_t output_height = lhs->shape().dimensions(1);
+    const int64_t output_batch = lhs->shape().dimensions(0);
     slice1_shape =
         ShapeUtil::MakeShape(matmul1->shape().element_type(),
                              {output_batch, output_height, output_width1});
@@ -185,11 +185,11 @@ StatusOr<bool> MatmulCombiner::HandleMatch(
     lhs1 = PrepareLHS(lhs1, dot_dims1, computation);
     lhs2 = PrepareLHS(lhs2, dot_dims2, computation);
 
-    const int64 output_width = rhs->shape().dimensions(2);
-    const int64 output_height1 = lhs1->shape().dimensions(1);
-    const int64 output_height2 = lhs2->shape().dimensions(1);
-    const int64 output_height = output_height1 + output_height2;
-    const int64 output_batch = rhs->shape().dimensions(0);
+    const int64_t output_width = rhs->shape().dimensions(2);
+    const int64_t output_height1 = lhs1->shape().dimensions(1);
+    const int64_t output_height2 = lhs2->shape().dimensions(1);
+    const int64_t output_height = output_height1 + output_height2;
+    const int64_t output_batch = rhs->shape().dimensions(0);
 
     slice1_shape =
         ShapeUtil::MakeShape(matmul1->shape().element_type(),
@@ -208,7 +208,7 @@ StatusOr<bool> MatmulCombiner::HandleMatch(
                              {output_batch, output_height, output_width});
   }
 
-  std::vector<int64> slice2_offset(3);
+  std::vector<int64_t> slice2_offset(3);
   for (int i = 0; i < matmul_shape.rank(); i++) {
     slice2_offset[i] = matmul_shape.dimensions(i) - slice2_shape.dimensions(i);
   }

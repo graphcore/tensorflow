@@ -29,9 +29,9 @@ namespace xla {
 namespace poplarplugin {
 
 namespace {
-Shape GetBufferShape(const Shape& shape, int64 size) {
+Shape GetBufferShape(const Shape& shape, int64_t size) {
   CHECK(!shape.IsTuple());
-  std::vector<int64> dimensions(shape.rank() + 1);
+  std::vector<int64_t> dimensions(shape.rank() + 1);
   dimensions[0] = size;
   absl::c_copy(shape.dimensions(), std::next(dimensions.begin()));
   return ShapeUtil::MakeShape(shape.element_type(), dimensions);
@@ -166,7 +166,7 @@ PipelineBatchSerializationBufferInserter::
 
 Status PipelineBatchSerializationBufferInserter::InsertIntoPipeline(
     HloInstruction* pipeline_op) {
-  const int64 batch_serialization_iterations =
+  const int64_t batch_serialization_iterations =
       GetPipelineBatchSerializationIterations(pipeline_op);
   HloComputation* pipeline_comp = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
@@ -204,7 +204,7 @@ Status PipelineBatchSerializationBufferInserter::InsertIntoPipeline(
 
   // Go through all the pipeline stages in order, and insert buffers for all the
   // outputs used.
-  for (int64 i = 0; i != ordered_stages.GetNumberOfStages(); ++i) {
+  for (int64_t i = 0; i != ordered_stages.GetNumberOfStages(); ++i) {
     HloInstruction* stage = ordered_stages.GetStage(i);
 
     // Go through all the users which are expected to be GTEs.
@@ -250,7 +250,7 @@ Status PipelineBatchSerializationBufferInserter::InsertIntoPipeline(
       for (HloInstruction* user : users) {
         VLOG(3) << "Adding slice operations for buffer in " << user->ToString();
 
-        const int64 user_idx = ordered_stages.GetIndex(user);
+        const int64_t user_idx = ordered_stages.GetIndex(user);
         // Keep track of which instructions need to be lowered into the user
         // stage.
         std::vector<HloInstruction*> lower_to_user_stage;
@@ -262,8 +262,8 @@ Status PipelineBatchSerializationBufferInserter::InsertIntoPipeline(
 
         // Replace the uses of the previous output with the new (reshaped)
         // slice.
-        std::map<int64, HloInstruction*> replacements;
-        absl::c_for_each(user->OperandIndices(gte), [&](int64 operand_idx) {
+        std::map<int64_t, HloInstruction*> replacements;
+        absl::c_for_each(user->OperandIndices(gte), [&](int64_t operand_idx) {
           replacements[operand_idx] = slice;
         });
         TF_ASSIGN_OR_RETURN(user, AddInstructionsToPipelineStage(

@@ -56,8 +56,8 @@ class IsomorphicFunctionsMap {
   struct FunctionCompare {
     bool operator()(const HloInstruction* a, const HloInstruction* b) const {
       if (sort_by_increasing_size) {
-        const int64 a_size = GetByteSizeOfTotalShape(a->shape());
-        const int64 b_size = GetByteSizeOfTotalShape(b->shape());
+        const int64_t a_size = GetByteSizeOfTotalShape(a->shape());
+        const int64_t b_size = GetByteSizeOfTotalShape(b->shape());
 
         if (a_size != b_size) {
           return a_size < b_size;

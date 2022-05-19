@@ -15,6 +15,10 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 
+#include <map>
+#include <set>
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_ipu_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/find_all_users.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -32,19 +36,19 @@ StatusOr<HloInstruction*> InsertInterIpuCopy(
     HloInstruction* inst, const HloSharding& output_sharding) {
   HloComputation* comp = inst->parent();
 
-  std::vector<int64> vec;
+  std::vector<int64_t> vec;
 
   vec = GetShardingDeviceIdVector(output_sharding);
-  std::set<int64> output_devices(vec.begin(), vec.end());
+  std::set<int64_t> output_devices(vec.begin(), vec.end());
 
   vec = GetShardingDeviceIdVector(inst->sharding());
-  std::set<int64> input_devices(vec.begin(), vec.end());
+  std::set<int64_t> input_devices(vec.begin(), vec.end());
 
   if (input_devices.size() > 1 || output_devices.size() > 1) {
     std::vector<HloInstruction*> instructions;
-    int64 tuple_count = ShapeUtil::TupleElementCount(inst->shape());
+    int64_t tuple_count = ShapeUtil::TupleElementCount(inst->shape());
     auto& input_sharding = inst->sharding();
-    for (int64 i = 0; i < tuple_count; i++) {
+    for (int64_t i = 0; i < tuple_count; i++) {
       auto output_sub_sharding =
           output_sharding.GetSubSharding(inst->shape(), ShapeIndex({i}));
       auto input_sub_sharding =
@@ -118,11 +122,11 @@ StatusOr<bool> InterIpuCopyInserter::Run(HloModule* module) {
       const auto& src_sharding = GetShardingOfOutputTensor(inst);
 
       // Construct a map from the sharding of the tensor users' operand inputs
-      // (represented as a vector of int64 values, to all users and operand
+      // (represented as a vector of int64_t values, to all users and operand
       // indices.
-      std::multimap<std::vector<int64>, UserAndParam> dst_sharding_map;
-      std::set<std::vector<int64>> dst_shardings;
-      std::map<std::vector<int64>, HloSharding> sharding_map;
+      std::multimap<std::vector<int64_t>, UserAndParam> dst_sharding_map;
+      std::set<std::vector<int64_t>> dst_shardings;
+      std::map<std::vector<int64_t>, HloSharding> sharding_map;
       for (const auto& user : inst->users()) {
         if (is_ineligible_op(user)) {
           continue;
@@ -147,7 +151,7 @@ StatusOr<bool> InterIpuCopyInserter::Run(HloModule* module) {
           if (user->operand(operand) == inst) {
             const auto& dst_sharding = GetShardingForOperand(user, operand);
 
-            std::vector<int64> sharding_vector =
+            std::vector<int64_t> sharding_vector =
                 GetShardingDeviceIdVector(dst_sharding);
 
             if (src_sharding != dst_sharding) {

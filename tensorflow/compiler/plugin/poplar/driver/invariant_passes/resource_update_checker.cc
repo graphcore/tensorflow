@@ -26,7 +26,7 @@ StatusOr<bool> ResourceUpdateChecker::Run(HloModule* module) {
   for (const HloComputation* comp : module->computations()) {
     for (const HloInstruction* inst : comp->instructions()) {
       if (IsResourceUpdate(inst)) {
-        absl::flat_hash_set<int64> seen_indices;
+        absl::flat_hash_set<int64_t> seen_indices;
         for (const HloInstruction* user : inst->users()) {
           if (user->opcode() != HloOpcode::kGetTupleElement) {
             return InternalError(

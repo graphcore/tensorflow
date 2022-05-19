@@ -147,26 +147,26 @@ HloInstructionMap<HloPoplarBufferIdSet> GenerateProgramLiveness(
 }
 
 namespace {
-int64 MemoryUsageOfBufferSet(
+int64_t MemoryUsageOfBufferSet(
     const HloPoplarBufferIdSet& buffers,
-    const absl::flat_hash_map<HloPoplarBuffer::Id, int64>&
+    const absl::flat_hash_map<HloPoplarBuffer::Id, int64_t>&
         buffer_sizes_in_bytes) {
-  const int64 memory_usage = absl::c_accumulate(
+  const int64_t memory_usage = absl::c_accumulate(
       buffers, 0l,
-      [&buffer_sizes_in_bytes](int64 sum, HloPoplarBuffer::Id buffer_id) {
+      [&buffer_sizes_in_bytes](int64_t sum, HloPoplarBuffer::Id buffer_id) {
         return sum + buffer_sizes_in_bytes.at(buffer_id);
       });
   return memory_usage;
 }
 }  // namespace
 
-int64 EstimateMinimumLiveMemory(
+int64_t EstimateMinimumLiveMemory(
     const HloInstructionMap<HloPoplarBufferIdSet>& program_liveness,
-    const absl::flat_hash_map<HloPoplarBuffer::Id, int64>&
+    const absl::flat_hash_map<HloPoplarBuffer::Id, int64_t>&
         buffer_sizes_in_bytes) {
   // Max buffer usage is the minimum live memory since we don't know what other
   // memory the Poplar ops of our program will use.
-  int64 max_buffer_set_memory_usage = 0;
+  int64_t max_buffer_set_memory_usage = 0;
 
   for (auto& item : program_liveness) {
     auto& live_buffers = item.second;

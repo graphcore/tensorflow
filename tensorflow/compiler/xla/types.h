@@ -30,6 +30,7 @@ using ::tensorflow::int8;
 using ::tensorflow::int16;
 using ::tensorflow::int32;
 using ::tensorflow::int64;
+using ::int64_t;
 
 using ::tensorflow::bfloat16;
 

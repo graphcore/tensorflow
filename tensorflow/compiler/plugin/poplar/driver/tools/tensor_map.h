@@ -127,7 +127,7 @@ struct TensorOrRemoteBuffer {
    * Construct with a poplar remote buffer.
    */
   explicit TensorOrRemoteBuffer(RemoteBufferHolder* rbuffer,
-                                bool is_replica_partitioned, int64 num_merged)
+                                bool is_replica_partitioned, int64_t num_merged)
       : remote_buffer_holder(rbuffer),
         is_replica_partitioned(is_replica_partitioned),
         num_merged(num_merged),
@@ -160,7 +160,7 @@ struct TensorOrRemoteBuffer {
     return IsRemoteBuffer() && is_replica_partitioned;
   }
 
-  int64 NumMerged() const { return num_merged; }
+  int64_t NumMerged() const { return num_merged; }
 
   /**
    * Helper function to test whether an opaque absl::any is stored in the
@@ -285,7 +285,7 @@ struct TensorOrRemoteBuffer {
    * Additional meta-data is stored here
    */
   bool is_replica_partitioned = false;
-  int64 num_merged = 1;
+  int64_t num_merged = 1;
 
   enum class ContentType { Empty, Tensor, RemoteBuffer, Opaque };
 
@@ -335,34 +335,34 @@ class TensorMap {
 
   // Status AddOutputTensor( TensorLocation key, const std::string& tensor_name,
   // DriverTensor tensor);
-  Status AddOutputTensor(const HloInstruction* inst, int64 output_index,
+  Status AddOutputTensor(const HloInstruction* inst, int64_t output_index,
                          DriverTensor tensor);
-  Status AddOutputOpaque(const HloInstruction* inst, int64 output_index,
+  Status AddOutputOpaque(const HloInstruction* inst, int64_t output_index,
                          absl::any opaque);
-  Status AddOutput(const HloInstruction* inst, int64 output_index,
+  Status AddOutput(const HloInstruction* inst, int64_t output_index,
                    TensorOrRemoteBuffer torb);
 
   Status UpdateTensor(TensorLocation key, DriverTensor tensor);
   DriverTensor GetTensor(TensorLocation key) const;
   DriverTensor FindTensorByName(const std::string& name,
-                                int64 output_index) const;
+                                int64_t output_index) const;
   void Clear();
   /* This returns a vector of poplar tensors or remote buffers which are all of
    * the outputs from the given instruction
    */
   TensorOrRemoteBufferVector FindInstructionOutputs(
       const HloInstruction* inst,
-      absl::optional<int64> opt_tensors_start = absl::nullopt,
-      absl::optional<int64> opt_tensors_end = absl::nullopt) const;
+      absl::optional<int64_t> opt_tensors_start = absl::nullopt,
+      absl::optional<int64_t> opt_tensors_end = absl::nullopt) const;
   StatusOr<TensorVector> FindInstructionOutputTensors(
       const HloInstruction* inst,
-      absl::optional<int64> opt_tensors_start = absl::nullopt,
-      absl::optional<int64> opt_tensors_end = absl::nullopt) const;
+      absl::optional<int64_t> opt_tensors_start = absl::nullopt,
+      absl::optional<int64_t> opt_tensors_end = absl::nullopt) const;
   using NamedTensorLocationVector = std::vector<NamedTensorLocation>;
   NamedTensorLocationVector FindInstructionNamedTensorLocations(
       const HloInstruction* inst,
-      absl::optional<int64> opt_tensors_start = absl::nullopt,
-      absl::optional<int64> opt_tensors_end = absl::nullopt) const;
+      absl::optional<int64_t> opt_tensors_start = absl::nullopt,
+      absl::optional<int64_t> opt_tensors_end = absl::nullopt) const;
 
  private:
   std::map<TensorLocation, NamedTensor> _map;

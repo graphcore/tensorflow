@@ -467,7 +467,7 @@ ENTRY main {
 
   const PoplarOp slice_op = param.acc_scale == 1.f ? PoplarOp::SliceApplyabY
                                                    : PoplarOp::SliceApplyaXbY;
-  const int64 grad_scale_index = param.acc_scale == 1.f ? 2 : 3;
+  const int64_t grad_scale_index = param.acc_scale == 1.f ? 2 : 3;
   HloInstruction* next = accumulator_add->fused_expression_root();
   {
     EXPECT_TRUE(IsPoplarInstruction(slice_op)(next));
@@ -807,7 +807,7 @@ ENTRY main {
 
   const PoplarOp slice_op = param.acc_scale == 1.f ? PoplarOp::SliceApplyabY
                                                    : PoplarOp::SliceApplyaXbY;
-  const int64 grad_scale_index = param.acc_scale == 1.f ? 2 : 3;
+  const int64_t grad_scale_index = param.acc_scale == 1.f ? 2 : 3;
 
   HloInstruction* next = accumulator_add->fused_expression_root();
   {
@@ -1004,12 +1004,12 @@ ENTRY main {
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ScaledInplaceaXbY)(scaled_add_0));
   }
 
-  int64 scaled_add_1_p1_idx = 3;
-  int64 scaled_add_1_p2_idx = 4;
+  int64_t scaled_add_1_p1_idx = 3;
+  int64_t scaled_add_1_p2_idx = 4;
 
-  int64 scaled_add_0_p0_idx = 0;
-  int64 scaled_add_0_p1_idx = 1;
-  int64 scaled_add_0_p2_idx = 2;
+  int64_t scaled_add_0_p0_idx = 0;
+  int64_t scaled_add_0_p1_idx = 1;
+  int64_t scaled_add_0_p2_idx = 2;
 
   if (param.acc_scale != 1.0f) {
     // Additional accumulator scale paramter at position 1.

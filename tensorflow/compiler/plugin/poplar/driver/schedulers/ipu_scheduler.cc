@@ -50,7 +50,7 @@ StatusOr<HloSchedule> IpuScheduleModule(
                       HloPoplarDataflowAnalysis::Run(module, annotations));
   TF_ASSIGN_OR_RETURN(std::unique_ptr<HloAliasAnalysis> alias_analysis,
                       HloAliasAnalysis::Run(module));
-  absl::flat_hash_map<const HloComputation*, int64> memory_by_computation;
+  absl::flat_hash_map<const HloComputation*, int64_t> memory_by_computation;
   for (auto* computation : module->MakeComputationPostOrder()) {
     if (!computation->IsFusionComputation()) {
       TF_ASSIGN_OR_RETURN(
@@ -100,11 +100,11 @@ class AliasAnalysisCache {
 }  // namespace
 
 MemoryEstimator HeapMemoryEstimator() {
-  using HeapSimulatorOverload = StatusOr<int64> (*)(
+  using HeapSimulatorOverload = StatusOr<int64_t> (*)(
       const HloComputation& computation, const HloInstructionSequence& sequence,
       const HloAliasAnalysis& alias_analysis,
       const LogicalBuffer::SizeFunction& size_function,
-      const absl::flat_hash_map<const HloComputation*, int64>*);
+      const absl::flat_hash_map<const HloComputation*, int64_t>*);
 
   return static_cast<HeapSimulatorOverload>(
       HeapSimulator::MinimumMemoryForComputation);
@@ -125,13 +125,13 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
        size_function = size_function, memory_estimator = memory_estimator](
           HloComputation* computation,
           const HloPoplarDataflowAnalysis& dataflow_analysis,
-          const absl::flat_hash_map<const HloComputation*, int64>&
+          const absl::flat_hash_map<const HloComputation*, int64_t>&
               memory_by_computation) -> StatusOr<HloInstructionSequence> {
         const HloAliasAnalysis& alias_analysis =
             alias_analysis_cache->FindOrRun(computation->parent());
 
         struct ScheduleResult {
-          int64 schedule_memory;
+          int64_t schedule_memory;
           std::string algorithm_name;
           HloInstructionSequence schedule;
         };
@@ -152,7 +152,7 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
 
           // TODO(T9494): Replace the heap simulator.
           TF_ASSIGN_OR_RETURN(
-              const int64 schedule_memory,
+              const int64_t schedule_memory,
               memory_estimator(*computation, schedule, alias_analysis,
                                size_function, &memory_by_computation));
 

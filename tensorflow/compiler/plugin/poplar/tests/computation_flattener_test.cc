@@ -27,7 +27,7 @@ using pipeline_config = PoplarBackendConfig::CallConfig::PipelineConfig;
 
 struct ComputationFlattenerTestSpec {
   pipeline_config::RecomputationMode recomputation_mode;
-  int64 expected_funcs;
+  int64_t expected_funcs;
 };
 
 std::ostream& operator<<(std::ostream& os,
@@ -112,8 +112,8 @@ ENTRY e {
       hlo_format, pipeline_config::RecomputationMode_Name(recomputation_mode));
 }
 
-int64 CountFunctions(const HloModule* module) {
-  int64 count = 0;
+int64_t CountFunctions(const HloModule* module) {
+  int64_t count = 0;
   for (auto comp : module->computations()) {
     count += absl::c_count_if(comp->instructions(), IsFunction);
   }

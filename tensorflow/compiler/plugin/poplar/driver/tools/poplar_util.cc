@@ -50,12 +50,12 @@ namespace poplarplugin {
 
 std::string GetRandomNumberSeedStream() { return "__seed_stream"; }
 
-std::string GetInfeedCopyHandle(const std::string& name, int64 shape_index) {
+std::string GetInfeedCopyHandle(const std::string& name, int64_t shape_index) {
   return tensorflow::strings::Printf("infeed_%s.%lld", name.c_str(),
                                      shape_index);
 }
 
-std::string GetOutfeedCopyHandle(const std::string& name, int64 shape_index) {
+std::string GetOutfeedCopyHandle(const std::string& name, int64_t shape_index) {
   return tensorflow::strings::Printf("outfeed_%s.%lld", name.c_str(),
                                      shape_index);
 }
@@ -149,8 +149,8 @@ absl::optional<std::string> GetPoplarEngineOption(const std::string& opt) {
   return attributes[opt].asString();
 }
 
-int64 GetShardForOutputIndex(const HloInstruction* inst,
-                             int flattened_output_tuple_index) {
+int64_t GetShardForOutputIndex(const HloInstruction* inst,
+                               int flattened_output_tuple_index) {
   if (inst->has_sharding()) {
     const auto& sharding = GetShardingDeviceIdVector(inst->sharding());
 
@@ -520,19 +520,19 @@ void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t,
 }
 
 const RemoteParameterInfo* FindRemoteParameterInfo(
-    int64 parameter_number,
+    int64_t parameter_number,
     const RemoteParameterInfos& remote_parameter_infos) {
   auto itr = remote_parameter_infos.find(RemoteParameterInfo{parameter_number});
   return itr != remote_parameter_infos.end() ? &*itr : nullptr;
 }
 
-bool IsRemoteParameter(int64 parameter_number,
+bool IsRemoteParameter(int64_t parameter_number,
                        const RemoteParameterInfos& remote_parameter_infos) {
   return FindRemoteParameterInfo(parameter_number, remote_parameter_infos) !=
          nullptr;
 }
 
-bool IsRemoteParameter(int64 parameter_number, const CompilerResources& res) {
+bool IsRemoteParameter(int64_t parameter_number, const CompilerResources& res) {
   return IsRemoteParameter(parameter_number,
                            res.annotations.remote_parameter_infos);
 }
@@ -544,7 +544,7 @@ bool IsRemoteParameter(const HloInstruction* inst,
          IsRemoteParameter(inst->parameter_number(), res);
 }
 
-bool IsReplicaPartitioned(int64 parameter_number,
+bool IsReplicaPartitioned(int64_t parameter_number,
                           const RemoteParameterInfos& remote_parameter_infos) {
   auto itr = remote_parameter_infos.find(RemoteParameterInfo{parameter_number});
 
@@ -556,7 +556,7 @@ bool IsReplicaPartitioned(int64 parameter_number,
   return itr->is_replica_partitioned;
 }
 
-bool IsReplicaPartitioned(int64 parameter_number,
+bool IsReplicaPartitioned(int64_t parameter_number,
                           const CompilerResources& res) {
   return IsReplicaPartitioned(parameter_number,
                               res.annotations.remote_parameter_infos);
@@ -571,8 +571,8 @@ bool IsReplicaPartitioned(const HloInstruction* inst,
 
 StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteBuffer(
     DriverGraph& graph, CompilerResources& res, std::string remote_buffer_name,
-    poplar::Type element_type, int64 element_count, int64 num_repeats,
-    int64 num_merged, bool is_replica_partitioned) {
+    poplar::Type element_type, int64_t element_count, int64_t num_repeats,
+    int64_t num_merged, bool is_replica_partitioned) {
   auto found_buffer = res.remote_buffers.find(remote_buffer_name);
   if (found_buffer != res.remote_buffers.end()) {
     // Return the existing remote buffer.
@@ -586,7 +586,7 @@ StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteBuffer(
         element_count, res.partition_replication_factor);
   }
 
-  const int64 total_num_repeats = num_merged * num_repeats;
+  const int64_t total_num_repeats = num_merged * num_repeats;
 
   // Save the buffer such that the others that we have merged with can find it.
   auto remote_buffer = res.remote_buffers
@@ -655,7 +655,7 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const poplar::OptionFlags& engine_opts, const poplar::Target& target) {
   try {
     ipu::MetadataBuilder builder;
-    std::map<int64, InputOutputAliasingMap::InputInfo> params_handle_map;
+    std::map<int64_t, InputOutputAliasingMap::InputInfo> params_handle_map;
     for (auto input : io_map.GetEntryInputInfos()) {
       VLOG(1) << "Processing input " << input.Name();
       if (input.Shape().IsTuple()) {
@@ -938,7 +938,7 @@ DeferredArgRBVectors ConvertInputsToDeferredInputs(
 }
 
 void ZeroRemoteBuffer(CompilerResources& res, poplar::Graph& graph,
-                      poplar::RemoteBuffer& remote_buffer, int64 offset,
+                      poplar::RemoteBuffer& remote_buffer, int64_t offset,
                       poplar::program::Sequence& sequence,
                       const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::Tensor zero = graph.addConstant(remote_buffer.elementType(), {1}, 0,
@@ -991,15 +991,15 @@ void ZeroTensors(CompilerResources& res, poplar::Graph& graph,
 }
 
 void SetRuntimeReplicaOptions(poplar::OptionFlags* option_flags,
-                              int64 process_index, int64 process_count,
-                              int64 global_replication_factor) {
+                              int64_t process_index, int64_t process_count,
+                              int64_t global_replication_factor) {
   CHECK_GT(process_count, 0);
   CHECK_GE(process_index, 0);
   CHECK_LT(process_index, process_count);
   CHECK_EQ(global_replication_factor % process_count, 0);
 
-  const int64 num_runtime_replica = global_replication_factor / process_count;
-  const int64 first_runtime_replica = process_index * num_runtime_replica;
+  const int64_t num_runtime_replica = global_replication_factor / process_count;
+  const int64_t first_runtime_replica = process_index * num_runtime_replica;
 
   option_flags->set("target.firstRuntimeReplica",
                     std::to_string(first_runtime_replica));
@@ -1011,7 +1011,7 @@ bool HasIOTiles(CompilerResources& res) {
   return res.io_graph || !res.shard_io_graphs.empty();
 }
 
-int64 GetNumIPUs(CompilerResources& res) {
+int64_t GetNumIPUs(CompilerResources& res) {
   auto& master_graph = GetMasterGraph(res);
   const auto ipu_count = master_graph.getTarget().getNumIPUs();
   return ipu_count;

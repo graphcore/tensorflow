@@ -60,7 +60,7 @@ bool IsGradientAccumulatorCreate(const HloInstruction* inst) {
 }
 
 void RemoveComputationParameter(Replacements& replacements,
-                                HloComputation* comp, int64 param_no) {
+                                HloComputation* comp, int64_t param_no) {
   const auto& params = comp->parameter_instructions();
   CHECK_LT(param_no, params.size())
       << "Invalid parameter number for RemoveComputationParameter";
@@ -75,7 +75,8 @@ void RemoveComputationParameter(Replacements& replacements,
 }
 
 std::unique_ptr<HloInstruction> SpliceOperandsImpl(
-    HloInstruction* inst, const Shape& shape, const std::set<int64>& remove_ops,
+    HloInstruction* inst, const Shape& shape,
+    const std::set<int64_t>& remove_ops,
     const std::initializer_list<HloInstruction*>& new_operands) {
   auto operands = inst->operands();
 
@@ -104,7 +105,7 @@ std::unique_ptr<HloInstruction> SpliceOperands(
     HloInstruction* inst, const Shape& shape,
     const std::initializer_list<HloInstruction*>& old_operands,
     const std::initializer_list<HloInstruction*>& new_operands) {
-  std::set<int64> remove_ops;
+  std::set<int64_t> remove_ops;
   for (auto old_operand : old_operands) {
     remove_ops.insert(inst->operand_index(old_operand));
   }
@@ -114,15 +115,15 @@ std::unique_ptr<HloInstruction> SpliceOperands(
 std::unique_ptr<HloInstruction> SpliceOperands(
     HloInstruction* inst, const Shape& shape,
     const std::initializer_list<HloInstruction*>& new_operands) {
-  return SpliceOperandsImpl(inst, shape, std::set<int64>(), new_operands);
+  return SpliceOperandsImpl(inst, shape, std::set<int64_t>(), new_operands);
 }
 
 std::unique_ptr<HloInstruction> SpliceOperands(
     HloInstruction* inst, const Shape& shape,
-    // Using int64 because it is operand_index(...) return type.
-    const std::initializer_list<int64>& old_operands,
+    // Using int64_t because it is operand_index(...) return type.
+    const std::initializer_list<int64_t>& old_operands,
     const std::initializer_list<HloInstruction*>& new_operands) {
-  std::set<int64> remove_ops;
+  std::set<int64_t> remove_ops;
   for (auto op : old_operands) {
     remove_ops.insert(op);
   }
@@ -148,7 +149,7 @@ void RemoveInstruction(Replacements& replacements, HloInstruction* inst) {
   replacements.emplace(inst, nullptr);
 }
 
-std::unique_ptr<HloInstruction> CreateComputationParameter(int64 param_no,
+std::unique_ptr<HloInstruction> CreateComputationParameter(int64_t param_no,
                                                            const Shape& shape) {
   const std::string param_name = absl::StrCat("arg_", param_no);
   VLOG(2) << "Creating parameter " << param_name;
@@ -156,7 +157,7 @@ std::unique_ptr<HloInstruction> CreateComputationParameter(int64 param_no,
 }
 
 void AdjustGTEIndices(Replacements& replacements, HloInstruction* call,
-                      int64 removed_index) {
+                      int64_t removed_index) {
   // If we remove element from output tuple, we have to adjust indices for GTEs.
   // For instance, for tuple of four elements returned, we have the following
   // instructions:
@@ -185,22 +186,22 @@ void AdjustGTEIndices(Replacements& replacements, HloInstruction* call,
 }
 
 struct OptimisationPlan {
-  int64 row_num;
-  int64 mini_batches_num;
-  int64 mini_batch_size;
-  int64 row_size;
+  int64_t row_num;
+  int64_t mini_batches_num;
+  int64_t mini_batch_size;
+  int64_t row_size;
   Shape accum_grads_shape;
   Shape accum_indices_shape;
 
   static absl::optional<OptimisationPlan> Build(
       HloInstruction* grad_create, HloInstruction* grad_add,
       HloInstruction* grad_sink_inst,
-      const absl::optional<int64> mini_batches_num_opt) {
+      const absl::optional<int64_t> mini_batches_num_opt) {
     if (!mini_batches_num_opt) {
       VLOG(2) << "Unknown number of mini batches";
       return absl::nullopt;
     }
-    int64 mini_batches_num = *mini_batches_num_opt;
+    int64_t mini_batches_num = *mini_batches_num_opt;
     auto grad_sink = Cast<HloGradientAccumulatorSink>(grad_sink_inst);
     auto multi_update_add =
         Cast<HloMultiUpdateInstruction>(grad_add->mutable_operand(1));
@@ -247,7 +248,8 @@ struct OptimisationPlan {
 
 HloComputation* ReplaceResourceUpdateFunction(
     HloModule* module, const OptimisationPlan& plan,
-    HloInstruction* resource_update, int64 resource_update_grad_sink_arg_index,
+    HloInstruction* resource_update,
+    int64_t resource_update_grad_sink_arg_index,
     HloMultiUpdateInstruction* multi_update_add) {
   auto resource_update_comp = resource_update->to_apply();
   auto old_sink_arg = resource_update_comp->parameter_instruction(

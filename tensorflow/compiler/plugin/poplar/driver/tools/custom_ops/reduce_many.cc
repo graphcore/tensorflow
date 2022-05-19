@@ -33,14 +33,15 @@ HloReduceManyInstruction::HloReduceManyInstruction(
     : HloPoplarInstruction(output_shape, inputs, PoplarOp::ReduceMany),
       reductions_info_(reductions_info) {}
 
-absl::flat_hash_set<int64> HloReduceManyInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloReduceManyInstruction::AllocatingIndices()
+    const {
   return {};
 }
 
 bool HloReduceManyInstruction::AllocatingOutput() const { return true; }
 
-absl::flat_hash_map<int64, int64> HloReduceManyInstruction::LayoutDependencies()
-    const {
+absl::flat_hash_map<int64_t, int64_t>
+HloReduceManyInstruction::LayoutDependencies() const {
   return {};
 }
 

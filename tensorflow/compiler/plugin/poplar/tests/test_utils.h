@@ -18,11 +18,12 @@ limitations under the License.
 
 #include <gtest/gtest.h>
 
+#include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
-
 #include "tensorflow/compiler/xla/array3d.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -43,7 +44,7 @@ struct HloTestFixture : HloTestBase {
   using HloTestBase::HloTestBase;
 
   ::testing::AssertionResult SetUpHloModule(const std::string& hlo,
-                                            int64 replica_count = 1) {
+                                            int64_t replica_count = 1) {
     auto config = GetModuleConfigForTest();
     config.set_replica_count(replica_count);
     auto module = ParseAndReturnVerifiedModule(hlo, config);
@@ -75,11 +76,11 @@ struct HloTestCase {
   HloTestCase(const std::string& name, const std::string& hlo)
       : name(name), hlo(hlo), replica_count(1) {}
   HloTestCase(const std::string& name, const std::string& hlo,
-              int64 replica_count)
+              int64_t replica_count)
       : name(name), hlo(hlo), replica_count(replica_count) {}
   std::string name;
   std::string hlo;
-  int64 replica_count;
+  int64_t replica_count;
 };
 
 std::ostream& operator<<(std::ostream& stream, const HloTestCase& test_case) {
@@ -127,7 +128,7 @@ struct TemporaryDirManager {
     TF_CHECK_OK(tensorflow::Env::Default()->CreateDir(dir_name_));
   }
   ~TemporaryDirManager() {
-    tensorflow::int64 undeleted_dirs, undeleted_files;
+    std::int64_t undeleted_dirs, undeleted_files;
     TF_CHECK_OK(tensorflow::Env::Default()->DeleteRecursively(
         dir_name_, &undeleted_dirs, &undeleted_files));
   }
@@ -138,7 +139,7 @@ struct TemporaryDirManager {
 };
 
 template <typename Instruction>
-int64 GetNumInstructions(const HloComputation* comp) {
+int64_t GetNumInstructions(const HloComputation* comp) {
   return absl::c_count_if(comp->instructions(), [](const HloInstruction* inst) {
     return DynCast<Instruction>(inst);
   });
@@ -147,24 +148,25 @@ int64 GetNumInstructions(const HloComputation* comp) {
 namespace reference_util {
 // Implementations of 3D functions which are missing from the reference util.
 std::vector<float> Reduce3DTo1D(
-    const Array3D<float>& array, float init, absl::Span<const int64> dims,
+    const Array3D<float>& array, float init, absl::Span<const int64_t> dims,
     const std::function<float(float, float)>& reduce_function) {
   std::vector<float> result;
   CHECK_EQ(dims.size(), 2);
-  const std::set<int64> dim_set(dims.begin(), dims.end());
+  const std::set<int64_t> dim_set(dims.begin(), dims.end());
   CHECK_EQ(dim_set.size(), 2);
-  for (int64 a0 = 0; a0 == 0 || (!dim_set.count(0) && a0 < array.n1()); ++a0) {
-    for (int64 a1 = 0; a1 == 0 || (!dim_set.count(1) && a1 < array.n2());
+  for (int64_t a0 = 0; a0 == 0 || (!dim_set.count(0) && a0 < array.n1());
+       ++a0) {
+    for (int64_t a1 = 0; a1 == 0 || (!dim_set.count(1) && a1 < array.n2());
          ++a1) {
-      for (int64 a2 = 0; a2 == 0 || (!dim_set.count(2) && a2 < array.n3());
+      for (int64_t a2 = 0; a2 == 0 || (!dim_set.count(2) && a2 < array.n3());
            ++a2) {
         float accumulator = init;
-        for (int64 i0 = 0; i0 == 0 || (dim_set.count(0) && i0 < array.n1());
+        for (int64_t i0 = 0; i0 == 0 || (dim_set.count(0) && i0 < array.n1());
              ++i0) {
-          for (int64 i1 = 0; i1 == 0 || (dim_set.count(1) && i1 < array.n2());
+          for (int64_t i1 = 0; i1 == 0 || (dim_set.count(1) && i1 < array.n2());
                ++i1) {
-            for (int64 i2 = 0; i2 == 0 || (dim_set.count(2) && i2 < array.n3());
-                 ++i2) {
+            for (int64_t i2 = 0;
+                 i2 == 0 || (dim_set.count(2) && i2 < array.n3()); ++i2) {
               // Handle zero-sized arrays.
               if (array.n1() > 0 && array.n2() > 0 && array.n3() > 0) {
                 accumulator = reduce_function(accumulator,
@@ -181,13 +183,13 @@ std::vector<float> Reduce3DTo1D(
 }
 
 std::unique_ptr<Array3D<float>> Broadcast1DTo3D(
-    const std::vector<float>& array, const std::vector<int64>& bounds,
-    int64 broadcast_from_dim) {
+    const std::vector<float>& array, const std::vector<int64_t>& bounds,
+    int64_t broadcast_from_dim) {
   auto result =
       absl::make_unique<Array3D<float>>(bounds[0], bounds[1], bounds[2]);
-  for (int64 i = 0; i < result->n1(); ++i) {
-    for (int64 j = 0; j < result->n2(); ++j) {
-      for (int64 k = 0; k < result->n3(); ++k) {
+  for (int64_t i = 0; i < result->n1(); ++i) {
+    for (int64_t j = 0; j < result->n2(); ++j) {
+      for (int64_t k = 0; k < result->n3(); ++k) {
         switch (broadcast_from_dim) {
           case 0:
             (*result)(i, j, k) = array[i];
@@ -216,9 +218,9 @@ static std::unique_ptr<Array3D<float>> MapWithIndexArray3D(
     const Array3D<float>& input, F&& map_function) {
   auto result =
       absl::make_unique<Array3D<float>>(input.n1(), input.n2(), input.n3());
-  for (int64 n1 = 0; n1 < input.n1(); ++n1) {
-    for (int64 n2 = 0; n2 < input.n2(); ++n2) {
-      for (int64 n3 = 0; n3 < input.n3(); ++n3) {
+  for (int64_t n1 = 0; n1 < input.n1(); ++n1) {
+    for (int64_t n2 = 0; n2 < input.n2(); ++n2) {
+      for (int64_t n3 = 0; n3 < input.n3(); ++n3) {
         (*result)(n1, n2, n3) = map_function(input(n1, n2, n3), n1, n2, n3);
       }
     }
@@ -231,9 +233,10 @@ static std::unique_ptr<Array3D<float>> MapWithIndexArray3D(
 template <typename F>
 static std::unique_ptr<Array3D<float>> MapArray3D(const Array3D<float>& input,
                                                   F&& map_function) {
-  return MapWithIndexArray3D(input, [&](float value, int64, int64, int64) {
-    return map_function(value);
-  });
+  return MapWithIndexArray3D(input,
+                             [&](float value, int64_t, int64_t, int64_t) {
+                               return map_function(value);
+                             });
 }
 
 // Applies map_function to each pair of element in lhs and rhs (3D array) and
@@ -244,9 +247,9 @@ template <typename F>
 static std::unique_ptr<Array3D<float>> MapWithIndexArray3D(
     const Array3D<float>& lhs, const Array3D<float>& rhs, F&& map_function) {
   auto result = absl::make_unique<Array3D<float>>(lhs.n1(), lhs.n2(), lhs.n3());
-  for (int64 n1 = 0; n1 < lhs.n1(); ++n1) {
-    for (int64 n2 = 0; n2 < lhs.n2(); ++n2) {
-      for (int64 n3 = 0; n3 < lhs.n3(); ++n3) {
+  for (int64_t n1 = 0; n1 < lhs.n1(); ++n1) {
+    for (int64_t n2 = 0; n2 < lhs.n2(); ++n2) {
+      for (int64_t n3 = 0; n3 < lhs.n3(); ++n3) {
         (*result)(n1, n2, n3) =
             map_function(lhs(n1, n2, n3), rhs(n1, n2, n3), n1, n2, n3);
       }
@@ -261,10 +264,10 @@ template <typename F>
 static std::unique_ptr<Array3D<float>> MapArray3D(const Array3D<float>& lhs,
                                                   const Array3D<float>& rhs,
                                                   F&& map_function) {
-  return MapWithIndexArray3D(lhs, rhs,
-                             [&](float lhs, float rhs, int64, int64, int64) {
-                               return map_function(lhs, rhs);
-                             });
+  return MapWithIndexArray3D(
+      lhs, rhs, [&](float lhs, float rhs, int64_t, int64_t, int64_t) {
+        return map_function(lhs, rhs);
+      });
 }
 
 static std::unique_ptr<Array3D<float>> BatchNorm3D(const Array3D<float>& input,

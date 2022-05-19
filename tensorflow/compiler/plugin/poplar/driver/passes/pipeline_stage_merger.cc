@@ -92,8 +92,8 @@ StatusOr<bool> MergeLastForwardAndBackwardStage(
   // Note that the communication optimizer might remove these links.
   {
     std::vector<HloInstruction*> stage_inputs;
-    std::vector<int64> indices;
-    for (int64 op_idx = 0; op_idx != last_bwd_stage->operand_count();
+    std::vector<int64_t> indices;
+    for (int64_t op_idx = 0; op_idx != last_bwd_stage->operand_count();
          ++op_idx) {
       HloInstruction* operand = last_bwd_stage->mutable_operand(op_idx);
       if (operand->opcode() == HloOpcode::kGetTupleElement) {
@@ -106,7 +106,7 @@ StatusOr<bool> MergeLastForwardAndBackwardStage(
     HloComputation::Builder builder(
         absl::StrCat("pipeline_stage_", stages.forward.size() - 1));
     std::vector<HloInstruction*> comp_parameters(stage_inputs.size());
-    for (int64 param_idx = 0; param_idx != stage_inputs.size(); ++param_idx) {
+    for (int64_t param_idx = 0; param_idx != stage_inputs.size(); ++param_idx) {
       comp_parameters[param_idx] =
           builder.AddInstruction(HloInstruction::CreateParameter(
               param_idx, stage_inputs[param_idx]->shape(),
@@ -117,7 +117,7 @@ StatusOr<bool> MergeLastForwardAndBackwardStage(
     fwd_comp = module->AddEmbeddedComputation(builder.Build());
 
     // Create the pipeline stage.
-    const int64 stage_id = stages.forward.size() - 1;
+    const int64_t stage_id = stages.forward.size() - 1;
     TF_ASSIGN_OR_RETURN(
         last_fwd_stage,
         CreatePipelineStage(pipeline_comp, stage_inputs, fwd_comp,
@@ -126,7 +126,7 @@ StatusOr<bool> MergeLastForwardAndBackwardStage(
     last_fwd_stage->set_sharding(last_fwd_stage_sharding);
 
     // Rewire the outputs so that the backward stage uses the forward stage.
-    for (int64 output_idx = 0; output_idx != indices.size(); ++output_idx) {
+    for (int64_t output_idx = 0; output_idx != indices.size(); ++output_idx) {
       TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                           MakeGetTupleElementHlo(last_fwd_stage, output_idx));
       TF_RETURN_IF_ERROR(

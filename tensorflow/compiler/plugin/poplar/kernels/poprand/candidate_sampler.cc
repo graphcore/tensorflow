@@ -30,8 +30,8 @@ class CandidateSamplerOp : public XlaOpKernel, public IpuOpKernel {
  public:
   explicit CandidateSamplerOp(OpKernelConstruction* ctx, std::string dist)
       : XlaOpKernel(ctx), IpuOpKernel() {
-    int64 seed1;
-    int64 seed2;
+    int64_t seed1;
+    int64_t seed2;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("num_true", &num_true_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("num_sampled", &num_sampled_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("unique", &unique_));
@@ -77,7 +77,7 @@ class CandidateSamplerOp : public XlaOpKernel, public IpuOpKernel {
     // Define output shapes
     const xla::Shape sampled_candidates_shape =
         xla::ShapeUtil::MakeShape(xla::S64, {num_sampled_});
-    // we take in an int64 input but we want an f32 output
+    // we take in an int64_t input but we want an f32 output
     true_classes_xla_shape.set_element_type(xla::F32);
     const xla::Shape sampled_expected_count_shape =
         xla::ShapeUtil::MakeShape(xla::F32, {num_sampled_});
@@ -126,11 +126,11 @@ class CandidateSamplerOp : public XlaOpKernel, public IpuOpKernel {
   // 2. copy assignment (operator=) with another instance of this op
   TF_DISALLOW_COPY_AND_ASSIGN(CandidateSamplerOp);
 
-  int64 num_true_;
-  int64 num_sampled_;
+  int64_t num_true_;
+  int64_t num_sampled_;
   bool unique_;
-  int64 range_max_;
-  int64 seed_;
+  int64_t range_max_;
+  int64_t seed_;
   std::string distribution_;
 };
 

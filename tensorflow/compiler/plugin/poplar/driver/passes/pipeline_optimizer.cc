@@ -78,8 +78,8 @@ StatusOr<bool> MoveParameterInputsToBackwardStages(
     HloInstruction* bwd_stage = stages.backward[stage_id];
     // Go through the inputs to the fwd stage and identify operand indices
     // which are parameters.
-    absl::flat_hash_set<int64> parameter_input_indices;
-    for (int64 op_idx = 0; op_idx != fwd_stage->operand_count(); ++op_idx) {
+    absl::flat_hash_set<int64_t> parameter_input_indices;
+    for (int64_t op_idx = 0; op_idx != fwd_stage->operand_count(); ++op_idx) {
       if (fwd_stage->operand(op_idx)->opcode() == HloOpcode::kParameter) {
         parameter_input_indices.insert(op_idx);
       }
@@ -88,7 +88,7 @@ StatusOr<bool> MoveParameterInputsToBackwardStages(
       continue;
     }
     // Map all the output GTEs from their tuple_index to the instruction.
-    absl::flat_hash_map<int64, HloInstruction*> gtes;
+    absl::flat_hash_map<int64_t, HloInstruction*> gtes;
     for (HloInstruction* user : fwd_stage->users()) {
       gtes[user->tuple_index()] = user;
     }
@@ -98,17 +98,17 @@ StatusOr<bool> MoveParameterInputsToBackwardStages(
     HloComputation* fwd_stage_comp = fwd_stage->to_apply();
     HloInstruction* fwd_stage_root = fwd_stage_comp->root_instruction();
     CHECK_EQ(fwd_stage_root->opcode(), HloOpcode::kTuple);
-    for (int64 param_idx : parameter_input_indices) {
+    for (int64_t param_idx : parameter_input_indices) {
       HloInstruction* parameter =
           fwd_stage_comp->parameter_instruction(param_idx);
       // Given the parameter, go through all the uses in the root.
-      for (int64 output_idx : fwd_stage_root->OperandIndices(parameter)) {
+      for (int64_t output_idx : fwd_stage_root->OperandIndices(parameter)) {
         if (!gtes.contains(output_idx)) {
           continue;
         }
         // Get all the indices the bwd stages uses this GTE.
         auto uses = bwd_stage->OperandIndices(gtes[output_idx]);
-        for (int64 use_idx : uses) {
+        for (int64_t use_idx : uses) {
           TF_RETURN_IF_ERROR(bwd_stage->ReplaceOperandWith(
               use_idx, fwd_stage->mutable_operand(param_idx)));
           changed = true;

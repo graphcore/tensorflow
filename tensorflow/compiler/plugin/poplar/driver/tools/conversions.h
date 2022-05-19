@@ -32,8 +32,10 @@ namespace poplarplugin {
 // NOTE: for these convertors, either the source size or the dest size will be
 //       non-zero.  The convertor needs to work out the number of items to
 //       transfer by considering both.
-std::vector<char> ConvInt64ToInt32(const void* src, int64 ssize, int64 dsize);
-std::vector<char> ConvInt32ToInt64(const void* src, int64 ssize, int64 dsize);
+std::vector<char> ConvInt64ToInt32(const void* src, int64_t ssize,
+                                   int64_t dsize);
+std::vector<char> ConvInt32ToInt64(const void* src, int64_t ssize,
+                                   int64_t dsize);
 
 ConversionFn GetInputConversionFunction(const xla::Shape&);
 ConversionFn GetOutputConversionFunction(const xla::Shape&);

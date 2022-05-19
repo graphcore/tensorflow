@@ -25,16 +25,16 @@ namespace poplarplugin {
 
 class HloFifoInstruction : public HloPoplarInstruction {
  public:
-  explicit HloFifoInstruction(HloInstruction* operand, int64 depth,
+  explicit HloFifoInstruction(HloInstruction* operand, int64_t depth,
                               bool offload);
 
   const HloInstruction* input() const;
-  int64 depth() const;
+  int64_t depth() const;
   bool offload() const;
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
@@ -53,12 +53,12 @@ class HloFifoInstruction : public HloPoplarInstruction {
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
 
-  const int64 depth_;
+  const int64_t depth_;
   const bool offload_;
 };
 
-std::unique_ptr<HloInstruction> CreateFifo(HloInstruction* operand, int64 depth,
-                                           bool offload);
+std::unique_ptr<HloInstruction> CreateFifo(HloInstruction* operand,
+                                           int64_t depth, bool offload);
 
 }  // namespace poplarplugin
 }  // namespace xla

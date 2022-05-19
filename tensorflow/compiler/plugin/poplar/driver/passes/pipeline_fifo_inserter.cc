@@ -63,7 +63,7 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
                          /*allow_recomputation=*/false,
                          /*allow_communication_optimizations=*/true));
 
-  const int64 last_stage_id = stages.forward.size() - 1;
+  const int64_t last_stage_id = stages.forward.size() - 1;
   TF_ASSIGN_OR_RETURN(const int fifo_depth_multiplier,
                       GetFifoDepthMultiplier(pipeline_op));
   // Get whether any Fifos which will be inserted should be offloaded.

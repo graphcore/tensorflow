@@ -55,7 +55,7 @@ Status InsertInterTilesetCopy(
     std::vector<HloInstruction*> gtes;
     gtes.reserve(source->shape().tuple_shapes_size());
 
-    for (int64 i = 0; i != source->shape().tuple_shapes_size(); ++i) {
+    for (int64_t i = 0; i != source->shape().tuple_shapes_size(); ++i) {
       // Add a GTE.
       auto gte = HloInstruction::CreateGetTupleElement(
           source->shape().tuple_shapes(i), source, i);

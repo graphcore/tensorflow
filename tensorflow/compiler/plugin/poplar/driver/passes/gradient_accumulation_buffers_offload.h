@@ -120,7 +120,7 @@ namespace poplarplugin {
 class GradientAccumulationBuffersOffload : public HloModulePass {
  public:
   GradientAccumulationBuffersOffload(bool remote_memory_supported,
-                                     int64 minimum_remote_tensor_size);
+                                     int64_t minimum_remote_tensor_size);
 
   absl::string_view name() const override {
     return "gradient-accumulation-buffers-offload";
@@ -133,7 +133,7 @@ class GradientAccumulationBuffersOffload : public HloModulePass {
   StatusOr<bool> OffloadInPipeline(HloInstruction* const pipeline_op);
 
   const bool remote_memory_supported_;
-  const int64 minimum_remote_tensor_size_;
+  const int64_t minimum_remote_tensor_size_;
 };
 
 }  // namespace poplarplugin

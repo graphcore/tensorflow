@@ -54,13 +54,13 @@ bool IsValidGather(const HloGatherInstruction* gather) {
 
   const bool multiple_slice_dims = start_index_map.size() > 1;
 
-  const int64 num_dims_operand =
+  const int64_t num_dims_operand =
       ShapeUtil::IsScalar(operand_shape) ? 1 : operand_shape.rank();
 
-  const int64 num_dims_indices =
+  const int64_t num_dims_indices =
       ShapeUtil::IsScalar(indices_shape) ? 1 : indices_shape.rank();
 
-  const int64 num_dims_output =
+  const int64_t num_dims_output =
       ShapeUtil::IsScalar(output_shape) ? 1 : output_shape.rank();
 
   if (slice_sizes.size() != num_dims_operand) {
@@ -77,7 +77,7 @@ bool IsValidGather(const HloGatherInstruction* gather) {
       // number of slice dimensions.
       return false;
     }
-    for (int64 i = 1; i != start_index_map.size(); ++i) {
+    for (int64_t i = 1; i != start_index_map.size(); ++i) {
       // Slice dimensions must be in ascending order.
       if (start_index_map[i - 1] >= start_index_map[i]) {
         return false;
@@ -85,11 +85,11 @@ bool IsValidGather(const HloGatherInstruction* gather) {
     }
   }
 
-  auto in_bounds = [](int64 min, int64 max) {
-    return [min, max](int64 n) { return n >= min && n < max; };
+  auto in_bounds = [](int64_t min, int64_t max) {
+    return [min, max](int64_t n) { return n >= min && n < max; };
   };
-  auto in_container = [](absl::Span<const int64> container) {
-    return [container](int64 n) {
+  auto in_container = [](absl::Span<const int64_t> container) {
+    return [container](int64_t n) {
       return absl::c_find(container, n) != container.end();
     };
   };
@@ -118,7 +118,7 @@ bool IsConvertableToMultiSlice(const HloGatherInstruction* gather) {
   const auto& start_index_map = dim_numbers.start_index_map();
   const auto& slice_sizes = gather->gather_slice_sizes();
 
-  const int64 num_dims_operand =
+  const int64_t num_dims_operand =
       ShapeUtil::IsScalar(operand_shape) ? 1 : operand_shape.rank();
 
   switch (operand_shape.element_type()) {
@@ -134,7 +134,7 @@ bool IsConvertableToMultiSlice(const HloGatherInstruction* gather) {
   }
 
   // MultiSlice does not currently support non-standard slice sizes.
-  for (int64 dim = 0; dim != num_dims_operand; ++dim) {
+  for (int64_t dim = 0; dim != num_dims_operand; ++dim) {
     if (absl::c_find(start_index_map, dim) != start_index_map.end()) {
       // The slice size must be 1 in the axes we are indexing.
       if (slice_sizes[dim] != 1) {
@@ -164,16 +164,16 @@ StatusOr<bool> ReplaceGather(HloGatherInstruction* gather) {
   const auto& start_index_map = dim_numbers.start_index_map();
   const auto& offset_dims = dim_numbers.offset_dims();
   const auto& index_vector_dim = dim_numbers.index_vector_dim();
-  int64 num_slice_dims = start_index_map.size();
-  int64 num_offset_dims = offset_dims.size();
+  int64_t num_slice_dims = start_index_map.size();
+  int64_t num_offset_dims = offset_dims.size();
 
-  std::vector<int64> iota_indices(num_slice_dims);
+  std::vector<int64_t> iota_indices(num_slice_dims);
   absl::c_iota(iota_indices, 0);
   bool pre_transpose = !absl::c_equal(start_index_map, iota_indices);
 
   bool reduce_indices = num_slice_dims > 1;
 
-  std::vector<int64> iota_offsets(num_offset_dims);
+  std::vector<int64_t> iota_offsets(num_offset_dims);
   absl::c_iota(iota_offsets, gather->shape().rank() - num_offset_dims);
   bool post_transpose = !absl::c_equal(offset_dims, iota_offsets);
 
@@ -186,11 +186,12 @@ StatusOr<bool> ReplaceGather(HloGatherInstruction* gather) {
 
   // Reshape values to rank 2 where dim0 is the sliced dim.
   const auto& dims = transformed_values->shape().dimensions();
-  std::vector<int64> flattened_dims(2);
-  flattened_dims[0] = std::accumulate(
-      dims.begin(), dims.begin() + num_slice_dims, 1, std::multiplies<int64>());
+  std::vector<int64_t> flattened_dims(2);
+  flattened_dims[0] =
+      std::accumulate(dims.begin(), dims.begin() + num_slice_dims, 1,
+                      std::multiplies<int64_t>());
   flattened_dims[1] = std::accumulate(dims.begin() + num_slice_dims, dims.end(),
-                                      1, std::multiplies<int64>());
+                                      1, std::multiplies<int64_t>());
   TF_ASSIGN_OR_RETURN(transformed_values,
                       ReshapeIfDifferent(transformed_values, flattened_dims));
 
@@ -200,8 +201,8 @@ StatusOr<bool> ReplaceGather(HloGatherInstruction* gather) {
     // dimension of size num_slice_dims, as we need an index per slice dim
     // rather than a single index. Now we have flattened the slice dims, we need
     // to reduce these indices into a single index for each slice.
-    std::vector<int64> sizes(num_slice_dims);
-    for (int64 i = 0; i != num_slice_dims; ++i) {
+    std::vector<int64_t> sizes(num_slice_dims);
+    for (int64_t i = 0; i != num_slice_dims; ++i) {
       sizes[i] = values->shape().dimensions(start_index_map[i]);
     }
 
@@ -217,7 +218,7 @@ StatusOr<bool> ReplaceGather(HloGatherInstruction* gather) {
   }
 
   // Create the multi slice.
-  std::vector<int64> multi_slice_dims(2);
+  std::vector<int64_t> multi_slice_dims(2);
   // Use ElementsIn as it handles scalar and 1d indices tensors.
   multi_slice_dims[0] = ShapeUtil::ElementsIn(transformed_indices->shape());
   multi_slice_dims[1] = transformed_values->shape().dimensions(1);
@@ -233,8 +234,8 @@ StatusOr<bool> ReplaceGather(HloGatherInstruction* gather) {
   if (post_transpose) {
     // Create transposed version of the original gather shape by
     // transposing the index dimensions to the front.
-    std::vector<int64> permutations;
-    for (int64 dim = 0; dim != gather_shape.rank(); ++dim) {
+    std::vector<int64_t> permutations;
+    for (int64_t dim = 0; dim != gather_shape.rank(); ++dim) {
       if (absl::c_find(offset_dims, dim) == offset_dims.end()) {
         permutations.push_back(dim);
       }

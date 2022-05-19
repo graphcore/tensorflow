@@ -67,7 +67,7 @@ Status AddWriteUndefToFIFOBuffer(
 }
 
 void IncreaseCounter(poplar::Graph& graph, const poplar::Tensor& counter,
-                     int64 depth, poplar::program::Sequence& seq,
+                     int64_t depth, poplar::program::Sequence& seq,
                      const poplar::DebugNameAndId& debug_name_and_id) {
   // A slightly faster path if the depth is a power of two
   // counter = (counter + 1) % depth
@@ -89,8 +89,8 @@ void IncreaseCounter(poplar::Graph& graph, const poplar::Tensor& counter,
 }
 
 void IncreaseCounters(std::vector<poplar::Graph*>& graphs,
-                      const std::vector<poplar::Tensor>& counters, int64 depth,
-                      poplar::program::Sequence& seq,
+                      const std::vector<poplar::Tensor>& counters,
+                      int64_t depth, poplar::program::Sequence& seq,
                       const poplar::DebugNameAndId& debug_name_and_id) {
   for (int i = 0; i < graphs.size(); ++i) {
     if (counters[i].numElements() > 0) {

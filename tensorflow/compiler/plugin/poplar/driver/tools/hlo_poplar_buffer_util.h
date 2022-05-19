@@ -33,7 +33,7 @@ HloPoplarUseDescriptions UseDescriptionsNoInputOutputAlias();
 // Returns descriptions where all the inputs/outputs are non-tuples, and the
 // output aliases the first 'num_operands' operands.
 HloPoplarUseDescriptions UseDescriptionsSimpleNoTupleAliasing(
-    const HloInstruction* inst, int64 num_operands, BufferUseKind kind);
+    const HloInstruction* inst, int64_t num_operands, BufferUseKind kind);
 
 // Same as above, however fixes num_operands=1, which is common for
 // elementwise-like operations.
@@ -46,7 +46,7 @@ HloPoplarUseDescriptions UseDescriptionsSimpleNoTuple0thOperandAliasing(
 // Requires the shape of inst to match the shape obtained by combining the
 // shapes of the 'num_operands' operands.
 HloPoplarUseDescriptions UseDescriptionsForwardsBuffers(
-    const HloInstruction* inst, int64 num_operands, BufferUseKind kind);
+    const HloInstruction* inst, int64_t num_operands, BufferUseKind kind);
 
 // Returns descriptions where no allocations were made.
 HloPoplarBufferDescriptions BufferDescriptionsNoAllocations();

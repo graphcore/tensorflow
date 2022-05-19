@@ -17,6 +17,7 @@ limitations under the License.
 
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_HLO_CUSTOM_OP_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_HLO_CUSTOM_OP_H_
+#include <utility>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hash.h"
@@ -46,7 +47,7 @@ class HloPoplarInstruction : public HloCustomCallInstruction {
                        Args&&... attributes)
       : HloCustomCallInstruction(shape, operands, PoplarOp_Name(op), "") {
     // Hash all attributes to prevent comparisons of ops from false positives
-    int64 hash = hash_util::hash(std::forward<Args>(attributes)...);
+    int64_t hash = hash_util::hash(std::forward<Args>(attributes)...);
 
     // Poke the hash of the attributes into the backend config
     PoplarBackendConfig backend_config;
@@ -60,7 +61,7 @@ class HloPoplarInstruction : public HloCustomCallInstruction {
   }
 
   // Allocating indexes used by the Allocation Finder - op specific.
-  virtual absl::flat_hash_set<int64> AllocatingIndices() const = 0;
+  virtual absl::flat_hash_set<int64_t> AllocatingIndices() const = 0;
 
   // Return whether this instruction needs an output tensor allocated for it.
   virtual bool AllocatingOutput() const = 0;
@@ -73,7 +74,7 @@ class HloPoplarInstruction : public HloCustomCallInstruction {
   // { {1, 0}, {2, 0} }
   // Note that the dependent allocation cannot be an Allocating index or another
   // layout dependency.
-  virtual absl::flat_hash_map<int64, int64> LayoutDependencies() const = 0;
+  virtual absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const = 0;
 
   // Returns HloPoplarUseDescription to describe any aliasing from the operands
   // to the output of the instruction.

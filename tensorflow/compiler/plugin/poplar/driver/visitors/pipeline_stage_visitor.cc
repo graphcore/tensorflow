@@ -143,14 +143,14 @@ DriverProgramSequence ReusablePipelineStageVisitor::GetCachedSequence(
   // can be executed after the PipelineStage and before the
   // PipelineStageRecomputation since the values won't be modified inplace.
   DriverProgramSequence seq(graph, dnai_);
-  for (int64 op_idx = 0; op_idx != callsite->operand_count(); ++op_idx) {
+  for (int64_t op_idx = 0; op_idx != callsite->operand_count(); ++op_idx) {
     const HloInstruction* operand = callsite->operand(op_idx);
     if (IsPipelineStageReadOnlyInput(operand)) {
       continue;
     }
     // If op_idx is out of bounds then it's a state and therefore no copy
     // is needed.
-    if (op_idx < static_cast<int64>(computation_inputs_.size())) {
+    if (op_idx < static_cast<int64_t>(computation_inputs_.size())) {
       CHECK_EQ(inputs[op_idx].size(), computation_inputs_[op_idx].size());
       for (size_t flat_idx = 0; flat_idx != inputs[op_idx].size(); ++flat_idx) {
         seq.add(TensorCopyWithAliasing(graph, inputs[op_idx][flat_idx],

@@ -41,14 +41,14 @@ const HloInstruction* HloGroupNormTrainInstruction::offset() const {
   return HloInstruction::operand(2);
 }
 
-absl::flat_hash_set<int64> HloGroupNormTrainInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloGroupNormTrainInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloGroupNormTrainInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloGroupNormTrainInstruction::LayoutDependencies() const {
   return {{1, 0}, {2, 0}};
 }

@@ -26,14 +26,14 @@ HloTruncatedNormalInstruction::HloTruncatedNormalInstruction(const Shape& shape)
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64> HloTruncatedNormalInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloTruncatedNormalInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloTruncatedNormalInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloTruncatedNormalInstruction::LayoutDependencies() const {
   return {};
 }

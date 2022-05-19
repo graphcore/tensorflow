@@ -36,7 +36,7 @@ class HloModule;
 
 namespace poplarplugin {
 
-using NodeId = int64;
+using NodeId = int64_t;
 using NodeOperands = std::vector<NodeId>;
 using NodeCondition = std::function<bool(const HloInstruction*)>;
 using MatcherGraph = MetaGraph<NodeId>;
@@ -205,7 +205,7 @@ class HloMatcherPattern {
 
 struct InstructionIndex {
   HloInstruction* inst;
-  int64 op_idx;
+  int64_t op_idx;
 };
 
 using Trace = std::vector<InstructionIndex>;
@@ -258,7 +258,7 @@ class HloMatcher : public HloModulePass {
   StatusOr<HloInstruction*> OutlineExpressionFromComputation(
       const HloMatcherMatched& matched,
       const std::string& outlined_computation_name,
-      const absl::optional<int64> sharding_device,
+      const absl::optional<int64_t> sharding_device,
       std::vector<HloInstruction*>&& forced_parameters = {});
 
   // The instruction annotations from the compiler
@@ -267,20 +267,20 @@ class HloMatcher : public HloModulePass {
  private:
   virtual StatusOr<bool> HandleMatch(
       HloMatcherMatched& match,
-      const absl::optional<int64> sharding_device) = 0;
+      const absl::optional<int64_t> sharding_device) = 0;
 
   Status RemoveUnusedInstructions(const HloMatcherMatched& matched);
 
   StatusOr<HloInstruction*> OutlineFusionFromComputation(
       const HloMatcherMatched& matched,
       const std::string& outlined_computation_name,
-      const absl::optional<int64> sharding_device,
+      const absl::optional<int64_t> sharding_device,
       std::vector<HloInstruction*>&& forced_parameters);
 
   StatusOr<HloInstruction*> OutlineCustomOpFromComputation(
       const HloMatcherMatched& matched,
       const std::string& outlined_computation_name,
-      const absl::optional<int64> sharding_device,
+      const absl::optional<int64_t> sharding_device,
       std::vector<HloInstruction*>&& forced_parameters);
 
   StatusOr<bool> MatchPatternStart(HloComputation*);

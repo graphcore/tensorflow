@@ -32,8 +32,10 @@ HloBarrier::HloBarrier(const Shape& shape,
                        absl::Span<HloInstruction* const> operands)
     : HloPoplarInstruction(shape, operands, PoplarOp::Barrier) {}
 
-absl::flat_hash_set<int64> HloBarrier::AllocatingIndices() const { return {}; }
-absl::flat_hash_map<int64, int64> HloBarrier::LayoutDependencies() const {
+absl::flat_hash_set<int64_t> HloBarrier::AllocatingIndices() const {
+  return {};
+}
+absl::flat_hash_map<int64_t, int64_t> HloBarrier::LayoutDependencies() const {
   return {};
 }
 

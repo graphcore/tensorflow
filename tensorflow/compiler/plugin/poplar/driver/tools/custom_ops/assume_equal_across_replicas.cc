@@ -32,11 +32,11 @@ HloAssumeEqualAcrossReplicas::HloAssumeEqualAcrossReplicas(
     : HloPoplarInstruction(shape, {operand},
                            PoplarOp::AssumeEqualAcrossReplicas) {}
 
-absl::flat_hash_set<int64> HloAssumeEqualAcrossReplicas::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloAssumeEqualAcrossReplicas::AllocatingIndices()
     const {
   return {};
 }
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloAssumeEqualAcrossReplicas::LayoutDependencies() const {
   return {};
 }

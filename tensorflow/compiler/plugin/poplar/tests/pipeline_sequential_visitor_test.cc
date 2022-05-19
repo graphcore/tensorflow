@@ -104,7 +104,7 @@ ENTRY e {
 
   InterIpuCopyInserter inserter;
   EXPECT_TRUE(inserter.Run(module.get()).ValueOrDie());
-  auto size_function = [](const BufferValue& buffer) -> int64 {
+  auto size_function = [](const BufferValue& buffer) -> int64_t {
     return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
   };
 

@@ -32,8 +32,8 @@ class HloMultiConvInstruction : public HloPoplarInstruction {
     ConvType type;
     Window window;
     ConvolutionDimensionNumbers dims;
-    int64 feature_group_count;
-    int64 batch_group_count;
+    int64_t feature_group_count;
+    int64_t batch_group_count;
   };
   struct OptionFlag {
     std::string key;
@@ -46,10 +46,10 @@ class HloMultiConvInstruction : public HloPoplarInstruction {
                           const std::vector<OptionFlag>& option_flags,
                           bool is_weight_update);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
 
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
 
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -75,7 +75,7 @@ class HloMultiConvInstruction : public HloPoplarInstruction {
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       HloCloneContext*) const override;
 
-  absl::flat_hash_set<int64> allocating_indices_;
+  absl::flat_hash_set<int64_t> allocating_indices_;
   const std::vector<ConvolutionSpec> convolution_specs_;
   const std::vector<OptionFlag> option_flags_;
   const bool is_weight_update_;

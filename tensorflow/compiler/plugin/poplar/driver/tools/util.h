@@ -64,14 +64,14 @@ bool check_convert_ok(const To& to, const From& from) {
  * Currently only `All` is available. This device ID is used to represent the
  * whole logical Poplar device.
  */
-enum class Devices : int64 {
+enum class Devices : int64_t {
   All = -1,
 };
 
-bool operator==(const int64 lhs, const Devices rhs);
-bool operator==(const Devices rhs, const int64 lhs);
-bool operator!=(const int64 lhs, const Devices rhs);
-bool operator!=(const Devices rhs, const int64 lhs);
+bool operator==(const int64_t lhs, const Devices rhs);
+bool operator==(const Devices rhs, const int64_t lhs);
+bool operator!=(const int64_t lhs, const Devices rhs);
+bool operator!=(const Devices rhs, const int64_t lhs);
 
 template <typename To, typename From>
 absl::optional<To> convert_array(const From& from) {
@@ -113,11 +113,11 @@ const HloSharding& GetShardingOfOutputTensor(const HloInstruction* inst);
 
 // Get the vector of maximal sharding ids from the leaf nodes of a sharding
 // object
-std::vector<int64> GetShardingDeviceIdVector(const HloSharding& sharding);
+std::vector<int64_t> GetShardingDeviceIdVector(const HloSharding& sharding);
 
 // Get the sharding Id of the output tensor, given the knowledge that the
 // sharding must be a single value.
-int64 GetSingleShardingDeviceId(const HloInstruction* inst);
+int64_t GetSingleShardingDeviceId(const HloInstruction* inst);
 
 // Returns whether the instruction is allowed to have tuple sharding.
 bool IsAllowedTupleSharding(const HloInstruction* inst);
@@ -127,7 +127,7 @@ void CopyShardingIfPresent(HloInstruction* const from,
                            HloInstruction* const to);
 
 // Count the number of leaf shapes in a shape tuple
-int64 CountShapes(const Shape& shape);
+int64_t CountShapes(const Shape& shape);
 
 // Create a ShapeIndex for querying the root element of a ShapeTree.
 ShapeIndex RootShapeIndex();
@@ -135,20 +135,20 @@ ShapeIndex RootShapeIndex();
 // Find the index when embedding a shape into a tuple. The tuple_index is the
 // index of the shape in the new tuple, and the original_index is the index
 // of the tensor in the original shape.
-int64 InsertIntoTuple(const Shape& tuple, int64 tuple_index,
-                      int64 original_index);
+int64_t InsertIntoTuple(const Shape& tuple, int64_t tuple_index,
+                        int64_t original_index);
 
 // Find the index of a tensor after extracting it (or a tuple containing it)
 // from a tuple. tuple_index is the index of one of the elements of the tuple,
 // and original_index is the tensor position within the original tuple.
-int64 ExtractFromTuple(const Shape& tuple, int64 tuple_index,
-                       int64 original_index);
+int64_t ExtractFromTuple(const Shape& tuple, int64_t tuple_index,
+                         int64_t original_index);
 
 std::vector<Shape> FlattenedXlaShape(const Shape& shape);
-int64 GetByteSizeOfTotalShape(const Shape& shape);
+int64_t GetByteSizeOfTotalShape(const Shape& shape);
 // Get total byte size and if hit opaque type assume zero rather than
 // erroring
-int64 GetByteSizeOfTotalShapeSafe(const Shape& shape);
+int64_t GetByteSizeOfTotalShapeSafe(const Shape& shape);
 
 template <typename NativeT>
 StatusOr<NativeT> LiteralScalarToNativeType(const Literal& lit);
@@ -165,7 +165,7 @@ bool IsFusion(const HloInstruction*, const std::string& name);
 bool IsArithmeticExpressionFusion(const HloComputation*);
 bool IsArithmeticExpressionFusion(const HloInstruction*);
 bool IsRepeatLoop(const HloInstruction*);
-int64 GetRepeatLoopCount(const HloInstruction*);
+int64_t GetRepeatLoopCount(const HloInstruction*);
 bool GetRepeatLoopAllowFinerAliasAnalysis(const HloInstruction*);
 bool IsPipelineStage(const HloInstruction*);
 bool IsPipelineStageBackward(const HloInstruction*);
@@ -175,8 +175,8 @@ bool IsFunction(const HloInstruction*);
 bool IsMultiConv(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
 bool IsBatchSerializedPipelineOp(const HloInstruction*);
-int64 GetPipelineRepeatCount(const HloInstruction*);
-int64 GetAccumulationCountOperandIndex(const HloInstruction* inst);
+int64_t GetPipelineRepeatCount(const HloInstruction*);
+int64_t GetAccumulationCountOperandIndex(const HloInstruction* inst);
 const HloInstruction* GetGradientAccumulationCountInstruction(
     const HloInstruction* inst);
 bool IsGCLWithinReplicaOp(const HloInstruction* inst);
@@ -184,26 +184,27 @@ bool IsGCLWithinReplicaOp(const HloInstruction* inst);
 template <typename NativeT>
 absl::optional<NativeT> GetConstantValue(const HloInstruction* inst);
 
-absl::optional<int64> GetAccumulationConstantsValue(const HloInstruction* inst);
-absl::optional<int64> GetGradientAccumulationCount(const HloInstruction*);
-int64 GetPipelineBatchSerializationIterations(const HloInstruction*);
+absl::optional<int64_t> GetAccumulationConstantsValue(
+    const HloInstruction* inst);
+absl::optional<int64_t> GetGradientAccumulationCount(const HloInstruction*);
+int64_t GetPipelineBatchSerializationIterations(const HloInstruction*);
 ThreeState GetPipelineOffloadActivations(const HloInstruction*);
 ThreeState GetPipelineOffloadGradientAccumulationBuffers(const HloInstruction*);
 ThreeState GetPipelinePartitionVariables(const HloInstruction*);
 ThreeState GetPipelineOffloadVariables(const HloInstruction*);
-int64 GetPipelineStageID(const HloInstruction*);
+int64_t GetPipelineStageID(const HloInstruction*);
 const HloInstruction* GetResourceUpdateNumMiniBatchesInstruction(
     const HloInstruction*);
 HloInstruction* GetResourceUpdateNumMiniBatchesInstruction(HloInstruction*);
-absl::optional<int64> GetResourceUpdateBatchesToAccumulate(
+absl::optional<int64_t> GetResourceUpdateBatchesToAccumulate(
     const HloInstruction*);
 ThreeState GetResourceUpdateOffloadVariables(const HloInstruction*);
 ThreeState GetResourceUpdatePartitionOffloadedVariables(const HloInstruction*);
 bool GetFunctionPartitionedElementwiseCluster(const HloInstruction*);
 bool GetFunctionKeepInputLayouts(const HloInstruction*);
 bool GetFunctionUniqueSharding(const HloInstruction*);
-int64 GetFunctionNumberModifiedRemoteBufferInputs(const HloInstruction*);
-int64 GetFunctionNumberUnmodifiedRemoteBufferInputs(const HloInstruction*);
+int64_t GetFunctionNumberModifiedRemoteBufferInputs(const HloInstruction*);
+int64_t GetFunctionNumberUnmodifiedRemoteBufferInputs(const HloInstruction*);
 
 bool IsSupportedSharding(const HloSharding&);
 
@@ -277,11 +278,11 @@ SliceInfo GetSliceInfo(const std::vector<size_t>& shape_to_slice,
 SliceInfo GetSliceInfo(const Shape& shape_to_slice, const Shape& slice_shape);
 
 Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
-                           const int64 dimension);
+                           const int64_t dimension);
 
 // Get a unique GTE user of `inst` at a given tuple index.
 StatusOr<HloInstruction*> GetUniqueGTEUser(HloInstruction* inst,
-                                           int64 tuple_index);
+                                           int64_t tuple_index);
 // Check that all users of an instruction are GTEs, and that each GTE appears
 // exactly once.
 bool AllUsersUniqueGTEs(const HloInstruction* inst);
@@ -322,10 +323,10 @@ StatusOr<Tileset> GetTileset(const HloInstruction* inst);
 
 // Function for permuting vector like containers.
 template <typename T>
-T Permute(const T& in, const std::vector<int64>& permutation) {
+T Permute(const T& in, const std::vector<int64_t>& permutation) {
   CHECK_EQ(in.size(), permutation.size());
   T out(in.size());
-  for (int64 i = 0; i != permutation.size(); ++i) {
+  for (int64_t i = 0; i != permutation.size(); ++i) {
     out[permutation[i]] = in[i];
   }
   return out;
@@ -345,41 +346,42 @@ StatusOr<HloInstruction*> CloneComputationSubtree(
 // Get tuple indices for call outputs which are used in multiple places.
 // Returns a map from the tuple index of first occurrence to a set of all other
 // occurrences.
-StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
+StatusOr<absl::flat_hash_map<int64_t, absl::flat_hash_set<int64_t>>>
 GetDuplicateCallOutputs(const HloInstruction* call);
 
 // Get tuple indices for call operands which are used in multiple places.
 // Returns a map from the tuple index of first occurrence to a set of all other
 // occurrences.
-StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
+StatusOr<absl::flat_hash_map<int64_t, absl::flat_hash_set<int64_t>>>
 GetDuplicateCallInputs(const HloInstruction* call);
 
 // Get output tuple indices for unused call outputs.
-StatusOr<absl::flat_hash_set<int64>> GetUnusedCallOutputIndices(
+StatusOr<absl::flat_hash_set<int64_t>> GetUnusedCallOutputIndices(
     const HloInstructionSet& calls);
-StatusOr<absl::flat_hash_set<int64>> GetUnusedCallOutputIndices(
+StatusOr<absl::flat_hash_set<int64_t>> GetUnusedCallOutputIndices(
     HloInstruction* call);
 
 // Get parameter numbers for parameter instructions in the call which have no
 // users.
-StatusOr<absl::flat_hash_set<int64>> GetUnusedParametersInCall(
+StatusOr<absl::flat_hash_set<int64_t>> GetUnusedParametersInCall(
     const HloInstruction* call);
 
 // Replace duplicate call outputs identified by GetDuplicateCallOutputs.
 Status ReplaceDuplicateCallOutputs(
     HloInstruction* call,
-    const absl::flat_hash_map<int64, absl::flat_hash_set<int64>>&
+    const absl::flat_hash_map<int64_t, absl::flat_hash_set<int64_t>>&
         duplicate_outputs);
 
 // Replace duplicate call inputs identified by GetDuplicateCallInputs.
 Status ReplaceDuplicateCallInputs(
     HloInstruction* call,
-    const absl::flat_hash_map<int64, absl::flat_hash_set<int64>>&
+    const absl::flat_hash_map<int64_t, absl::flat_hash_set<int64_t>>&
         duplicate_inputs);
 
 // Removes outputs from the call, and GTEs which are not used by anything.
 Status RemoveOutputsFromCall(
-    HloInstruction* call, const absl::flat_hash_set<int64>& outputs_to_remove);
+    HloInstruction* call,
+    const absl::flat_hash_set<int64_t>& outputs_to_remove);
 
 // Set sharding of destination output tuple based on source output tuple.
 Status SetTupleUniqueDeviceSharding(const HloInstruction* source,
@@ -406,7 +408,7 @@ StatusOr<HloInstruction*> ReplaceCallWith(
 // HloCloneContext which will have all of the cloned instructions recorded.
 StatusOr<HloInstruction*> RemoveParametersFromCall(
     HloInstruction* call,
-    const absl::flat_hash_set<int64>& parameters_to_remove,
+    const absl::flat_hash_set<int64_t>& parameters_to_remove,
     HloCloneContext* context = nullptr,
     const std::function<void(const HloCloneContext*)>&
         instructions_cloned_callback = {});
@@ -429,11 +431,11 @@ Status SetCopyCloneMethod(HloInstruction* inst,
 
 // Transpose the shape such that the specified dims are the first dims.
 StatusOr<HloInstruction*> TransposeToFront(HloInstruction* inst,
-                                           absl::Span<const int64> dims);
+                                           absl::Span<const int64_t> dims);
 
 // Apply the inverse of the transpose specified by the permutation.
-StatusOr<HloInstruction*> InverseTranspose(HloInstruction* inst,
-                                           absl::Span<const int64> permutation);
+StatusOr<HloInstruction*> InverseTranspose(
+    HloInstruction* inst, absl::Span<const int64_t> permutation);
 
 // Reshape if the shape given is different to the instruction shape.
 StatusOr<HloInstruction*> ReshapeIfDifferent(HloInstruction* inst,
@@ -441,7 +443,7 @@ StatusOr<HloInstruction*> ReshapeIfDifferent(HloInstruction* inst,
 
 // Reshape if the shape given is different to the instruction shape.
 StatusOr<HloInstruction*> ReshapeIfDifferent(HloInstruction* inst,
-                                             absl::Span<const int64> shape);
+                                             absl::Span<const int64_t> shape);
 
 // Reshape to rank 1.
 StatusOr<HloInstruction*> Flatten(HloInstruction* inst);

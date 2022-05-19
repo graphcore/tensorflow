@@ -40,8 +40,8 @@ struct IndexedLocation {
 
 struct InputLocation {
   HloInstruction* instruction;
-  int64 operand_index;
-  InputLocation(HloInstruction* inst, int64 index)
+  int64_t operand_index;
+  InputLocation(HloInstruction* inst, int64_t index)
       : instruction(inst), operand_index(index) {}
   std::string ToString() const;
 };
@@ -134,7 +134,8 @@ struct AllocationGroups {
   // instructions are in the same group then this is actually correct.
   static StatusOr<AllocationGroups> CreateAllocationGroups(HloModule* module);
   void Verify(HloModule* module) const;
-  absl::flat_hash_map<IndexedLocation, int64> CreateLocationToGroupMap() const;
+  absl::flat_hash_map<IndexedLocation, int64_t> CreateLocationToGroupMap()
+      const;
 };
 
 }  // namespace poplarplugin

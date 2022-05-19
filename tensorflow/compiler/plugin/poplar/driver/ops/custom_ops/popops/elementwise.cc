@@ -226,7 +226,7 @@ class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
                                     "ImplicitBinaryElementwiseOp");
     const HloInstruction* inst = tensor_target.tgt;
     CHECK_EQ(inst->operand_count(), 2);
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
 
     const HloInstruction* layout = *tensor_target.layout;
     const auto layout_output_idx = *tensor_target.layout_output_idx;
@@ -250,8 +250,9 @@ class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
         inst->fused_expression_root()->operand(input_index);
     CHECK_EQ(broadcast->opcode(), HloOpcode::kBroadcast);
 
-    const std::vector<int64> non_broadcast_dimensions = broadcast->dimensions();
-    absl::flat_hash_set<int64> non_broadcast_dimensions_set{
+    const std::vector<int64_t> non_broadcast_dimensions =
+        broadcast->dimensions();
+    absl::flat_hash_set<int64_t> non_broadcast_dimensions_set{
         non_broadcast_dimensions.begin(), non_broadcast_dimensions.end()};
 
     // Create a permutation of the other side tensor, which collapses all
@@ -259,8 +260,8 @@ class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
     std::vector<uint32> permutation(layout_shape.rank());
     {
       absl::c_copy(non_broadcast_dimensions, permutation.begin());
-      int64 next_non_broadcast_dim = non_broadcast_dimensions.size();
-      for (int64 i = 0; i != layout_shape.rank(); ++i) {
+      int64_t next_non_broadcast_dim = non_broadcast_dimensions.size();
+      for (int64_t i = 0; i != layout_shape.rank(); ++i) {
         if (!non_broadcast_dimensions_set.contains(i)) {
           permutation[next_non_broadcast_dim++] = i;
         }
@@ -312,7 +313,7 @@ class TernaryElementwiseOp : public PoplarOpDef {
     // Get the ternary operation.
     auto operation = helper::GetElementwiseOp(inst);
     // Create the permutation of the inputs expected by popops.
-    std::vector<int64> permutation;
+    std::vector<int64_t> permutation;
     switch (operation->opcode()) {
       case HloOpcode::kClamp: {
         permutation = {1, 0, 2};

@@ -47,9 +47,9 @@ class SyncListScheduler {
   static StatusOr<HloInstructionSequence> Run(
       HloComputation* computation,
       const HloPoplarDataflowAnalysis& dataflow_analysis,
-      const absl::flat_hash_map<const HloComputation*, int64>&
+      const absl::flat_hash_map<const HloComputation*, int64_t>&
           memory_by_computation,
-      int64 max_syncs) {
+      int64_t max_syncs) {
     SyncListScheduler scheduler(computation, dataflow_analysis,
                                 memory_by_computation, max_syncs);
     return scheduler.CreateSchedule();
@@ -69,13 +69,13 @@ class SyncListScheduler {
   // represented as a std::tuple containing these three values (first element is
   // the bytes waiting to sync). std::tuple provides the necessary comparison
   // operators.
-  using Priority = std::tuple<int64, int64, int64>;
+  using Priority = std::tuple<int64_t, int64_t, int64_t>;
 
   SyncListScheduler(HloComputation* computation,
                     const HloPoplarDataflowAnalysis& dataflow_analysis,
-                    const absl::flat_hash_map<const HloComputation*, int64>&
+                    const absl::flat_hash_map<const HloComputation*, int64_t>&
                         memory_by_computation,
-                    int64 max_syncs)
+                    int64_t max_syncs)
       : computation_(computation),
         dataflow_analysis_(dataflow_analysis),
         memory_by_computation_(memory_by_computation),
@@ -142,13 +142,13 @@ class SyncListScheduler {
     HloInstruction* instruction;
 
     // The total size of all buffers defined by this instruction.
-    int64 bytes_defined;
+    int64_t bytes_defined;
 
     // For each buffer B used by this instruction, we keep a pair (B, U), where
     // U is the number of uses of B that have not yet been scheduled. This pair
     // is a pointer into the unscheduled_use_count_ map, so it gets updated for
     // free when we update counts in the map.
-    std::vector<const std::pair<const HloPoplarBuffer* const, int64>*>
+    std::vector<const std::pair<const HloPoplarBuffer* const, int64_t>*>
         used_buffer_unscheduled_use_counts;
   };
 
@@ -189,11 +189,11 @@ class SyncListScheduler {
   // by the instruction. This is not entirely accurate, but it is more accurate
   // than not taking subcomputations into account at all. In the future, we may
   // improve accounting for subcomputation memory (b/65409243).
-  int64 BytesFreedIfScheduled(const ReadyListEntry& entry) {
+  int64_t BytesFreedIfScheduled(const ReadyListEntry& entry) {
     auto instruction = entry.instruction;
     auto opcode = instruction->opcode();
 
-    int64 freed_bytes = 0;
+    int64_t freed_bytes = 0;
     for (const auto& kv : entry.used_buffer_unscheduled_use_counts) {
       auto buffer = kv->first;
       auto use_count = kv->second;
@@ -203,17 +203,17 @@ class SyncListScheduler {
     }
     // We only count the memory usage of the largest subcomputation, instead of
     // adding them all, because subcomputations won't execute in parallel.
-    int64 max_subcomputation_bytes = 0;
+    int64_t max_subcomputation_bytes = 0;
     for (const auto* c : instruction->called_computations()) {
       auto it = memory_by_computation_.find(c);
       if (it != memory_by_computation_.end()) {
-        int64 subcomputation_bytes = it->second;
+        int64_t subcomputation_bytes = it->second;
         if (subcomputation_bytes > max_subcomputation_bytes) {
           max_subcomputation_bytes = subcomputation_bytes;
         }
       }
     }
-    int64 bytes_defined;
+    int64_t bytes_defined;
     if (max_subcomputation_bytes > 0 &&
         (opcode == HloOpcode::kWhile || opcode == HloOpcode::kCall ||
          opcode == HloOpcode::kConditional)) {
@@ -226,7 +226,7 @@ class SyncListScheduler {
     return freed_bytes - bytes_defined;
   }
 
-  int64 BytesSyncedIfScheduled(const ReadyListEntry& entry) {
+  int64_t BytesSyncedIfScheduled(const ReadyListEntry& entry) {
     auto instruction = entry.instruction;
 
     // We only consider all-reduce at the moment
@@ -248,7 +248,7 @@ class SyncListScheduler {
 
     // Populate the ready list with instructions which have no operands or
     // control predecessors.
-    absl::flat_hash_map<const HloInstruction*, int64> unscheduled_pred_count;
+    absl::flat_hash_map<const HloInstruction*, int64_t> unscheduled_pred_count;
     for (auto* instruction : computation_->instructions()) {
       // TODO(b/34466113): Replace this and above with successors() or
       // predecessors() when these methods are added to HloInstruction.
@@ -268,7 +268,7 @@ class SyncListScheduler {
                         std::multimap<Priority, ReadyListEntry>::iterator>
         ready_instructions;
 
-    int64 waiting_syncs = 0;
+    int64_t waiting_syncs = 0;
 
     auto add_to_ready_queue = [&](HloInstruction* inst) {
       auto entry = MakeReadyListEntry(inst);
@@ -302,7 +302,7 @@ class SyncListScheduler {
       bool adjust_ready_queue = false;
       // Update the unscheduled uses of the buffers.
       for (auto* buffer : buffer_uses_.at(best)) {
-        int64& count = unscheduled_use_count_[buffer];
+        int64_t& count = unscheduled_use_count_[buffer];
         CHECK_GT(count, 0);
         --count;
         if (count == 1) {
@@ -312,7 +312,7 @@ class SyncListScheduler {
 
       // Add new instructions to ready list.
       auto update_pred_count = [&](HloInstruction* inst) {
-        int64 pred_count = --unscheduled_pred_count.at(inst);
+        int64_t pred_count = --unscheduled_pred_count.at(inst);
         CHECK_GE(pred_count, 0);
         if (pred_count == 0) {
           add_to_ready_queue(inst);
@@ -401,7 +401,7 @@ class SyncListScheduler {
   // Computations are analyzed in post-order. When scheduling an instruction
   // that includes subcomputations, such as a while loop, we use this map to
   // look up the memory needed by subcomputations.
-  const absl::flat_hash_map<const HloComputation*, int64>&
+  const absl::flat_hash_map<const HloComputation*, int64_t>&
       memory_by_computation_;
 
   // A map containing the buffers that each instruction uses.
@@ -411,30 +411,30 @@ class SyncListScheduler {
 
   // A map containing the count of unscheduled HLOs which using a particular
   // buffer.
-  absl::flat_hash_map<const HloPoplarBuffer*, int64> unscheduled_use_count_;
+  absl::flat_hash_map<const HloPoplarBuffer*, int64_t> unscheduled_use_count_;
 
   // Set of instructions which have been scheduled.
   absl::flat_hash_set<const HloInstruction*> scheduled_instructions_;
 
-  int64 max_syncs_;
+  int64_t max_syncs_;
 };
 
 // List scheduler
 StatusOr<HloInstructionSequence> SyncListMemoryScheduler(
     HloComputation* computation,
     const HloPoplarDataflowAnalysis& dataflow_analysis,
-    const absl::flat_hash_map<const HloComputation*, int64>&
+    const absl::flat_hash_map<const HloComputation*, int64_t>&
         memory_by_computation,
-    int64 max_syncs) {
+    int64_t max_syncs) {
   return SyncListScheduler::Run(computation, dataflow_analysis,
                                 memory_by_computation, max_syncs);
 }
 }  // namespace
 
-IpuSchedulerAlgorithm CreateSyncListMemoryScheduler(int64 max_syncs) {
+IpuSchedulerAlgorithm CreateSyncListMemoryScheduler(int64_t max_syncs) {
   return [=](HloComputation* computation,
              const HloPoplarDataflowAnalysis& dataflow_analysis,
-             const absl::flat_hash_map<const HloComputation*, int64>&
+             const absl::flat_hash_map<const HloComputation*, int64_t>&
                  memory_by_computation) {
     return SyncListMemoryScheduler(computation, dataflow_analysis,
                                    memory_by_computation, max_syncs);

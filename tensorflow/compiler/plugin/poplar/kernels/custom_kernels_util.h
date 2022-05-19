@@ -48,9 +48,9 @@ class AttributeMap {
   AttributeMap(const std::string& attributes_json);
 
   // We support:
-  // * float, int, bool, uint64, int64, tensorflow::DataType
-  // * absl::flat_hash_set of int64
-  // * absl::flat_hash_map of int64 to int64
+  // * float, int, bool, uint64, int64_t, tensorflow::DataType
+  // * absl::flat_hash_set of int64_t
+  // * absl::flat_hash_map of int64_t to int64_t
   void AddAttribute(const std::string& field_name, const absl::any& attr);
 
   bool HasAttribute(const std::string& field_name) const;
@@ -60,19 +60,19 @@ class AttributeMap {
   StatusOr<float> GetAttributeAsFloat(const std::string& field_name) const;
   StatusOr<int> GetAttributeAsInt(const std::string& field_name) const;
   StatusOr<uint64> GetAttributeAsUInt64(const std::string& field_name) const;
-  StatusOr<int64> GetAttributeAsInt64(const std::string& field_name) const;
+  StatusOr<int64_t> GetAttributeAsInt64(const std::string& field_name) const;
   StatusOr<bool> GetAttributeAsBool(const std::string& field_name) const;
   StatusOr<tensorflow::DataType> GetAttributeAsTFDataType(
       const std::string& field_name) const;
 
   // These are included as absl::flat_hash_set<T> is unordered,
   // whereas this allows a list to be passed whilst preserving ordering.
-  StatusOr<std::vector<int64>> GetAttributeInt64Vector(
+  StatusOr<std::vector<int64_t>> GetAttributeInt64Vector(
       const std::string& field_name) const;
 
-  StatusOr<absl::flat_hash_set<int64>> GetAttributeFlatHashSet(
+  StatusOr<absl::flat_hash_set<int64_t>> GetAttributeFlatHashSet(
       const std::string& field_name) const;
-  StatusOr<absl::flat_hash_map<int64, int64>> GetAttributeFlatHashMap(
+  StatusOr<absl::flat_hash_map<int64_t, int64_t>> GetAttributeFlatHashMap(
       const std::string& field_name) const;
   StatusOr<Window> GetAttributeAsWindow(const std::string& field_name) const;
   StatusOr<Shape> GetAttributeAsShape(const std::string& field_name) const;

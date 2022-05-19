@@ -69,13 +69,13 @@ auto GetNumReshape = GetNumInstructions<HloReshapeInstruction>;
 auto GetNumTranspose = GetNumInstructions<HloTransposeInstruction>;
 
 float ComputeMatMulValue2D(const Literal& lhs, const Literal& rhs,
-                           absl::Span<const int64> output_index) {
+                           absl::Span<const int64_t> output_index) {
   EXPECT_EQ(output_index.size(), 2);
   float value = 0.0f;
   auto M = output_index[0];
   auto N = output_index[1];
   auto K = lhs.shape().dimensions(1);
-  for (int64 k = 0; k < K; k++) {
+  for (int64_t k = 0; k < K; k++) {
     float lhs_value = lhs.Get<float>({M, k});
     float rhs_value = rhs.Get<float>({k, N});
     value += lhs_value * rhs_value;
@@ -84,14 +84,14 @@ float ComputeMatMulValue2D(const Literal& lhs, const Literal& rhs,
 }
 
 float ComputeMatMulValue3D(const Literal& lhs, const Literal& rhs,
-                           absl::Span<const int64> output_index) {
+                           absl::Span<const int64_t> output_index) {
   EXPECT_EQ(output_index.size(), 3);
   float value = 0.0f;
   auto batch = output_index[0];
   auto M = output_index[1];
   auto N = output_index[2];
   auto K = lhs.shape().dimensions(2);
-  for (int64 k = 0; k < K; k++) {
+  for (int64_t k = 0; k < K; k++) {
     float lhs_value = lhs.Get<float>({batch, M, k});
     float rhs_value = rhs.Get<float>({batch, k, N});
     value += lhs_value * rhs_value;
@@ -180,14 +180,14 @@ ENTRY main {
   ASSERT_TRUE(result.shape().IsTuple());
 
   const Shape& slice1 = ShapeUtil::GetSubshape(result.shape(), {0});
-  ShapeUtil::ForEachIndex(slice1, [&](absl::Span<const int64> output_index) {
+  ShapeUtil::ForEachIndex(slice1, [&](absl::Span<const int64_t> output_index) {
     float expected_value = ComputeMatMulValue3D(lhs, rhs, output_index);
     float value = result.Get<float>(output_index, {0});
     EXPECT_FLOAT_EQ(value, expected_value);
     return true;
   });
   const Shape& slice2 = ShapeUtil::GetSubshape(result.shape(), {1});
-  ShapeUtil::ForEachIndex(slice2, [&](absl::Span<const int64> output_index) {
+  ShapeUtil::ForEachIndex(slice2, [&](absl::Span<const int64_t> output_index) {
     float expected_value = ComputeMatMulValue3D(lhs, rhs2, output_index);
     float value = result.Get<float>(output_index, {1});
     EXPECT_FLOAT_EQ(value, expected_value);
@@ -277,14 +277,14 @@ ENTRY main {
   ASSERT_TRUE(result.shape().IsTuple());
 
   const Shape& slice1 = ShapeUtil::GetSubshape(result.shape(), {0});
-  ShapeUtil::ForEachIndex(slice1, [&](absl::Span<const int64> output_index) {
+  ShapeUtil::ForEachIndex(slice1, [&](absl::Span<const int64_t> output_index) {
     float expected_value = ComputeMatMulValue3D(lhs, rhs, output_index);
     float value = result.Get<float>(output_index, {0});
     EXPECT_FLOAT_EQ(value, expected_value);
     return true;
   });
   const Shape& slice2 = ShapeUtil::GetSubshape(result.shape(), {1});
-  ShapeUtil::ForEachIndex(slice2, [&](absl::Span<const int64> output_index) {
+  ShapeUtil::ForEachIndex(slice2, [&](absl::Span<const int64_t> output_index) {
     float expected_value = ComputeMatMulValue3D(lhs2, rhs, output_index);
     float value = result.Get<float>(output_index, {1});
     EXPECT_FLOAT_EQ(value, expected_value);
@@ -374,14 +374,14 @@ ENTRY main {
   ASSERT_TRUE(result.shape().IsTuple());
 
   const Shape& slice1 = ShapeUtil::GetSubshape(result.shape(), {0});
-  ShapeUtil::ForEachIndex(slice1, [&](absl::Span<const int64> output_index) {
+  ShapeUtil::ForEachIndex(slice1, [&](absl::Span<const int64_t> output_index) {
     float expected_value = ComputeMatMulValue2D(lhs, rhs, output_index);
     float value = result.Get<float>(output_index, {0});
     EXPECT_FLOAT_EQ(value, expected_value);
     return true;
   });
   const Shape& slice2 = ShapeUtil::GetSubshape(result.shape(), {1});
-  ShapeUtil::ForEachIndex(slice2, [&](absl::Span<const int64> output_index) {
+  ShapeUtil::ForEachIndex(slice2, [&](absl::Span<const int64_t> output_index) {
     float expected_value = ComputeMatMulValue2D(lhs2, rhs, output_index);
     float value = result.Get<float>(output_index, {1});
     EXPECT_FLOAT_EQ(value, expected_value);

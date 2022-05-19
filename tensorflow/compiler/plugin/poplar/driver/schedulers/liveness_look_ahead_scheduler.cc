@@ -43,26 +43,27 @@ namespace poplarplugin {
 namespace {
 
 // TF's calculation for bytes defined
-int64 BytesIfScheduled(HloInstruction* instruction,
-                       const absl::flat_hash_map<const HloComputation*, int64>&
-                           memory_by_computation_,
-                       const HloPoplarDataflowAnalysis& dataflow_analysis) {
+int64_t BytesIfScheduled(
+    HloInstruction* instruction,
+    const absl::flat_hash_map<const HloComputation*, int64_t>&
+        memory_by_computation_,
+    const HloPoplarDataflowAnalysis& dataflow_analysis) {
   auto opcode = instruction->opcode();
 
   // We only count the memory usage of the largest subcomputation, instead of
   // adding them all, because subcomputations won't execute in parallel.
-  int64 max_subcomputation_bytes = 0;
+  int64_t max_subcomputation_bytes = 0;
   for (const auto* c : instruction->called_computations()) {
     auto it = memory_by_computation_.find(c);
     if (it != memory_by_computation_.end()) {
-      int64 subcomputation_bytes = it->second;
+      int64_t subcomputation_bytes = it->second;
       if (subcomputation_bytes > max_subcomputation_bytes) {
         max_subcomputation_bytes = subcomputation_bytes;
       }
     }
   }
 
-  int64 bytes_defined = 0;
+  int64_t bytes_defined = 0;
   dataflow_analysis.GetInstructionBufferSet(instruction)
       .ForEachElement([&](const ShapeIndex& /*index*/,
                           const HloPoplarBufferSet& buffer_set) {
@@ -87,11 +88,11 @@ int64 BytesIfScheduled(HloInstruction* instruction,
 }
 
 struct GrossCost {
-  const absl::flat_hash_map<const HloComputation*, int64>&
+  const absl::flat_hash_map<const HloComputation*, int64_t>&
       memory_by_computation_;
   const HloPoplarDataflowAnalysis& dataflow_analysis;
 
-  int64 operator()(HloInstruction* inst) const {
+  int64_t operator()(HloInstruction* inst) const {
     return BytesIfScheduled(inst, memory_by_computation_, dataflow_analysis);
   }
 };
@@ -100,8 +101,8 @@ struct TempCost {
   GrossCost cost_f_;
 
   template <typename Set>
-  int64 operator()(const Set& set, HloInstruction* inst) const {
-    int64 result = 0;
+  int64_t operator()(const Set& set, HloInstruction* inst) const {
+    int64_t result = 0;
 
     // Consider operands that will be killed, as a temporary cost.
     for (auto operand : inst->unique_operands()) {
@@ -138,9 +139,9 @@ using HloScheduleTree =
 
 StatusOr<HloInstructionSequence> ScheduleInstructions(
     HloComputation* comp, const HloPoplarDataflowAnalysis& dataflow_analysis,
-    const absl::flat_hash_map<const HloComputation*, int64>&
+    const absl::flat_hash_map<const HloComputation*, int64_t>&
         memory_by_computation,
-    int64 max_search_depth, int64 max_search_size) {
+    int64_t max_search_depth, int64_t max_search_size) {
   auto instructions = comp->MakeInstructionPostOrder();
   auto schedule_tree = std::make_shared<HloScheduleTree const>(
       instructions, HloInstructionForEachPredecessor{},
@@ -162,9 +163,9 @@ StatusOr<HloInstructionSequence> ScheduleInstructions(
 StatusOr<HloInstructionSequence> LivenessLookAheadMemoryScheduler(
     HloComputation* computation,
     const HloPoplarDataflowAnalysis& dataflow_analysis,
-    const absl::flat_hash_map<const HloComputation*, int64>&
+    const absl::flat_hash_map<const HloComputation*, int64_t>&
         memory_by_computation,
-    int64 max_search_depth, int64 max_search_size) {
+    int64_t max_search_depth, int64_t max_search_size) {
   TF_ASSIGN_OR_RETURN(
       auto sched, ScheduleInstructions(computation, dataflow_analysis,
                                        memory_by_computation, max_search_depth,
@@ -180,7 +181,7 @@ IpuSchedulerAlgorithm CreateLivenessLookAheadMemoryScheduler(
     const CompilerInformation& information) {
   return [=](HloComputation* computation,
              const HloPoplarDataflowAnalysis& dataflow_analysis,
-             const absl::flat_hash_map<const HloComputation*, int64>&
+             const absl::flat_hash_map<const HloComputation*, int64_t>&
                  memory_by_computation) {
     return LivenessLookAheadMemoryScheduler(
         computation, dataflow_analysis, memory_by_computation,

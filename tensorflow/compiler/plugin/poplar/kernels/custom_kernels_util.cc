@@ -122,7 +122,7 @@ Json::Value GetAsJsonValue(const tensorflow::DataType& val) {
   return Json::Value(DataType_Name(val));
 }
 template <>
-Json::Value GetAsJsonValue(const int64& val) {
+Json::Value GetAsJsonValue(const int64_t& val) {
   return Json::Value(Json::Value::Int64(val));
 }
 template <>
@@ -153,8 +153,8 @@ void AttributeMap::AddAttribute(const std::string& field_name,
     auto casted_val = absl::any_cast<uint64>(attr);
     attributes_[field_name] = GetAsJsonValue(casted_val);
 
-  } else if (tinfo == typeid(int64)) {
-    auto casted_val = absl::any_cast<int64>(attr);
+  } else if (tinfo == typeid(int64_t)) {
+    auto casted_val = absl::any_cast<int64_t>(attr);
     attributes_[field_name] = GetAsJsonValue(casted_val);
 
   } else if (tinfo == typeid(tensorflow::DataType)) {
@@ -165,8 +165,8 @@ void AttributeMap::AddAttribute(const std::string& field_name,
     auto casted_val = absl::any_cast<std::string>(attr);
     attributes_[field_name] = GetAsJsonValue(casted_val);
 
-  } else if (tinfo == typeid(std::vector<int64>)) {
-    auto casted_vals = absl::any_cast<std::vector<int64>>(attr);
+  } else if (tinfo == typeid(std::vector<int64_t>)) {
+    auto casted_vals = absl::any_cast<std::vector<int64_t>>(attr);
     // Always create the field.
     auto& values = attributes_[field_name];
     values = Json::arrayValue;
@@ -181,8 +181,8 @@ void AttributeMap::AddAttribute(const std::string& field_name,
     for (auto val : casted_vals) {
       values.append(GetAsJsonValue(val));
     }
-  } else if (tinfo == typeid(absl::flat_hash_set<int64>)) {
-    auto casted_vals = absl::any_cast<absl::flat_hash_set<int64>>(attr);
+  } else if (tinfo == typeid(absl::flat_hash_set<int64_t>)) {
+    auto casted_vals = absl::any_cast<absl::flat_hash_set<int64_t>>(attr);
     // Always create the field.
     auto& values = attributes_[field_name];
     values = Json::arrayValue;
@@ -190,8 +190,9 @@ void AttributeMap::AddAttribute(const std::string& field_name,
       values.append(GetAsJsonValue(val));
     }
 
-  } else if (tinfo == typeid(absl::flat_hash_map<int64, int64>)) {
-    auto casted_vals = absl::any_cast<absl::flat_hash_map<int64, int64>>(attr);
+  } else if (tinfo == typeid(absl::flat_hash_map<int64_t, int64_t>)) {
+    auto casted_vals =
+        absl::any_cast<absl::flat_hash_map<int64_t, int64_t>>(attr);
 
     auto& keys = attributes_[field_name]["keys"];
     auto& values = attributes_[field_name]["values"];
@@ -264,7 +265,7 @@ StatusOr<uint64> AttributeMap::GetAttributeAsUInt64(
   return attributes_[field_name].asUInt64();
 }
 
-StatusOr<int64> AttributeMap::GetAttributeAsInt64(
+StatusOr<int64_t> AttributeMap::GetAttributeAsInt64(
     const std::string& field_name) const {
   TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
   return attributes_[field_name].asInt64();
@@ -288,35 +289,35 @@ StatusOr<tensorflow::DataType> AttributeMap::GetAttributeAsTFDataType(
   return data_type;
 }
 
-StatusOr<std::vector<int64>> AttributeMap::GetAttributeInt64Vector(
+StatusOr<std::vector<int64_t>> AttributeMap::GetAttributeInt64Vector(
     const std::string& field_name) const {
   TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
   if (!attributes_[field_name].isArray()) {
     return xla::FailedPrecondition("Custom op field %s is not an array.",
                                    field_name.c_str());
   }
-  std::vector<int64> result;
+  std::vector<int64_t> result;
   for (auto val : attributes_[field_name]) {
     result.push_back(val.asInt64());
   }
   return result;
 }
 
-StatusOr<absl::flat_hash_set<int64>> AttributeMap::GetAttributeFlatHashSet(
+StatusOr<absl::flat_hash_set<int64_t>> AttributeMap::GetAttributeFlatHashSet(
     const std::string& field_name) const {
   TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
   if (!attributes_[field_name].isArray()) {
     return xla::FailedPrecondition("Custom op field %s is not an array.",
                                    field_name.c_str());
   }
-  absl::flat_hash_set<int64> result;
+  absl::flat_hash_set<int64_t> result;
   for (auto val : attributes_[field_name]) {
     result.insert(val.asInt64());
   }
   return result;
 }
 
-StatusOr<absl::flat_hash_map<int64, int64>>
+StatusOr<absl::flat_hash_map<int64_t, int64_t>>
 AttributeMap::GetAttributeFlatHashMap(const std::string& field_name) const {
   TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
   if (!attributes_[field_name].isMember("keys") ||
@@ -330,12 +331,12 @@ AttributeMap::GetAttributeFlatHashMap(const std::string& field_name) const {
     return xla::FailedPrecondition("Corrupted hash map %s for the custom op.",
                                    field_name.c_str());
   }
-  absl::flat_hash_map<int64, int64> result;
+  absl::flat_hash_map<int64_t, int64_t> result;
   // i must be an 'int' otherwise the call to the operator [] is ambiguous
   // between Json::Value and int
   for (int i = 0; i < static_cast<int>(keys.size()); i++) {
-    int64 key = keys[i].asInt64();
-    int64 value = values[i].asInt64();
+    int64_t key = keys[i].asInt64();
+    int64_t value = values[i].asInt64();
     result[key] = value;
   }
   return result;

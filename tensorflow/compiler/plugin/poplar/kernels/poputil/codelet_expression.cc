@@ -44,9 +44,9 @@ using namespace xla::poplarplugin;
 namespace tensorflow {
 
 namespace {
-xla::StatusOr<std::vector<int64>> NumpyBroadcast(
-    const absl::Span<const int64>& a, const absl::Span<const int64>& b) {
-  std::vector<int64> result(std::max(a.size(), b.size()));
+xla::StatusOr<std::vector<int64_t>> NumpyBroadcast(
+    const absl::Span<const int64_t>& a, const absl::Span<const int64_t>& b) {
+  std::vector<int64_t> result(std::max(a.size(), b.size()));
 
   size_t offset = std::min(a.size(), b.size());
   if (a.size() < b.size()) {
@@ -93,7 +93,7 @@ class PoputilCodeletExpressionOp : public XlaOpKernel, IpuOpKernel {
     OP_REQUIRES_OK(ctx, DataTypeToPrimitiveType(dtype, &type));
 
     xla::Shape out_shape =
-        xla::ShapeUtil::MakeShape(type, absl::Span<const int64>{});
+        xla::ShapeUtil::MakeShape(type, absl::Span<const int64_t>{});
 
     for (int i = 0; i < num_inputs; ++i) {
       inputs[i] = ctx->Input(i);

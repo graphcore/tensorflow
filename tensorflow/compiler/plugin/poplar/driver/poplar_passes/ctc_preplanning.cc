@@ -50,10 +50,10 @@ static StatusOr<popnn::ctc::Plan> GetPlanForLossInstruction(
 
   const auto& data_shape = ctc_inst->operand(0)->shape();
   const auto& labels_shape = ctc_inst->operand(1)->shape();
-  const int64 max_time = data_shape.dimensions(0);
-  const int64 batch_size = data_shape.dimensions(1);
-  const int64 num_classes = data_shape.dimensions(2);
-  const int64 max_label_length = labels_shape.dimensions(1);
+  const int64_t max_time = data_shape.dimensions(0);
+  const int64_t batch_size = data_shape.dimensions(1);
+  const int64_t num_classes = data_shape.dimensions(2);
+  const int64_t max_label_length = labels_shape.dimensions(1);
   return popnn::ctc::plan(graph, in_dtype, out_dtype, batch_size, max_time,
                           max_label_length, num_classes);
 }
@@ -66,10 +66,10 @@ static StatusOr<popnn::ctc::Plan> GetPlanForInferenceInstruction(
   TF_ASSIGN_OR_RETURN(poplar::Type in_dtype,
                       PoplarDataType(ctc_inst->in_dtype()));
   const auto& data_shape = ctc_inst->operand(0)->shape();
-  const int64 max_time = data_shape.dimensions(0);
-  const int64 batch_size = data_shape.dimensions(1);
-  const int64 num_classes = data_shape.dimensions(2);
-  const int64 beam_width = ctc_inst->beam_width();
+  const int64_t max_time = data_shape.dimensions(0);
+  const int64_t batch_size = data_shape.dimensions(1);
+  const int64_t num_classes = data_shape.dimensions(2);
+  const int64_t beam_width = ctc_inst->beam_width();
   return popnn::ctc_infer::plan(graph, in_dtype, batch_size, max_time,
                                 num_classes, beam_width);
 }

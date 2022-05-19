@@ -28,7 +28,7 @@ namespace poplarplugin {
 
 HloDropout::HloDropout(HloInstruction* operand, HloInstruction* seed,
                        float rate, float scale,
-                       const std::vector<int64>& noise_shape)
+                       const std::vector<int64_t>& noise_shape)
     : HloPoplarInstruction(
           ShapeUtil::MakeTupleShape(
               {operand->shape(), seed->shape(), ShapeUtil::MakeOpaqueShape()}),
@@ -39,7 +39,7 @@ HloDropout::HloDropout(HloInstruction* operand, HloInstruction* seed,
 
 HloDropout::HloDropout(HloInstruction* operand, HloInstruction* seed,
                        HloInstruction* reference, float rate, float scale,
-                       const std::vector<int64>& noise_shape)
+                       const std::vector<int64_t>& noise_shape)
     : HloPoplarInstruction(
           ShapeUtil::MakeTupleShape(
               {operand->shape(), seed->shape(), ShapeUtil::MakeOpaqueShape()}),
@@ -49,11 +49,13 @@ HloDropout::HloDropout(HloInstruction* operand, HloInstruction* seed,
       rate(rate),
       noise_shape(noise_shape) {}
 
-absl::flat_hash_set<int64> HloDropout::AllocatingIndices() const { return {}; }
+absl::flat_hash_set<int64_t> HloDropout::AllocatingIndices() const {
+  return {};
+}
 
 bool HloDropout::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloDropout::LayoutDependencies() const {
+absl::flat_hash_map<int64_t, int64_t> HloDropout::LayoutDependencies() const {
   return {};
 }
 
@@ -102,13 +104,13 @@ std::unique_ptr<HloInstruction> HloDropout::CloneWithNewOperandsImpl(
 
 std::unique_ptr<HloInstruction> CreateDropout(
     HloInstruction* operand, HloInstruction* seed, float rate, float scale,
-    const std::vector<int64>& noise_shape) {
+    const std::vector<int64_t>& noise_shape) {
   return absl::make_unique<HloDropout>(operand, seed, rate, scale, noise_shape);
 }
 
 std::unique_ptr<HloInstruction> CreateDropout(
     HloInstruction* operand, HloInstruction* seed, HloInstruction* reference,
-    float rate, float scale, const std::vector<int64>& noise_shape) {
+    float rate, float scale, const std::vector<int64_t>& noise_shape) {
   return absl::make_unique<HloDropout>(operand, seed, reference, rate, scale,
                                        noise_shape);
 }
@@ -124,7 +126,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloDropoutFactoryFunc(
 
   // If the noise_shape attribute is not present (defaults to empty list), we
   // want the corresponding std::vector to also be empty.
-  std::vector<int64> noise_shape;
+  std::vector<int64_t> noise_shape;
   if (attribute_map.HasAttribute("noise_shape")) {
     TF_ASSIGN_OR_RETURN(noise_shape,
                         attribute_map.GetAttributeInt64Vector("noise_shape"));
@@ -148,8 +150,8 @@ static HloPoplarInstructionFactory dropout_factory(PoplarOp::Dropout,
 // std::vector<long long> does not by default have a std::hash specialization.
 namespace std {
 template <>
-struct hash<std::vector<tensorflow::int64>> {
-  size_t operator()(const std::vector<tensorflow::int64>& vec) const {
+struct hash<std::vector<int64_t>> {
+  size_t operator()(const std::vector<int64_t>& vec) const {
     return tensorflow::Hash64(absl::StrJoin(vec, ""));
   }
 };

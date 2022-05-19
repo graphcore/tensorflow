@@ -32,7 +32,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-int64 GetNumConvolutionWithReverse(const HloComputation* comp) {
+int64_t GetNumConvolutionWithReverse(const HloComputation* comp) {
   return absl::c_count_if(comp->instructions(), [](const HloInstruction* inst) {
     return IsPopOpsConvolutionWithReverse(inst);
   });
@@ -46,7 +46,7 @@ std::vector<HloInstruction*> GetConvolutionWithReverse(
   return insts;
 }
 
-int64 GetNumWeightsTransposeChansFlipXY(const HloComputation* comp) {
+int64_t GetNumWeightsTransposeChansFlipXY(const HloComputation* comp) {
   return absl::c_count_if(comp->instructions(), [](const HloInstruction* inst) {
     return IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY)(inst);
   });

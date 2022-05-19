@@ -21,6 +21,7 @@ limitations under the License.
  * optimizers target within the BUILD file.
  */
 
+#include <utility>
 #include <vector>
 
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
@@ -35,7 +36,7 @@ namespace poplarplugin {
 class WhileLoopUtil {
  public:
   static bool IsGTEFromParamIndex(const HloInstruction* inst,
-                                  int64 param_index);
+                                  int64_t param_index);
   static bool CanRepresentInstructionAsInt64Constant(
       const HloInstruction* inst);
 
@@ -44,7 +45,7 @@ class WhileLoopUtil {
   // while body in the same index as the inst.
   // Returns a vector of pairs of instructions and the constant
   // increment/decrement.
-  static std::vector<std::pair<HloInstruction*, int64>>
+  static std::vector<std::pair<HloInstruction*, int64_t>>
   FindMatchingLoopDeltasInsideBody(const HloInstruction* inst,
                                    const HloComputation* while_body);
 

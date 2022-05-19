@@ -24,11 +24,12 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-std::string GetInputCopyHandle(int64 parameter, int64 index) {
+std::string GetInputCopyHandle(int64_t parameter, int64_t index) {
   return tensorflow::strings::Printf("%lld.%lld", parameter, index);
 }
 
-std::string GetOutputCopyHandle(int64 output_index, int64 flat_tensor_index) {
+std::string GetOutputCopyHandle(int64_t output_index,
+                                int64_t flat_tensor_index) {
   return tensorflow::strings::Printf("out_%lld.%lld", output_index,
                                      flat_tensor_index);
 }
@@ -113,7 +114,7 @@ InputOutputAliasingMap::InputOutputAliasingMap(const HloModule* module) {
 
     bool argument_end = argument_itr == argument_input_indices.end();
     bool resource_end = resource_itr == resource_input_indices.end();
-    int64 next_parameter_idx = 0;
+    int64_t next_parameter_idx = 0;
     while (!argument_end || !resource_end) {
       if (resource_end ||
           (!argument_end && !resource_end && *argument_itr < *resource_itr)) {
@@ -155,7 +156,7 @@ InputOutputAliasingMap::InputOutputAliasingMap(const HloModule* module) {
   std::vector<Shape> output_shapes;
   std::vector<std::string> output_names;
   if (root->shape().IsTuple()) {
-    int64 tuple_index = 0;
+    int64_t tuple_index = 0;
     for (auto shape : root->shape().tuple_shapes()) {
       output_shapes.push_back(shape);
       if (root->opcode() == HloOpcode::kTuple) {
@@ -251,20 +252,20 @@ const uint64 InputOutputAliasingMap::InputInfo::GetOutputIndex() const {
   return output_index_;
 }
 
-const int64 InputOutputAliasingMap::InputInfo::GetParameterIndex() const {
+const int64_t InputOutputAliasingMap::InputInfo::GetParameterIndex() const {
   return parameter_index_;
 }
 
 InputOutputAliasingMap::InputInfo::InputInfo(const Type type,
                                              const std::string& name,
                                              const xla::Shape& shape,
-                                             int64 parameter_idx)
+                                             int64_t parameter_idx)
     : type_(type),
       output_index_(0),
       name_(name),
       shape_(shape),
       parameter_index_(parameter_idx) {
-  int64 index = 0;
+  int64_t index = 0;
   for (auto shape : FlattenedXlaShape(shape)) {
     handles_.push_back(GetInputCopyHandle(parameter_idx, index));
     index++;
@@ -275,9 +276,9 @@ InputOutputAliasingMap::OutputInfo::OutputInfo(const Type& type,
                                                const std::string& name,
                                                const xla::Shape& shape,
                                                const uint64 input_index,
-                                               int64 parameter_idx)
+                                               int64_t parameter_idx)
     : type_(type), input_index_(input_index), name_(name), shape_(shape) {
-  int64 index = 0;
+  int64_t index = 0;
   for (auto shape : FlattenedXlaShape(shape)) {
     handles_.push_back(GetOutputCopyHandle(parameter_idx, index));
     index++;

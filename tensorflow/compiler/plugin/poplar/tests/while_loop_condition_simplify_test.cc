@@ -141,8 +141,8 @@ TEST_F(WhileLoopConditionSimplifyTest,
       HloInstruction::CreateParameter(0, tuple_shape, "cond_tuple"));
   auto limit0_cond = builder_cond.AddInstruction(
       HloInstruction::CreateConstant(LiteralUtil::CreateR0<int32>(loop_bound)));
-  auto limit1_cond = builder_cond.AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int64>(loop_bound)));
+  auto limit1_cond = builder_cond.AddInstruction(HloInstruction::CreateConstant(
+      LiteralUtil::CreateR0<int64_t>(loop_bound)));
   auto c0_cond =
       builder_cond.AddInstruction(HloInstruction::CreateGetTupleElement(
           ShapeUtil::MakeShape(S32, {}), tuple_cond, 0));
@@ -173,7 +173,7 @@ TEST_F(WhileLoopConditionSimplifyTest,
   auto new_c0_body = builder_body.AddInstruction(HloInstruction::CreateBinary(
       c0_body->shape(), HloOpcode::kAdd, c0_body, s32_one));
   auto s64_one = builder_body.AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int64>(1)));
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int64_t>(1)));
   auto new_c1_body = builder_body.AddInstruction(HloInstruction::CreateBinary(
       c1_body->shape(), HloOpcode::kAdd, c1_body, s64_one));
 
@@ -188,7 +188,7 @@ TEST_F(WhileLoopConditionSimplifyTest,
   auto c0_init = builder_main.AddInstruction(
       HloInstruction::CreateConstant(LiteralUtil::CreateR0<int32>(0)));
   auto c1_init = builder_main.AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int64>(0)));
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int64_t>(0)));
 
   auto init = builder_main.AddInstruction(
       HloInstruction::CreateTuple({c0_init, c1_init}));

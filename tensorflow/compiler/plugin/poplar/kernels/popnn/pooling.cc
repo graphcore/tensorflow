@@ -45,17 +45,16 @@ using namespace xla::poplarplugin;
 
 namespace tensorflow {
 namespace {
-xla::StatusOr<xla::Window> MakeWindow(const xla::Shape& input_shape,
-                                      absl::Span<const int64> window_dimensions,
-                                      absl::Span<const int64> window_strides,
-                                      xla::Padding xla_padding,
-                                      absl::Span<const int64> lhs_dilation,
-                                      absl::Span<const int64> rhs_dilation) {
+xla::StatusOr<xla::Window> MakeWindow(
+    const xla::Shape& input_shape, absl::Span<const int64_t> window_dimensions,
+    absl::Span<const int64_t> window_strides, xla::Padding xla_padding,
+    absl::Span<const int64_t> lhs_dilation,
+    absl::Span<const int64_t> rhs_dilation) {
   TF_RETURN_IF_ERROR(
       xla::ValidatePaddingValues(xla::AsInt64Slice(input_shape.dimensions()),
                                  window_dimensions, window_strides));
 
-  std::vector<std::pair<int64, int64>> padding =
+  std::vector<std::pair<int64_t, int64_t>> padding =
       xla::MakePadding(xla::AsInt64Slice(input_shape.dimensions()),
                        window_dimensions, window_strides, xla_padding);
 
@@ -140,11 +139,11 @@ class PoolingOp : public XlaOpKernel, IpuOpKernel {
   void Compile(XlaOpKernelContext* ctx) override {
     auto ksize_or_error = GetKernelSize(ctx);
     OP_REQUIRES_OK(ctx, ksize_or_error.status());
-    std::vector<int64> ksize = ksize_or_error.ValueOrDie();
+    std::vector<int64_t> ksize = ksize_or_error.ValueOrDie();
 
     auto stride_or_error = GetStride(ctx);
     OP_REQUIRES_OK(ctx, stride_or_error.status());
-    std::vector<int64> stride = stride_or_error.ValueOrDie();
+    std::vector<int64_t> stride = stride_or_error.ValueOrDie();
 
     const TensorShape tensor_in_shape = ctx->InputShape(0);
     OP_REQUIRES(ctx, tensor_in_shape.dims() == num_dims(),
@@ -197,7 +196,7 @@ class PoolingOp : public XlaOpKernel, IpuOpKernel {
   int num_dims() const { return num_spatial_dims_ + 2; }
 
  protected:
-  xla::StatusOr<std::vector<int64>> GetKernelSize(XlaOpKernelContext* ctx) {
+  xla::StatusOr<std::vector<int64_t>> GetKernelSize(XlaOpKernelContext* ctx) {
     if (ctx->num_inputs() == 1) {
       return ksize_;
     }
@@ -213,7 +212,7 @@ class PoolingOp : public XlaOpKernel, IpuOpKernel {
           "specify ",
           num_dims(), " dimensions");
     }
-    std::vector<int64> ksize;
+    std::vector<int64_t> ksize;
     auto status = ctx->ConstantInputAsIntVector(1, &ksize);
     if (!status.ok()) {
       return status;
@@ -221,7 +220,7 @@ class PoolingOp : public XlaOpKernel, IpuOpKernel {
     return ksize;
   }
 
-  xla::StatusOr<std::vector<int64>> GetStride(XlaOpKernelContext* ctx) {
+  xla::StatusOr<std::vector<int64_t>> GetStride(XlaOpKernelContext* ctx) {
     if (ctx->num_inputs() == 1) {
       return stride_;
     }
@@ -237,7 +236,7 @@ class PoolingOp : public XlaOpKernel, IpuOpKernel {
           "specify ",
           num_dims(), " dimensions");
     }
-    std::vector<int64> stride;
+    std::vector<int64_t> stride;
     auto status = ctx->ConstantInputAsIntVector(2, &stride);
     if (!status.ok()) {
       return status;
@@ -247,8 +246,8 @@ class PoolingOp : public XlaOpKernel, IpuOpKernel {
 
  protected:
   const int num_spatial_dims_;
-  std::vector<int64> ksize_;
-  std::vector<int64> stride_;
+  std::vector<int64_t> ksize_;
+  std::vector<int64_t> stride_;
   xla::Padding padding_;
   PoplarOp op_type_;
 };
@@ -400,8 +399,8 @@ class MaxPoolGradOp : public XlaOpKernel, IpuOpKernel {
 
  protected:
   const int num_spatial_dims_;
-  std::vector<int64> ksize_;
-  std::vector<int64> stride_;
+  std::vector<int64_t> ksize_;
+  std::vector<int64_t> stride_;
   Padding padding_;
 };
 
@@ -506,8 +505,8 @@ class AvgPoolGradOp : public XlaOpKernel, IpuOpKernel {
 
  protected:
   const int num_spatial_dims_;
-  std::vector<int64> ksize_;
-  std::vector<int64> stride_;
+  std::vector<int64_t> ksize_;
+  std::vector<int64_t> stride_;
   Padding padding_;
 };
 

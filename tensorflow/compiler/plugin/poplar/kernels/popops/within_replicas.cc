@@ -36,9 +36,9 @@ class PopopsAllGatherWithinReplica : public XlaOpKernel, IpuOpKernel {
     // Create an output tuple shape where each element has shape
     // (num_elements(input0) + num_elements(input1) ...
     // + num_elements(inputN-1)).
-    int64 element_count = 0;
+    int64_t element_count = 0;
     std::vector<xla::XlaOp> inputs;
-    for (int64 i = 0; i != ctx->num_inputs(); ++i) {
+    for (int64_t i = 0; i != ctx->num_inputs(); ++i) {
       CHECK_EQ(ctx->input_type(0), ctx->input_type(i))
           << "Expecting all inputs to be of the same type.";
 
@@ -93,7 +93,7 @@ class PopopsReduceScatterWithinReplica : public XlaOpKernel, IpuOpKernel {
     // Ceil(input_length/shard_count). We assume ctx->num_inputs
     // to equal the number of shards.
     std::vector<xla::XlaOp> inputs;
-    for (int64 i = 0; i != ctx->num_inputs(); ++i) {
+    for (int64_t i = 0; i != ctx->num_inputs(); ++i) {
       CHECK_EQ(ctx->input_type(0), ctx->input_type(i))
           << "Expecting all inputs to be of the same type.";
 
@@ -102,10 +102,10 @@ class PopopsReduceScatterWithinReplica : public XlaOpKernel, IpuOpKernel {
     }
 
     const TensorShape input_shape = ctx->InputShape(0);
-    const int64 input_length = input_shape.dim_size(0);
+    const int64_t input_length = input_shape.dim_size(0);
     const auto shard_count = ctx->num_inputs();
-    const int64 output_length =
-        MathUtil::CeilOfRatio<int64>(input_length, shard_count);
+    const int64_t output_length =
+        MathUtil::CeilOfRatio<int64_t>(input_length, shard_count);
 
     TensorShape output_shape;
     output_shape.AddDim(output_length);

@@ -56,8 +56,8 @@ class PoplinPreplanning : public HloModulePass {
   // OptionsFlags storage location.
   std::list<poplar::OptionFlags> option_flags_store;
 
-  Status StorePreplanConv(const HloInstruction* inst, int64 input_index,
-                          int64 kernel_index);
+  Status StorePreplanConv(const HloInstruction* inst, int64_t input_index,
+                          int64_t kernel_index);
 
   Status StorePreplanMatMulsLSTM(const HloInstruction* inst);
 

@@ -30,14 +30,14 @@ HloPoolingInstruction::HloPoolingInstruction(
 
 const xla::Window& HloPoolingInstruction::window() const { return window_; }
 
-absl::flat_hash_set<int64> HloPoolingInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloPoolingInstruction::AllocatingIndices() const {
   return {};
 }
 
 bool HloPoolingInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloPoolingInstruction::LayoutDependencies()
-    const {
+absl::flat_hash_map<int64_t, int64_t>
+HloPoolingInstruction::LayoutDependencies() const {
   return {};
 }
 

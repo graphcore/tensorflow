@@ -92,7 +92,7 @@ xla::StatusOr<xla::LocalExecutable*> CompileExecutable(
 
   // IPU Specific - store the names of all inputs.
   std::vector<std::string> mangled_input_names(inputs.size());
-  for (int64 i = 0; i != inputs.size(); ++i) {
+  for (int64_t i = 0; i != inputs.size(); ++i) {
     mangled_input_names[i] = ctx->op_kernel().requested_input(i);
   }
 
@@ -129,7 +129,7 @@ Status CopyDeviceTensorsToHost(OpKernelContext* ctx,
   Device* device = static_cast<Device*>(ctx->device());
   host_tensors->reserve(input_tensors->size());
 
-  for (const int64 input_num : constant_indices) {
+  for (const int64_t input_num : constant_indices) {
     const Tensor* input = (*input_tensors)[input_num];
     // Create a host value and copy to it.
     host_tensors->emplace_back(input->dtype(), input->shape());

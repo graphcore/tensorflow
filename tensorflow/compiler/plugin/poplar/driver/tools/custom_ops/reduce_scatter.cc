@@ -34,14 +34,14 @@ HloReduceScatterInstruction::HloReduceScatterInstruction(
       op_(op),
       replica_groups_(replica_groups) {}
 
-absl::flat_hash_set<int64> HloReduceScatterInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloReduceScatterInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloReduceScatterInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloReduceScatterInstruction::LayoutDependencies() const {
   return {};
 }

@@ -33,7 +33,7 @@ namespace poplarplugin {
 using ::tensorflow::str_util::Join;
 
 PartitionedElementwiseClusterVisitor::PartitionedElementwiseClusterVisitor(
-    int64 next_rearrangement_id, CompilerResources& res,
+    int64_t next_rearrangement_id, CompilerResources& res,
     const DeferredArgRBVectors& callsite_inputs,
     const poplar::DebugNameAndId& debug_name_and_id,
     bool allocate_all_input_tensors,
@@ -47,7 +47,7 @@ PartitionedElementwiseClusterVisitor::PartitionedElementwiseClusterVisitor(
 }
 
 PartitionedElementwiseClusterVisitor::PartitionedElementwiseClusterVisitor(
-    int64 next_rearrangement_id, CompilerResources& res,
+    int64_t next_rearrangement_id, CompilerResources& res,
     const DeferredArgRBVectors& callsite_inputs,
     const poplar::DebugNameAndId& debug_name_and_id,
     bool allocate_all_input_tensors,
@@ -76,7 +76,7 @@ Status PartitionedElementwiseClusterVisitor::Preprocess(HloInstruction* inst) {
     }
     auto entry_param = GetRemoteBufferEntryParameterNumber(*dfa_, inst);
     if (entry_param.ok()) {
-      int64 entry_param_idx = entry_param.ValueOrDie();
+      int64_t entry_param_idx = entry_param.ValueOrDie();
       VLOG(3) << "Parameter mapped to entry parameter " << entry_param_idx;
       TF_ASSIGN_OR_RETURN(bool updated,
                           UpdateRemoteBufferInformation(entry_param_idx, inst));
@@ -137,18 +137,18 @@ Status PartitionedElementwiseClusterVisitor::ValidateShape(
 
   const gcl::CollectiveBalancedHostRearrangement& host_rearrangement =
       cbr->getHostRearrangement();
-  const int64 replicated_element_count =
+  const int64_t replicated_element_count =
       host_rearrangement.totalElementsPerReplica;
-  const int64 non_replicated_element_count =
+  const int64_t non_replicated_element_count =
       replicated_element_count * host_rearrangement.replicationFactor;
-  const int64 xla_element_count = ShapeUtil::ElementsIn(shape);
+  const int64_t xla_element_count = ShapeUtil::ElementsIn(shape);
   VLOG(3) << "CBR slice element count: " << replicated_element_count
           << ", total collectives elements: " << non_replicated_element_count
           << ", XLA element count: " << xla_element_count;
 
   if (out.IsTensor()) {
     // Check shape.
-    int64 element_count = out.AsTensor().numElements();
+    int64_t element_count = out.AsTensor().numElements();
     VLOG(3) << "Validate tensor with " << element_count << " elements.";
     if (replicated_element_count == element_count ||
         non_replicated_element_count == element_count ||
@@ -212,8 +212,9 @@ PartitionedElementwiseClusterVisitor::MakeParameterAllocationFunction(
 }
 
 Status PartitionedElementwiseClusterVisitor::SetRemoteBufferHostRearrangementId(
-    DriverGraph& graph, const HloComputation* entry_comp, int64 entry_param_idx,
-    int64 host_rearrangement_id, int64 elements_per_replica) {
+    DriverGraph& graph, const HloComputation* entry_comp,
+    int64_t entry_param_idx, int64_t host_rearrangement_id,
+    int64_t elements_per_replica) {
   auto& annotations = resources_.annotations;
   auto& remote_parameter_infos = annotations.remote_parameter_infos;
   auto old_info =
@@ -261,7 +262,7 @@ Status PartitionedElementwiseClusterVisitor::SetRemoteBufferHostRearrangementId(
 
 StatusOr<bool>
 PartitionedElementwiseClusterVisitor::UpdateRemoteBufferInformation(
-    int64 entry_param_idx, const HloInstruction* entry_param) {
+    int64_t entry_param_idx, const HloInstruction* entry_param) {
   TF_ASSIGN_OR_RETURN(auto cbr_info, GetCollectiveBalancedReorder(entry_param));
   if (!cbr_info) {
     VLOG(3) << "No CBR created, skipping.";
@@ -321,7 +322,7 @@ PartitionedElementwiseClusterVisitor::UpdateRemoteBufferInformation(
 
 Status PartitionedElementwiseClusterVisitor::UpdateRemoteBuffersInformation() {
   for (auto it = entry_params_.begin(); it != entry_params_.end();) {
-    int64 entry_param_idx = it->first;
+    int64_t entry_param_idx = it->first;
     VLOG(3) << "Adding rearrangement info for entry parameter "
             << entry_param_idx;
 

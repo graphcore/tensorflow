@@ -1357,7 +1357,7 @@ ENTRY entry {
 
   // Make sure both while and repeat wasn't lowered inplace.
   EXPECT_TRUE(!IsLoweredInplace(loop));
-  int64 operand_n;
+  int64_t operand_n;
   if (convert_to_repeat) {
     EXPECT_TRUE(IsRepeatLoop(loop));
   } else {

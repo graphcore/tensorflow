@@ -34,7 +34,7 @@ struct GetNonRUCall {
     EXPECT_FALSE(root_operands.empty());
   }
 
-  HloInstruction* operator()(int64 output_tuple_idx) {
+  HloInstruction* operator()(int64_t output_tuple_idx) {
     auto merged_ru_gte = root_operands.at(output_tuple_idx);
     EXPECT_EQ(merged_ru_gte->opcode(), HloOpcode::kGetTupleElement);
 
@@ -209,7 +209,7 @@ ENTRY entry_comp {
   EXPECT_EQ(non_ru0->to_apply(), non_ru1->to_apply());
 
   auto check_non_ru_call_operand = [](HloInstruction* non_ru_call,
-                                      int64 op_idx) {
+                                      int64_t op_idx) {
     EXPECT_EQ(non_ru_call->name(), "ru1_non_ru_call");
 
     auto gte = non_ru_call->operands().at(op_idx);
@@ -371,7 +371,7 @@ ENTRY entry_comp {
   EXPECT_NE(non_ru1->to_apply(), non_ru2->to_apply());
 
   auto check_non_ru_call_operand_ru0 = [](HloInstruction* non_ru_call,
-                                          int64 op_idx) {
+                                          int64_t op_idx) {
     EXPECT_EQ(non_ru_call->name(), "ru0_non_ru_call");
 
     auto param = non_ru_call->operands().at(op_idx);
@@ -384,7 +384,7 @@ ENTRY entry_comp {
   check_non_ru_call_operand_ru0(non_ru1, 1);
 
   auto check_non_ru_call_operand_ru1 = [](HloInstruction* non_ru_call,
-                                          int64 op_idx) {
+                                          int64_t op_idx) {
     EXPECT_EQ(non_ru_call->name(), "ru1_non_ru_call");
 
     auto gte = non_ru_call->operands().at(op_idx);

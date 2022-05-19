@@ -16,6 +16,7 @@ limitations under the License.
 
 #include <functional>
 #include <limits>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/norm.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
@@ -113,7 +114,7 @@ bool Is2DReductionWindow(const HloInstruction* inst) {
 
   const Window& window(inst->window());
   int reduction_count = 0;
-  for (int64 i = 0; i < window.dimensions_size(); i++) {
+  for (int64_t i = 0; i < window.dimensions_size(); i++) {
     if (window.dimensions(i).size() != 1 ||
         window.dimensions(i).stride() != 1 ||
         window.dimensions(i).padding_low() != 0 ||
@@ -158,7 +159,7 @@ bool IsConvFilterTranspose(const HloInstruction* inst) {
   // special 'reverse spatial dimensions' feature of the convolution
   // to achieve the reverse
   if (inst->users().size() != 1) return false;
-  const std::vector<int64>& rev(inst->dimensions());
+  const std::vector<int64_t>& rev(inst->dimensions());
 
   HloInstruction* conv = inst->users()[0];
   if (conv->opcode() != HloOpcode::kConvolution) {
@@ -186,8 +187,9 @@ bool IsBiasReduce(const HloInstruction* inst) {
 
   if (inst->shape().rank() != 1) return false;
 
-  const std::vector<int64>& dims(inst->dimensions());
-  if (static_cast<int64>(dims.size()) != inst->operand(0)->shape().rank() - 1) {
+  const std::vector<int64_t>& dims(inst->dimensions());
+  if (static_cast<int64_t>(dims.size()) !=
+      inst->operand(0)->shape().rank() - 1) {
     return false;
   }
   return true;
@@ -284,10 +286,10 @@ bool IsBiasAdd(const HloInstruction* inst) {
 
   // Go through the bias shape, if the dimension size is 1, then the dimension
   // of the op doesn't matter, otherwise they have to match.
-  for (int64 i = 0; i < bias_shape.rank(); i++) {
-    int64 bias_dim = ShapeUtil::GetDimension(bias_shape, i);
+  for (int64_t i = 0; i < bias_shape.rank(); i++) {
+    int64_t bias_dim = ShapeUtil::GetDimension(bias_shape, i);
     if (bias_dim != 1) {
-      int64 op_dim = ShapeUtil::GetDimension(op_shape, i);
+      int64_t op_dim = ShapeUtil::GetDimension(op_shape, i);
       if (bias_dim != op_dim) {
         return false;
       }
@@ -432,12 +434,12 @@ bool IsWideConstantZero(const HloInstruction* inst) {
 bool IsUniformSingleDimSlice(const HloInstruction* slice) {
   // All the strides are 1.
   if (absl::c_any_of(slice->slice_strides(),
-                     [](int64 stride) { return stride != 1; })) {
+                     [](int64_t stride) { return stride != 1; })) {
     return false;
   }
   // Only one dimension is sliced.
-  int64 num_sliced_dims = 0;
-  for (int64 i = 0; i != slice->shape().rank(); ++i) {
+  int64_t num_sliced_dims = 0;
+  for (int64_t i = 0; i != slice->shape().rank(); ++i) {
     if (slice->shape().dimensions(i) !=
         slice->operand(0)->shape().dimensions(i)) {
       num_sliced_dims++;

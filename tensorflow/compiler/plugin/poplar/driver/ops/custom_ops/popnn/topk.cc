@@ -45,7 +45,7 @@ popops::TopKParams GetParams(const HloInstruction* inst) {
 
 std::vector<std::size_t> Get2DDimensions(const Shape& shape) {
   CHECK_GE(shape.rank(), 1);
-  const int64 rank = shape.rank();
+  const int64_t rank = shape.rank();
   return {ShapeUtil::ElementsIn(shape) / shape.dimensions(rank - 1),
           shape.dimensions(rank - 1)};
 }

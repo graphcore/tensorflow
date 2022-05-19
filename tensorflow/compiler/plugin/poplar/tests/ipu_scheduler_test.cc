@@ -45,7 +45,7 @@ MATCHER_P(IsScheduledWith, expected_schedule, "Module to have given schedule") {
   return true;
 }
 
-int64 SizeFunction(const BufferValue& buffer) {
+int64_t SizeFunction(const BufferValue& buffer) {
   if (buffer.shape().IsOpaque()) {
     return 0;
   }
@@ -58,7 +58,7 @@ MemoryEstimator ScheduleUsesLeastMemory(const HloSchedule& schedule) {
              const HloInstructionSequence& sequence,
              const HloAliasAnalysis& alias_analysis,
              const LogicalBuffer::SizeFunction& size_function,
-             const absl::flat_hash_map<const HloComputation*, int64>*
+             const absl::flat_hash_map<const HloComputation*, int64_t>*
                  computations) {
     if (schedule.is_computation_scheduled(&computation)) {
       const auto& expected = schedule.sequence(&computation);

@@ -137,11 +137,11 @@ class InfeedIterator {
 
   bool HasReplicationFactor() const;
 
-  int64 ReplicationFactor() const;
-  void SetReplicationFactor(int64 replication_factor);
+  int64_t ReplicationFactor() const;
+  void SetReplicationFactor(int64_t replication_factor);
 
  private:
-  int64 replication_factor_;
+  int64_t replication_factor_;
   std::vector<Shape> shapes_;
 
   // Not owned.

@@ -34,11 +34,12 @@ RemoteBufferHandleVectors GetInputRemoteBufferHandles(
 
   // Construct the structure for encoding remote buffer inputs and their
   // positions.
-  for (int64 operand_idx = 0; operand_idx != inputs.size(); ++operand_idx) {
+  for (int64_t operand_idx = 0; operand_idx != inputs.size(); ++operand_idx) {
     auto& operand_inputs = inputs[operand_idx];
     RemoteBufferHandleVector& operand_handles = handles[operand_idx];
     operand_handles.resize(operand_inputs.size());
-    for (int64 tuple_idx = 0; tuple_idx != operand_inputs.size(); ++tuple_idx) {
+    for (int64_t tuple_idx = 0; tuple_idx != operand_inputs.size();
+         ++tuple_idx) {
       // For remote buffer inputs store their handle.
       auto& operand_input = operand_inputs[tuple_idx];
       if (operand_input && operand_input->IsRemoteBuffer()) {
@@ -59,7 +60,7 @@ ReallocateInputsInfo GetReallocateInputsInfo(const DeferredArgRBVectors& inputs,
     if (!reallocate) {
       // If there is a hint provided not to reallocate, any inputs which are not
       // parallel writeable are still reallocated.
-      for (int64 i = 0; i != input.size(); ++i) {
+      for (int64_t i = 0; i != input.size(); ++i) {
         if (input[i] && input[i]->IsTensor()) {
           const poplar::Tensor& t = input[i]->AsTensor();
           reallocate_inputs.back()[i] = !t.isParallelWriteable();

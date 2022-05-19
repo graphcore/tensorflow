@@ -22,7 +22,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-HloFifoInstruction::HloFifoInstruction(HloInstruction* operand, int64 depth,
+HloFifoInstruction::HloFifoInstruction(HloInstruction* operand, int64_t depth,
                                        bool offload)
     : HloPoplarInstruction(operand->shape(), {operand}, PoplarOp::Fifo, depth,
                            offload),
@@ -31,17 +31,17 @@ HloFifoInstruction::HloFifoInstruction(HloInstruction* operand, int64 depth,
 
 const HloInstruction* HloFifoInstruction::input() const { return operand(0); }
 
-int64 HloFifoInstruction::depth() const { return depth_; }
+int64_t HloFifoInstruction::depth() const { return depth_; }
 
 bool HloFifoInstruction::offload() const { return offload_; }
 
-absl::flat_hash_set<int64> HloFifoInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloFifoInstruction::AllocatingIndices() const {
   return {};
 }
 
 bool HloFifoInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloFifoInstruction::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloFifoInstruction::LayoutDependencies()
     const {
   return {};
 }
@@ -78,8 +78,8 @@ std::vector<std::string> HloFifoInstruction::ExtraPoplarAttributesToStringImpl(
   return attributes;
 }
 
-std::unique_ptr<HloInstruction> CreateFifo(HloInstruction* operand, int64 depth,
-                                           bool offload) {
+std::unique_ptr<HloInstruction> CreateFifo(HloInstruction* operand,
+                                           int64_t depth, bool offload) {
   return absl::make_unique<HloFifoInstruction>(operand, depth, offload);
 }
 
@@ -87,7 +87,7 @@ namespace {
 StatusOr<std::unique_ptr<HloInstruction>> HloFifoInstructionFactoryFunc(
     HloCustomCallInstruction* call) {
   auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
-  TF_ASSIGN_OR_RETURN(int64 depth, attribute_map.GetAttributeAsInt("depth"));
+  TF_ASSIGN_OR_RETURN(int64_t depth, attribute_map.GetAttributeAsInt("depth"));
   TF_ASSIGN_OR_RETURN(bool offload,
                       attribute_map.GetAttributeAsBool("offload"));
 

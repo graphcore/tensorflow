@@ -38,7 +38,7 @@ HloHostEmbeddingLookupInstruction::HloHostEmbeddingLookupInstruction(
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64>
+absl::flat_hash_set<int64_t>
 HloHostEmbeddingLookupInstruction::AllocatingIndices() const {
   return {};
 }
@@ -47,7 +47,7 @@ bool HloHostEmbeddingLookupInstruction::AllocatingOutput() const {
   return true;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloHostEmbeddingLookupInstruction::LayoutDependencies() const {
   return {};
 }
@@ -118,7 +118,7 @@ HloHostEmbeddingUpdateInstruction::HloHostEmbeddingUpdateInstruction(
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64>
+absl::flat_hash_set<int64_t>
 HloHostEmbeddingUpdateInstruction::AllocatingIndices() const {
   return {};
 }
@@ -127,7 +127,7 @@ bool HloHostEmbeddingUpdateInstruction::AllocatingOutput() const {
   return false;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloHostEmbeddingUpdateInstruction::LayoutDependencies() const {
   return {};
 }
@@ -195,7 +195,7 @@ HloHostEmbeddingNotifyInstruction::HloHostEmbeddingNotifyInstruction(
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64>
+absl::flat_hash_set<int64_t>
 HloHostEmbeddingNotifyInstruction::AllocatingIndices() const {
   return {};
 }
@@ -204,7 +204,7 @@ bool HloHostEmbeddingNotifyInstruction::AllocatingOutput() const {
   return false;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloHostEmbeddingNotifyInstruction::LayoutDependencies() const {
   return {};
 }

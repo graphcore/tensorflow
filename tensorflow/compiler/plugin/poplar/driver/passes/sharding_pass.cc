@@ -276,7 +276,7 @@ bool CopyShardingFromTupleUsersOrOperands(HloInstruction* inst) {
 bool CopyGteShardingFromOperand(HloInstruction* inst) {
   auto* operand = inst->operand(0);
   if (operand->has_sharding()) {
-    int64 tuple_index = inst->tuple_index();
+    int64_t tuple_index = inst->tuple_index();
     auto s = GetShardingOfOutputTensor(operand);
     if (!s.IsTuple()) {
       s = HloSharding::SingleTuple(operand->shape(), s);
@@ -529,7 +529,7 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
   return true;
 }
 
-Status PropagateShardingDeviceToInstruction(int64 sharding_device,
+Status PropagateShardingDeviceToInstruction(int64_t sharding_device,
                                             HloInstruction* inst) {
   const HloSharding single_sharding =
       HloSharding::AssignDevice(sharding_device);
@@ -557,7 +557,7 @@ Status ProcessPipelineStage(
     HloInstruction* stage, HloInstruction* pipeline_op,
     const CallGraph* call_graph,
     absl::flat_hash_set<const HloComputation*>& computations_in_pipeline) {
-  const int64 sharding_device = stage->sharding().GetUniqueDevice();
+  const int64_t sharding_device = stage->sharding().GetUniqueDevice();
 
   CHECK_NE(sharding_device, -1);
 
@@ -582,7 +582,7 @@ Status ProcessParallelPipelineStage(
     HloInstruction* stage, HloInstruction* pipeline_op,
     const CallGraph* call_graph,
     absl::flat_hash_set<const HloComputation*>& computations_in_pipeline) {
-  const int64 sharding_device = stage->sharding().GetUniqueDevice();
+  const int64_t sharding_device = stage->sharding().GetUniqueDevice();
 
   auto stage_insts = stage->to_apply()->MakeInstructionPostOrder();
   auto insts_itr =
@@ -590,7 +590,7 @@ Status ProcessParallelPipelineStage(
   stage_insts.erase(insts_itr, stage_insts.end());
 
   for (auto sub_stage : stage_insts) {
-    const int64 sub_sharding_device = sub_stage->sharding().GetUniqueDevice();
+    const int64_t sub_sharding_device = sub_stage->sharding().GetUniqueDevice();
 
     // Process each substage.
     // And add the substage computations to the computation set.
@@ -644,7 +644,7 @@ Status TransferSubStageSharding(HloComputation* fwd_stage,
   fwd_insts.erase(fwd_itr, fwd_insts.end());
   bwd_insts.erase(bwd_itr, bwd_insts.end());
 
-  absl::flat_hash_map<int64, int64> fwd_inst_shard;
+  absl::flat_hash_map<int64_t, int64_t> fwd_inst_shard;
   for (auto fwd_inst : fwd_insts) {
     CHECK(fwd_inst->has_sharding());
     const HloSharding& sharding = fwd_inst->sharding();
@@ -664,7 +664,7 @@ Status TransferSubStageSharding(HloComputation* fwd_stage,
 
 StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
     HloInstruction* pipeline_op, const CallGraph* call_graph,
-    const int64 computation_count) {
+    const int64_t computation_count) {
   absl::flat_hash_set<const HloComputation*> computations_in_pipeline;
   computations_in_pipeline.reserve(computation_count);
 
@@ -700,7 +700,7 @@ StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
   // 2.  all the user GTEs.
   for (auto& stages : {stages.forward, stages.backward}) {
     for (HloInstruction* stage : stages) {
-      const int64 sharding_device = stage->sharding().GetUniqueDevice();
+      const int64_t sharding_device = stage->sharding().GetUniqueDevice();
 
       if (sharding_device != Devices::All) {
         TF_RETURN_IF_ERROR(ProcessPipelineStage(stage, pipeline_op, call_graph,
@@ -731,7 +731,7 @@ Status ConvertComputationToUniqueSharding(HloInstruction* caller,
                       GetAllComputationsCalledBy(caller, call_graph));
 
   // Find the device with most parameters.
-  std::map<int64, int64> bytes_per_shard;
+  std::map<int64_t, int64_t> bytes_per_shard;
 
   for (HloInstruction* parameter : comp->parameter_instructions()) {
     const Shape shape = parameter->shape();
@@ -749,10 +749,10 @@ Status ConvertComputationToUniqueSharding(HloInstruction* caller,
 
   if (bytes_per_shard.size() > 1) {
     // Get the device with most bytes.
-    const int64 sharding_device =
+    const int64_t sharding_device =
         absl::c_max_element(bytes_per_shard,
-                            [](const std::pair<int64, int64>& a,
-                               const std::pair<int64, int64>& b) {
+                            [](const std::pair<int64_t, int64_t>& a,
+                               const std::pair<int64_t, int64_t>& b) {
                               return a.second < b.second;
                             })
             ->first;

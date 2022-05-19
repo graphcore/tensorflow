@@ -27,13 +27,13 @@ HloStatelessRandom::HloStatelessRandom(
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64> HloStatelessRandom::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloStatelessRandom::AllocatingIndices() const {
   return {};
 }
 
 bool HloStatelessRandom::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloStatelessRandom::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloStatelessRandom::LayoutDependencies()
     const {
   return {};
 }

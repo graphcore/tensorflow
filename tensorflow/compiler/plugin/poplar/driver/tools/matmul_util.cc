@@ -110,23 +110,23 @@ std::vector<Dimension> RightMatMulPackShapeInternal(
 
   const Dimension rhs_b =
       std::accumulate(rhs_shape_itr_begin, rhs_shape_itr_a,
-                      static_cast<int64>(1), std::multiplies<int64>());
+                      static_cast<int64_t>(1), std::multiplies<int64_t>());
   const Dimension rhs_k =
-      std::accumulate(rhs_shape_itr_a, rhs_shape_itr_b, static_cast<int64>(1),
-                      std::multiplies<int64>());
+      std::accumulate(rhs_shape_itr_a, rhs_shape_itr_b, static_cast<int64_t>(1),
+                      std::multiplies<int64_t>());
   const Dimension rhs_n =
-      std::accumulate(rhs_shape_itr_b, rhs_shape_itr_end, static_cast<int64>(1),
-                      std::multiplies<int64>());
+      std::accumulate(rhs_shape_itr_b, rhs_shape_itr_end,
+                      static_cast<int64_t>(1), std::multiplies<int64_t>());
   return {rhs_b, rhs_k, rhs_n};
 }
 }  // namespace
 
-std::vector<int64> LeftMatMulPermutations(const Shape& shape,
-                                          const DotDimensionNumbers& dot_dims) {
+std::vector<int64_t> LeftMatMulPermutations(
+    const Shape& shape, const DotDimensionNumbers& dot_dims) {
   // XLA and Poplar use opposite types of permutations so invert the
   // permutations vector.
-  return InvertPermutations<int64>(
-      LeftMatMulPermutationsInternal<int64>(shape.dimensions(), dot_dims));
+  return InvertPermutations<int64_t>(
+      LeftMatMulPermutationsInternal<int64_t>(shape.dimensions(), dot_dims));
 }
 
 std::vector<unsigned> LeftMatMulPermutations(
@@ -135,12 +135,12 @@ std::vector<unsigned> LeftMatMulPermutations(
   return LeftMatMulPermutationsInternal<unsigned>(shape, dot_dims);
 }
 
-std::vector<int64> RightMatMulPermutations(
+std::vector<int64_t> RightMatMulPermutations(
     const Shape& shape, const DotDimensionNumbers& dot_dims) {
   // XLA and Poplar use opposite types of permutations so invert the
   // permutations vector.
-  return InvertPermutations<int64>(
-      RightMatMulPermutationsInternal<int64>(shape.dimensions(), dot_dims));
+  return InvertPermutations<int64_t>(
+      RightMatMulPermutationsInternal<int64_t>(shape.dimensions(), dot_dims));
 }
 
 std::vector<unsigned> RightMatMulPermutations(
@@ -173,9 +173,9 @@ std::vector<size_t> RightMatMulPackShape(const absl::Span<const size_t>& shape,
   return RightMatMulPackShapeInternal(shape, dot_dims);
 }
 
-std::tuple<Shape, Shape, std::vector<int64>> LeftMatMulPrepare(
+std::tuple<Shape, Shape, std::vector<int64_t>> LeftMatMulPrepare(
     const Shape& shape, const DotDimensionNumbers& dot_dims) {
-  std::vector<int64> permutations = LeftMatMulPermutations(shape, dot_dims);
+  std::vector<int64_t> permutations = LeftMatMulPermutations(shape, dot_dims);
   // Collapse the LHS dimensions down to [Batch, M, Contracting]
   Shape shuffled_shape =
       ShapeUtil::PermuteDimensions(InversePermutation(permutations), shape);
@@ -183,9 +183,9 @@ std::tuple<Shape, Shape, std::vector<int64>> LeftMatMulPrepare(
                          shuffled_shape, permutations);
 }
 
-std::tuple<Shape, Shape, std::vector<int64>> RightMatMulPrepare(
+std::tuple<Shape, Shape, std::vector<int64_t>> RightMatMulPrepare(
     const Shape& shape, const DotDimensionNumbers& dot_dims) {
-  std::vector<int64> permutations = RightMatMulPermutations(shape, dot_dims);
+  std::vector<int64_t> permutations = RightMatMulPermutations(shape, dot_dims);
   // Collapse the LHS dimensions down to [Batch, M, Contracting]
   Shape shuffled_shape =
       ShapeUtil::PermuteDimensions(InversePermutation(permutations), shape);

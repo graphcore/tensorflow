@@ -138,7 +138,7 @@ StatusOr<HloComputation*> CloneStageCompWithStates(
   // Go through any inputs to the pipeline stage which are not parameters in the
   // pipeline and add copies if they are used inplace to make sure the inputs
   // are preserved when storing them in FIFOs for recomputation.
-  for (int64 idx = 0; idx != stage_comp->num_parameters(); ++idx) {
+  for (int64_t idx = 0; idx != stage_comp->num_parameters(); ++idx) {
     if (stage->operand(idx)->opcode() == HloOpcode::kParameter) {
       continue;
     }
@@ -203,8 +203,9 @@ StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
   bool changed = false;
   // Go through all the forward stages (apart from the last one which does not
   // need recomputation).
-  for (int64 stage_id = 0;
-       stage_id != static_cast<int64>(stages.forward.size()) - 1; ++stage_id) {
+  for (int64_t stage_id = 0;
+       stage_id != static_cast<int64_t>(stages.forward.size()) - 1;
+       ++stage_id) {
     HloInstruction* fwd_stage = stages.forward[stage_id];
     HloInstruction* bwd_stage = stages.backward[stage_id];
     // Do not recompute a stage if it has no outputs which go into the
@@ -321,8 +322,8 @@ StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
 
       // Outputs of the stateful ops are passed as extra parameters after
       // the regular stage operands.
-      int64 parameter_idx = fwd_stage->operands().size();
-      int64 tuple_index =
+      int64_t parameter_idx = fwd_stage->operands().size();
+      int64_t tuple_index =
           original_fwd_stage_comp->root_instruction()->operands().size();
 
       for (auto inst : recomp_info.to_cache) {

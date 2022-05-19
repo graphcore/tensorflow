@@ -76,7 +76,7 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
       const ElementwiseClusterValidator::Inputs& valid_inputs) const;
 
   virtual StatusOr<HloInstruction*> AddClusterInput(
-      int64 param_idx, const ElementwiseCluster& cluster,
+      int64_t param_idx, const ElementwiseCluster& cluster,
       HloInstruction* cluster_input, HloComputation::Builder* builder,
       HloCloneContext* context) const;
 
@@ -108,7 +108,7 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
                                  elementwise_comps) const;
 
   StatusOr<HloInstruction*> AddClusterInputToOutlinedComputation(
-      int64 param_idx, const ElementwiseCluster& cluster,
+      int64_t param_idx, const ElementwiseCluster& cluster,
       HloInstruction* cluster_input, HloComputation::Builder* builder,
       HloCloneContext* context) const;
 };

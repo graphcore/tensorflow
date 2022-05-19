@@ -179,7 +179,7 @@ StatusOr<bool> CombineInstructions::Run(HloModule* module) {
   const auto& schedule = module->schedule();
   const auto& sequences = schedule.sequences();
 
-  absl::flat_hash_map<int64, HloComputation*> computations;
+  absl::flat_hash_map<int64_t, HloComputation*> computations;
   for (int i = 0; i < module->computation_count(); ++i) {
     auto comp = module->mutable_computation(i);
     computations[comp->unique_id()] = comp;

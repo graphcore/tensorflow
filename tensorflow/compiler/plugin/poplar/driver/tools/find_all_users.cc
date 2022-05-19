@@ -27,7 +27,7 @@ namespace xla {
 namespace poplarplugin {
 
 void FindAllUsers::FindUsers(HloInstruction* tgt, const InstructionList& stack,
-                             int64 index) {
+                             int64_t index) {
   if (tgt->parent()->root_instruction() == tgt) {
     if (stack.size() > 0) {
       HloInstruction* caller = stack.back();
@@ -68,13 +68,14 @@ void FindAllUsers::FindUsers(HloInstruction* tgt, const InstructionList& stack,
               break;
             }
             case HloOpcode::kTuple: {
-              int64 new_index = InsertIntoTuple(user->shape(), op_index, index);
+              int64_t new_index =
+                  InsertIntoTuple(user->shape(), op_index, index);
               FindUsers(user, stack, new_index);
               break;
             }
             case HloOpcode::kGetTupleElement: {
-              int64 tuple_index = user->tuple_index();
-              int64 new_index =
+              int64_t tuple_index = user->tuple_index();
+              int64_t new_index =
                   ExtractFromTuple(tgt->shape(), tuple_index, index);
               if (new_index != -1) {
                 FindUsers(user, stack, new_index);

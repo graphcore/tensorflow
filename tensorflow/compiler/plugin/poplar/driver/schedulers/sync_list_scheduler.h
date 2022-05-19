@@ -23,7 +23,7 @@ namespace poplarplugin {
 // Sync aware list scheduler based on the TF ListMemoryScheduler from
 // hlo_memory_scheduler
 IpuSchedulerAlgorithm CreateSyncListMemoryScheduler(
-    int64 maxmimum_all_reduce_buffer_size = 0);
+    int64_t maxmimum_all_reduce_buffer_size = 0);
 
 }  // namespace poplarplugin
 }  // namespace xla

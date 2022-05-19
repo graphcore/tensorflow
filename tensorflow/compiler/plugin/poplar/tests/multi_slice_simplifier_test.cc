@@ -74,7 +74,7 @@ TEST_P(MultiSliceSimplifierTest, ReplaceWithStaticMultiSliceTest) {
 
   const Shape output_shape = ShapeUtil::MakeShape(F32, {3, 2});
   const Shape input_shape = ShapeUtil::MakeShape(F32, {6, 2});
-  const std::vector<int64> indices = {0, 2, 4};
+  const std::vector<int64_t> indices = {0, 2, 4};
 
   HloStaticMultiSliceInstruction* slice = Cast<HloStaticMultiSliceInstruction>(
       module->entry_computation()->root_instruction());
@@ -137,7 +137,7 @@ ENTRY main {
   const Shape input_shape = ShapeUtil::MakeShape(F32, {6, 2});
   const Shape updates_shape = ShapeUtil::MakeShape(F32, {3, 2});
   const Shape scale_shape = ShapeUtil::MakeShape(F32, {});
-  const std::vector<int64> indices = {0, 2, 4};
+  const std::vector<int64_t> indices = {0, 2, 4};
 
   HloStaticMultiUpdateAddInstruction* update =
       Cast<HloStaticMultiUpdateAddInstruction>(

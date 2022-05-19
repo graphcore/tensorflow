@@ -42,7 +42,7 @@ Status ReplaceConvsWithMultiConv(
     HloComputation* comp, std::vector<HloInstruction*>& convs,
     const std::vector<HloMultiConvInstruction::OptionFlag>& option_flags,
     CallInliner::InlinedInstructionMap& inline_map, bool is_wu) {
-  const int64 num_convs = convs.size();
+  const int64_t num_convs = convs.size();
   if (num_convs < 2) {
     return Status::OK();
   }
@@ -51,7 +51,7 @@ Status ReplaceConvsWithMultiConv(
   std::vector<HloMultiConvInstruction::ConvolutionSpec> convolution_specs(
       num_convs);
 
-  for (int64 i = 0; i != num_convs; ++i) {
+  for (int64_t i = 0; i != num_convs; ++i) {
     HloInstruction* new_conv = inline_map[convs[i]];
     CHECK_EQ(new_conv->operand_count(), 2);
 
@@ -84,7 +84,7 @@ Status ReplaceConvsWithMultiConv(
                       convolution_specs, option_flags, is_wu));
 
   // Replace all the uses with the outputs from the multi conv.
-  for (int64 i = 0; i != num_convs; ++i) {
+  for (int64_t i = 0; i != num_convs; ++i) {
     TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                         MakeGetTupleElementHlo(multi_conv_inst, i));
 
@@ -149,7 +149,7 @@ Status MultiConvFixer::FixMultiConv(HloInstruction* multi_conv_op) {
   std::vector<HloMultiConvInstruction::OptionFlag> option_flags(
       option_flags_proto.flags_size());
 
-  for (int64 i = 0; i != option_flags_proto.flags_size(); ++i) {
+  for (int64_t i = 0; i != option_flags_proto.flags_size(); ++i) {
     auto& flag = option_flags_proto.flags(i);
     option_flags[i] = {flag.option(), flag.value()};
   }

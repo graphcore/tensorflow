@@ -69,7 +69,7 @@ HloGRUFwdInstruction::HloGRUFwdInstruction(
                            partials_type, options, reset_after),
       HloGRUInstructionCommon(reset_after) {}
 
-absl::flat_hash_set<int64> HloGRUFwdInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloGRUFwdInstruction::AllocatingIndices() const {
   return {0, 1, 2, 3};
 }
 
@@ -135,7 +135,7 @@ HloDynamicGRUFwdInstruction::HloDynamicGRUFwdInstruction(
                            num_channels, partials_type, options, reset_after),
       HloGRUInstructionCommon(reset_after) {}
 
-absl::flat_hash_set<int64> HloDynamicGRUFwdInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloDynamicGRUFwdInstruction::AllocatingIndices()
     const {
   return {0, 1, 2, 3};
 }
@@ -204,7 +204,7 @@ HloAUGRUFwdInstruction::HloAUGRUFwdInstruction(
                            num_channels, partials_type, options, reset_after),
       HloGRUInstructionCommon(reset_after) {}
 
-absl::flat_hash_set<int64> HloAUGRUFwdInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloAUGRUFwdInstruction::AllocatingIndices() const {
   return {0, 1, 2, 3, 4, 5};
 }
 

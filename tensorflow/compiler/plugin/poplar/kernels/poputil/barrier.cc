@@ -35,7 +35,7 @@ class BarrierOp : public XlaOpKernel, IpuOpKernel {
 
     std::vector<xla::Shape> input_shapes;
     std::vector<xla::XlaOp> inputs;
-    for (int64 i = 0; i != ctx->num_inputs(); ++i) {
+    for (int64_t i = 0; i != ctx->num_inputs(); ++i) {
       auto input = ctx->Input(i);
       const auto& xla_shape_status = builder->GetShape(input);
       OP_REQUIRES_OK(ctx, xla_shape_status.status());
@@ -48,7 +48,7 @@ class BarrierOp : public XlaOpKernel, IpuOpKernel {
                         xla::ShapeUtil::MakeTupleShape(input_shapes),
                         attribute_map_.Serialise());
 
-    for (int64 i = 0; i != ctx->num_inputs(); ++i) {
+    for (int64_t i = 0; i != ctx->num_inputs(); ++i) {
       ctx->SetOutput(i, xla::GetTupleElement(outputs, i));
     }
   }

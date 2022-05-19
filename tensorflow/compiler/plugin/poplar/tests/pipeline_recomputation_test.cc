@@ -396,7 +396,7 @@ ENTRY e {
 
   auto stage0_bwd = stages.backward[0];
   ASSERT_EQ(stage0_bwd->operand_count(), 8);
-  for (int64 i = 3; i != 8; ++i) {
+  for (int64_t i = 3; i != 8; ++i) {
     EXPECT_TRUE(Match(stage0_bwd->operand(i),
                       m::GetTupleElement(m::Op().Is(stage0_fwd))));
   }
@@ -520,7 +520,7 @@ ENTRY e {
   // Stage 1's bwd pass will take these 3 additional outputs from stage 1.
   auto stage_1_bwd = stages.backward[1];
   ASSERT_EQ(stage_1_bwd->operand_count(), 8);
-  for (int64 i = 5; i != 8; ++i) {
+  for (int64_t i = 5; i != 8; ++i) {
     EXPECT_TRUE(Match(stage_1_bwd->operand(i),
                       m::GetTupleElement(m::Op().Is(stage_1_fwd))));
   }

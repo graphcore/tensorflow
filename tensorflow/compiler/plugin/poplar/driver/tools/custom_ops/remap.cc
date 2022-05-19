@@ -26,13 +26,13 @@ HloRemapInstruction::HloRemapInstruction(HloInstruction* operand)
 
 const HloInstruction* HloRemapInstruction::input() const { return operand(0); }
 
-absl::flat_hash_set<int64> HloRemapInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloRemapInstruction::AllocatingIndices() const {
   return {};
 }
 
 bool HloRemapInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloRemapInstruction::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloRemapInstruction::LayoutDependencies()
     const {
   return {};
 }

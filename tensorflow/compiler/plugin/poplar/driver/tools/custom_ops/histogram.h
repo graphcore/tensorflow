@@ -33,8 +33,8 @@ class HloHistogramInstruction : public HloPoplarInstruction {
   HloHistogramInstruction(const Shape& shape, HloInstruction* const input,
                           HloInstruction* const levels, bool absolute_of_input);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool AllocatingOutput() const override;
@@ -67,8 +67,8 @@ class HloHistogramUpdateInstruction : public HloPoplarInstruction {
                                 HloInstruction* const levels,
                                 bool absolute_of_input);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool AllocatingOutput() const override;

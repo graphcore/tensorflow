@@ -38,11 +38,11 @@ StatusOr<bool> TrySimplifyLoopCondition(HloInstruction* while_inst) {
   // Find all LT instructions, AND predicates and GTEs from parameters
   std::set<HloInstruction*> lt_instructions;
   std::set<HloInstruction*> and_instructions;
-  std::map<int64, HloInstruction*> while_condition_GTEs;
+  std::map<int64_t, HloInstruction*> while_condition_GTEs;
 
   // When looking for LTs, also find the smallest constant
   HloInstruction* smallest_lt = nullptr;
-  int64 smallest_constant_value = INT64_MAX;
+  int64_t smallest_constant_value = INT64_MAX;
 
   for (HloInstruction* inst : while_condition->MakeInstructionPostOrder()) {
     // Ignore dead instructions
@@ -97,8 +97,8 @@ StatusOr<bool> TrySimplifyLoopCondition(HloInstruction* while_inst) {
           lt_instructions.insert(inst);
 
           // Test if the value is the smallest
-          TF_ASSIGN_OR_RETURN(int64 val, LiteralScalarToNativeType<int64>(
-                                             inst->operand(1)->literal()));
+          TF_ASSIGN_OR_RETURN(int64_t val, LiteralScalarToNativeType<int64_t>(
+                                               inst->operand(1)->literal()));
           if (val < smallest_constant_value) {
             smallest_lt = inst;
             smallest_constant_value = val;
@@ -146,15 +146,16 @@ StatusOr<bool> TrySimplifyLoopCondition(HloInstruction* while_inst) {
     if (!WhileLoopUtil::CanRepresentInstructionAsInt64Constant(init_val)) {
       return false;
     }
-    TF_ASSIGN_OR_RETURN(int64 initial_value,
-                        LiteralScalarToNativeType<int64>(init_val->literal()));
+    TF_ASSIGN_OR_RETURN(
+        int64_t initial_value,
+        LiteralScalarToNativeType<int64_t>(init_val->literal()));
     if (initial_value != 0) {
       return false;
     }
   }
 
   // Find all GTEs from the parameter tuple in the while loop body
-  std::map<int64, HloInstruction*> while_body_GTEs;
+  std::map<int64_t, HloInstruction*> while_body_GTEs;
   for (HloInstruction* inst : while_body->MakeInstructionPostOrder()) {
     const bool is_GTE_from_param_0 =
         WhileLoopUtil::IsGTEFromParamIndex(inst, 0);

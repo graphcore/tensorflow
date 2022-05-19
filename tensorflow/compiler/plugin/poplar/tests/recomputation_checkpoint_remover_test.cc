@@ -56,7 +56,7 @@ ENTRY e {
   EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
 
   auto get_num_checkpoints = [&module]() {
-    int64 num_values = 0;
+    int64_t num_values = 0;
     for (auto comp : module->computations()) {
       num_values += absl::c_count_if(
           comp->instructions(),

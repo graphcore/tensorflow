@@ -18,29 +18,31 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-std::vector<char> ConvInt64ToInt32(const void* src, int64 ssize, int64 dsize) {
-  int64 count = ssize / sizeof(int64);
+std::vector<char> ConvInt64ToInt32(const void* src, int64_t ssize,
+                                   int64_t dsize) {
+  int64_t count = ssize / sizeof(int64_t);
   if (count == 0) {
     count = dsize / sizeof(int32);
   }
   std::vector<char> result(count * sizeof(int32));
-  const int64* src64 = reinterpret_cast<const int64*>(src);
+  const int64_t* src64 = reinterpret_cast<const int64_t*>(src);
   int32* dst32 = reinterpret_cast<int32*>(result.data());
-  for (int64 i = 0; i < count; i++) {
+  for (int64_t i = 0; i < count; i++) {
     *dst32++ = *src64++;
   }
   return result;
 }
 
-std::vector<char> ConvInt32ToInt64(const void* src, int64 ssize, int64 dsize) {
-  int64 count = ssize / sizeof(int32);
+std::vector<char> ConvInt32ToInt64(const void* src, int64_t ssize,
+                                   int64_t dsize) {
+  int64_t count = ssize / sizeof(int32);
   if (count == 0) {
-    count = dsize / sizeof(int64);
+    count = dsize / sizeof(int64_t);
   }
-  std::vector<char> result(count * sizeof(int64));
+  std::vector<char> result(count * sizeof(int64_t));
   const int32* src32 = reinterpret_cast<const int32*>(src);
-  int64* dst64 = reinterpret_cast<int64*>(result.data());
-  for (int64 i = 0; i < count; i++) {
+  int64_t* dst64 = reinterpret_cast<int64_t*>(result.data());
+  for (int64_t i = 0; i < count; i++) {
     *dst64++ = *src32++;
   }
   return result;

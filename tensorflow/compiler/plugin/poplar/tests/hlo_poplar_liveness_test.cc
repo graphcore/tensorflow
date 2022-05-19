@@ -456,7 +456,7 @@ TEST_F(MemoryUsageTest, SumOfLiveBuffers) {
   HloInstructionMap<HloPoplarBufferIdSet> program_liveness;
   program_liveness[inst] = {0, 1, 2, 3, 5};
 
-  absl::flat_hash_map<HloPoplarBuffer::Id, int64> buffer_sizes_in_bytes;
+  absl::flat_hash_map<HloPoplarBuffer::Id, int64_t> buffer_sizes_in_bytes;
   buffer_sizes_in_bytes[0] = 100;
   buffer_sizes_in_bytes[1] = 100;
   buffer_sizes_in_bytes[2] = 300;
@@ -484,7 +484,7 @@ TEST_F(MemoryUsageTest, MaxOfInstructionUsage) {
   program_liveness[inst2] = {1};
   program_liveness[inst3] = {4};
 
-  absl::flat_hash_map<HloPoplarBuffer::Id, int64> buffer_sizes_in_bytes;
+  absl::flat_hash_map<HloPoplarBuffer::Id, int64_t> buffer_sizes_in_bytes;
   buffer_sizes_in_bytes[0] = 5451;
   buffer_sizes_in_bytes[1] = 230;
   buffer_sizes_in_bytes[2] = 7500;
@@ -515,7 +515,7 @@ TEST_F(MemoryUsageTest, DataflowAnalysisIntegration) {
   auto instruction_buffer_sets = analysis->GetInstructionBufferSets();
   auto buffer_uses = FindUsedBuffers(hlo_module_, instruction_buffer_sets);
 
-  absl::flat_hash_map<HloPoplarBuffer::Id, int64> buffer_sizes;
+  absl::flat_hash_map<HloPoplarBuffer::Id, int64_t> buffer_sizes;
   for (auto& item : buffer_uses) {
     buffer_sizes.merge(DeviceMemoryBufferSizesInBytes(item.second));
   }

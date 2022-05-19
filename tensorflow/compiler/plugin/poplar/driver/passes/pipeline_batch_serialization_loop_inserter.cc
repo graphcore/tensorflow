@@ -44,7 +44,7 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
     HloInstruction* pipeline_op) {
   HloModule* module = pipeline_op->GetModule();
   HloComputation* pipeline_comp = pipeline_op->to_apply();
-  const int64 batch_serialization_iterations =
+  const int64_t batch_serialization_iterations =
       GetPipelineBatchSerializationIterations(pipeline_op);
 
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
@@ -53,7 +53,7 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
   OrderedPipelineStages ordered_stages(stages,
                                        /*include_resource_update*/ false);
 
-  for (int64 stage_id = 0; stage_id != ordered_stages.GetNumberOfStages();
+  for (int64_t stage_id = 0; stage_id != ordered_stages.GetNumberOfStages();
        ++stage_id) {
     HloInstruction* stage = ordered_stages.GetStage(stage_id);
     HloComputation* stage_comp = stage->to_apply();
@@ -75,9 +75,9 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
     std::vector<HloInstruction*> loop_inputs;
     std::vector<HloInstruction*> loop_root_tuple_operands;
     std::vector<HloInstruction*> outputs;
-    absl::flat_hash_map<const HloInstruction*, int64> outputs_map;
+    absl::flat_hash_map<const HloInstruction*, int64_t> outputs_map;
 
-    for (int64 i = 0; i != stage->operand_count(); ++i) {
+    for (int64_t i = 0; i != stage->operand_count(); ++i) {
       const HloInstruction* operand = stage->operand(i);
       HloInstruction* param = stage_comp->parameter_instruction(i);
       switch (operand->opcode()) {
@@ -193,7 +193,7 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
     }
 
     // Go through all the stage outputs and find any which were missing.
-    for (int64 i = 0; i != root->operand_count(); ++i) {
+    for (int64_t i = 0; i != root->operand_count(); ++i) {
       HloInstruction* output = root->mutable_operand(i);
       if (!outputs_map.contains(output)) {
         // Create zeros as the loop input.
@@ -204,7 +204,7 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
         loop_root_tuple_operands.push_back(output);
         outputs.push_back(output);
 
-        const int64 output_index = outputs_map.size();
+        const int64_t output_index = outputs_map.size();
         outputs_map[output] = output_index;
       }
     }
@@ -214,7 +214,7 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
     HloComputation::Builder builder(stage->name() + ".batch_loop");
 
     // Create inputs.
-    for (int64 i = 0; i != loop_inputs.size(); ++i) {
+    for (int64_t i = 0; i != loop_inputs.size(); ++i) {
       HloInstruction* input = loop_inputs[i];
       HloInstruction* parameter =
           builder.AddInstruction(HloInstruction::CreateParameter(
@@ -253,9 +253,9 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
     TF_RETURN_IF_ERROR(repeat_loop->set_backend_config(backend_config));
 
     // Set up all the loop outputs.
-    for (int64 i = 0; i != root->operand_count(); ++i) {
+    for (int64_t i = 0; i != root->operand_count(); ++i) {
       HloInstruction* output = root->mutable_operand(i);
-      const int64 loop_output_index = outputs_map.at(output);
+      const int64_t loop_output_index = outputs_map.at(output);
       TF_ASSIGN_OR_RETURN(
           HloInstruction * gte,
           MakeGetTupleElementHlo(repeat_loop, loop_output_index));

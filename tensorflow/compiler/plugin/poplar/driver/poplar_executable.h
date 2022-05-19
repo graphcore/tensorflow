@@ -42,7 +42,7 @@ struct CompilerAnnotations;
 struct CompilerResources;
 
 struct PoplarExecutableInfo {
-  int64 num_IPUs;
+  int64_t num_IPUs;
   std::string target_type;
   std::string target_arch;
   bool gateway_mode;
@@ -70,7 +70,7 @@ struct PoplarExecutableInfo {
 };
 
 using CollectiveBalanceReorderHostRerrangements =
-    absl::flat_hash_map<int64, gcl::CollectiveBalancedHostRearrangement>;
+    absl::flat_hash_map<int64_t, gcl::CollectiveBalancedHostRearrangement>;
 
 class PoplarExecutableCore {
  public:
@@ -130,7 +130,7 @@ class PoplarExecutableCore {
   }
 
   const gcl::CollectiveBalancedHostRearrangement*
-  GetCollectiveBalanceReorderHostRerrangement(int64 id) const {
+  GetCollectiveBalanceReorderHostRerrangement(int64_t id) const {
     auto it = cbr_host_rearrangements_.find(id);
     return it != cbr_host_rearrangements_.end() ? &it->second : nullptr;
   }
@@ -158,8 +158,8 @@ class PoplarExecutableCore {
   Status Serialize(const std::string& filepath) const;
 
   struct RuntimeReplicaOptions {
-    int64 process_index;
-    int64 process_count;
+    int64_t process_index;
+    int64_t process_count;
   };
 
   static StatusOr<std::unique_ptr<PoplarExecutableCore>> Deserialize(
@@ -228,9 +228,9 @@ class PoplarExecutable : public Executable {
       std::vector<ExecutionInput> arguments,
       HloExecutionProfile* hlo_execution_profile) override;
 
-  static int64 ShapeSizeBytes(const Shape& shape);
+  static int64_t ShapeSizeBytes(const Shape& shape);
 
-  int64 ExecutionCount() const { return execution_count_; }
+  int64_t ExecutionCount() const { return execution_count_; }
 
   void OnEngineLoaded() { execution_count_ = 0; }
 
@@ -319,7 +319,7 @@ class PoplarExecutable : public Executable {
   }
 
   const gcl::CollectiveBalancedHostRearrangement*
-  GetCollectiveBalanceReorderHostRerrangement(int64 id) const {
+  GetCollectiveBalanceReorderHostRerrangement(int64_t id) const {
     return executable_core_->GetCollectiveBalanceReorderHostRerrangement(id);
   }
 
@@ -338,7 +338,7 @@ class PoplarExecutable : public Executable {
   const TranslatedOutfeedInfos outfeed_infos_;
   std::shared_ptr<PoplarExecutableCore> executable_core_;
   std::vector<std::vector<Literal>> literal_output_;
-  int64 execution_count_;
+  int64_t execution_count_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PoplarExecutable);
 };

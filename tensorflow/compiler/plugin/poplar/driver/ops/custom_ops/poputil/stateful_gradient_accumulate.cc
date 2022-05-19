@@ -143,7 +143,7 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
     PoplarOpDefDebugInfo debug_info(debug_context,
                                     "StatefulGradientAccumulateWithMomentumOp");
     const HloInstruction* inst = tensor_target.tgt;
-    const int64 accumulator_index = tensor_target.input_index;
+    const int64_t accumulator_index = tensor_target.input_index;
     // Expect to allocate for the accumulator.
     const uint64 num_grads = inst->operand_count() / 2;
     if (accumulator_index > num_grads) {

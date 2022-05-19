@@ -27,14 +27,14 @@ HloBatchNormStatsInstruction::HloBatchNormStatsInstruction(
     : HloNormInstruction(shape, {operand}, PoplarOp::BatchNormStatistics,
                          epsilon, feature_index) {}
 
-absl::flat_hash_set<int64> HloBatchNormStatsInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloBatchNormStatsInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloBatchNormStatsInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloBatchNormStatsInstruction::LayoutDependencies() const {
   return {};
 }

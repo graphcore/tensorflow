@@ -24,13 +24,13 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-absl::flat_hash_set<int64> HloCandidateSampler::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloCandidateSampler::AllocatingIndices() const {
   return {};
 }
 
 bool HloCandidateSampler::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloCandidateSampler::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloCandidateSampler::LayoutDependencies()
     const {
   return {};
 }

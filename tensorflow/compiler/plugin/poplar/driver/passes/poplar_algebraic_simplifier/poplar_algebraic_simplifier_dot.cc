@@ -34,11 +34,11 @@ namespace {
 // Transposes a dot operand such that the batch dimensions are the most major,
 // and the contracting dimensions are most minor.
 StatusOr<HloInstruction*> NormalizeDotOperandToBatchMajorAndContractingMinor(
-    HloInstruction* dot_operand, absl::Span<const int64> batch_dimensions,
-    absl::Span<const int64> contracting_dimensions) {
-  std::vector<int64> transpose_dimensions(batch_dimensions.begin(),
-                                          batch_dimensions.end());
-  for (int64 i = 0; i < dot_operand->shape().rank(); ++i) {
+    HloInstruction* dot_operand, absl::Span<const int64_t> batch_dimensions,
+    absl::Span<const int64_t> contracting_dimensions) {
+  std::vector<int64_t> transpose_dimensions(batch_dimensions.begin(),
+                                            batch_dimensions.end());
+  for (int64_t i = 0; i < dot_operand->shape().rank(); ++i) {
     if (!(absl::c_linear_search(batch_dimensions, i) ||
           absl::c_linear_search(contracting_dimensions, i))) {
       transpose_dimensions.push_back(i);
@@ -64,8 +64,8 @@ StatusOr<HloInstruction*> OptimizeDotOfConcat(
     return nullptr;
   }
 
-  const int64 lhs_contracting_dim = dnums.lhs_contracting_dimensions(0);
-  const int64 rhs_contracting_dim = dnums.rhs_contracting_dimensions(0);
+  const int64_t lhs_contracting_dim = dnums.lhs_contracting_dimensions(0);
+  const int64_t rhs_contracting_dim = dnums.rhs_contracting_dimensions(0);
   HloInstruction *lhs, *rhs;
   CHECK(Match(dot, m::Dot(m::Op(&lhs), m::Op(&rhs))));
 
@@ -83,8 +83,8 @@ StatusOr<HloInstruction*> OptimizeDotOfConcat(
 
 StatusOr<HloInstruction*> OptimizeDotOfConcatHelper(
     AlgebraicSimplifierVisitor* visitor, const HloInstruction& dot,
-    HloInstruction* lhs, int64 lhs_contracting_dim, HloInstruction* rhs,
-    int64 rhs_contracting_dim, bool swapped) {
+    HloInstruction* lhs, int64_t lhs_contracting_dim, HloInstruction* rhs,
+    int64_t rhs_contracting_dim, bool swapped) {
   bool can_optimize = lhs->opcode() == HloOpcode::kConcatenate &&
                       lhs->concatenate_dimension() == lhs_contracting_dim &&
                       rhs->opcode() == HloOpcode::kConstant;
@@ -147,21 +147,21 @@ StatusOr<HloInstruction*> OptimizeDotOfConcatHelper(
   // Here we use the MKN notation, where the contracted dimension has K
   // elements and the two non-contracted dimensions have M and N elements.
   HloInstruction* add_result = nullptr;
-  int64 rhs_contracting_dim_offset = 0;
+  int64_t rhs_contracting_dim_offset = 0;
   for (HloInstruction* concat_op : lhs->operands()) {
-    int64 sub_k = concat_op->shape().dimensions(lhs_contracting_dim);
+    int64_t sub_k = concat_op->shape().dimensions(lhs_contracting_dim);
     Shape rhs_slice_shape(rhs->shape());
     rhs_slice_shape.set_dimensions(rhs_contracting_dim, sub_k);
     visitor->simplifier_->UpdateLayout(&rhs_slice_shape);
 
-    std::vector<int64> start_indices(rhs->shape().rank(), 0);
+    std::vector<int64_t> start_indices(rhs->shape().rank(), 0);
     start_indices[rhs_contracting_dim] = rhs_contracting_dim_offset;
 
-    std::vector<int64> limit_indices(rhs->shape().dimensions().begin(),
-                                     rhs->shape().dimensions().end());
+    std::vector<int64_t> limit_indices(rhs->shape().dimensions().begin(),
+                                       rhs->shape().dimensions().end());
     limit_indices[rhs_contracting_dim] = rhs_contracting_dim_offset + sub_k;
 
-    std::vector<int64> strides(rhs->shape().rank(), 1);
+    std::vector<int64_t> strides(rhs->shape().rank(), 1);
 
     HloInstruction* rhs_slice = util::PreserveFrontendAttributesIfNeeded(
         visitor->computation_->AddInstruction(HloInstruction::CreateSlice(
@@ -386,11 +386,12 @@ StatusOr<HloInstruction*> OptimizeDotOfReorderContractingDims(
   auto unmodified_dims = ShapeUtil::DimensionsUnmodifiedByReshape(
       reshape->operand(0)->shape(), reshape->shape());
   CHECK_EQ(lhs_contracting_dims.size(), 1);
-  if ((static_cast<int64>(unmodified_dims.size()) !=
+  if ((static_cast<int64_t>(unmodified_dims.size()) !=
        reshape->shape().rank() - 1) ||
-      absl::c_any_of(unmodified_dims, [&](const std::pair<int64, int64>& p) {
-        return p.second == lhs_contracting_dims[0];
-      })) {
+      absl::c_any_of(unmodified_dims,
+                     [&](const std::pair<int64_t, int64_t>& p) {
+                       return p.second == lhs_contracting_dims[0];
+                     })) {
     return nullptr;
   }
 
@@ -401,19 +402,19 @@ StatusOr<HloInstruction*> OptimizeDotOfReorderContractingDims(
   //
   // (We don't need to actually create a new dot instruction. We can just keep
   // track of lhs and lhs_contracting_dims.)
-  absl::flat_hash_set<int64> unmodified_transpose_dims;
+  absl::flat_hash_set<int64_t> unmodified_transpose_dims;
   for (const auto& pair : unmodified_dims) {
     unmodified_transpose_dims.insert(pair.first);
   }
   lhs_contracting_dims.Clear();
-  for (int64 i = 0; i < transpose->shape().dimensions_size(); ++i) {
+  for (int64_t i = 0; i < transpose->shape().dimensions_size(); ++i) {
     if (!unmodified_transpose_dims.contains(i)) {
       lhs_contracting_dims.Add(i);
     }
   }
   // We require the "unsquished" lhs contracting dims to be consecutive.
-  auto is_iota = [](absl::Span<const int64> dims) {
-    return absl::c_adjacent_find(dims, [](const int64 a, const int64 b) {
+  auto is_iota = [](absl::Span<const int64_t> dims) {
+    return absl::c_adjacent_find(dims, [](const int64_t a, const int64_t b) {
              return (b != a + 1);
            }) == dims.end();
   };
@@ -423,8 +424,8 @@ StatusOr<HloInstruction*> OptimizeDotOfReorderContractingDims(
   lhs = lhs->mutable_operand(0);
 
   // Check that the transpose only permutes the contracting dims.
-  const std::vector<int64>& transpose_dims = transpose->dimensions();
-  for (int64 i = 0; i < static_cast<int64>(transpose_dims.size()); ++i) {
+  const std::vector<int64_t>& transpose_dims = transpose->dimensions();
+  for (int64_t i = 0; i < static_cast<int64_t>(transpose_dims.size()); ++i) {
     if (transpose_dims[i] != i &&
         !absl::c_linear_search(lhs_contracting_dims, i)) {
       return nullptr;
@@ -432,7 +433,7 @@ StatusOr<HloInstruction*> OptimizeDotOfReorderContractingDims(
   }
   // Virtually pull the transpose into the dot. Now the dot is equivalent to
   // a new dot with "permuted" lhs contracting dims.
-  std::vector<int64> permutation;
+  std::vector<int64_t> permutation;
   for (auto dim : lhs_contracting_dims) {
     permutation.push_back(transpose_dims[dim] - lhs_contracting_dims[0]);
   }
@@ -482,7 +483,7 @@ StatusOr<HloInstruction*> OptimizeDotOfReorderContractingDims(
 
   // Invert reshape.
   CHECK_EQ(rhs_contracting_dims.size(), 1);
-  std::vector<int64> rhs_unsquished_shape_dims =
+  std::vector<int64_t> rhs_unsquished_shape_dims =
       SpanToVector(constant->shape().dimensions());
   auto it = rhs_unsquished_shape_dims.erase(rhs_unsquished_shape_dims.begin() +
                                             rhs_contracting_dims[0]);
@@ -505,7 +506,7 @@ StatusOr<HloInstruction*> OptimizeDotOfReorderContractingDims(
   absl::c_iota(rhs_contracting_dims, rhs_contracting_dims[0]);
 
   // Invert transpose. First compute the shape.
-  std::vector<int64> rhs_transpose_shape_dims =
+  std::vector<int64_t> rhs_transpose_shape_dims =
       SpanToVector(rhs_reshape->shape().dimensions());
   it = rhs_transpose_shape_dims.erase(
       rhs_transpose_shape_dims.begin() + rhs_contracting_dims[0],
@@ -516,7 +517,7 @@ StatusOr<HloInstruction*> OptimizeDotOfReorderContractingDims(
     ++it;
   }
   // Then compute the transpose dims.
-  std::vector<int64> rhs_transpose_dims(rhs_reshape->shape().rank());
+  std::vector<int64_t> rhs_transpose_dims(rhs_reshape->shape().rank());
   absl::c_iota(rhs_transpose_dims, 0);
   it = rhs_transpose_dims.erase(
       rhs_transpose_dims.begin() + rhs_contracting_dims[0],
@@ -564,7 +565,7 @@ std::unique_ptr<HloInstruction> CreateBroadcastCompatibleWithOperand(
     const RepeatedField& contracting_dimensions,
     uint64_t target_outer_dimensions) {
   // Initialize broadcast dimensions with batch dimensions starting from 0.
-  std::vector<int64> broadcast_dimensions(batch_dimensions.size());
+  std::vector<int64_t> broadcast_dimensions(batch_dimensions.size());
   absl::c_iota(broadcast_dimensions, 0);
 
   // Add the rest of the dimensions and fill the batch dimensions starting with
@@ -635,10 +636,10 @@ StatusOr<HloInstruction*> OptimizeDotStrengthReduction(
     new_rhs = MakeConvertToHlo(new_rhs, dot->shape().element_type());
   }
 
-  int64 lhs_outer_dimensions =
+  int64_t lhs_outer_dimensions =
       lhs->shape().rank() -
       (lhs_batch_dimensions.size() + lhs_contracting_dimensions.size());
-  int64 rhs_outer_dimensions =
+  int64_t rhs_outer_dimensions =
       rhs->shape().rank() -
       (rhs_batch_dimensions.size() + rhs_contracting_dimensions.size());
   const auto outer_dimensions =
@@ -666,7 +667,7 @@ StatusOr<HloInstruction*> OptimizeDotStrengthReduction(
                       MakeBinaryHlo(HloOpcode::kMultiply, new_lhs, new_rhs));
 
   // We want to reduce the source operand to its original rank.
-  std::vector<int64> reduce_dimensions(lhs_contracting_dimensions.size());
+  std::vector<int64_t> reduce_dimensions(lhs_contracting_dimensions.size());
   absl::c_iota(reduce_dimensions,
                outer_dimensions + lhs_batch_dimensions.size());
 

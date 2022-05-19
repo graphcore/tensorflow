@@ -340,7 +340,7 @@ StatusOr<ExternalAndLocalTransferSequence> CreateOutfeed(
     const poplar::DebugNameAndId& debug_name_and_id);
 
 StatusOr<ExternalAndLocalTransferSequence> CreateInfeed(
-    CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
+    CompilerResources& res, const HloInstruction* inst, int64_t tuple_index,
     const xla::Shape& output_shape, poplar::Tensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id);
 

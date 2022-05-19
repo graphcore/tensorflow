@@ -29,19 +29,19 @@ namespace m = match;
 namespace poplarplugin {
 namespace {
 
-int64 GetNumMultiSlice(const HloComputation* comp) {
+int64_t GetNumMultiSlice(const HloComputation* comp) {
   return absl::c_count_if(comp->instructions(),
                           IsPoplarInstruction(PoplarOp::MultiSlice));
 }
 
-int64 GetNumGather(const HloComputation* comp) {
+int64_t GetNumGather(const HloComputation* comp) {
   return absl::c_count_if(comp->instructions(), [](const HloInstruction* inst) {
     return inst->opcode() == HloOpcode::kGather;
   });
 }
 
 template <typename NativeT>
-Literal CreateIotaLiteral(absl::Span<const int64> dims) {
+Literal CreateIotaLiteral(absl::Span<const int64_t> dims) {
   auto shape = ShapeUtil::MakeShape(
       primitive_util::NativeToPrimitiveType<NativeT>(), dims);
   Literal literal(shape);

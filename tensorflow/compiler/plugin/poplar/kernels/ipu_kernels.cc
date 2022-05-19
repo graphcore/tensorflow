@@ -248,7 +248,7 @@ class IpuGetNumDevicesOp : public OpKernel {
     Tensor* output_tensor = nullptr;
     OP_REQUIRES_OK(
         ctx, ctx->allocate_output("out", TensorShape({}), &output_tensor));
-    auto output_flat = output_tensor->flat<int64>();
+    auto output_flat = output_tensor->flat<int64_t>();
     output_flat(0) = status_or.ValueOrDie();
   }
 

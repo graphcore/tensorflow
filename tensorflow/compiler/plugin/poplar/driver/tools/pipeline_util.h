@@ -63,7 +63,7 @@ bool IsPipelineStageReadOnlyInput(const HloInstruction* inst);
 struct PipelineStages {
   std::vector<HloInstruction*> forward;
   std::vector<HloInstruction*> backward;
-  absl::flat_hash_map<int64, HloInstruction*> recomputation;
+  absl::flat_hash_map<int64_t, HloInstruction*> recomputation;
   absl::optional<HloInstruction*> resource_update;
 };
 
@@ -72,14 +72,14 @@ class OrderedPipelineStages {
  public:
   OrderedPipelineStages(const PipelineStages& stages,
                         bool include_resource_update);
-  int64 GetNumberOfStages() const;
-  HloInstruction* GetStage(int64 index) const;
-  int64 GetIndex(HloInstruction* stage) const;
-  void UpdateStage(int64 index, HloInstruction* stage);
+  int64_t GetNumberOfStages() const;
+  HloInstruction* GetStage(int64_t index) const;
+  int64_t GetIndex(HloInstruction* stage) const;
+  void UpdateStage(int64_t index, HloInstruction* stage);
 
  private:
-  absl::flat_hash_map<int64, HloInstruction*> id_to_stage;
-  absl::flat_hash_map<HloInstruction*, int64> stage_to_id;
+  absl::flat_hash_map<int64_t, HloInstruction*> id_to_stage;
+  absl::flat_hash_map<HloInstruction*, int64_t> stage_to_id;
 };
 
 // Get all the pipelines in the module.
@@ -137,7 +137,7 @@ StatusOr<bool> UniquifyPipelineStageCallsites(PipelineStages& pipeline_stages);
 StatusOr<HloInstruction*> CreatePipelineStage(
     HloComputation* pipeline, const std::vector<HloInstruction*> operands,
     HloComputation* stage_comp, PoplarBackendConfig_CallConfig_Type stage_type,
-    int64 stage_id, const std::string& name);
+    int64_t stage_id, const std::string& name);
 
 // Add the instruction in ordered_lowering to the PipelineStage stage  Note that
 // the instructions in ordered_lowering are sorted in post order. Optionally
@@ -157,7 +157,7 @@ StatusOr<HloInstruction*> CreatePipelineStage(
 StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     HloInstruction* stage,
     const std::vector<HloInstruction*>& ordered_lowering = {},
-    std::map<int64, HloInstruction*>
+    std::map<int64_t, HloInstruction*>
         replace_parameter_with_lowered_instruction = {},
     HloInstructionSet forced_parameters = {},
     bool replace_resource_update_uses = true,
@@ -190,7 +190,7 @@ enum class StageType {
 };
 
 struct StageID {
-  StageID(StageType stage_type, int64 id) : stage_type(stage_type), id(id) {}
+  StageID(StageType stage_type, int64_t id) : stage_type(stage_type), id(id) {}
 
   bool operator==(const StageID& other) const {
     return stage_type == other.stage_type && id == other.id;
@@ -201,7 +201,7 @@ struct StageID {
   std::string ToString() const;
 
   StageType stage_type;
-  int64 id;
+  int64_t id;
 };
 
 std::ostream& operator<<(std::ostream& stream, const StageID& stage_id);
@@ -244,7 +244,7 @@ class PipelineDataflowAnalysis {
   StatusOr<StageID> GetPreviousStageID(const HloInstruction* inst) const;
 
   // Get the sharding device a pipeline stage resides on.
-  StatusOr<int64> GetShardForStage(const StageID& stage_id) const;
+  StatusOr<int64_t> GetShardForStage(const StageID& stage_id) const;
 
   // Verifies that the dataflow between Pipeline Stages is legal.
   Status VerifyPipelineUsage(const HloInstruction* pipeline_stage,
@@ -310,9 +310,9 @@ class PipelineDataflowAnalysis {
 
   const PipelineStages pipeline_stages_;
   // Hash maps to speed up lookup.
-  absl::flat_hash_map<HloInstruction*, int64> fwd_stages_lookup_;
-  absl::flat_hash_map<HloInstruction*, int64> bwd_stages_lookup_;
-  absl::flat_hash_map<HloInstruction*, int64> recomputation_stages_lookup_;
+  absl::flat_hash_map<HloInstruction*, int64_t> fwd_stages_lookup_;
+  absl::flat_hash_map<HloInstruction*, int64_t> bwd_stages_lookup_;
+  absl::flat_hash_map<HloInstruction*, int64_t> recomputation_stages_lookup_;
 
   bool allow_duplicate_gte_edges_;
   bool allow_communication_ops_;
@@ -347,7 +347,7 @@ class PipelinePath {
   std::vector<uint64>& GetVisitedStages();
   std::vector<uint64>& GetInputsPath();
   std::vector<uint64>& GetOutputsPath();
-  StatusOr<int64> GetFifoDepth();
+  StatusOr<int64_t> GetFifoDepth();
   // The pipeline stage which should now be consuming the value.
   HloInstruction* GetNewConsumerStage() const;
   // The old pipeline stage which is currently consuming the value.
@@ -357,7 +357,7 @@ class PipelinePath {
  private:
   // The fields below are populated by the FinishPath function.
   bool finished_ = false;
-  int64 fifo_depth_ = -1;
+  int64_t fifo_depth_ = -1;
   bool fifo_between_fwd_and_bwd_ = false;
   HloInstruction* old_consumer_ = nullptr;
   Type type_;

@@ -42,15 +42,15 @@ void VisitSlicedConv2dPadding(const HloSliceInstruction* slice, Fn&& apply) {
 
   CHECK_EQ(conv_dim_numbers.input_spatial_dimensions_size(),
            window.dimensions_size());
-  for (int64 dim = 0; dim < window.dimensions_size(); dim++) {
+  for (int64_t dim = 0; dim < window.dimensions_size(); dim++) {
     // We check the slices across the convolutions spatial dimensions as this is
     // where the padding happens.
-    const int64 slice_dim = conv_dim_numbers.input_spatial_dimensions(dim);
-    const int64 slice_first = slice->slice_starts(slice_dim);
-    const int64 slice_last = slice->slice_limits(slice_dim);
-    const int64 slice_size = slice_last - slice_first;
+    const int64_t slice_dim = conv_dim_numbers.input_spatial_dimensions(dim);
+    const int64_t slice_first = slice->slice_starts(slice_dim);
+    const int64_t slice_last = slice->slice_limits(slice_dim);
+    const int64_t slice_size = slice_last - slice_first;
 
-    const int64 conv_dim_size = conv_shape.dimensions(slice_dim);
+    const int64_t conv_dim_size = conv_shape.dimensions(slice_dim);
     if (conv_dim_size > slice_size) {
       const WindowDimension& window_dimensions = window.dimensions(dim);
 
@@ -71,8 +71,8 @@ bool Is2DSliceOfConv(const HloInstruction* slice) {
 
     const ConvolutionDimensionNumbers& conv_dim_numbers =
         operand->convolution_dimension_numbers();
-    const int64 batch_dim = conv_dim_numbers.input_batch_dimension();
-    const int64 feature_dim = conv_dim_numbers.input_feature_dimension();
+    const int64_t batch_dim = conv_dim_numbers.input_batch_dimension();
+    const int64_t feature_dim = conv_dim_numbers.input_feature_dimension();
 
     return slice_shape.rank() == 4 &&
            slice_shape.dimensions(batch_dim) ==
@@ -88,9 +88,9 @@ bool SliceReducesConv2dPadding(const HloInstruction* slice) {
   if (Is2DSliceOfConv(slice)) {
     bool slice_reduces_padding = true;
     const auto check_slice_reduces_padding =
-        [&slice_reduces_padding](int64 dim, int64 conv_dim_size,
-                                 int64 padding_low, int64 padding_high,
-                                 int64 slice_first, int64 slice_last) {
+        [&slice_reduces_padding](int64_t dim, int64_t conv_dim_size,
+                                 int64_t padding_low, int64_t padding_high,
+                                 int64_t slice_first, int64_t slice_last) {
           if (slice_first > 0) {
             slice_reduces_padding &= padding_low > slice_first;
           }
@@ -119,10 +119,12 @@ StatusOr<PatternInstructionOutputs> CreateSlicedConvWithReverseFromMatch(
   const HloInstruction* original_conv = slice->operand(0);
 
   Window reduced_window = original_conv->window();
-  const auto reduce_conv_padding = [&reduced_window](
-                                       int64 dim, int64 conv_dim_size,
-                                       int64 padding_low, int64 padding_high,
-                                       int64 slice_first, int64 slice_last) {
+  const auto reduce_conv_padding = [&reduced_window](int64_t dim,
+                                                     int64_t conv_dim_size,
+                                                     int64_t padding_low,
+                                                     int64_t padding_high,
+                                                     int64_t slice_first,
+                                                     int64_t slice_last) {
     WindowDimension* dimensions = reduced_window.mutable_dimensions(dim);
     dimensions->set_padding_low(padding_low - slice_first);
     dimensions->set_padding_high(padding_high - (conv_dim_size - slice_last));

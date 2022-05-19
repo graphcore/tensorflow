@@ -40,7 +40,7 @@ class HloPoplarTestBase : public HloTestBase {
 
   static std::unique_ptr<CompilerResources> GetMockResources(
       poplar::Device& device, HloModule* module, bool merge_infeeds,
-      int number_of_vgraphs, int64 max_inter_ipu_copies_buffer_size = 0);
+      int number_of_vgraphs, int64_t max_inter_ipu_copies_buffer_size = 0);
 
   static std::unique_ptr<CompilerResources> GetMockResources(
       poplar::Device& device, HloModule* module, int32 replication_factor = 1,

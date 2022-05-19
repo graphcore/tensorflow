@@ -35,14 +35,15 @@ HloMultiSliceInstruction::HloMultiSliceInstruction(
                            indices_are_sorted),
       indices_are_sorted_(indices_are_sorted) {}
 
-absl::flat_hash_set<int64> HloMultiSliceInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloMultiSliceInstruction::AllocatingIndices()
+    const {
   return {0, 1};
 }
 
 bool HloMultiSliceInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloMultiSliceInstruction::LayoutDependencies()
-    const {
+absl::flat_hash_map<int64_t, int64_t>
+HloMultiSliceInstruction::LayoutDependencies() const {
   return {};
 }
 
@@ -89,18 +90,18 @@ std::unique_ptr<HloInstruction> CreateMultiSlice(const Shape& shape,
 // StaticMultiSlice
 HloStaticMultiSliceInstruction::HloStaticMultiSliceInstruction(
     const Shape& shape, HloInstruction* const input,
-    absl::Span<const int64> indices)
+    absl::Span<const int64_t> indices)
     : HloPoplarInstruction(shape, {input}, PoplarOp::StaticMultiSlice, indices),
       indices_(indices.begin(), indices.end()) {}
 
-absl::flat_hash_set<int64> HloStaticMultiSliceInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloStaticMultiSliceInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloStaticMultiSliceInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloStaticMultiSliceInstruction::LayoutDependencies() const {
   return {};
 }
@@ -144,7 +145,7 @@ HloStaticMultiSliceInstruction::CloneWithNewOperandsImpl(
 
 std::unique_ptr<HloInstruction> CreateStaticMultiSlice(
     const Shape& shape, HloInstruction* const input,
-    absl::Span<const int64> indices) {
+    absl::Span<const int64_t> indices) {
   return absl::make_unique<HloStaticMultiSliceInstruction>(shape, input,
                                                            indices);
 }
@@ -166,14 +167,14 @@ HloMultiUpdateInstruction::HloMultiUpdateInstruction(
   CHECK_EQ(operands[2]->shape().rank(), 2);
 }
 
-absl::flat_hash_set<int64> HloMultiUpdateInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloMultiUpdateInstruction::AllocatingIndices()
     const {
   return {0, 1, 2};
 }
 
 bool HloMultiUpdateInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloMultiUpdateInstruction::LayoutDependencies() const {
   return {};
 }
@@ -260,7 +261,7 @@ std::unique_ptr<HloInstruction> CreateMultiUpdateAdd(
 // StaticMultiUpdateAdd
 HloStaticMultiUpdateAddInstruction::HloStaticMultiUpdateAddInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    absl::Span<const int64> indices)
+    absl::Span<const int64_t> indices)
     : HloPoplarInstruction(shape, operands, PoplarOp::StaticMultiUpdateAdd,
                            indices),
       indices_(indices.begin(), indices.end()) {
@@ -276,7 +277,7 @@ HloStaticMultiUpdateAddInstruction::HloStaticMultiUpdateAddInstruction(
   }
 }
 
-absl::flat_hash_set<int64>
+absl::flat_hash_set<int64_t>
 HloStaticMultiUpdateAddInstruction::AllocatingIndices() const {
   return {};
 }
@@ -285,7 +286,7 @@ bool HloStaticMultiUpdateAddInstruction::AllocatingOutput() const {
   return false;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloStaticMultiUpdateAddInstruction::LayoutDependencies() const {
   return {{0, 1}, {1, 0}};
 }
@@ -332,7 +333,7 @@ HloStaticMultiUpdateAddInstruction::CloneWithNewOperandsImpl(
 
 std::unique_ptr<HloInstruction> CreateStaticMultiUpdateAdd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    absl::Span<const int64> indices) {
+    absl::Span<const int64_t> indices) {
   return absl::make_unique<HloStaticMultiUpdateAddInstruction>(shape, operands,
                                                                indices);
 }
@@ -350,7 +351,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloMultiSliceInstructionFactoryFunc(
 StatusOr<std::unique_ptr<HloInstruction>>
 HloStaticMultiSliceInstructionFactoryFunc(HloCustomCallInstruction* call) {
   auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
-  TF_ASSIGN_OR_RETURN(std::vector<int64> indices,
+  TF_ASSIGN_OR_RETURN(std::vector<int64_t> indices,
                       attribute_map.GetAttributeInt64Vector("indices"));
   return CreateStaticMultiSlice(call->shape(), call->mutable_operand(0),
                                 indices);
@@ -376,7 +377,7 @@ HloMultiUpdateAddInstructionFactoryFunc(HloCustomCallInstruction* call) {
 StatusOr<std::unique_ptr<HloInstruction>>
 HloStaticMultiUpdateAddInstructionFactoryFunc(HloCustomCallInstruction* call) {
   auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
-  TF_ASSIGN_OR_RETURN(std::vector<int64> indices,
+  TF_ASSIGN_OR_RETURN(std::vector<int64_t> indices,
                       attribute_map.GetAttributeInt64Vector("indices"));
   return CreateStaticMultiUpdateAdd(call->shape(), call->operands(), indices);
 }

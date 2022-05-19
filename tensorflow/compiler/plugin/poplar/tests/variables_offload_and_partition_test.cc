@@ -42,7 +42,7 @@ std::string GetHlo(
     ThreeState partition_variables = THREESTATE_OFF,
     PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule =
         PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved,
-    int64 batch_serialization_iterations = 1) {
+    int64_t batch_serialization_iterations = 1) {
   constexpr absl::string_view hlo_format = R"(
 HloModule top
 
@@ -297,7 +297,7 @@ TEST_F(VariablesOffloadAndPartitionTest, OffloadVariable) {
             4);
 
   // Check load and stores.
-  for (int64 i : {4, 5}) {
+  for (int64_t i : {4, 5}) {
     HloInstruction* param = resource_update->parameter_instruction(i);
     EXPECT_EQ(param->user_count(), 2);
     HloInstruction *load, *store;
@@ -332,7 +332,7 @@ TEST_F(VariablesOffloadAndPartitionTest,
             4);
 
   // Check load and stores.
-  for (int64 i : {4, 5}) {
+  for (int64_t i : {4, 5}) {
     HloInstruction* param = resource_update->parameter_instruction(i);
     EXPECT_EQ(param->user_count(), 2);
     HloInstruction *load, *store;
@@ -344,7 +344,7 @@ TEST_F(VariablesOffloadAndPartitionTest,
                            IsPoplarInstruction(PoplarOp::RemoteParameterLoad));
   };
   // Check parameters used in other pipeline stages have not been offloaded.
-  for (int64 i : {0, 1}) {
+  for (int64_t i : {0, 1}) {
     HloInstruction* param = resource_update->parameter_instruction(i);
     EXPECT_TRUE(is_not_offloaded(param));
   }
@@ -383,7 +383,7 @@ TEST_F(VariablesOffloadAndPartitionTest, OffloadPipelineVariablesNoPartition) {
             4);
 
   // Check load and stores.
-  for (int64 i : {0, 1, 4, 5}) {
+  for (int64_t i : {0, 1, 4, 5}) {
     HloInstruction* param = resource_update->parameter_instruction(i);
     EXPECT_EQ(param->user_count(), 2);
     HloInstruction *load, *store;
@@ -428,7 +428,7 @@ TEST_F(VariablesOffloadAndPartitionTest,
             4);
 
   // Check load and stores.
-  for (int64 i : {0, 1, 4, 5}) {
+  for (int64_t i : {0, 1, 4, 5}) {
     HloInstruction* param = resource_update->parameter_instruction(i);
     EXPECT_EQ(param->user_count(), 2);
     HloInstruction *load, *store;
@@ -513,7 +513,7 @@ ENTRY e {
             4);
 
   // Check load and stores.
-  for (int64 i : {0, 1}) {
+  for (int64_t i : {0, 1}) {
     HloInstruction* param = resource_update->parameter_instruction(i);
     EXPECT_EQ(param->user_count(), 2);
     HloInstruction* add = nullptr;
@@ -604,7 +604,7 @@ ENTRY e {
             4);
 
   // Check load and stores.
-  for (int64 i : {2, 3}) {
+  for (int64_t i : {2, 3}) {
     HloInstruction* param = resource_update->parameter_instruction(i);
     EXPECT_EQ(param->user_count(), 2);
     HloInstruction *load, *store;
@@ -1269,7 +1269,7 @@ ENTRY e {
             4);
 
   // Check load and stores.
-  for (int64 i : {0, 1}) {
+  for (int64_t i : {0, 1}) {
     HloInstruction* param = resource_update->parameter_instruction(i);
     EXPECT_EQ(param->user_count(), 2);
     HloInstruction* add = nullptr;
@@ -1393,7 +1393,7 @@ ENTRY e {
             4);
 
   // Check load and stores.
-  for (int64 i : {0, 1}) {
+  for (int64_t i : {0, 1}) {
     HloInstruction* param = resource_update->parameter_instruction(i);
     EXPECT_EQ(param->user_count(), 2);
     HloInstruction* add = nullptr;
@@ -1512,7 +1512,7 @@ ENTRY e {
             4);
 
   // Check load and stores.
-  for (int64 i : {0, 1}) {
+  for (int64_t i : {0, 1}) {
     HloInstruction* param = resource_update->parameter_instruction(i);
     EXPECT_EQ(param->user_count(), 2);
     HloInstruction* add = nullptr;

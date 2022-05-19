@@ -36,8 +36,6 @@ limitations under the License.
 
 namespace se = stream_executor;
 
-using int64 = tensorflow::int64;
-
 namespace tensorflow {
 class IpuTraceEvent;
 }

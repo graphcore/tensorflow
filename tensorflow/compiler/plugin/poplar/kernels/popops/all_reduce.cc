@@ -41,7 +41,7 @@ class PopopsCrossReplicaSumOp : public XlaOpKernel {
   }
 
  private:
-  int64 replica_group_size_;
+  int64_t replica_group_size_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsCrossReplicaSumOp);
 };
@@ -92,7 +92,7 @@ class PopopsCrossReplicaMeanOp : public XlaOpKernel {
   }
 
  private:
-  int64 replica_group_size_;
+  int64_t replica_group_size_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsCrossReplicaMeanOp);
 };

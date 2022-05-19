@@ -57,7 +57,7 @@ class OneHotOp : public PoplarOpDef {
                         FindInstructionInput(tensor_map, res, inst, 2, seq,
                                              {debug_info}, false));
 
-    const int64 axis = one_hot_op->Axis();
+    const int64_t axis = one_hot_op->Axis();
 
     // Create the output tensor to store the result in (as popops takes this by
     // reference to make sure the output is in this layout).

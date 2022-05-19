@@ -119,8 +119,8 @@ TensorOrRemoteBufferVector GetTensorsMaybeExpand(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     poplar::program::Sequence& seq, bool expand_aliasing,
     const poplar::DebugNameAndId& debug_name_and_id,
-    absl::optional<int64> opt_tensors_start = absl::nullopt,
-    absl::optional<int64> opt_tensors_end = absl::nullopt) {
+    absl::optional<int64_t> opt_tensors_start = absl::nullopt,
+    absl::optional<int64_t> opt_tensors_end = absl::nullopt) {
   // Allocate any tensors which were deferred.
   DeferredAllocations::AllocateIfExists(res, inst, opt_tensors_start,
                                         opt_tensors_end);
@@ -188,7 +188,7 @@ std::vector<size_t> PoplarShapeFromXlaShape(const xla::Shape& xla_shape) {
 
 // Concatenate all tensors into a single tensor.
 DriverTensor ConcatenateTensors(const std::vector<DriverTensor>& tensors,
-                                int64 dimension) {
+                                int64_t dimension) {
   std::vector<snap::Tensor> snap_tensors(tensors.size());
   absl::c_copy(tensors, snap_tensors.begin());
   auto ret = snap::concat(snap_tensors, dimension);
@@ -207,8 +207,8 @@ DriverTensor FlattenAndConcatenateTensors(
 
 StatusOr<DriverTensor> SliceTensor(
     DriverTensor tensor_to_slice,
-    const HloInstruction::InstructionVector& slices, int64 slice_index,
-    int64 dimension) {
+    const HloInstruction::InstructionVector& slices, int64_t slice_index,
+    int64_t dimension) {
   size_t offset = 0;
   for (auto slice : slices) {
     if (!slice->shape().IsArray()) {
@@ -242,7 +242,7 @@ xla::Shape XlaShapeFromPoplarShape(PrimitiveType element_type,
                                    const std::vector<size_t>& poplar_shape) {
   xla::Shape shape;
   shape.set_element_type(element_type);
-  for (int64 dimension : poplar_shape) {
+  for (int64_t dimension : poplar_shape) {
     shape.add_dimensions(dimension);
   }
   LayoutUtil::SetToDefaultLayout(&shape);
@@ -393,9 +393,9 @@ static StatusOr<std::size_t> FindSeqDim(const xla::Shape& shape_xla,
 }
 
 namespace {
-int64 HighestFactorLessOrEqualThanN(int64 to_factor, int64 n) {
+int64_t HighestFactorLessOrEqualThanN(int64_t to_factor, int64_t n) {
   CHECK_GE(to_factor, n);
-  int64 factor = n;
+  int64_t factor = n;
   while (to_factor % factor) {
     factor--;
   }
@@ -404,12 +404,12 @@ int64 HighestFactorLessOrEqualThanN(int64 to_factor, int64 n) {
 }  // namespace
 
 DriverTensor CreateTensorFromSlice(
-    DriverGraph& graph, const DriverTensor& slice, int64 slice_dimension,
-    int64 output_size, CompilerResources& resources,
+    DriverGraph& graph, const DriverTensor& slice, int64_t slice_dimension,
+    int64_t output_size, CompilerResources& resources,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  const int64 slice_size = slice.dim(slice_dimension);
+  const int64_t slice_size = slice.dim(slice_dimension);
   // Find the higher number of rows we can slice out.
-  const int64 rows_to_clone =
+  const int64_t rows_to_clone =
       HighestFactorLessOrEqualThanN(output_size, slice_size);
 
   // Slice out the right number of rows from the slice.
@@ -419,7 +419,7 @@ DriverTensor CreateTensorFromSlice(
   }
 
   // Calculate how many slices are required for the input tensor.
-  const int64 number_of_clones = output_size / rows_to_clone;
+  const int64_t number_of_clones = output_size / rows_to_clone;
   std::vector<DriverTensor> output_slices(number_of_clones);
 
   // Make a clone of the slice.
@@ -427,7 +427,7 @@ DriverTensor CreateTensorFromSlice(
       graph, resources, adjusted_slice, {debug_name_and_id});
 
   // The remaining slices will just clone the layout of the first slice.
-  for (int64 i = 1; i != number_of_clones; ++i) {
+  for (int64_t i = 1; i != number_of_clones; ++i) {
     output_slices[i] = graph.clone(output_slices[0], {debug_name_and_id});
   }
 
@@ -460,7 +460,7 @@ static StatusOr<DriverTensor> RevertPoplarCustomOpTensorTransformation(
       // corresponds to a duplicated slice from the input).
       const auto input_indices = slice_inst->GetIndices();
       std::vector<unsigned> unique_slice_indices;
-      absl::flat_hash_set<int64> visited_input_indices;
+      absl::flat_hash_set<int64_t> visited_input_indices;
       for (unsigned i = 0; i < input_indices.size(); i++) {
         if (!visited_input_indices.count(input_indices[i])) {
           unique_slice_indices.push_back(i);
@@ -490,7 +490,7 @@ static StatusOr<DriverTensor> RevertPoplarCustomOpTensorTransformation(
 
 static StatusOr<DriverTensor> PathTransform(
     DriverGraph& graph, const TensorLocation& source,
-    CompilerResources& resources, DriverTensor in, int64 input_index,
+    CompilerResources& resources, DriverTensor in, int64_t input_index,
     const std::vector<const HloInstruction*>& path,
     const poplar::DebugNameAndId& debug_name_and_id) {
   // Now revert any transformations required by the path from the source to
@@ -529,7 +529,7 @@ static StatusOr<DriverTensor> PathTransform(
       case HloOpcode::kConcatenate: {
         const HloInstruction* operand =
             i + 1 == path.rend() ? source.instruction : *(i + 1);
-        const int64 slice_index = inst->operand_index(operand);
+        const int64_t slice_index = inst->operand_index(operand);
         TF_ASSIGN_OR_RETURN(in, SliceTensor(in, inst->operands(), slice_index,
                                             inst->concatenate_dimension()));
         TF_ASSIGN_OR_RETURN(auto poplar_type,
@@ -552,8 +552,8 @@ static StatusOr<DriverTensor> PathTransform(
         break;
       }
       case HloOpcode::kSlice: {
-        std::vector<int64> slice_dimensions;
-        for (int64 i = 0; i != inst->shape().rank(); ++i) {
+        std::vector<int64_t> slice_dimensions;
+        for (int64_t i = 0; i != inst->shape().rank(); ++i) {
           if (inst->shape().dimensions(i) !=
               inst->operand(0)->shape().dimensions(i)) {
             slice_dimensions.push_back(i);
@@ -565,7 +565,7 @@ static StatusOr<DriverTensor> PathTransform(
               "dimension, instead got a slice in ",
               slice_dimensions.size(), " dimensions.");
         }
-        const int64 slice_dimension = slice_dimensions[0];
+        const int64_t slice_dimension = slice_dimensions[0];
         in = CreateTensorFromSlice(
             graph, in, slice_dimension,
             inst->operand(0)->shape().dimensions(slice_dimension), resources,
@@ -740,7 +740,7 @@ static StatusOr<DriverTensor> AddLeftMatMul(
   auto dot_dims = target->dot_dimension_numbers();
 
   // Find the permutations
-  std::vector<int64> permutations;
+  std::vector<int64_t> permutations;
   Shape shuffled_shape, a_shape;
 
   // Collapse the LHS dimensions down to [Batch, M, Contracting]
@@ -777,7 +777,7 @@ static StatusOr<DriverTensor> AddRightMatMul(
   auto dot_dims = target->dot_dimension_numbers();
 
   // Find the permutations
-  std::vector<int64> permutations;
+  std::vector<int64_t> permutations;
   Shape shuffled_shape, b_shape;
 
   // Collapse the LHS dimensions down to [Batch, Contracting, N]
@@ -792,20 +792,20 @@ static StatusOr<DriverTensor> AddRightMatMul(
   // Support RHS being sliceable on the output dimension.
   bool make_output_dimension_sliceable = false;
   if (tensor_target.permutation && tensor_target.sliceable_dimension) {
-    const std::vector<int64> permutation = *tensor_target.permutation;
-    const int64 sliceable_dimension = *tensor_target.sliceable_dimension;
+    const std::vector<int64_t> permutation = *tensor_target.permutation;
+    const int64_t sliceable_dimension = *tensor_target.sliceable_dimension;
 
     // Get the dimension in the output which is sliced.
-    const int64 sliceable_output_dimension = permutation[sliceable_dimension];
+    const int64_t sliceable_output_dimension = permutation[sliceable_dimension];
 
     // We want the matmul to be sliceable if sliceable_output_dimension is one
     // of the output dimensions - the output dimensions are all the dimensions
     // after the batch and contracting dimensions.
-    const int64 first_output_dimension =
+    const int64_t first_output_dimension =
         dot_dims.rhs_batch_dimensions_size() +
         dot_dims.rhs_contracting_dimensions_size();
 
-    for (int64 d = first_output_dimension; d != permutations.size(); ++d) {
+    for (int64_t d = first_output_dimension; d != permutations.size(); ++d) {
       make_output_dimension_sliceable |=
           permutations[d] == sliceable_output_dimension;
     }
@@ -1048,7 +1048,7 @@ void Set64BitInitialTensorValueImpl(DriverGraph& graph, DriverTensor& tensor,
   size_t element_count = literal.element_count();
   const void* data(static_cast<const void*>(literal.untyped_data()));
   std::vector<char> converted =
-      ConvInt64ToInt32(data, element_count * sizeof(int64), 0);
+      ConvInt64ToInt32(data, element_count * sizeof(int64_t), 0);
 
   int32* data32 = reinterpret_cast<int32*>(converted.data());
   poplar::ArrayRef<int32> array(data32, element_count);
@@ -1110,7 +1110,7 @@ template <typename TYPE>
 DriverTensor CreateConstantTensorImpl(
     DriverGraph& graph, const xla::Literal& literal, const xla::Shape& shape,
     const poplar::Type& type, const poplar::DebugNameAndId& debug_name_and_id) {
-  int64 num_elements(ShapeUtil::ElementsIn(literal.shape()));
+  int64_t num_elements(ShapeUtil::ElementsIn(literal.shape()));
   std::vector<std::size_t> dim = PoplarShapeFromXlaShape(shape);
   const TYPE* data(static_cast<const TYPE*>(literal.untyped_data()));
 
@@ -1130,7 +1130,7 @@ DriverTensor CreateConstantTensorImpl(
 DriverTensor CreateFp16ConstantTensorImpl(
     DriverGraph& graph, const xla::Literal& literal, const xla::Shape& shape,
     const poplar::Type& type, const poplar::DebugNameAndId& debug_name_and_id) {
-  int64 num_elements(ShapeUtil::ElementsIn(literal.shape()));
+  int64_t num_elements(ShapeUtil::ElementsIn(literal.shape()));
   std::vector<std::size_t> dim = PoplarShapeFromXlaShape(shape);
   const uint16_t* data(static_cast<const uint16_t*>(literal.untyped_data()));
 
@@ -1151,12 +1151,12 @@ DriverTensor CreateFp16ConstantTensorImpl(
 DriverTensor Create64BitConstantTensorImpl(
     DriverGraph& graph, const xla::Literal& literal, const xla::Shape& shape,
     const poplar::Type& type, const poplar::DebugNameAndId& debug_name_and_id) {
-  int64 num_elements(ShapeUtil::ElementsIn(literal.shape()));
+  int64_t num_elements(ShapeUtil::ElementsIn(literal.shape()));
   std::vector<std::size_t> dim = PoplarShapeFromXlaShape(shape);
   const void* data(static_cast<const void*>(literal.untyped_data()));
 
   std::vector<char> converted =
-      ConvInt64ToInt32(data, num_elements * sizeof(int64), 0);
+      ConvInt64ToInt32(data, num_elements * sizeof(int64_t), 0);
 
   const int32* data32 = reinterpret_cast<const int32*>(converted.data());
 
@@ -1271,7 +1271,8 @@ StatusOr<DriverTensor> UnpadTensor(const PaddingConfig& cfg,
     std::vector<std::size_t> shape(out.shape());
     // Remove front and back padding first:
     size_t begin = cfg.dimensions(d).edge_padding_low();
-    if (static_cast<int64>(shape[d]) < cfg.dimensions(d).edge_padding_high()) {
+    if (static_cast<int64_t>(shape[d]) <
+        cfg.dimensions(d).edge_padding_high()) {
       return xla::FailedPrecondition(
           "Edge %zu is larger than padded edge %zu for dimension %u",
           cfg.dimensions(d).edge_padding_high(), shape[d], d);
@@ -1343,10 +1344,10 @@ StatusOr<DriverTensor> PadTensor(const PaddingConfig& cfg,
 }
 
 StatusOr<DriverTensor> ReverseTensor(const DriverTensor& in,
-                                     const std::vector<int64>& dimensions) {
+                                     const std::vector<int64_t>& dimensions) {
   DriverTensor out = in;
   if (in.numElements() > 0) {
-    for (int64 d : dimensions) {
+    for (int64_t d : dimensions) {
       out = out.reverse(d);
     }
   }
@@ -1355,7 +1356,7 @@ StatusOr<DriverTensor> ReverseTensor(const DriverTensor& in,
 
 StatusOr<DriverTensor> BroadcastTensor(const DriverTensor& in,
                                        const xla::Shape& out,
-                                       const std::vector<int64>& dimensions) {
+                                       const std::vector<int64_t>& dimensions) {
   if (PoplarShapeMatchesXLAShape(in, out)) {
     return in;
   }
@@ -1438,27 +1439,27 @@ bool PoplarShapeMatchesXLAShape(TensorOrRemoteBuffer torb,
   return element_count == ShapeUtil::ElementsIn(shape);
 }
 
-std::pair<int64, int64> FindTupleInputIndices(const HloInstruction* tuple,
-                                              int64 n) {
-  int64 start = 0;
-  for (int64 i = 0; i < n; i++) {
+std::pair<int64_t, int64_t> FindTupleInputIndices(const HloInstruction* tuple,
+                                                  int64_t n) {
+  int64_t start = 0;
+  for (int64_t i = 0; i < n; i++) {
     start += CountShapes(tuple->operand(i)->shape());
   }
-  int64 end = start + CountShapes(tuple->operand(n)->shape());
+  int64_t end = start + CountShapes(tuple->operand(n)->shape());
   return std::make_pair(start, end);
 }
 
-std::pair<int64, int64> FindGetTupleElementTupleIndices(
+std::pair<int64_t, int64_t> FindGetTupleElementTupleIndices(
     const HloInstruction* inst) {
   const auto* gte = Cast<HloGetTupleElementInstruction>(inst);
   const HloInstruction* tuple = inst->operand(0);
   const Shape& shape = tuple->shape();
-  int64 start = 0;
-  for (int64 i = 0; i < gte->tuple_index(); i++) {
+  int64_t start = 0;
+  for (int64_t i = 0; i < gte->tuple_index(); i++) {
     start += CountShapes(ShapeUtil::GetTupleElementShape(shape, i));
   }
-  int64 end = start + CountShapes(ShapeUtil::GetTupleElementShape(
-                          shape, gte->tuple_index()));
+  int64_t end = start + CountShapes(ShapeUtil::GetTupleElementShape(
+                            shape, gte->tuple_index()));
   return std::make_pair(start, end);
 }
 
@@ -1485,7 +1486,8 @@ StatusOr<TensorVector> TensorOrRemoteBufferVectorToTensorVector(
 
 StatusOr<TensorVector> FindInstructionInputTensorsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, std::pair<int64, int64> range, poplar::program::Sequence& seq,
+    int64_t input, std::pair<int64_t, int64_t> range,
+    poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing) {
   const HloInstruction* operand = inst->operand(input);
 
@@ -1499,7 +1501,8 @@ StatusOr<TensorVector> FindInstructionInputTensorsInRange(
 
 TensorOrRemoteBufferVector FindInstructionInputsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, std::pair<int64, int64> range, poplar::program::Sequence& seq,
+    int64_t input, std::pair<int64_t, int64_t> range,
+    poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing) {
   const HloInstruction* operand = inst->operand(input);
 
@@ -1509,7 +1512,7 @@ TensorOrRemoteBufferVector FindInstructionInputsInRange(
 
 StatusOr<DriverTensor> FindInstructionInput(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq,
+    int64_t input, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing) {
   const HloInstruction* operand = inst->operand(input);
 
@@ -1532,7 +1535,7 @@ StatusOr<DriverTensor> FindInstructionInput(
 
 TensorOrRemoteBufferVector FindInstructionInputs(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq,
+    int64_t input, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing) {
   const HloInstruction* operand = inst->operand(input);
   return GetTensorsMaybeExpand(map, res, operand, seq, expand_aliasing,
@@ -1541,7 +1544,7 @@ TensorOrRemoteBufferVector FindInstructionInputs(
 
 StatusOr<TensorVector> FindInstructionInputTensors(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq,
+    int64_t input, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing) {
   const HloInstruction* operand = inst->operand(input);
   TensorOrRemoteBufferVector inputs = GetTensorsMaybeExpand(
@@ -1566,21 +1569,21 @@ StatusOr<TensorVector> FindInstructionOutputTensors(
 
 StatusOr<TensorVector> FindInstructionOutputTensorsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    std::pair<int64, int64> range) {
+    std::pair<int64_t, int64_t> range) {
   DeferredAllocations::AllocateIfExists(res, inst, range.first, range.second);
   return map.FindInstructionOutputTensors(inst, range.first, range.second);
 }
 
 StatusOr<TensorOrRemoteBufferVector> FindInstructionOutputsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    std::pair<int64, int64> range) {
+    std::pair<int64_t, int64_t> range) {
   DeferredAllocations::AllocateIfExists(res, inst, range.first, range.second);
   return map.FindInstructionOutputs(inst, range.first, range.second);
 }
 
 StatusOr<TensorVector> FindExpandedInstructionOutputsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    std::pair<int64, int64> range, poplar::program::Sequence& seq,
+    std::pair<int64_t, int64_t> range, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
   return TensorOrRemoteBufferVectorToTensorVector(
       GetTensorsMaybeExpand(map, res, inst, seq, true, debug_name_and_id,
@@ -1668,7 +1671,7 @@ StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
     uint64 inplace_index = inplace_indices[i];
     tensors[i] = FindInstructionInputs(map, res, inst, inplace_index, seq,
                                        debug_name_and_id, expand_aliasing);
-    for (int64 j = 0; j < tensors[i].size(); ++j) {
+    for (int64_t j = 0; j < tensors[i].size(); ++j) {
       if (tensors[i][j].IsTensor()) {
         DriverTensor tensor = tensors[i][j].AsTensor();
         if (require_parallel_writeable && !tensor.isParallelWriteable()) {
@@ -1686,17 +1689,17 @@ StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
   return tensors;
 }
 
-Status AddOutput(TensorMap& map, const HloInstruction* inst, int64 n,
+Status AddOutput(TensorMap& map, const HloInstruction* inst, int64_t n,
                  const TensorOrRemoteBuffer& torb) {
   return map.AddOutput(inst, n, torb);
 }
 
-Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
+Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64_t n,
                        const DriverTensor& tensor) {
   return map.AddOutputTensor(inst, n, tensor);
 }
 
-Status AddOutputOpaque(TensorMap& map, const HloInstruction* inst, int64 n,
+Status AddOutputOpaque(TensorMap& map, const HloInstruction* inst, int64_t n,
                        absl::any token) {
   return map.AddOutputOpaque(inst, n, token);
 }

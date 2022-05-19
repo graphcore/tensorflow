@@ -38,9 +38,9 @@ namespace {
 using FunctionCombinerTest = HloTestBase;
 
 struct FunctionDescription {
-  int64 count;
-  int64 shard;
-  std::vector<int64> shape;
+  int64_t count;
+  int64_t shard;
+  std::vector<int64_t> shape;
 };
 
 // Function for generating Hlo modules with different functions.
@@ -49,12 +49,12 @@ std::string GetHlo(const std::vector<FunctionDescription>& functions) {
   comps_ss << "HloModule m\n";
   entry_ss << "ENTRY entry {";
 
-  int64 next_param_number = 0;
-  int64 next_function_id = 0;
+  int64_t next_param_number = 0;
+  int64_t next_function_id = 0;
   // Create the functions.
 
   for (const FunctionDescription& desc : functions) {
-    for (int64 i = 0; i != desc.count; ++i) {
+    for (int64_t i = 0; i != desc.count; ++i) {
       const std::string func_hlo = R"(
       comp_$counter_$shard {
         c$counter_param_0 = f32[$shape] parameter(0), sharding={maximal device=$shard}

@@ -57,11 +57,11 @@ RemoteBufferInputsOutputsInfos::RemoteBufferInputsOutputsInfos(
     gtes.insert(user);
   }
 
-  std::set<int64> outlined_modified_load_indices;
-  std::set<int64> outlined_unmodified_load_indices;
-  std::map<int64, int64> load_to_store_index;
+  std::set<int64_t> outlined_modified_load_indices;
+  std::set<int64_t> outlined_unmodified_load_indices;
+  std::map<int64_t, int64_t> load_to_store_index;
 
-  for (int64 i = 0; i != inst->operand_count(); ++i) {
+  for (int64_t i = 0; i != inst->operand_count(); ++i) {
     HloInstruction* remote_load = inst->mutable_operand(i);
     if (!IsRemoteBufferLoad(remote_load)) {
       continue;
@@ -102,7 +102,7 @@ RemoteBufferInputsOutputsInfos::RemoteBufferInputsOutputsInfos(
         continue;
       }
 
-      const int64 output_idx = store_input->tuple_index();
+      const int64_t output_idx = store_input->tuple_index();
 
       VLOG(2) << "Cluster input " << remote_load->ToString()
               << " is a modified parameter load index " << i;
@@ -124,8 +124,8 @@ RemoteBufferInputsOutputsInfos::RemoteBufferInputsOutputsInfos(
   num_modified_load_stores_ = outlined_modified_load_indices.size();
   num_unmodified_loads_ = outlined_unmodified_load_indices.size();
 
-  const int64 num_inputs = inst->operand_count();
-  const int64 num_outputs = ShapeUtil::TupleElementCount(inst->shape());
+  const int64_t num_inputs = inst->operand_count();
+  const int64_t num_outputs = ShapeUtil::TupleElementCount(inst->shape());
   // Create the input and output permutations - this is used such that:
   // * Fist x inputs/outputs correspond to pairs of parameter load/stores which
   // can be outlined.
@@ -139,19 +139,19 @@ RemoteBufferInputsOutputsInfos::RemoteBufferInputsOutputsInfos(
   outputs_new_to_old_permutation_.resize(num_outputs);
 
   {
-    int64 next_idx = 0;
-    absl::flat_hash_set<int64> visited;
-    for (int64 i : outlined_modified_load_indices) {
+    int64_t next_idx = 0;
+    absl::flat_hash_set<int64_t> visited;
+    for (int64_t i : outlined_modified_load_indices) {
       inputs_old_to_new_permutation_[i] = next_idx;
       inputs_new_to_old_permutation_[next_idx++] = i;
       visited.insert(i);
     }
-    for (int64 i : outlined_unmodified_load_indices) {
+    for (int64_t i : outlined_unmodified_load_indices) {
       inputs_old_to_new_permutation_[i] = next_idx;
       inputs_new_to_old_permutation_[next_idx++] = i;
       visited.insert(i);
     }
-    for (int64 i = 0; i != num_inputs; ++i) {
+    for (int64_t i = 0; i != num_inputs; ++i) {
       if (visited.contains(i)) {
         continue;
       }
@@ -165,16 +165,16 @@ RemoteBufferInputsOutputsInfos::RemoteBufferInputsOutputsInfos(
   }
 
   {
-    int64 next_idx = 0;
-    absl::flat_hash_set<int64> visited;
+    int64_t next_idx = 0;
+    absl::flat_hash_set<int64_t> visited;
     for (auto pair : load_to_store_index) {
-      const int64 output_idx = pair.second;
+      const int64_t output_idx = pair.second;
       outputs_new_to_old_permutation_[next_idx] = output_idx;
       outputs_old_to_new_permutation_[output_idx] = next_idx++;
       visited.insert(output_idx);
     }
 
-    for (int64 i = 0; i != num_outputs; ++i) {
+    for (int64_t i = 0; i != num_outputs; ++i) {
       if (visited.contains(i)) {
         continue;
       }
@@ -189,43 +189,43 @@ RemoteBufferInputsOutputsInfos::RemoteBufferInputsOutputsInfos(
 }
 
 uint64 RemoteBufferInputsOutputsInfos::GetLoadReplicationFactor(
-    int64 index) const {
+    int64_t index) const {
   return input_to_replication_factor_.at(index);
 }
 
-int64 RemoteBufferInputsOutputsInfos::GetNumModifiedLoadStores() const {
+int64_t RemoteBufferInputsOutputsInfos::GetNumModifiedLoadStores() const {
   return num_modified_load_stores_;
 }
 
-int64 RemoteBufferInputsOutputsInfos::GetNumUnmodifiedLoads() const {
+int64_t RemoteBufferInputsOutputsInfos::GetNumUnmodifiedLoads() const {
   return num_unmodified_loads_;
 }
 
-int64 RemoteBufferInputsOutputsInfos::GetNumLoadInputs() const {
+int64_t RemoteBufferInputsOutputsInfos::GetNumLoadInputs() const {
   return GetNumModifiedLoadStores() + GetNumUnmodifiedLoads();
 }
 
-const absl::flat_hash_map<int64, uint64>&
+const absl::flat_hash_map<int64_t, uint64>&
 RemoteBufferInputsOutputsInfos::GetReplicationFactors() const {
   return input_to_replication_factor_;
 }
 
-const std::vector<int64>&
+const std::vector<int64_t>&
 RemoteBufferInputsOutputsInfos::GetInputsOldToNewPermutation() const {
   return inputs_old_to_new_permutation_;
 }
 
-const std::vector<int64>&
+const std::vector<int64_t>&
 RemoteBufferInputsOutputsInfos::GetInputsNewToOldPermutation() const {
   return inputs_new_to_old_permutation_;
 }
 
-const std::vector<int64>&
+const std::vector<int64_t>&
 RemoteBufferInputsOutputsInfos::GetOutputsOldToNewPermutation() const {
   return outputs_old_to_new_permutation_;
 }
 
-const std::vector<int64>&
+const std::vector<int64_t>&
 RemoteBufferInputsOutputsInfos::GetOutputsNewToOldPermutation() const {
   return outputs_new_to_old_permutation_;
 }
@@ -281,7 +281,7 @@ StatusOr<bool> OutlineIntoFunctions(const Functions& functions) {
     HloInstruction* inst;
     uint64 replication_factor;
   };
-  absl::flat_hash_map<int64, RemoteBufferParameter> remote_buffer_parameters;
+  absl::flat_hash_map<int64_t, RemoteBufferParameter> remote_buffer_parameters;
 
   // Clone the computation and:
   // * Permute the parameters and outline the RemoteParameterLoads.
@@ -289,8 +289,8 @@ StatusOr<bool> OutlineIntoFunctions(const Functions& functions) {
   for (HloInstruction* old_inst : comp->MakeInstructionPostOrder()) {
     HloInstruction* new_inst;
     if (old_inst->opcode() == HloOpcode::kParameter) {
-      const int64 parameter_number = old_inst->parameter_number();
-      const int64 new_parameter_number =
+      const int64_t parameter_number = old_inst->parameter_number();
+      const int64_t new_parameter_number =
           rbioi.GetInputsOldToNewPermutation().at(parameter_number);
 
       // Add a parameter load instruction if required.
@@ -335,7 +335,7 @@ StatusOr<bool> OutlineIntoFunctions(const Functions& functions) {
 
       CHECK_LE(rbioi.GetNumModifiedLoadStores(), operands.size());
       // Add store instructions for the remote buffer outputs.
-      for (int64 i = 0; i != rbioi.GetNumModifiedLoadStores(); ++i) {
+      for (int64_t i = 0; i != rbioi.GetNumModifiedLoadStores(); ++i) {
         RemoteBufferParameter& remote_buffer = remote_buffer_parameters.at(i);
 
         // Store the value into the remote buffer.
@@ -356,7 +356,7 @@ StatusOr<bool> OutlineIntoFunctions(const Functions& functions) {
 
   HloComputation* outlined_computation =
       module->AddEmbeddedComputation(builder.Build(new_root));
-  const int64 num_outputs = ShapeUtil::TupleElementCount(func->shape());
+  const int64_t num_outputs = ShapeUtil::TupleElementCount(func->shape());
 
   // Go through all the function calls, and use the new computation, permute
   // inputs/outputs and replace all the users.
@@ -366,7 +366,7 @@ StatusOr<bool> OutlineIntoFunctions(const Functions& functions) {
     auto new_operands =
         Permute(old_function->operands(), rbioi.GetInputsOldToNewPermutation());
     // Look through the parameter loads for operands.
-    for (int64 i = 0; i != rbioi.GetNumLoadInputs(); ++i) {
+    for (int64_t i = 0; i != rbioi.GetNumLoadInputs(); ++i) {
       CHECK(IsRemoteBufferLoad(new_operands[i]));
       new_operands[i] = new_operands[i]->mutable_operand(0);
     }
@@ -396,14 +396,14 @@ StatusOr<bool> OutlineIntoFunctions(const Functions& functions) {
     // Get all the old gtes and create the new ones.
     std::vector<HloInstruction*> new_gtes(num_outputs);
     std::vector<HloInstruction*> old_gtes(num_outputs);
-    for (int64 i = 0; i != num_outputs; ++i) {
+    for (int64_t i = 0; i != num_outputs; ++i) {
       TF_ASSIGN_OR_RETURN(old_gtes[i], GetUniqueGTEUser(old_function, i));
       TF_ASSIGN_OR_RETURN(new_gtes[i], MakeGetTupleElementHlo(new_function, i));
     }
     // Replace the old uses of GTEs with the new ones, looking through the
     // parameter stores.
     old_gtes = Permute(old_gtes, rbioi.GetOutputsOldToNewPermutation());
-    for (int64 i = 0; i != num_outputs; ++i) {
+    for (int64_t i = 0; i != num_outputs; ++i) {
       HloInstruction* old_gte = old_gtes.at(i);
       HloInstruction* new_gte = new_gtes.at(i);
       old_gte->SetupDerivedInstruction(new_gte);

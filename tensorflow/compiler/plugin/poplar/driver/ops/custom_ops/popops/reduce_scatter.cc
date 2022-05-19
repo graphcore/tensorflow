@@ -45,9 +45,9 @@ class ReduceScatterOp : public PoplarOpDef {
     const auto replica_groups = reduce_scatter_inst->GetPoplarReplicaGroups();
 
     // Collect all the inputs.
-    const int64 num_inputs = inst->operand_count();
+    const int64_t num_inputs = inst->operand_count();
     std::vector<poplar::Tensor> inputs(num_inputs);
-    for (int64 i = 0; i < num_inputs; ++i) {
+    for (int64_t i = 0; i < num_inputs; ++i) {
       TF_ASSIGN_OR_RETURN(
           inputs[i],
           FindInstructionInput(tensor_map, res, inst, i, seq, {debug_info}));
@@ -67,7 +67,7 @@ class ReduceScatterOp : public PoplarOpDef {
         graph, inputs, op, seq, gcl_comm_group, {debug_info, "ReduceScatter"},
         GetReplicatedCollectiveOptions(res));
 
-    for (int64 i = 0; i != outputs.size(); ++i) {
+    for (int64_t i = 0; i != outputs.size(); ++i) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
                                   DriverTensor(outputs[i], graph)));
     }

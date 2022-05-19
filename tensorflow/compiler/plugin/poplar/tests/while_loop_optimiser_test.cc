@@ -38,7 +38,7 @@ namespace m = match;
 namespace poplarplugin {
 namespace {
 
-int64 pass_arg = 0;
+int64_t pass_arg = 0;
 
 using WhileLoopOptimiserTest = HloTestBase;
 using WhileLoopRemapTest = HloTestBase;

@@ -32,9 +32,9 @@ HloAssert::HloAssert(HloInstruction* predicate)
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64> HloAssert::AllocatingIndices() const { return {}; }
+absl::flat_hash_set<int64_t> HloAssert::AllocatingIndices() const { return {}; }
 
-absl::flat_hash_map<int64, int64> HloAssert::LayoutDependencies() const {
+absl::flat_hash_map<int64_t, int64_t> HloAssert::LayoutDependencies() const {
   return {};
 }
 

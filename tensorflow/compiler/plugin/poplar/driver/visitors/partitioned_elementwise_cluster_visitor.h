@@ -41,11 +41,11 @@ class PartitionedElementwiseClusterVisitor : public DeferredVisitor {
  public:
   struct HostRearrangementInfo {
     std::unique_ptr<gcl::CollectiveBalancedReorder> host_rearrangement;
-    int64 host_rearrangement_id;
+    int64_t host_rearrangement_id;
   };
 
   PartitionedElementwiseClusterVisitor(
-      int64 next_rearrangement_id, CompilerResources& res,
+      int64_t next_rearrangement_id, CompilerResources& res,
       const DeferredArgRBVectors& callsite_inputs,
       const poplar::DebugNameAndId& debug_name_and_id,
       bool allocate_all_input_tensors = true,
@@ -53,7 +53,7 @@ class PartitionedElementwiseClusterVisitor : public DeferredVisitor {
       bool reallocate_inputs = true);
 
   PartitionedElementwiseClusterVisitor(
-      int64 next_rearrangement_id, CompilerResources& res,
+      int64_t next_rearrangement_id, CompilerResources& res,
       const DeferredArgRBVectors& callsite_inputs,
       const poplar::DebugNameAndId& debug_name_and_id,
       bool allocate_all_input_tensors,
@@ -71,13 +71,13 @@ class PartitionedElementwiseClusterVisitor : public DeferredVisitor {
       const poplar::DebugNameAndId& debug_name_and_id) override;
 
   StatusOr<bool> UpdateRemoteBufferInformation(
-      int64 entry_param_idx, const HloInstruction* entry_param);
+      int64_t entry_param_idx, const HloInstruction* entry_param);
   Status UpdateRemoteBuffersInformation();
   Status SetRemoteBufferHostRearrangementId(DriverGraph& graph,
                                             const HloComputation* entry_comp,
-                                            int64 entry_param_idx,
-                                            int64 host_rearrangement_id,
-                                            int64 elements_per_replica);
+                                            int64_t entry_param_idx,
+                                            int64_t host_rearrangement_id,
+                                            int64_t elements_per_replica);
 
   Status FinishDeferedAllocationVisit(HloInstruction* inst) override;
 
@@ -87,7 +87,7 @@ class PartitionedElementwiseClusterVisitor : public DeferredVisitor {
       const HloInstruction* inst,
       std::unique_ptr<gcl::CollectiveBalancedReorder> cbr);
 
-  int64 GetNextRearrangementId() const { return next_rearrangement_id_; }
+  int64_t GetNextRearrangementId() const { return next_rearrangement_id_; }
 
  private:
   using HloShardingPtr = std::shared_ptr<const HloSharding>;
@@ -103,12 +103,12 @@ class PartitionedElementwiseClusterVisitor : public DeferredVisitor {
     }
   };
 
-  int64 next_rearrangement_id_;
+  int64_t next_rearrangement_id_;
   std::unique_ptr<HloDataflowAnalysis> dfa_;
   absl::flat_hash_map<HloShardingPtr, HostRearrangementInfo, HloShardingPtrHash,
                       HloShardingPtrEqual>
       cbr_;
-  std::map<int64, const HloInstruction*> entry_params_;
+  std::map<int64_t, const HloInstruction*> entry_params_;
 };
 
 }  // namespace poplarplugin

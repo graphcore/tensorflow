@@ -30,14 +30,14 @@ const HloInstruction* HloSuggestRecomputeInstruction::input() const {
   return operand(0);
 }
 
-absl::flat_hash_set<int64> HloSuggestRecomputeInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloSuggestRecomputeInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloSuggestRecomputeInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloSuggestRecomputeInstruction::LayoutDependencies() const {
   return {};
 }
@@ -94,14 +94,14 @@ const HloInstruction* HloBlockRecomputeInstruction::input() const {
   return operand(0);
 }
 
-absl::flat_hash_set<int64> HloBlockRecomputeInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloBlockRecomputeInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloBlockRecomputeInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloBlockRecomputeInstruction::LayoutDependencies() const {
   return {};
 }
@@ -150,7 +150,7 @@ HloRecomputationCheckpointInstruction::HloRecomputationCheckpointInstruction(
     : HloPoplarInstruction(operand->shape(), {operand},
                            PoplarOp::RecomputationCheckpoint) {}
 
-absl::flat_hash_set<int64>
+absl::flat_hash_set<int64_t>
 HloRecomputationCheckpointInstruction::AllocatingIndices() const {
   return {};
 }
@@ -159,7 +159,7 @@ bool HloRecomputationCheckpointInstruction::AllocatingOutput() const {
   return false;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloRecomputationCheckpointInstruction::LayoutDependencies() const {
   return {};
 }
@@ -214,8 +214,8 @@ HloRecomputationInputInstruction::HloRecomputationInputInstruction(
                            {checkpointed_input, old_input},
                            PoplarOp::RecomputationInput) {}
 
-absl::flat_hash_set<int64> HloRecomputationInputInstruction::AllocatingIndices()
-    const {
+absl::flat_hash_set<int64_t>
+HloRecomputationInputInstruction::AllocatingIndices() const {
   return {};
 }
 
@@ -223,7 +223,7 @@ bool HloRecomputationInputInstruction::AllocatingOutput() const {
   return false;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloRecomputationInputInstruction::LayoutDependencies() const {
   return {};
 }

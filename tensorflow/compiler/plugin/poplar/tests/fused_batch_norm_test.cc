@@ -52,8 +52,8 @@ namespace {
 /* Test based on tensorflow/compiler/xla/tests/batch_normalization_test.cc */
 
 struct HloFusedBatchNorm3DTestParam {
-  std::vector<int64> bounds;
-  int64 feature_index;
+  std::vector<int64_t> bounds;
+  int64_t feature_index;
   float random_value_mean;
   float random_value_var;
 
@@ -78,13 +78,13 @@ class HloFusedBatchNorm3DTest
 std::vector<HloFusedBatchNorm3DTestParam> BuildHloFusedBatchNorm3DTestParams() {
   std::vector<HloFusedBatchNorm3DTestParam> params;
 
-  auto add_testcase = [&](std::vector<int64> bounds, int64 feature_index,
+  auto add_testcase = [&](std::vector<int64_t> bounds, int64_t feature_index,
                           float random_value_mean, float random_value_var) {
     HloFusedBatchNorm3DTestParam p{bounds, feature_index, random_value_mean,
                                    random_value_var};
     params.push_back(p);
   };
-  std::vector<int64> shape = {2, 2, 2};
+  std::vector<int64_t> shape = {2, 2, 2};
   for (auto dim : shape) {
     add_testcase(shape, dim, 100.2f, 200.0f);
   }
@@ -101,23 +101,23 @@ POPLAR_TEST_P(HloFusedBatchNorm3DTest, RandomizedInferencingTests) {
   float epsilon = 0.001;
   XlaBuilder builder(TestName());
 
-  const std::vector<int64>& bounds = GetParam().bounds;
+  const std::vector<int64_t>& bounds = GetParam().bounds;
   Array3D<float> input_array(bounds[0], bounds[1], bounds[2]);
 
   input_array.FillRandom(GetParam().random_value_var,
                          GetParam().random_value_mean);
 
-  const int64 feature_index = GetParam().feature_index;
-  const int64 num_elements_per_feature =
+  const int64_t feature_index = GetParam().feature_index;
+  const int64_t num_elements_per_feature =
       Product(bounds) / bounds[feature_index];
-  const int64 feature_bound = bounds[feature_index];
+  const int64_t feature_bound = bounds[feature_index];
   std::vector<float> offset(feature_bound, 1);
   std::vector<float> scale(feature_bound, 2);
 
   auto input_squared =
       reference_util::MapArray3D(input_array, [](float a) { return a * a; });
-  std::vector<int64> reduce_dims;
-  for (int64 i = 0; i < static_cast<int64>(bounds.size()); ++i) {
+  std::vector<int64_t> reduce_dims;
+  for (int64_t i = 0; i < static_cast<int64_t>(bounds.size()); ++i) {
     if (i != feature_index) {
       reduce_dims.push_back(i);
     }
@@ -133,22 +133,22 @@ POPLAR_TEST_P(HloFusedBatchNorm3DTest, RandomizedInferencingTests) {
 
   std::vector<float> mean(feature_bound);
 
-  for (int64 i = 0; i < feature_bound; ++i) {
+  for (int64_t i = 0; i < feature_bound; ++i) {
     mean[i] = sum[i] / num_elements_per_feature;
   }
 
   std::vector<float> mean_square(feature_bound);
-  for (int64 i = 0; i < feature_bound; ++i) {
+  for (int64_t i = 0; i < feature_bound; ++i) {
     mean_square[i] = mean[i] * mean[i];
   }
 
   std::vector<float> square_mean(feature_bound);
-  for (int64 i = 0; i < feature_bound; ++i) {
+  for (int64_t i = 0; i < feature_bound; ++i) {
     square_mean[i] = sum_squared[i] / num_elements_per_feature;
   }
 
   std::vector<float> var(feature_bound);
-  for (int64 i = 0; i < feature_bound; ++i) {
+  for (int64_t i = 0; i < feature_bound; ++i) {
     var[i] = square_mean[i] - mean_square[i];
   }
 

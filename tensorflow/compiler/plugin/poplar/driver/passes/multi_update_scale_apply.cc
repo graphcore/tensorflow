@@ -107,8 +107,8 @@ Status ReplaceMatch(HloMatcherMatched& match) {
 MultiUpdateScaleApply::MultiUpdateScaleApply(CompilerAnnotations& annotations)
     : HloMatcher(patterns, annotations, false, false) {}
 
-StatusOr<bool> MultiUpdateScaleApply::HandleMatch(HloMatcherMatched& match,
-                                                  const absl::optional<int64>) {
+StatusOr<bool> MultiUpdateScaleApply::HandleMatch(
+    HloMatcherMatched& match, const absl::optional<int64_t>) {
   TF_RETURN_IF_ERROR(ReplaceMatch(match));
   return true;
 }

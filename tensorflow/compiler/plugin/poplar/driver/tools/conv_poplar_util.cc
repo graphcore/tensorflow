@@ -28,7 +28,7 @@ namespace {
 StatusOr<poplin::ConvParams> GetConvolutionParametersCore(
     const HloInstruction* inst, const std::vector<size_t>& input_dims,
     const std::vector<size_t>& kernel_dims,
-    const std::vector<size_t>& output_dims, int64 f_g, int64 b_g,
+    const std::vector<size_t>& output_dims, int64_t f_g, int64_t b_g,
     const xla::ConvolutionDimensionNumbers& dims, const Window& window,
     poplar::Type input_dtype, poplar::Type output_dtype) {
   if (f_g > 1 && b_g > 1) {
@@ -89,7 +89,7 @@ StatusOr<poplin::ConvParams> GetConvolutionParametersCore(
   std::vector<unsigned int> out_t_l;
   std::vector<unsigned int> out_t_u;
 
-  for (int64 i = 0; i < window.dimensions().size(); i++) {
+  for (int64_t i = 0; i < window.dimensions().size(); i++) {
     n_s.push_back(input_dims[dims.input_spatial_dimensions(i)]);
     f_s.push_back(kernel_dims[dims.kernel_spatial_dimensions(i)]);
     out_s.push_back(window.dimensions(i).stride());
@@ -135,7 +135,7 @@ StatusOr<poplin::ConvParams> GetConvolutionParametersCore(
 }  // namespace
 
 StatusOr<poplin::ConvParams> GetConvolutionParameters(
-    const HloInstruction* inst, int64 input_index, int64 kernel_index) {
+    const HloInstruction* inst, int64_t input_index, int64_t kernel_index) {
   const Shape& input = inst->operand(input_index)->shape();
   const Shape& kernel = inst->operand(kernel_index)->shape();
   const Shape& output = inst->shape();
@@ -187,7 +187,7 @@ StatusOr<std::vector<poplin::ConvParams>> GetConvolutionParametersForMultiConv(
   const auto& convolution_specs = inst->GetConvolutionSpecs();
 
   std::vector<poplin::ConvParams> params(convolution_specs.size());
-  for (int64 i = 0; i != convolution_specs.size(); ++i) {
+  for (int64_t i = 0; i != convolution_specs.size(); ++i) {
     const Shape& input = inst->operand(i)->shape();
     const Shape& kernel = inst->operand(i + convolution_specs.size())->shape();
     const Shape& output = ShapeUtil::GetTupleElementShape(inst->shape(), i);
@@ -217,12 +217,12 @@ StatusOr<std::vector<poplin::ConvParams>> GetConvolutionParametersForMultiConv(
 // ConvolutionDimensionNumbers), into a Poplar format tensor, always
 // Batch, Features, Y, X, ...
 poplar::Tensor ShuffleConvolutionInputToPoplar(
-    int64 group_count, const ConvolutionDimensionNumbers& dims,
+    int64_t group_count, const ConvolutionDimensionNumbers& dims,
     const poplar::Tensor& tensor) {
   std::vector<unsigned int> shuffle(2 + dims.input_spatial_dimensions_size());
   shuffle[0] = dims.input_batch_dimension();
   shuffle[1] = dims.input_feature_dimension();
-  for (int64 i = 0; i < dims.input_spatial_dimensions_size(); i++) {
+  for (int64_t i = 0; i < dims.input_spatial_dimensions_size(); i++) {
     shuffle[2 + i] = dims.input_spatial_dimensions(i);
   }
 
@@ -249,7 +249,7 @@ poplar::Tensor ShuffleConvolutionOutputToPoplar(
                                     dims.output_spatial_dimensions().size());
   shuffle[0] = dims.output_batch_dimension();
   shuffle[1] = dims.output_feature_dimension();
-  for (int64 i = 0; i < dims.output_spatial_dimensions().size(); ++i) {
+  for (int64_t i = 0; i < dims.output_spatial_dimensions().size(); ++i) {
     shuffle[2 + i] = dims.output_spatial_dimensions(i);
   }
 
@@ -273,7 +273,7 @@ poplar::Tensor ShuffleConvolutionWeightsToPoplar(
     shuffle[0] = dims.kernel_output_feature_dimension();
     shuffle[1] = dims.kernel_input_feature_dimension();
   }
-  for (int64 i = 0; i < dims.kernel_spatial_dimensions_size(); i++) {
+  for (int64_t i = 0; i < dims.kernel_spatial_dimensions_size(); i++) {
     shuffle[2 + i] = dims.kernel_spatial_dimensions(i);
   }
 
@@ -288,7 +288,7 @@ StatusOr<poplar::Tensor> ShuffleConvolutionWeightsToPoplar(
 }
 
 poplar::Tensor ShuffleConvolutionInputToTensorflow(
-    int64 group_count, const ConvolutionDimensionNumbers& dims,
+    int64_t group_count, const ConvolutionDimensionNumbers& dims,
     const poplar::Tensor& tensor) {
   // Move 'G' parts of the B back to I
   const unsigned n_g = group_count;
@@ -299,7 +299,7 @@ poplar::Tensor ShuffleConvolutionInputToTensorflow(
   std::vector<unsigned int> shuffle(2 + dims.input_spatial_dimensions_size());
   shuffle[dims.input_batch_dimension()] = 0;
   shuffle[dims.input_feature_dimension()] = 1;
-  for (int64 i = 0; i < dims.input_spatial_dimensions_size(); i++) {
+  for (int64_t i = 0; i < dims.input_spatial_dimensions_size(); i++) {
     shuffle[dims.input_spatial_dimensions(i)] = i + 2;
   }
 
@@ -308,7 +308,7 @@ poplar::Tensor ShuffleConvolutionInputToTensorflow(
 
 StatusOr<poplar::Tensor> ShuffleConvolutionInputToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor) {
-  TF_ASSIGN_OR_RETURN(int64 group_count, GetBatchGroupCount(inst));
+  TF_ASSIGN_OR_RETURN(int64_t group_count, GetBatchGroupCount(inst));
   TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers d, GetConvolutionDims(inst));
   return ShuffleConvolutionInputToTensorflow(group_count, d, tensor);
 }
@@ -321,7 +321,7 @@ poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
   int in_dim = dims.kernel_input_feature_dimension();
   shuffle[out_dim] = swap_features ? 1 : 0;
   shuffle[in_dim] = swap_features ? 0 : 1;
-  for (int64 i = 0; i < dims.kernel_spatial_dimensions_size(); i++) {
+  for (int64_t i = 0; i < dims.kernel_spatial_dimensions_size(); i++) {
     shuffle[dims.kernel_spatial_dimensions(i)] = i + 2;
   }
   return tensor.dimShuffle(shuffle);
@@ -339,7 +339,7 @@ poplar::Tensor ShuffleConvolutionOutputToTensorflow(
   std::vector<unsigned int> shuffle(2 + dims.output_spatial_dimensions_size());
   shuffle[dims.output_batch_dimension()] = 0;
   shuffle[dims.output_feature_dimension()] = 1;
-  for (int64 i = 0; i < dims.output_spatial_dimensions_size(); i++) {
+  for (int64_t i = 0; i < dims.output_spatial_dimensions_size(); i++) {
     shuffle[dims.output_spatial_dimensions(i)] = i + 2;
   }
 

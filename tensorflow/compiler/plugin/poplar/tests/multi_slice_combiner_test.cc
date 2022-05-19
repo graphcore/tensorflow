@@ -134,7 +134,7 @@ ENTRY main {
   ASSERT_TRUE(result.shape().IsTuple());
 
   const Shape& slice1 = ShapeUtil::GetSubshape(result.shape(), {0});
-  ShapeUtil::ForEachIndex(slice1, [&](absl::Span<const int64> output_index) {
+  ShapeUtil::ForEachIndex(slice1, [&](absl::Span<const int64_t> output_index) {
     EXPECT_EQ(output_index.size(), 2);
     float value = result.Get<float>(output_index, {0});
     auto offset_idx = offset1.Get<int32>({output_index[0], 0});
@@ -143,7 +143,7 @@ ENTRY main {
     return true;
   });
   const Shape& slice2 = ShapeUtil::GetSubshape(result.shape(), {1});
-  ShapeUtil::ForEachIndex(slice2, [&](absl::Span<const int64> output_index) {
+  ShapeUtil::ForEachIndex(slice2, [&](absl::Span<const int64_t> output_index) {
     EXPECT_EQ(output_index.size(), 2);
     float value = result.Get<float>(output_index, {1});
     auto offset_idx = offset2.Get<int32>({output_index[0], 0});
@@ -234,7 +234,7 @@ ENTRY main {
   ASSERT_TRUE(result.shape().IsTuple());
 
   const Shape& slice1 = ShapeUtil::GetSubshape(result.shape(), {0});
-  ShapeUtil::ForEachIndex(slice1, [&](absl::Span<const int64> output_index) {
+  ShapeUtil::ForEachIndex(slice1, [&](absl::Span<const int64_t> output_index) {
     EXPECT_EQ(output_index.size(), 2);
     float value = result.Get<float>(output_index, {0});
     auto offset_idx = offset1.Get<int32>({output_index[0], 0});
@@ -243,7 +243,7 @@ ENTRY main {
     return true;
   });
   const Shape& slice2 = ShapeUtil::GetSubshape(result.shape(), {1});
-  ShapeUtil::ForEachIndex(slice2, [&](absl::Span<const int64> output_index) {
+  ShapeUtil::ForEachIndex(slice2, [&](absl::Span<const int64_t> output_index) {
     EXPECT_EQ(output_index.size(), 2);
     float value = result.Get<float>(output_index, {1});
     auto offset_idx = offset2.Get<int32>({output_index[0], 0});
@@ -252,7 +252,7 @@ ENTRY main {
     return true;
   });
   const Shape& slice3 = ShapeUtil::GetSubshape(result.shape(), {2});
-  ShapeUtil::ForEachIndex(slice3, [&](absl::Span<const int64> output_index) {
+  ShapeUtil::ForEachIndex(slice3, [&](absl::Span<const int64_t> output_index) {
     EXPECT_EQ(output_index.size(), 2);
     float value = result.Get<float>(output_index, {2});
     auto offset_idx = offset3.Get<int32>({output_index[0], 0});

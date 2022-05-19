@@ -42,9 +42,9 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-int64 ByteSizeOfIncludingTuple(const Shape& shape) {
+int64_t ByteSizeOfIncludingTuple(const Shape& shape) {
   if (shape.IsTuple()) {
-    int64 result = 0;
+    int64_t result = 0;
 
     for (auto i = 0; i < shape.tuple_shapes_size(); ++i) {
       result += ByteSizeOfIncludingTuple(shape.tuple_shapes(i));
@@ -70,7 +70,7 @@ HloInstruction* AddReplacementInstruction(
 }
 
 StatusOr<HloInstruction*> AddGTEInstruction(HloInstruction* operand,
-                                            int64 index,
+                                            int64_t index,
                                             HloInstruction* to_replace) {
   TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                       MakeGetTupleElementHlo(operand, index));
@@ -121,14 +121,15 @@ InstructionColocatorHelper::InstructionColocatorHelper(
     : id_(GetNextID()),
       requires_matching_element_types_(requires_matching_element_types) {}
 
-int64 InstructionColocatorHelper::GetID() const { return id_; }
+int64_t InstructionColocatorHelper::GetID() const { return id_; }
 
-int64 InstructionColocatorHelper::GetNextID() {
-  static int64 id = 0;
+int64_t InstructionColocatorHelper::GetNextID() {
+  static int64_t id = 0;
   return id++;
 }
 
-int64 InstructionColocatorHelper::ByteSizeOf(const HloInstruction* inst) const {
+int64_t InstructionColocatorHelper::ByteSizeOf(
+    const HloInstruction* inst) const {
   return ByteSizeOfIncludingTuple(inst->shape());
 }
 
@@ -222,7 +223,7 @@ InstructionColocatorHelper::CombineAndReplaceColocatedInstructions(
   result.push_back(new_inst);
 
   // Delete old instructions and replace uses.
-  int64 output_index_offset = 0;
+  int64_t output_index_offset = 0;
   for (HloInstruction* old_inst : to_combine) {
     TF_RETURN_IF_ERROR(new_inst->CopyAllControlDepsFrom(old_inst));
     TF_RETURN_IF_ERROR(old_inst->DropAllControlDeps());
@@ -230,7 +231,7 @@ InstructionColocatorHelper::CombineAndReplaceColocatedInstructions(
     if (old_inst->shape().IsTuple()) {
       // Record the number of users before adding the users from old_inst.
       // This is used to iterate through only the new users.
-      int64 new_users_offset = new_inst->user_count();
+      int64_t new_users_offset = new_inst->user_count();
       TF_RETURN_IF_ERROR(old_inst->ReplaceAllUsesWithDifferentShape(new_inst));
 
       // Iterate through new users and update GTE indexes.
@@ -314,7 +315,7 @@ class AllReduceColocatorHelper : public InstructionColocatorHelper {
     return inst->opcode() == HloOpcode::kAllReduce;
   }
 
-  int64 GetColocateBufferSize(
+  int64_t GetColocateBufferSize(
       const CompilerInformation& information) const override {
     return information.max_all_reduce_buffer_size;
   }
@@ -350,7 +351,7 @@ class InterIpuCopyColocatorHelper : public InstructionColocatorHelper {
     return true;
   }
 
-  int64 GetColocateBufferSize(
+  int64_t GetColocateBufferSize(
       const CompilerInformation& information) const override {
     return information.max_inter_ipu_copies_buffer_size;
   }
@@ -382,7 +383,7 @@ class ReduceScatterColocatorHelper : public InstructionColocatorHelper {
     return IsPoplarInstruction(PoplarOp::ReduceScatter)(inst);
   }
 
-  int64 GetColocateBufferSize(
+  int64_t GetColocateBufferSize(
       const CompilerInformation& information) const override {
     return information.max_reduce_scatter_buffer_size;
   }
@@ -405,17 +406,18 @@ class SendToHostColocatorHelper : public InstructionColocatorHelper {
     return IsPoplarInstruction(PoplarOp::SendToHost)(inst);
   }
 
-  int64 GetColocateBufferSize(
+  int64_t GetColocateBufferSize(
       const CompilerInformation& information) const override {
     return information.max_send_recv_cluster_size;
   }
 
-  int64 ByteSizeOf(const HloInstruction* inst) const override {
+  int64_t ByteSizeOf(const HloInstruction* inst) const override {
     // The size of the SendToHost is determined by the size of its inputs.
-    return absl::c_accumulate(
-        inst->operands(), int64{0}, [](int64 acc, const HloInstruction* input) {
-          return acc + ByteSizeOfIncludingTuple(input->shape());
-        });
+    return absl::c_accumulate(inst->operands(), int64_t{0},
+                              [](int64_t acc, const HloInstruction* input) {
+                                return acc +
+                                       ByteSizeOfIncludingTuple(input->shape());
+                              });
   }
 
   StatusOr<std::vector<HloInstruction*>> CombineAndReplaceColocatedInstructions(
@@ -469,7 +471,7 @@ class RecvFromHostColocatorHelper : public InstructionColocatorHelper {
     return IsPoplarInstruction(PoplarOp::RecvFromHost)(inst);
   }
 
-  int64 GetColocateBufferSize(
+  int64_t GetColocateBufferSize(
       const CompilerInformation& information) const override {
     return information.max_send_recv_cluster_size;
   }
@@ -547,7 +549,7 @@ class StatefulGradientAccumulationAllReduceColocatorHelper
         PoplarOp::StatefulGradientAccumulateAndAllReduce)(inst);
   }
 
-  int64 GetColocateBufferSize(
+  int64_t GetColocateBufferSize(
       const CompilerInformation& information) const override {
     return information.max_all_reduce_buffer_size;
   }
@@ -577,7 +579,7 @@ class StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper
         inst);
   }
 
-  int64 GetColocateBufferSize(
+  int64_t GetColocateBufferSize(
       const CompilerInformation& information) const override {
     return information.max_all_reduce_buffer_size;
   }
@@ -683,7 +685,7 @@ class ReduceManyColocatorHelper : public InstructionColocatorHelper {
     return (inst->opcode() == HloOpcode::kReduce) || IsReductionFusion(inst);
   }
 
-  int64 GetColocateBufferSize(
+  int64_t GetColocateBufferSize(
       const CompilerInformation& information) const override {
     return information.max_reduce_many_buffer_size;
   }
@@ -738,7 +740,7 @@ class AllGatherColocatorHelper : public InstructionColocatorHelper {
     return a_rg == b_rg;
   }
 
-  int64 GetColocateBufferSize(
+  int64_t GetColocateBufferSize(
       const CompilerInformation& information) const override {
     return information.max_all_gather_buffer_size;
   }

@@ -422,7 +422,7 @@ ENTRY cluster {
                                          m::Parameter(2), m::Parameter(3)),
                                 m::Op())));
 
-  int64 num_runs = 0;
+  int64_t num_runs = 0;
   bool changed = true;
   while (changed) {
     TF_ASSERT_OK_AND_ASSIGN(changed, CallOptimizer().Run(module.get()));

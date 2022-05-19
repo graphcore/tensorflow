@@ -104,8 +104,9 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
 
     // Validate shapes.
     TensorShape expected_input_h_state_shape;
-    TensorShapeUtils::MakeShape(std::vector<int64>({batch_size, num_channels_}),
-                                &expected_input_h_state_shape);
+    TensorShapeUtils::MakeShape(
+        std::vector<int64_t>({batch_size, num_channels_}),
+        &expected_input_h_state_shape);
     OP_REQUIRES(
         ctx, ctx->InputShape(1) == expected_input_h_state_shape,
         errors::InvalidArgument(absl::StrFormat(
@@ -113,8 +114,9 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
             batch_size, num_channels_)));
 
     TensorShape expected_input_c_state_shape;
-    TensorShapeUtils::MakeShape(std::vector<int64>({batch_size, num_channels_}),
-                                &expected_input_c_state_shape);
+    TensorShapeUtils::MakeShape(
+        std::vector<int64_t>({batch_size, num_channels_}),
+        &expected_input_c_state_shape);
     OP_REQUIRES(
         ctx, ctx->InputShape(2) == expected_input_c_state_shape,
         errors::InvalidArgument(absl::StrFormat(
@@ -123,7 +125,7 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
 
     TensorShape expected_kernel_shape;
     TensorShapeUtils::MakeShape(
-        std::vector<int64>({input_size + num_channels_, 4 * num_channels_}),
+        std::vector<int64_t>({input_size + num_channels_, 4 * num_channels_}),
         &expected_kernel_shape);
     OP_REQUIRES(ctx, ctx->InputShape(3) == expected_kernel_shape,
                 errors::InvalidArgument(absl::StrFormat(
@@ -131,7 +133,7 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
                     input_size + num_channels_, 4 * num_channels_)));
 
     TensorShape expected_biases_shape;
-    TensorShapeUtils::MakeShape(std::vector<int64>({4, num_channels_}),
+    TensorShapeUtils::MakeShape(std::vector<int64_t>({4, num_channels_}),
                                 &expected_biases_shape);
     OP_REQUIRES(
         ctx, ctx->InputShape(4) == expected_biases_shape,
@@ -140,7 +142,7 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
 
     if (lstm_type == LstmType::DYNAMIC_LSTM) {
       TensorShape expected_seq_len_shape;
-      TensorShapeUtils::MakeShape(std::vector<int64>({batch_size}),
+      TensorShapeUtils::MakeShape(std::vector<int64_t>({batch_size}),
                                   &expected_seq_len_shape);
       OP_REQUIRES(
           ctx, ctx->InputShape(5) == expected_seq_len_shape,

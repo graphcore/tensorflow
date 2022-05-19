@@ -28,13 +28,13 @@ namespace poplarplugin {
 class HloSliceApplyBase : public HloPoplarInstruction {
  protected:
   HloSliceApplyBase(const std::vector<HloInstruction*>& operands,
-                    int64 apply_dimension, int64 start_index,
+                    int64_t apply_dimension, int64_t start_index,
                     HloOpcode operation, PoplarOp poplar_op);
 
  public:
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
@@ -42,8 +42,8 @@ class HloSliceApplyBase : public HloPoplarInstruction {
   bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
 
-  int64 GetApplyDimension() const;
-  int64 GetStartIndex() const;
+  int64_t GetApplyDimension() const;
+  int64_t GetStartIndex() const;
   HloOpcode GetOperation() const;
 
  protected:
@@ -51,8 +51,8 @@ class HloSliceApplyBase : public HloPoplarInstruction {
       const HloPrintOptions& options) const override;
 
  private:
-  const int64 apply_dimension_;
-  const int64 start_index_;
+  const int64_t apply_dimension_;
+  const int64_t start_index_;
   const HloOpcode operation_;
 };
 
@@ -61,7 +61,8 @@ class HloSliceApplyBase : public HloPoplarInstruction {
 class HloSliceApply : public HloSliceApplyBase {
  public:
   HloSliceApply(HloInstruction* const input, HloInstruction* const update,
-                int64 apply_dimension, int64 start_index, HloOpcode operation);
+                int64_t apply_dimension, int64_t start_index,
+                HloOpcode operation);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -71,8 +72,8 @@ class HloSliceApply : public HloSliceApplyBase {
 
 std::unique_ptr<HloInstruction> CreateSliceApply(HloInstruction* const input,
                                                  HloInstruction* const update,
-                                                 int64 apply_dimension,
-                                                 int64 start_index,
+                                                 int64_t apply_dimension,
+                                                 int64_t start_index,
                                                  HloOpcode operation);
 
 // Slices input into along the `apply_dimension` dimension from `start_index` to
@@ -82,8 +83,8 @@ class HloSliceApplyaXbY : public HloSliceApplyBase {
  public:
   HloSliceApplyaXbY(HloInstruction* const input, HloInstruction* const update,
                     HloInstruction* const scale_input,
-                    HloInstruction* const scale_update, int64 apply_dimension,
-                    int64 start_index, HloOpcode operation);
+                    HloInstruction* const scale_update, int64_t apply_dimension,
+                    int64_t start_index, HloOpcode operation);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -94,7 +95,7 @@ class HloSliceApplyaXbY : public HloSliceApplyBase {
 std::unique_ptr<HloInstruction> CreateSliceApplyaXbY(
     HloInstruction* const input, HloInstruction* const update,
     HloInstruction* const scale_input, HloInstruction* const scale_update,
-    int64 apply_dimension, int64 start_index, HloOpcode operation);
+    int64_t apply_dimension, int64_t start_index, HloOpcode operation);
 
 // Slices input into along the `apply_dimension` dimension from `start_index` to
 // form `input_slice` and applies the update using the elementwise `operation`,
@@ -102,8 +103,8 @@ std::unique_ptr<HloInstruction> CreateSliceApplyaXbY(
 class HloSliceApplyabY : public HloSliceApplyBase {
  public:
   HloSliceApplyabY(HloInstruction* const input, HloInstruction* const update,
-                   HloInstruction* const scale_update, int64 apply_dimension,
-                   int64 start_index, HloOpcode operation);
+                   HloInstruction* const scale_update, int64_t apply_dimension,
+                   int64_t start_index, HloOpcode operation);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -113,8 +114,8 @@ class HloSliceApplyabY : public HloSliceApplyBase {
 
 std::unique_ptr<HloInstruction> CreateSliceApplyabY(
     HloInstruction* const input, HloInstruction* const update,
-    HloInstruction* const scale_update, int64 apply_dimension,
-    int64 start_index, HloOpcode operation);
+    HloInstruction* const scale_update, int64_t apply_dimension,
+    int64_t start_index, HloOpcode operation);
 
 // Slices input into along the `apply_dimension` dimension from `start_index` to
 // form `input_slice` and applies the update using the elementwise `operation`,
@@ -122,8 +123,8 @@ std::unique_ptr<HloInstruction> CreateSliceApplyabY(
 class HloSliceApplyaXb : public HloSliceApplyBase {
  public:
   HloSliceApplyaXb(HloInstruction* const input, HloInstruction* const update,
-                   HloInstruction* const scale_input, int64 apply_dimension,
-                   int64 start_index, HloOpcode operation);
+                   HloInstruction* const scale_input, int64_t apply_dimension,
+                   int64_t start_index, HloOpcode operation);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -133,8 +134,8 @@ class HloSliceApplyaXb : public HloSliceApplyBase {
 
 std::unique_ptr<HloInstruction> CreateSliceApplyaXb(
     HloInstruction* const input, HloInstruction* const update,
-    HloInstruction* const scale_input, int64 apply_dimension, int64 start_index,
-    HloOpcode operation);
+    HloInstruction* const scale_input, int64_t apply_dimension,
+    int64_t start_index, HloOpcode operation);
 
 }  // namespace poplarplugin
 }  // namespace xla

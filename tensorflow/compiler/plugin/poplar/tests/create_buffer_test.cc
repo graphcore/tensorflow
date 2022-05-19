@@ -67,7 +67,7 @@ POPLAR_TEST_P(CreateBufferTest, DoIt) {
   const CreateBufferTestSpec& spec = GetParam();
 
   auto hlo_module = CreateNewVerifiedModule();
-  const int64 num_iterations = 50;
+  const int64_t num_iterations = 50;
 
   Shape counter_shape = ShapeUtil::MakeShape(S32, {});
   Shape buffer_shape = ShapeUtil::MakeShape(F32, {num_iterations, 128});

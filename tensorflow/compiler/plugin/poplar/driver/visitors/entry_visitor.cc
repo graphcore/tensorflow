@@ -34,7 +34,7 @@ namespace {
 // Helper function which marks all the entry computation inputs as unallocated.
 DeferredArgRBVectors MakeArgRBVector(const HloComputation* comp) {
   DeferredArgRBVectors output(comp->num_parameters());
-  for (int64 i = 0; i != comp->num_parameters(); ++i) {
+  for (int64_t i = 0; i != comp->num_parameters(); ++i) {
     output[i].resize(
         FlattenedXlaShape(comp->parameter_instruction(i)->shape()).size());
   }
@@ -117,7 +117,7 @@ StatusOr<DriverTensor> EntryVisitor::PostProcessParameterAllocation(
     DriverProgramSequence& stream_copy_seq, DriverTensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
   const HloInstruction* inst = location.instruction;
-  const int64 flat_tuple_index = location.flattened_output_tuple_index;
+  const int64_t flat_tuple_index = location.flattened_output_tuple_index;
 
   const auto& in_info = resources_.annotations.input_output_aliasing_map
                             .GetEntryInputInfos()[inst->parameter_number()];
@@ -243,7 +243,7 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
     // Check whether this is a dummy of inserted by a remote buffer - if it is
     // then we do not add copies/FIFO for it.
     if (out_info.IsResourceModified()) {
-      const int64 param_number = out_info.GetInputIndex();
+      const int64_t param_number = out_info.GetInputIndex();
       if (IsRemoteParameter(param_number, resources_)) {
         continue;
       }

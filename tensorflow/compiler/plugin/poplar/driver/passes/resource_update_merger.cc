@@ -244,7 +244,7 @@ Status CreateReplacementInstruction(
       if (IsResourceUpdate(op)) {
         auto* replacement_call = new_insts[op];
 
-        for (int64 idx = 0; idx < op->operands().size(); idx++) {
+        for (int64_t idx = 0; idx < op->operands().size(); idx++) {
           auto* ru_op = op->operands()[idx];
           // Find replacement operand.
           if (new_insts.find(ru_op) == new_insts.end()) {
@@ -284,7 +284,7 @@ Status CreateReplacementInstruction(
 }
 
 StatusOr<std::pair<std::unique_ptr<HloInstruction>,
-                   std::vector<std::tuple<int64, int64, HloInstruction*>>>>
+                   std::vector<std::tuple<int64_t, int64_t, HloInstruction*>>>>
 GetNewCompRoot(
     const std::vector<HloInstruction*>& ru_insts,
     const absl::flat_hash_map<HloInstruction*, HloInstruction*>& inst_map,
@@ -293,7 +293,7 @@ GetNewCompRoot(
   // original computations root to their counterparts in the new, merged
   // computation if that RU's output is not the input of another RU.
   std::vector<HloInstruction*> out_inst;
-  std::vector<std::tuple<int64, int64, HloInstruction*>> replacements;
+  std::vector<std::tuple<int64_t, int64_t, HloInstruction*>> replacements;
   for (auto* ru : ru_insts) {
     auto* root = ru->parent()->root_instruction();
 
@@ -323,8 +323,8 @@ GetNewCompRoot(
     };
 
     // Find which operand of the root tuple is the output of ru.
-    std::vector<std::tuple<int64, int64, HloInstruction*>> used_in;
-    for (int64 idx = 0; idx < root->operands().size(); idx++) {
+    std::vector<std::tuple<int64_t, int64_t, HloInstruction*>> used_in;
+    for (int64_t idx = 0; idx < root->operands().size(); idx++) {
       auto* operand = root->mutable_operand(idx);
       auto* to_replace = find_op_to_replace(root, operand);
       if (to_replace != nullptr) {
@@ -345,7 +345,7 @@ GetNewCompRoot(
 
     // Pull out the required element of each non-RU call output.
     for (auto u : used_in) {
-      int64 root_idx, tuple_idx;
+      int64_t root_idx, tuple_idx;
       HloInstruction* to_replace;
       std::tie(root_idx, tuple_idx, to_replace) = u;
 
@@ -365,7 +365,7 @@ GetNewCompRoot(
       // Push back.
       out_inst.push_back(gte);
       replacements.emplace_back(
-          root_idx, static_cast<int64>(out_inst.size()) - 1, to_replace);
+          root_idx, static_cast<int64_t>(out_inst.size()) - 1, to_replace);
     }
   }
 
@@ -383,11 +383,11 @@ GetNewCompRoot(
 Status ReplaceRootOperands(
     HloComputation* comp, HloInstruction* merged_ru,
     HloInstruction* merged_comp_root,
-    std::vector<std::tuple<int64, int64, HloInstruction*>>& replacements) {
+    std::vector<std::tuple<int64_t, int64_t, HloInstruction*>>& replacements) {
   auto* root = comp->root_instruction();
 
   for (auto r : replacements) {
-    int64 root_idx, ru_out_idx;
+    int64_t root_idx, ru_out_idx;
     HloInstruction* rep_inst;
     std::tie(root_idx, ru_out_idx, rep_inst) = r;
 
@@ -459,7 +459,7 @@ Status MergeResourceUpdates(HloModule* module, HloComputation* comp,
   // ResourceUpdate output that goes to the callers root. Also, get a
   // list of indices to which outputs should be mapped.
   std::unique_ptr<HloInstruction> merged_root;
-  std::vector<std::tuple<int64, int64, HloInstruction*>> root_replacements;
+  std::vector<std::tuple<int64_t, int64_t, HloInstruction*>> root_replacements;
   TF_ASSIGN_OR_RETURN(std::tie(merged_root, root_replacements),
                       GetNewCompRoot(insts, replacement_insts, comp_builder));
   auto* new_root = comp_builder.AddInstruction(std::move(merged_root));

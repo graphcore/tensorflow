@@ -23,7 +23,8 @@ Status PopItExecutor::Init(int device_ordinal,
   NOT_IMPLEMENTED;
 }
 
-se::DeviceMemoryBase PopItExecutor::Allocate(uint64 size, int64 memory_space) {
+se::DeviceMemoryBase PopItExecutor::Allocate(uint64 size,
+                                             int64_t memory_space) {
   NOT_IMPLEMENTED;
 }
 void* PopItExecutor::GetSubBuffer(se::DeviceMemoryBase* parent, uint64 offset,

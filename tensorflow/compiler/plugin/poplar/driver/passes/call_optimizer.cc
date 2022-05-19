@@ -53,9 +53,9 @@ std::vector<HloInstruction*> OrderInnerPipelineFunctions(
   return ordered_stages;
 }
 
-absl::flat_hash_map<int64, std::vector<HloInstruction*>> GetAllGtes(
+absl::flat_hash_map<int64_t, std::vector<HloInstruction*>> GetAllGtes(
     HloInstruction* const stage) {
-  absl::flat_hash_map<int64, std::vector<HloInstruction*>> gte_users;
+  absl::flat_hash_map<int64_t, std::vector<HloInstruction*>> gte_users;
   for (HloInstruction* user : stage->users()) {
     CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
     gte_users[user->tuple_index()].push_back(user);
@@ -65,13 +65,13 @@ absl::flat_hash_map<int64, std::vector<HloInstruction*>> GetAllGtes(
 
 StatusOr<bool> PropagatePadsAndBroadcasts(HloInstruction* const stage) {
   bool changed = false;
-  std::map<int64, HloInstruction*> outputs_to_propagate;
+  std::map<int64_t, HloInstruction*> outputs_to_propagate;
   HloComputation* pipeline_comp = stage->parent();
   HloComputation* stage_comp = stage->to_apply();
   HloInstruction* stage_root = stage_comp->root_instruction();
   CHECK_EQ(stage_root->opcode(), HloOpcode::kTuple);
 
-  for (int64 i = 0; i != stage_root->operand_count(); ++i) {
+  for (int64_t i = 0; i != stage_root->operand_count(); ++i) {
     HloInstruction* operand = stage_root->mutable_operand(i);
     switch (operand->opcode()) {
       case HloOpcode::kBroadcast:
@@ -83,7 +83,7 @@ StatusOr<bool> PropagatePadsAndBroadcasts(HloInstruction* const stage) {
     }
   }
 
-  absl::flat_hash_map<int64, std::vector<HloInstruction*>> gte_users =
+  absl::flat_hash_map<int64_t, std::vector<HloInstruction*>> gte_users =
       GetAllGtes(stage);
 
   // Go through all the users of padded/broadcasted outputs and do the
@@ -100,7 +100,8 @@ StatusOr<bool> PropagatePadsAndBroadcasts(HloInstruction* const stage) {
         if (user->opcode() != HloOpcode::kCall) {
           continue;
         }
-        const int64 num_outputs = ShapeUtil::TupleElementCount(stage->shape());
+        const int64_t num_outputs =
+            ShapeUtil::TupleElementCount(stage->shape());
         // Add the operands of the output being cloned as an output of the
         // stage.
         HloInstruction* output = output_pair.second;
@@ -124,7 +125,7 @@ StatusOr<bool> PropagatePadsAndBroadcasts(HloInstruction* const stage) {
 
         // Add GTEs for the new outputs.
         std::vector<HloInstruction*> new_gtes(output->operand_count());
-        for (int64 i = 0; i != new_gtes.size(); ++i) {
+        for (int64_t i = 0; i != new_gtes.size(); ++i) {
           TF_ASSIGN_OR_RETURN(new_gtes[i],
                               MakeGetTupleElementHlo(stage, num_outputs + i));
         }
@@ -135,8 +136,8 @@ StatusOr<bool> PropagatePadsAndBroadcasts(HloInstruction* const stage) {
             output->CloneWithNewOperands(output->shape(), new_gtes));
 
         // Lower the output into the stage and replace all the uses with it.
-        std::map<int64, HloInstruction*> replacements;
-        absl::c_for_each(user->OperandIndices(gte), [&](int64 operand_idx) {
+        std::map<int64_t, HloInstruction*> replacements;
+        absl::c_for_each(user->OperandIndices(gte), [&](int64_t operand_idx) {
           replacements[operand_idx] = output_clone;
         });
         TF_RETURN_IF_ERROR(
@@ -150,18 +151,18 @@ StatusOr<bool> PropagatePadsAndBroadcasts(HloInstruction* const stage) {
 }
 
 StatusOr<bool> PropagateConstantOutputs(HloInstruction* const stage) {
-  std::map<int64, HloInstruction*> constant_outputs;
+  std::map<int64_t, HloInstruction*> constant_outputs;
   HloComputation* stage_comp = stage->to_apply();
   HloInstruction* root = stage_comp->root_instruction();
 
   // Find any constant outputs.
-  for (int64 i = 0; i != root->operand_count(); ++i) {
+  for (int64_t i = 0; i != root->operand_count(); ++i) {
     if (root->mutable_operand(i)->opcode() == HloOpcode::kConstant) {
       constant_outputs[i] = root->mutable_operand(i);
     }
   }
 
-  absl::flat_hash_map<int64, std::vector<HloInstruction*>> gte_users =
+  absl::flat_hash_map<int64_t, std::vector<HloInstruction*>> gte_users =
       GetAllGtes(stage);
 
   // Go through all the constant outputs and replace the users of the
@@ -183,7 +184,7 @@ StatusOr<bool> PropagateConstantOutputs(HloInstruction* const stage) {
           HloInstruction* propagated_const =
               comp->AddInstruction(constant_output_pair.second->Clone());
 
-          for (int64 input_index : gte_user->OperandIndices(gte)) {
+          for (int64_t input_index : gte_user->OperandIndices(gte)) {
             // Get the parameter instruction for this operand.
             HloInstruction* parameter =
                 comp->parameter_instruction(input_index);

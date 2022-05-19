@@ -19,19 +19,22 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_EXECUTOR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_EXECUTOR_H_
 
+#include <algorithm>
 #include <condition_variable>
-#include <gcl/CollectiveBalancedReorder.hpp>
 #include <list>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <utility>
+#include <vector>
+
+#include <gcl/CollectiveBalancedReorder.hpp>
 #include <poplar/Device.hpp>
 #include <poplar/DeviceManager.hpp>
 #include <poplar/Engine.hpp>
 #include <poplar/OptionFlags.hpp>
 #include <poplar/Tensor.hpp>
 #include <poplar/exceptions.hpp>
-#include <vector>
 
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
@@ -83,7 +86,7 @@ enum PoplarProgramType {
 
 class PoplarExecutable;
 
-typedef std::vector<char> (*ConversionFn)(const void*, int64, int64);
+typedef std::vector<char> (*ConversionFn)(const void*, int64_t, int64_t);
 
 using Args = tensorflow::gtl::ArraySlice<se::DeviceMemoryBase>;
 
@@ -112,13 +115,13 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // defined by the parameter index and tuple index. The name doesn't partipate
   // in any comparison operations.
   struct ArgHandle {
-    int64 parameter_index;
-    int64 flat_tensor_index;
+    int64_t parameter_index;
+    int64_t flat_tensor_index;
     std::string name;
 
-    ArgHandle(int64 parameter_index, int64 flat_tensor_index);
+    ArgHandle(int64_t parameter_index, int64_t flat_tensor_index);
 
-    ArgHandle(int64 parameter_index, int64 flat_tensor_index,
+    ArgHandle(int64_t parameter_index, int64_t flat_tensor_index,
               const std::string& name);
 
     bool operator==(const ArgHandle& rhs) const;
@@ -198,7 +201,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return xla::Unimplemented("Not Implemented");
   }
 
-  se::DeviceMemoryBase Allocate(uint64 size, int64 memory_space) override;
+  se::DeviceMemoryBase Allocate(uint64 size, int64_t memory_space) override;
   void* GetSubBuffer(se::DeviceMemoryBase* mem, uint64 offset_bytes,
                      uint64 size_bytes) override;
   void Deallocate(se::DeviceMemoryBase* mem) override;
@@ -287,7 +290,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   int PlatformDeviceCount() override { return 1; }
 
-  bool DeviceMemoryUsage(int64* free, int64* total) const override {
+  bool DeviceMemoryUsage(int64_t* free, int64_t* total) const override {
     return false;
   }
 
@@ -368,11 +371,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return execution_options_;
   }
 
-  int64 GetMultiReplicaProcessIndex() const {
+  int64_t GetMultiReplicaProcessIndex() const {
     return current_config_.multi_replica_process_index();
   }
 
-  int64 GetMultiReplicaProcessCount() const {
+  int64_t GetMultiReplicaProcessCount() const {
     return current_config_.multi_replica_process_count();
   }
 
@@ -380,7 +383,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return GetMultiReplicaProcessCount() > 0;
   }
 
-  int64 GetNumIpusInLocalProcess(const poplar::Target& target) const;
+  int64_t GetNumIpusInLocalProcess(const poplar::Target& target) const;
 
   tensorflow::CancellationManager* cancellation_manager() { return cm_.get(); }
 
@@ -392,7 +395,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.profiling().enable_compilation_trace();
   }
 
-  int64 ReportEventNthExecution() const {
+  int64_t ReportEventNthExecution() const {
     return current_config_.profiling().report_every_nth_execution();
   }
 
@@ -408,7 +411,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.profiling().enable_poplar_graph();
   }
 
-  int64 MaxReportSize() const {
+  int64_t MaxReportSize() const {
     return current_config_.profiling().max_report_size();
   }
 
@@ -492,14 +495,14 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.use_stable_norm_statistics();
   }
 
-  int64 ExperimentalDistributedBatchNormReplicaGroupSize() const {
+  int64_t ExperimentalDistributedBatchNormReplicaGroupSize() const {
     return current_config_
         .experimental_distributed_batch_norm_replica_group_size();
   }
 
   bool SupportsRemoteBuffers() const;
 
-  int64 GetNumIoTiles() const { return current_config_.num_io_tiles(); }
+  int64_t GetNumIoTiles() const { return current_config_.num_io_tiles(); }
 
   double GetIoTileAvailableMemoryProportion() const {
     return current_config_.io_tile_available_memory_proportion();
@@ -519,50 +522,51 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.enable_experimental_prng_stability();
   }
 
-  int64 GetMaxAllReduceBufferSize() const {
+  int64_t GetMaxAllReduceBufferSize() const {
     return current_config_.max_cross_replica_sum_buffer_size();
   }
 
-  int64 GetMaxReduceScatterBufferSize() const {
+  int64_t GetMaxReduceScatterBufferSize() const {
     return current_config_.max_reduce_scatter_buffer_size();
   }
 
-  int64 GetMaxInterIpuCopyBufferSize() const {
+  int64_t GetMaxInterIpuCopyBufferSize() const {
     return current_config_.max_inter_ipu_copies_buffer_size();
   }
 
-  int64 GetMaxReduceManyBufferSize() const {
+  int64_t GetMaxReduceManyBufferSize() const {
     return current_config_.max_reduce_many_buffer_size();
   }
 
-  int64 GetMaxAllGatherBufferSize() const {
+  int64_t GetMaxAllGatherBufferSize() const {
     return current_config_.max_all_gather_buffer_size();
   }
 
-  int64 GetMaxSchedulerLookaheadDepth() const {
-    return std::max<int64>(1, current_config_.max_scheduler_lookahead_depth());
+  int64_t GetMaxSchedulerLookaheadDepth() const {
+    return std::max<int64_t>(1,
+                             current_config_.max_scheduler_lookahead_depth());
   }
 
-  int64 GetMaxSchedulerSearchSpaceSize() const {
-    return std::max<int64>(2,
-                           current_config_.max_scheduler_search_space_size());
+  int64_t GetMaxSchedulerSearchSpaceSize() const {
+    return std::max<int64_t>(2,
+                             current_config_.max_scheduler_search_space_size());
   }
 
-  int64 GetMaxSendRecvClusterSize() const {
+  int64_t GetMaxSendRecvClusterSize() const {
     return current_config_.max_send_recv_cluster_size();
   }
 
-  int64 GetMinimumRemoteTensorSize() const {
+  int64_t GetMinimumRemoteTensorSize() const {
     return current_config_.minimum_remote_tensor_size();
   }
 
-  int64 GetTriangularSolveExpanderBlockSize() const {
+  int64_t GetTriangularSolveExpanderBlockSize() const {
     // 128 is XLA default block size used in TriangularSolveExpander
     auto block_size = current_config_.triangular_solve_expander_block_size();
     return block_size <= 0 ? 128 : block_size;
   }
 
-  int64 GetCholeskyBlockSize() const {
+  int64_t GetCholeskyBlockSize() const {
     // 128 is XLA default block size used in CholeskyExpander
     auto block_size = current_config_.cholesky_block_size();
     return block_size <= 0 ? 128 : block_size;
@@ -585,13 +589,14 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.enable_dynamic_slice_replacement();
   }
 
-  int64 GetPoplarDeviceHash() const { return poplar_device_hash_; }
+  int64_t GetPoplarDeviceHash() const { return poplar_device_hash_; }
 
   void AddCompileBeginEventRecord(const std::string& module_name);
 
   void AddCompileEndEventRecord(const std::string& module_name,
                                 std::string&& tensor_map_json,
-                                std::string&& instruction_info, int64 duration);
+                                std::string&& instruction_info,
+                                int64_t duration);
 
   void AddHostToDeviceEventRecord(std::string&& transfer_json);
 
@@ -662,8 +667,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
       const std::string& feed_id, const PoplarFeedConfig_Mode& mode,
       bool warn_when_unconnected);
 
-  int64 GetReplicationFactorForOutfeed(const std::string& feed_id,
-                                       bool warn_when_unconnected) const;
+  int64_t GetReplicationFactorForOutfeed(const std::string& feed_id,
+                                         bool warn_when_unconnected) const;
 
   Status RegisterOutfeeds(const TranslatedOutfeedInfos& outfeed_infos);
 
@@ -719,7 +724,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   static std::string GetCycleCounterStream();
 
-  void SetCurrentReplicationFactor(int64 executable_replication_factor);
+  void SetCurrentReplicationFactor(int64_t executable_replication_factor);
 
  private:
   Status ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
@@ -757,14 +762,14 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
     // Function called to allocate a buffer for a particular output position.
     virtual StatusOr<se::DeviceMemoryBase> AllocateBuffer(
-        const Shape& shape, int64 output_index,
-        int64 flat_tuple_index) const = 0;
+        const Shape& shape, int64_t output_index,
+        int64_t flat_tuple_index) const = 0;
 
     // Function call to populate an output buffer with any information required
     // for execution.
     virtual Status PopulateBuffer(se::DeviceMemoryBase& buffer,
-                                  const Shape& shape, int64 output_index,
-                                  int64 flat_tuple_index) const = 0;
+                                  const Shape& shape, int64_t output_index,
+                                  int64_t flat_tuple_index) const = 0;
 
    protected:
     OutputAllocation(se::DeviceMemoryAllocator* allocator,
@@ -794,12 +799,12 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     }
 
     StatusOr<se::DeviceMemoryBase> AllocateBuffer(
-        const Shape& shape, int64 output_index,
-        int64 flat_tuple_index) const override;
+        const Shape& shape, int64_t output_index,
+        int64_t flat_tuple_index) const override;
 
     Status PopulateBuffer(se::DeviceMemoryBase& buffer, const Shape& shape,
-                          int64 output_index,
-                          int64 flat_tuple_index) const override;
+                          int64_t output_index,
+                          int64_t flat_tuple_index) const override;
 
    private:
     std::vector<std::vector<Literal>> const* constants_;
@@ -813,12 +818,12 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
         : OutputAllocation(allocator, io_map, args_map, ordinal) {}
 
     StatusOr<se::DeviceMemoryBase> AllocateBuffer(
-        const Shape& shape, int64 output_index,
-        int64 flat_tuple_index) const override;
+        const Shape& shape, int64_t output_index,
+        int64_t flat_tuple_index) const override;
 
     Status PopulateBuffer(se::DeviceMemoryBase& buffer, const Shape& shape,
-                          int64 output_index,
-                          int64 flat_tuple_index) const override;
+                          int64_t output_index,
+                          int64_t flat_tuple_index) const override;
   };
 
   class RemapOutputAllocation : public OutputAllocation {
@@ -831,19 +836,19 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
           remap_map_(remap_map) {}
 
     StatusOr<se::DeviceMemoryBase> AllocateBuffer(
-        const Shape& shape, int64 output_index,
-        int64 flat_tuple_index) const override;
+        const Shape& shape, int64_t output_index,
+        int64_t flat_tuple_index) const override;
 
     Status PopulateBuffer(se::DeviceMemoryBase& buffer, const Shape& shape,
-                          int64 output_index,
-                          int64 flat_tuple_index) const override;
+                          int64_t output_index,
+                          int64_t flat_tuple_index) const override;
 
     // Returns whether the remaped tensor needs to be copied due to aliasing.
-    bool AddRemapCopy(int64 output_index) const;
+    bool AddRemapCopy(int64_t output_index) const;
 
     // Returns the remaped argument for this output.
     StatusOr<TensorControl*> GetRemapedTensorControl(
-        int64 output_index, int64 flat_tensor_index) const;
+        int64_t output_index, int64_t flat_tensor_index) const;
 
    private:
     const std::vector<uint64>& remap_map_;
@@ -858,12 +863,12 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
    protected:
     StatusOr<se::DeviceMemoryBase> AllocateBuffer(
-        const Shape& shape, int64 output_index,
-        int64 flat_tuple_index) const override;
+        const Shape& shape, int64_t output_index,
+        int64_t flat_tuple_index) const override;
 
     Status PopulateBuffer(se::DeviceMemoryBase& buffer, const Shape& shape,
-                          int64 output_index,
-                          int64 flat_tuple_index) const override;
+                          int64_t output_index,
+                          int64_t flat_tuple_index) const override;
   };
 
   static std::unique_ptr<OutputAllocation> GetOutputAllocator(
@@ -990,7 +995,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // The current runtime replication factor, which might be lower than
   // the compile time replication factor when using the Poplar runtime
   // replica subset feature.
-  int64 current_replication_factor_;
+  int64_t current_replication_factor_;
 
   class IPUConfig {
    public:
@@ -1016,7 +1021,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   };
   IPUConfig ipu_;
 
-  int64 poplar_device_hash_;
+  int64_t poplar_device_hash_;
 
   Status current_status_ GUARDED_BY(ipu_.Mutex()) = Status::OK();
 
@@ -1053,14 +1058,14 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   struct OutfeedContext {
     OutfeedContext(const PoplarFeedConfig& config, const Shape& shape,
-                   int64 replication_factor);
+                   int64_t replication_factor);
     OutfeedContext() = delete;
 
     bool Matches(const TranslatedFeedInfo& other_outfeed_info,
-                 int64 other_replication_factor) const;
+                 int64_t other_replication_factor) const;
 
     const PoplarFeedConfig config;
-    const int64 replication_factor;
+    const int64_t replication_factor;
     const std::vector<xla::Shape> shapes;
     std::vector<tensorflow::DataType> tf_data_types;
     std::vector<tensorflow::TensorShape> tf_shapes;

@@ -25,13 +25,14 @@ HloInterIpuCopy::HloInterIpuCopy(absl::Span<HloInstruction* const> operands)
     : HloPoplarInstruction(GetHloPoplarInstructionShape(operands), operands,
                            PoplarOp::InterIpuCopy) {}
 
-absl::flat_hash_set<int64> HloInterIpuCopy::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloInterIpuCopy::AllocatingIndices() const {
   return {};
 }
 
 bool HloInterIpuCopy::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloInterIpuCopy::LayoutDependencies() const {
+absl::flat_hash_map<int64_t, int64_t> HloInterIpuCopy::LayoutDependencies()
+    const {
   return {};
 }
 

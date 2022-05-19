@@ -30,11 +30,13 @@ HloCopyInto::HloCopyInto(HloInstruction* const destination,
     : HloPoplarInstruction(destination->shape(), {destination, value},
                            PoplarOp::CopyInto) {}
 
-absl::flat_hash_set<int64> HloCopyInto::AllocatingIndices() const { return {}; }
+absl::flat_hash_set<int64_t> HloCopyInto::AllocatingIndices() const {
+  return {};
+}
 
 bool HloCopyInto::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloCopyInto::LayoutDependencies() const {
+absl::flat_hash_map<int64_t, int64_t> HloCopyInto::LayoutDependencies() const {
   return {};
 }
 

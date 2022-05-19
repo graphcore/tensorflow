@@ -65,11 +65,11 @@ TEST_P(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXY0) {
   conv_dim_num.add_output_spatial_dimensions(2);
   conv_dim_num.set_output_feature_dimension(3);
 
-  std::vector<int64> conv_input_shape = {1, 4, 4, 2};
-  std::vector<int64> conv_output_shape = {1, 4, 4, 2};
+  std::vector<int64_t> conv_input_shape = {1, 4, 4, 2};
+  std::vector<int64_t> conv_output_shape = {1, 4, 4, 2};
 
   xla::Window window = window_util::MakeWindow({1, 1});
-  int64 feature_group_count = 1;
+  int64_t feature_group_count = 1;
 
   auto weights_transpose_inst =
       builder.AddInstruction(CreateHloWeightsTransposeChansFlipXY(
@@ -142,11 +142,11 @@ TEST_P(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXYGroup) {
   conv_dim_num.add_output_spatial_dimensions(2);
   conv_dim_num.set_output_feature_dimension(3);
 
-  std::vector<int64> conv_input_shape = {16, 9, 9, 16};
-  std::vector<int64> conv_output_shape = {16, 9, 9, 16};
+  std::vector<int64_t> conv_input_shape = {16, 9, 9, 16};
+  std::vector<int64_t> conv_output_shape = {16, 9, 9, 16};
 
   Window window = window_util::MakeWindow({4, 4});
-  int64 feature_group_count = 16;
+  int64_t feature_group_count = 16;
 
   auto weights_transpose_inst =
       builder.AddInstruction(CreateHloWeightsTransposeChansFlipXY(

@@ -67,8 +67,8 @@ struct CompilerResources;
 class PoplarExecutor;
 
 std::string GetRandomNumberSeedStream();
-std::string GetInfeedCopyHandle(const std::string& name, int64 shape_index);
-std::string GetOutfeedCopyHandle(const std::string& name, int64 shape_index);
+std::string GetInfeedCopyHandle(const std::string& name, int64_t shape_index);
+std::string GetOutfeedCopyHandle(const std::string& name, int64_t shape_index);
 
 Status SetVertexField(poplar::Graph& graph, const poplar::FieldRef& field,
                       const Literal& literal);
@@ -97,8 +97,8 @@ bool JsonParse(const std::string& json_str, Json::Value& attributes);
 absl::optional<std::string> GetPoplarEngineOption(const std::string& opt);
 
 // Get the shard Id for a given output of the given instruction.
-int64 GetShardForOutputIndex(const HloInstruction* inst,
-                             int flattened_output_tuple_index);
+int64_t GetShardForOutputIndex(const HloInstruction* inst,
+                               int flattened_output_tuple_index);
 
 // Get the virtual graph for a particular output of an operation. Operations
 // like Parameter, Infeed, Call, While, Tuple can have multiple tensor
@@ -169,23 +169,25 @@ void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t,
                              const poplar::DebugNameAndId& debug_name_and_id);
 
 const RemoteParameterInfo* FindRemoteParameterInfo(
-    int64 parameter_number, const RemoteParameterInfos& remote_parameter_infos);
-bool IsRemoteParameter(int64 parameter_number,
+    int64_t parameter_number,
+    const RemoteParameterInfos& remote_parameter_infos);
+bool IsRemoteParameter(int64_t parameter_number,
                        const RemoteParameterInfos& remote_parameter_infos);
-bool IsRemoteParameter(int64 parameter_number, const CompilerResources& res);
+bool IsRemoteParameter(int64_t parameter_number, const CompilerResources& res);
 bool IsRemoteParameter(const HloInstruction* inst,
                        const CompilerResources& res);
 
-bool IsReplicaPartitioned(int64 parameter_number,
+bool IsReplicaPartitioned(int64_t parameter_number,
                           const RemoteParameterInfos& remote_parameter_infos);
-bool IsReplicaPartitioned(int64 parameter_number, const CompilerResources& res);
+bool IsReplicaPartitioned(int64_t parameter_number,
+                          const CompilerResources& res);
 bool IsReplicaPartitioned(const HloInstruction* inst,
                           const CompilerResources& res);
 
 StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteBuffer(
     DriverGraph& graph, CompilerResources& res, std::string remote_buffer_name,
-    poplar::Type element_type, int64 element_count, int64 num_repeats,
-    int64 num_merged, bool is_replica_partitioned = false);
+    poplar::Type element_type, int64_t element_count, int64_t num_repeats,
+    int64_t num_merged, bool is_replica_partitioned = false);
 
 StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteParameterBuffer(
     const HloInstruction* inst, CompilerResources& res);
@@ -252,7 +254,7 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
 
 // Zero the given remote buffer at the given repeat offset.
 void ZeroRemoteBuffer(CompilerResources& res, poplar::Graph& graph,
-                      poplar::RemoteBuffer& remote_buffer, int64 offset,
+                      poplar::RemoteBuffer& remote_buffer, int64_t offset,
                       poplar::program::Sequence& sequence,
                       const poplar::DebugNameAndId& debug_name_and_id);
 
@@ -270,12 +272,12 @@ struct PoplarTypeHasher {
 };
 
 void SetRuntimeReplicaOptions(poplar::OptionFlags* option_flags,
-                              int64 process_index, int64 process_count,
-                              int64 global_replication_factor);
+                              int64_t process_index, int64_t process_count,
+                              int64_t global_replication_factor);
 
 bool HasIOTiles(CompilerResources& res);
 
-int64 GetNumIPUs(CompilerResources& res);
+int64_t GetNumIPUs(CompilerResources& res);
 
 void CheckPoplarPackageHash();
 }  // namespace poplarplugin

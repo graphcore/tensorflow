@@ -47,7 +47,7 @@ const char kAnonymousCancellationManagerResource[] =
     "AnonymousCancellationManagerResource";
 
 // Used to generate unique names for anonymous cancellation managers.
-static std::atomic<int64> current_id_;
+static std::atomic<int64_t> current_id_;
 
 class CancellationManagerResource : public tensorflow::ResourceBase {
  public:
@@ -281,9 +281,11 @@ bool InfeedIterator::HasReplicationFactor() const {
   return replication_factor_ > 0;
 }
 
-int64 InfeedIterator::ReplicationFactor() const { return replication_factor_; }
+int64_t InfeedIterator::ReplicationFactor() const {
+  return replication_factor_;
+}
 
-void InfeedIterator::SetReplicationFactor(int64 replication_factor) {
+void InfeedIterator::SetReplicationFactor(int64_t replication_factor) {
   CHECK_GT(replication_factor, 0);
 
   replication_factor_ = replication_factor;
@@ -294,7 +296,7 @@ void InfeedIterator::SetReplicationFactor(int64 replication_factor) {
   infeed_queues_.resize(replication_factor);
 
   // Create the queues.
-  for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
+  for (int64_t replica_id = 0; replica_id < replication_factor; replica_id++) {
     infeed_queues_ptrs_[replica_id].clear();
     infeed_queues_[replica_id].clear();
 

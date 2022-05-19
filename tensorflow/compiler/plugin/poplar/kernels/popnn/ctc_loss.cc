@@ -42,7 +42,7 @@ class PopnnCTCLossOpBase : public XlaOpKernel, IpuOpKernel {
   explicit PopnnCTCLossOpBase(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
     tensorflow::DataType in_dtype;
     tensorflow::DataType out_dtype;
-    int64 blank_index;
+    int64_t blank_index;
 
     OP_REQUIRES_OK(ctx, ctx->GetAttr("in_dtype", &in_dtype));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("out_dtype", &out_dtype));
@@ -68,12 +68,12 @@ class PopnnCTCLossOpBase : public XlaOpKernel, IpuOpKernel {
                     "[%u]) tensors must be equal.",
                     data_shape.dim_size(1), label_shape.dim_size(0))));
 
-    int64 max_time = data_shape.dim_size(0);
-    int64 batch_size = data_shape.dim_size(1);
-    int64 num_classes = data_shape.dim_size(2);
+    int64_t max_time = data_shape.dim_size(0);
+    int64_t batch_size = data_shape.dim_size(1);
+    int64_t num_classes = data_shape.dim_size(2);
 
     TensorShape expected_lengths_shape;
-    TensorShapeUtils::MakeShape(std::vector<int64>({batch_size}),
+    TensorShapeUtils::MakeShape(std::vector<int64_t>({batch_size}),
                                 &expected_lengths_shape);
     OP_REQUIRES(
         ctx, ctx->InputShape(2) == expected_lengths_shape,
@@ -140,14 +140,14 @@ class PopnnCTCLossWithLogProbsOp : public PopnnCTCLossOpBase {
 REGISTER_IPU_OP("PopnnCTCLossWithLogProbs", PopnnCTCLossWithLogProbsOp);
 
 class PopnnCTCInferenceOpBase : public XlaOpKernel, IpuOpKernel {
-  int64 top_paths;
+  int64_t top_paths;
 
  protected:
   explicit PopnnCTCInferenceOpBase(OpKernelConstruction* ctx)
       : XlaOpKernel(ctx) {
     tensorflow::DataType in_dtype;
-    int64 blank_index;
-    int64 beam_width;
+    int64_t blank_index;
+    int64_t beam_width;
 
     OP_REQUIRES_OK(ctx, ctx->GetAttr("in_dtype", &in_dtype));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("blank_index", &blank_index));
@@ -168,12 +168,12 @@ class PopnnCTCInferenceOpBase : public XlaOpKernel, IpuOpKernel {
     // Validate shapes.
     auto data_shape = ctx->InputShape(0);
 
-    int64 max_time = data_shape.dim_size(0);
-    int64 batch_size = data_shape.dim_size(1);
-    int64 num_classes = data_shape.dim_size(2);
+    int64_t max_time = data_shape.dim_size(0);
+    int64_t batch_size = data_shape.dim_size(1);
+    int64_t num_classes = data_shape.dim_size(2);
 
     TensorShape expected_lengths_shape;
-    TensorShapeUtils::MakeShape(std::vector<int64>({batch_size}),
+    TensorShapeUtils::MakeShape(std::vector<int64_t>({batch_size}),
                                 &expected_lengths_shape);
     OP_REQUIRES(
         ctx, ctx->InputShape(1) == expected_lengths_shape,

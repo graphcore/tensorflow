@@ -79,7 +79,7 @@ namespace {
  *
  * @note Assumes the pipeline is correctly constructed.
  */
-int64 GetPipelineStageCount(const HloInstruction* pipeline) {
+int64_t GetPipelineStageCount(const HloInstruction* pipeline) {
   HloComputation* pipeline_computation = pipeline->to_apply();
 
   return absl::c_count_if(pipeline_computation->instructions(),
@@ -205,7 +205,7 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
         tuple->users(),
         [](const HloInstruction* inst) { return IsPipelineStage(inst); });
     CHECK(fwd_stage_itr != tuple->users().end());
-    int64 stage = result.at(*fwd_stage_itr);
+    int64_t stage = result.at(*fwd_stage_itr);
     result[inst] = stage;
     result[tuple] = stage;
   }
@@ -238,7 +238,7 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
                  util::IsInterTilesetCopyInInstruction(inst);
         });
     CHECK(fwd_stage_itr != gte->users().end());
-    int64 stage = result.at(*fwd_stage_itr);
+    int64_t stage = result.at(*fwd_stage_itr);
     result[inst] = stage;
     result[gte] = stage;
     result[token] = stage;
@@ -259,7 +259,7 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
     const HloInstruction* call = gte->operand(0);
     CHECK_EQ(call->opcode(), HloOpcode::kCall);
 
-    int64 stage = result.at(call);
+    int64_t stage = result.at(call);
     result[inst] = stage;
     result[gte] = stage;
   }
@@ -277,21 +277,21 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
     CHECK_EQ(token->opcode(), HloOpcode::kAfterAll);
     const HloInstruction* gte = copy->operand(0);
     if (result.contains(gte)) {
-      int64 stage = result.at(gte);
+      int64_t stage = result.at(gte);
       result[inst] = stage;
       result[copy] = stage;
       result[token] = stage;
     } else if (gte->opcode() == HloOpcode::kTuple) {
       const HloInstruction* gte2 = gte->operand(0);
       CHECK(util::IsInterTilesetCopyOutInstruction(gte2));
-      int64 stage = result.at(gte2);
+      int64_t stage = result.at(gte2);
       result[inst] = stage;
       result[gte] = stage;
       result[gte2] = stage;
       result[token] = stage;
     } else {
       CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
-      int64 stage = result.at(gte->operand(0));
+      int64_t stage = result.at(gte->operand(0));
       result[inst] = stage;
       result[gte] = stage;
       result[token] = stage;
@@ -308,13 +308,13 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
     operands.push(inst);
     unassigned_insts.push_back(inst);
 
-    int64 stage = -1;
+    int64_t stage = -1;
     while (!operands.empty()) {
       HloInstruction* x = operands.front();
       operands.pop();
 
       if (result.contains(x)) {
-        stage = std::max<int64>(result[x], stage);
+        stage = std::max<int64_t>(result[x], stage);
       } else {
         unassigned_insts.push_back(x);
         for (auto y : x->operands()) {
@@ -446,7 +446,7 @@ absl::flat_hash_set<int> GetPipelineStagesWithStatelessRecomputation(
   auto stages = GetPipelineStages(pipeline_computation).ValueOrDie();
   absl::flat_hash_set<int> result, tmp;
   absl::c_transform(stages.recomputation, std::inserter(tmp, tmp.begin()),
-                    [&stages](const std::pair<int64, HloInstruction*>& pair) {
+                    [&stages](const std::pair<int64_t, HloInstruction*>& pair) {
                       // Recomputation stages for stages containing stateful ops
                       // have a different number of operands
                       return (pair.second->operand_count() ==
@@ -468,7 +468,7 @@ absl::flat_hash_set<int> GetPipelineStagesWithStatelessRecomputation(
  *
  * @note Assumes the pipeline is correctly constructed.
  */
-int64 GetNumberOfBackwardPipelineStages(const HloInstruction* pipeline) {
+int64_t GetNumberOfBackwardPipelineStages(const HloInstruction* pipeline) {
   HloComputation* pipeline_computation = pipeline->to_apply();
   // Cannot reasonably return StatusOr because this is called inside a
   // constructor.
@@ -509,13 +509,13 @@ StatusOr<TensorOrRemoteBufferVectors> GetInputs(
   auto inst_description = GetInplaceDescription(inst);
   // Keep track of inputs which are not inplace (i.e. parameters for forward
   // stages).
-  absl::flat_hash_set<int64> non_inplace_operand_indices;
-  for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
+  absl::flat_hash_set<int64_t> non_inplace_operand_indices;
+  for (int64_t op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
     non_inplace_operand_indices.insert(op_idx);
   }
 
   // Populate the inputs with the inplace inputs first.
-  for (int64 inplace_idx : inst_description.GetInplaceOperandIndices()) {
+  for (int64_t inplace_idx : inst_description.GetInplaceOperandIndices()) {
     inputs[inplace_idx] = FindInstructionInputs(
         tensor_map, res, inst, inplace_idx, seq, debug_name_and_id, false);
     non_inplace_operand_indices.erase(inplace_idx);
@@ -524,7 +524,7 @@ StatusOr<TensorOrRemoteBufferVectors> GetInputs(
   if (inst_description.GetInplaceOperandIndices().size() !=
       static_cast<size_t>(inst->operand_count())) {
     CHECK(IsAnyPipelineStageOp(inst));
-    for (int64 op_idx : non_inplace_operand_indices) {
+    for (int64_t op_idx : non_inplace_operand_indices) {
       inputs[op_idx] = FindInstructionInputs(tensor_map, res, inst, op_idx, seq,
                                              {debug_name_and_id}, false);
     }
@@ -536,10 +536,10 @@ StatusOr<TensorOrRemoteBufferVectors> GetInputs(
 PipelineVisitor::PipelineVisitor(
     DriverGraph& graph,
     PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule,
-    int64 stage_count, const std::vector<int>& stage_ipu_mapping,
+    int64_t stage_count, const std::vector<int>& stage_ipu_mapping,
     const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
     const absl::flat_hash_set<int> stages_with_recomputation,
-    int64 num_backward_stages, CompilerResources& res,
+    int64_t num_backward_stages, CompilerResources& res,
     const DeferredArgRBVectors& inputs,
     const HloPoplarInplaceDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id)
@@ -591,8 +591,8 @@ PipelineVisitor::PipelineVisitor(
 
 PipelineVisitor::~PipelineVisitor() = default;
 
-static Status VerifyPipelineArgumentsFixed(int64 iterations,
-                                           int64 overlap_length) {
+static Status VerifyPipelineArgumentsFixed(int64_t iterations,
+                                           int64_t overlap_length) {
   const char* context_message =
       "This number might be called `gradient_accumulation_count`, "
       "`gradient_accumulation_steps_per_replica` or `steps_per_execution` "
@@ -617,7 +617,7 @@ static Status VerifyPipelineArgumentsFixed(int64 iterations,
 }
 
 static StatusOr<DriverProgramSequence> VerifyPipelineArgumentsRuntime(
-    const HloInstruction* accumulation_count, int64 overlap_length,
+    const HloInstruction* accumulation_count, int64_t overlap_length,
     DriverTensor accumulation_count_tensor, DriverGraph& graph,
     const poplar::DebugContext& debug_context) {
   DriverProgramSequence prog(graph, debug_context);
@@ -645,7 +645,7 @@ StatusOr<DriverProgramSequence> PipelineVisitor::VerifyPipelineArguments(
     const HloInstruction* accumulation_count,
     DriverTensor accumulation_count_tensor, DriverGraph& graph) const {
   const auto iterations = GetAccumulationConstantsValue(accumulation_count);
-  const int64 overlap_length =
+  const int64_t overlap_length =
       pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_).size();
 
   if (iterations) {
@@ -667,7 +667,7 @@ PipelineVisitor::IterationsType PipelineVisitor::RampDownAdditionalIterations(
 
 StatusOr<DriverProgramSequence> PipelineVisitor::GetPipelineSequence(
     DriverGraph& graph, IterationsType iterations) const {
-  const int64 overlap_length =
+  const int64_t overlap_length =
       pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_).size();
   DriverProgramSequence program(graph, dnai_);
 
@@ -843,7 +843,7 @@ StatusOr<DriverProgramSequence> PipelineVisitor::CreatePipelineStageOp(
     // When recomputation is enabled, we need to add clones for all non read
     // only inputs so that we can reuse the sequence between the forward and the
     // recomputation stage.
-    for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
+    for (int64_t op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
       const HloInstruction* operand = inst->operand(op_idx);
       if (IsPipelineStageReadOnlyInput(operand)) {
         continue;
@@ -1472,8 +1472,8 @@ DriverProgramSequence ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
 
   return absl::visit(
       make_visitor<DriverProgramSequence>(
-          [&](const int64 i) -> DriverProgramSequence {
-            const int64 num_repeats = ((i / offsets.size()) - 1);
+          [&](const int64_t i) -> DriverProgramSequence {
+            const int64_t num_repeats = ((i / offsets.size()) - 1);
             if (num_repeats < 1) {
               return DriverProgramSequence(graph, debug_name_and_id);
             }
@@ -1530,21 +1530,21 @@ DriverProgramSequence SequentialPipelineVisitor::GetPipelineRampDownSequence(
 DriverProgramSequence SequentialPipelineVisitor::GetPipelineRepeatBlockSequence(
     DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const IterationsType& iterations) const {
-  const int64 num_stages = stage_ipu_mapping_.size();
+  const int64_t num_stages = stage_ipu_mapping_.size();
   // Build a map to execute the recomputation sequence before the backward
   // stage. The recomputation sequences have the same id as the forward stage.
-  std::vector<int64> recomp_stage_id(num_stages, -1);
-  for (int64 stage_id = 0; stage_id != num_stages; ++stage_id) {
+  std::vector<int64_t> recomp_stage_id(num_stages, -1);
+  for (int64_t stage_id = 0; stage_id != num_stages; ++stage_id) {
     if (stages_with_recomputation_.contains(stage_id)) {
       CHECK_EQ(num_stages % 2, 0);
-      const int64 num_fwd_stages = num_stages / 2;
+      const int64_t num_fwd_stages = num_stages / 2;
       CHECK_LT(stage_id, num_fwd_stages);
       recomp_stage_id[2 * num_fwd_stages + stage_id - 1] = stage_id;
     }
   }
 
   DriverProgramSequence repeat_block(graph, debug_name_and_id);
-  for (int64 stage_id = 0; stage_id < num_stages; ++stage_id) {
+  for (int64_t stage_id = 0; stage_id < num_stages; ++stage_id) {
     repeat_block.add(infeed_sequences_[stage_id]);
     repeat_block.add(inter_tileset_copy_in_sequences_[stage_id]);
     if (recomp_stage_id[stage_id] > -1) {

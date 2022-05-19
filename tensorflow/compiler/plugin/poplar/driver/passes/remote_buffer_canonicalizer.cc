@@ -138,7 +138,7 @@ RemoteBufferCanonicalizer::RemoteBufferCanonicalizer(
                  /*requires_unique_sharding=*/true) {}
 
 StatusOr<bool> RemoteBufferCanonicalizer::HandleMatch(
-    HloMatcherMatched& match, const absl::optional<int64>) {
+    HloMatcherMatched& match, const absl::optional<int64_t>) {
   bool handled;
   switch (match.pattern_idx) {
     case 0: {

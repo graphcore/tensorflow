@@ -63,9 +63,9 @@ bool IsUsedAsInplace(const HloInstruction* user, const HloInstruction* inst,
     return false;
   }
   auto use_indicies = user->OperandIndices(inst);
-  std::vector<int64> inplace_indexes =
+  std::vector<int64_t> inplace_indexes =
       user_description.GetInplaceOperandIndices();
-  std::vector<int64> intersection;
+  std::vector<int64_t> intersection;
 
   absl::c_sort(use_indicies);
   absl::c_sort(inplace_indexes);
@@ -496,7 +496,7 @@ absl::optional<HloInstruction*> GetInplaceModifier(HloInstruction* inst) {
       auto is_used_inplace = [&inplace_description](HloInstruction* inst,
                                                     HloInstruction* user) {
         return absl::c_any_of(inplace_description.GetInplaceOperandIndices(),
-                              [&inst, &user](int64 inplace_idx) {
+                              [&inst, &user](int64_t inplace_idx) {
                                 return user->operand(inplace_idx) == inst;
                               });
       };

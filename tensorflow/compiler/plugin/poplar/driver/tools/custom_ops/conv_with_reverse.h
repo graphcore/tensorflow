@@ -30,7 +30,8 @@ class HloConvWithReverse : public HloPoplarInstruction {
  public:
   explicit HloConvWithReverse(
       const Shape& shape, HloInstruction* lhs, HloInstruction* rhs,
-      int64 feature_group_count, int64 batch_group_count, const Window& window,
+      int64_t feature_group_count, int64_t batch_group_count,
+      const Window& window,
       const ConvolutionDimensionNumbers& dimension_numbers,
       const PrecisionConfig& precision_config);
 
@@ -44,9 +45,9 @@ class HloConvWithReverse : public HloPoplarInstruction {
   const Window& window() const override;
 
   // HloPoplarInstruction virtuals.
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
 
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -72,8 +73,8 @@ class HloConvWithReverse : public HloPoplarInstruction {
 
 std::unique_ptr<HloConvWithReverse> CreateConvWithReverse(
     const Shape& shape, HloInstruction* lhs, HloInstruction* rhs,
-    int64 feature_group_count, int64 batch_group_count, const Window& window,
-    const ConvolutionDimensionNumbers& dimension_numbers,
+    int64_t feature_group_count, int64_t batch_group_count,
+    const Window& window, const ConvolutionDimensionNumbers& dimension_numbers,
     const PrecisionConfig& precision_config);
 
 }  // namespace poplarplugin

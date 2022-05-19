@@ -140,7 +140,7 @@ RedundantTriangularMaskRemover::RedundantTriangularMaskRemover(
                  /*requires_unique_sharding=*/true) {}
 
 StatusOr<bool> RedundantTriangularMaskRemover::HandleMatch(
-    HloMatcherMatched& match, const absl::optional<int64>) {
+    HloMatcherMatched& match, const absl::optional<int64_t>) {
   if (!IsTriangularMask(match)) {
     return false;
   }

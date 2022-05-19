@@ -29,7 +29,7 @@ namespace poplarplugin {
 HloCTCInferenceAndLossBase::HloCTCInferenceAndLossBase(
     PoplarOp op_type, const Shape& shape,
     absl::Span<HloInstruction* const> operands, PrimitiveType in_dtype,
-    PrimitiveType out_dtype, int64 blank_index)
+    PrimitiveType out_dtype, int64_t blank_index)
     : HloPoplarInstruction(shape, operands, op_type, in_dtype, out_dtype,
                            blank_index),
       in_dtype_(in_dtype),
@@ -38,27 +38,27 @@ HloCTCInferenceAndLossBase::HloCTCInferenceAndLossBase(
 HloCTCLossInstructionBase::HloCTCLossInstructionBase(
     PoplarOp op_type, const Shape& shape,
     absl::Span<HloInstruction* const> operands, PrimitiveType in_dtype,
-    PrimitiveType out_dtype, int64 blank_index)
+    PrimitiveType out_dtype, int64_t blank_index)
     : HloCTCInferenceAndLossBase(op_type, shape, operands, in_dtype, out_dtype,
                                  blank_index),
       out_dtype_(out_dtype) {}
 
 HloCTCLossWithLogProbsInstruction::HloCTCLossWithLogProbsInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    PrimitiveType in_dtype, PrimitiveType out_dtype, int64 blank_index)
+    PrimitiveType in_dtype, PrimitiveType out_dtype, int64_t blank_index)
     : HloCTCLossInstructionBase(PoplarOp::CTCLossWithLogits, shape, operands,
                                 in_dtype, out_dtype, blank_index) {}
 
 HloCTCLossWithLogitsInstruction::HloCTCLossWithLogitsInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    PrimitiveType in_dtype, PrimitiveType out_dtype, int64 blank_index)
+    PrimitiveType in_dtype, PrimitiveType out_dtype, int64_t blank_index)
     : HloCTCLossInstructionBase(PoplarOp::CTCLossWithLogits, shape, operands,
                                 in_dtype, out_dtype, blank_index) {}
 
 HloCTCInferenceInstructionBase::HloCTCInferenceInstructionBase(
     PoplarOp op_type, const Shape& shape,
     absl::Span<HloInstruction* const> operands, PrimitiveType in_dtype,
-    int64 beam_width, int64 blank_index, int64 top_paths)
+    int64_t beam_width, int64_t blank_index, int64_t top_paths)
     : HloCTCInferenceAndLossBase(op_type, shape, operands, in_dtype, in_dtype,
                                  blank_index),
       beam_width_(beam_width),
@@ -66,16 +66,16 @@ HloCTCInferenceInstructionBase::HloCTCInferenceInstructionBase(
 
 HloCTCBeamSearchDecoderWithLogProbs::HloCTCBeamSearchDecoderWithLogProbs(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    PrimitiveType in_dtype, int64 beam_width, int64 blank_index,
-    int64 top_paths)
+    PrimitiveType in_dtype, int64_t beam_width, int64_t blank_index,
+    int64_t top_paths)
     : HloCTCInferenceInstructionBase(PoplarOp::CTCBeamSearchWithLogProbs, shape,
                                      operands, in_dtype, beam_width,
                                      blank_index, top_paths) {}
 
 HloCTCBeamSearchDecoderWithLogits::HloCTCBeamSearchDecoderWithLogits(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    PrimitiveType in_dtype, int64 beam_width, int64 blank_index,
-    int64 top_paths)
+    PrimitiveType in_dtype, int64_t beam_width, int64_t blank_index,
+    int64_t top_paths)
     : HloCTCInferenceInstructionBase(PoplarOp::CTCBeamSearchWithLogits, shape,
                                      operands, in_dtype, beam_width,
                                      blank_index, top_paths) {}
@@ -84,24 +84,26 @@ PrimitiveType HloCTCInferenceAndLossBase::in_dtype() const { return in_dtype_; }
 PrimitiveType HloCTCLossInstructionBase::out_dtype() const {
   return out_dtype_;
 }
-int64 HloCTCInferenceAndLossBase::blank_index() const { return blank_index_; }
+int64_t HloCTCInferenceAndLossBase::blank_index() const { return blank_index_; }
 
-int64 HloCTCInferenceInstructionBase::beam_width() const { return beam_width_; }
-int64 HloCTCInferenceInstructionBase::top_paths() const { return top_paths_; }
+int64_t HloCTCInferenceInstructionBase::beam_width() const {
+  return beam_width_;
+}
+int64_t HloCTCInferenceInstructionBase::top_paths() const { return top_paths_; }
 
-absl::flat_hash_set<int64> HloCTCInferenceAndLossBase::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloCTCInferenceAndLossBase::AllocatingIndices()
     const {
   return {0, 1};
 }
 
-absl::flat_hash_set<int64> HloCTCInferenceInstructionBase::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloCTCInferenceInstructionBase::AllocatingIndices()
     const {
   return {0};
 }
 
 bool HloCTCInferenceAndLossBase::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloCTCInferenceAndLossBase::LayoutDependencies() const {
   return {};
 }
@@ -151,30 +153,30 @@ HloCTCInferenceInstructionBase::ExtraPoplarAttributesToStringImpl(
 
 static std::unique_ptr<HloInstruction> CreateCTCLossWithLogits(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    PrimitiveType in_dtype, PrimitiveType out_dtype, int64 blank_index) {
+    PrimitiveType in_dtype, PrimitiveType out_dtype, int64_t blank_index) {
   return absl::make_unique<HloCTCLossWithLogitsInstruction>(
       shape, operands, in_dtype, out_dtype, blank_index);
 }
 
 static std::unique_ptr<HloInstruction> CreateCTCLossWithLogProbs(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    PrimitiveType in_dtype, PrimitiveType out_dtype, int64 blank_index) {
+    PrimitiveType in_dtype, PrimitiveType out_dtype, int64_t blank_index) {
   return absl::make_unique<HloCTCLossWithLogProbsInstruction>(
       shape, operands, in_dtype, out_dtype, blank_index);
 }
 
 static std::unique_ptr<HloInstruction> CreateCTCBeamSearchWithLogits(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    PrimitiveType in_dtype, int64 beam_width, int64 blank_index,
-    int64 top_paths) {
+    PrimitiveType in_dtype, int64_t beam_width, int64_t blank_index,
+    int64_t top_paths) {
   return absl::make_unique<HloCTCBeamSearchDecoderWithLogits>(
       shape, operands, in_dtype, beam_width, blank_index, top_paths);
 }
 
 static std::unique_ptr<HloInstruction> CreateCTCBeamSearchWithLogProbs(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    PrimitiveType in_dtype, int64 beam_width, int64 blank_index,
-    int64 top_paths) {
+    PrimitiveType in_dtype, int64_t beam_width, int64_t blank_index,
+    int64_t top_paths) {
   return absl::make_unique<HloCTCBeamSearchDecoderWithLogProbs>(
       shape, operands, in_dtype, beam_width, blank_index, top_paths);
 }
@@ -222,7 +224,7 @@ static HloPoplarInstructionFactory ctc_loss_with_logits_factory(
                           attribute_map.GetAttributeAsTFDataType("in_dtype"));
       TF_ASSIGN_OR_RETURN(tensorflow::DataType out_dtype,
                           attribute_map.GetAttributeAsTFDataType("out_dtype"));
-      TF_ASSIGN_OR_RETURN(int64 blank_index,
+      TF_ASSIGN_OR_RETURN(int64_t blank_index,
                           attribute_map.GetAttributeAsInt("blank_index"));
 
       PrimitiveType in_dtype_xla;
@@ -243,7 +245,7 @@ static HloPoplarInstructionFactory ctc_loss_with_log_probs_factory(
                           attribute_map.GetAttributeAsTFDataType("in_dtype"));
       TF_ASSIGN_OR_RETURN(tensorflow::DataType out_dtype,
                           attribute_map.GetAttributeAsTFDataType("out_dtype"));
-      TF_ASSIGN_OR_RETURN(int64 blank_index,
+      TF_ASSIGN_OR_RETURN(int64_t blank_index,
                           attribute_map.GetAttributeAsInt("blank_index"));
 
       PrimitiveType in_dtype_xla;
@@ -263,11 +265,11 @@ static HloPoplarInstructionFactory ctc_beam_search_with_logits_factory(
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
       TF_ASSIGN_OR_RETURN(tensorflow::DataType in_dtype,
                           attribute_map.GetAttributeAsTFDataType("in_dtype"));
-      TF_ASSIGN_OR_RETURN(int64 beam_width,
+      TF_ASSIGN_OR_RETURN(int64_t beam_width,
                           attribute_map.GetAttributeAsInt("beam_width"));
-      TF_ASSIGN_OR_RETURN(int64 blank_index,
+      TF_ASSIGN_OR_RETURN(int64_t blank_index,
                           attribute_map.GetAttributeAsInt("blank_index"));
-      TF_ASSIGN_OR_RETURN(int64 top_paths,
+      TF_ASSIGN_OR_RETURN(int64_t top_paths,
                           attribute_map.GetAttributeAsInt("top_paths"));
 
       PrimitiveType in_dtype_xla;
@@ -285,11 +287,11 @@ static HloPoplarInstructionFactory ctc_beam_search_with_log_probs_factory(
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
       TF_ASSIGN_OR_RETURN(tensorflow::DataType in_dtype,
                           attribute_map.GetAttributeAsTFDataType("in_dtype"));
-      TF_ASSIGN_OR_RETURN(int64 beam_width,
+      TF_ASSIGN_OR_RETURN(int64_t beam_width,
                           attribute_map.GetAttributeAsInt("beam_width"));
-      TF_ASSIGN_OR_RETURN(int64 blank_index,
+      TF_ASSIGN_OR_RETURN(int64_t blank_index,
                           attribute_map.GetAttributeAsInt("blank_index"));
-      TF_ASSIGN_OR_RETURN(int64 top_paths,
+      TF_ASSIGN_OR_RETURN(int64_t top_paths,
                           attribute_map.GetAttributeAsInt("top_paths"));
 
       PrimitiveType in_dtype_xla;

@@ -37,7 +37,7 @@ void UpdateLayout(HloModule* module, HloComputation* comp,
   }
 }
 
-std::vector<int> GetTokenIndices(int64 num_elements, const Shape& tuple) {
+std::vector<int> GetTokenIndices(int64_t num_elements, const Shape& tuple) {
   std::vector<int> token_indices;
   for (int i = 0; i < num_elements; ++i) {
     const auto& element_shape = ShapeUtil::GetTupleElementShape(tuple, i);

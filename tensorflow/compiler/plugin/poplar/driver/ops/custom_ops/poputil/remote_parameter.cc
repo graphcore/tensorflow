@@ -91,7 +91,7 @@ class RemoteParameterStoreOp : public PoplarOpDef {
     DriverProgramSequence seq(graph, debug_info);
 
     const auto* store_inst = Cast<HloRemoteParameterStore>(inst);
-    const int64 num_outputs = store_inst->RemoteBuffers().size();
+    const int64_t num_outputs = store_inst->RemoteBuffers().size();
 
     const auto shapes = FlattenedXlaShape(output_shape);
     CHECK_EQ(shapes.size(), num_outputs);
@@ -103,7 +103,7 @@ class RemoteParameterStoreOp : public PoplarOpDef {
 
     poplar::program::Sequence temporary_copies_seq;
     poplar::program::Sequence stream_copies_seq;
-    for (int64 i = 0; i < num_outputs; ++i) {
+    for (int64_t i = 0; i < num_outputs; ++i) {
       auto& shard_graph = GetGraphWithOutputIndex(res, inst, i);
       CHECK_EQ(outputs[i].size(), 1);
       TensorOrRemoteBuffer& output = outputs[i][0];
@@ -160,7 +160,7 @@ class BufferStoreSliceOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "BufferStoreSliceOp");
     const auto* store_inst = Cast<HloBufferStoreSlice>(inst);
-    const int64 num_outputs = store_inst->RemoteBuffers().size();
+    const int64_t num_outputs = store_inst->RemoteBuffers().size();
 
     const auto shapes = FlattenedXlaShape(output_shape);
     CHECK_EQ(shapes.size(), num_outputs);
@@ -173,7 +173,7 @@ class BufferStoreSliceOp : public PoplarOpDef {
 
     poplar::program::Sequence temporary_copies_seq;
     poplar::program::Sequence stream_copies_seq;
-    for (int64 i = 0; i < num_outputs; ++i) {
+    for (int64_t i = 0; i < num_outputs; ++i) {
       auto& shard_graph = GetGraphWithOutputIndex(res, inst, i);
       CHECK_EQ(outputs[i].size(), 1);
       TensorOrRemoteBuffer& output = outputs[i][0];

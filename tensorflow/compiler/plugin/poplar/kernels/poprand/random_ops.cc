@@ -31,8 +31,8 @@ class RandomShuffleOp : public XlaOpKernel, public IpuOpKernel {
     auto builder = ctx->builder();
     xla::XlaOp input = ctx->Input(0);
     TensorShape input_shape = ctx->InputShape(0);
-    const int64 n = input_shape.dim_size(0);
-    int64 num_elements = 1;
+    const int64_t n = input_shape.dim_size(0);
+    int64_t num_elements = 1;
     for (tensorflow::TensorShapeDim dimension : input_shape) {
       num_elements *= dimension.size;
     }

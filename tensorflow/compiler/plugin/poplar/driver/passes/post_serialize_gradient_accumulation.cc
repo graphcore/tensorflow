@@ -69,7 +69,7 @@ Status InlineSerializedGradientAccumulation(HloInstruction* fusion) {
 
     HloInstruction* inst = pair.second;
     HloInstructionSet input_set;
-    for (int64 op_idx = 1; op_idx != inst->operand_count(); ++op_idx) {
+    for (int64_t op_idx = 1; op_idx != inst->operand_count(); ++op_idx) {
       HloInstruction* operand = inst->mutable_operand(op_idx);
       input_set.insert(operand);
       input_set.insert(operand->LatestNonGteAncestor());
@@ -155,7 +155,7 @@ StatusOr<bool> AddAllocationControlDependencies(HloModule* module) {
 
         const bool can_be_inplace =
             absl::c_any_of(peer->OperandIndices(layout_input),
-                           [&inplace_indices](int64 operand_idx) {
+                           [&inplace_indices](int64_t operand_idx) {
                              return inplace_indices.contains(operand_idx);
                            });
 

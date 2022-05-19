@@ -56,8 +56,8 @@ class ForwardAllocation : public HloModulePass {
  private:
   bool CreateForwardAllocationTarget(
       HloReachabilityMap* reachability_map, HloInstruction* source,
-      HloInstruction* target, const int64 input_index,
-      HloInstruction* layout_producer, const int64 layout_output_index,
+      HloInstruction* target, const int64_t input_index,
+      HloInstruction* layout_producer, const int64_t layout_output_index,
       const std::vector<HloInstruction*>& other_targets,
       const std::vector<HloInstruction*>& forward_path,
       const std::vector<HloInstruction*>& backward_path);

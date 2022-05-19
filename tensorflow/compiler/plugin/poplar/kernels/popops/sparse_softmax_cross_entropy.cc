@@ -129,7 +129,7 @@ class PopopsSparseSoftmaxXentWithLogitsOp : public XlaOpKernel, IpuOpKernel {
                     "Must have at least one class, but got logits shape ",
                     logits_shape.DebugString()));
 
-    int64 batch_size = logits_shape.dim_size(0);
+    int64_t batch_size = logits_shape.dim_size(0);
 
     const DataType logits_type = input_type(0);
     const xla::PrimitiveType xla_logits_type = ctx->input_xla_type(0);

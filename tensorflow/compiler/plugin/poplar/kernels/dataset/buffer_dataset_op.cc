@@ -48,7 +48,7 @@ constexpr char kSizeSuffix[] = ".size";
 
 class BufferDatasetOp::Dataset : public DatasetBase {
  public:
-  Dataset(OpKernelContext* ctx, int64 buffer_size, const DatasetBase* input,
+  Dataset(OpKernelContext* ctx, int64_t buffer_size, const DatasetBase* input,
           int op_version)
       : DatasetBase(DatasetContext(ctx)),
         buffer_size_(buffer_size),
@@ -84,8 +84,8 @@ class BufferDatasetOp::Dataset : public DatasetBase {
     return name_utils::DatasetDebugString(kDatasetType, params);
   }
 
-  int64 Cardinality() const override {
-    int64 n = input_->Cardinality();
+  int64_t Cardinality() const override {
+    int64_t n = input_->Cardinality();
     if (n == kInfiniteCardinality || n == kUnknownCardinality) {
       return n;
     }
@@ -202,12 +202,12 @@ class BufferDatasetOp::Dataset : public DatasetBase {
       if (!reader->Contains(full_name(kInputImplEmpty))) {
         TF_RETURN_IF_ERROR(RestoreInput(ctx, reader, input_impl_));
         {
-          int64 temp;
+          int64_t temp;
           TF_RETURN_IF_ERROR(reader->ReadScalar(full_name(kBufferSize), &temp));
           buffer_size_ = static_cast<size_t>(temp);
         }
         {
-          int64 temp;
+          int64_t temp;
           TF_RETURN_IF_ERROR(
               reader->ReadScalar(full_name(kBufferPosition), &temp));
           buffer_position_ = static_cast<size_t>(temp);
@@ -220,7 +220,7 @@ class BufferDatasetOp::Dataset : public DatasetBase {
           // Get how many tensors we need to read.
           size_t num_tensors;
           {
-            int64 temp;
+            int64_t temp;
             TF_RETURN_IF_ERROR(reader->ReadScalar(
                 full_name(strings::StrCat(kBuffer, "[", i, "]", kSizeSuffix)),
                 &temp));
@@ -259,7 +259,7 @@ class BufferDatasetOp::Dataset : public DatasetBase {
     mutex mu_;
     std::unique_ptr<IteratorBase> input_impl_ GUARDED_BY(mu_);
   };
-  const int64 buffer_size_;
+  const int64_t buffer_size_;
   const DatasetBase* const input_;
   const int op_version_;
   std::vector<PartialTensorShape> output_shapes_;
@@ -270,9 +270,9 @@ BufferDatasetOp::BufferDatasetOp(OpKernelConstruction* ctx)
 
 void BufferDatasetOp::MakeDataset(OpKernelContext* ctx, DatasetBase* input,
                                   DatasetBase** output) {
-  int64 buffer_size = 0;
+  int64_t buffer_size = 0;
   OP_REQUIRES_OK(ctx,
-                 ParseScalarArgument<int64>(ctx, kBufferSize, &buffer_size));
+                 ParseScalarArgument<int64_t>(ctx, kBufferSize, &buffer_size));
   OP_REQUIRES(
       ctx, buffer_size > 0,
       errors::InvalidArgument("Buffer size must be greater than zero."));

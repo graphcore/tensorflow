@@ -55,11 +55,12 @@ std::ostream& operator<<(std::ostream& out, const HloPoplarPosition& position);
 // Class used to describe a single buffer alias.
 class HloPoplarUseDescription {
  public:
-  HloPoplarUseDescription(int64 operand_number, const ShapeIndex& operand_index,
+  HloPoplarUseDescription(int64_t operand_number,
+                          const ShapeIndex& operand_index,
                           const ShapeIndex& output_index, BufferUseKind kind);
 
   // The operand number in which the buffer appears.
-  int64 operand_number() const { return operand_number_; }
+  int64_t operand_number() const { return operand_number_; }
 
   // The shape index within the operand in which the buffer appears.
   const ShapeIndex& operand_index() const { return operand_index_; }
@@ -83,7 +84,7 @@ class HloPoplarUseDescription {
   bool operator!=(const HloPoplarUseDescription& other) const;
 
  private:
-  const int64 operand_number_;
+  const int64_t operand_number_;
   const ShapeIndex operand_index_;
   const ShapeIndex output_index_;
   const BufferUseKind kind_;
@@ -98,7 +99,7 @@ class HloPoplarUse {
   HloInstruction* instruction() const { return instruction_; }
 
   // The operand number in which the buffer appears.
-  int64 operand_number() const { return operand_number_; }
+  int64_t operand_number() const { return operand_number_; }
 
   // The shape index within the operand in which the buffer appears.
   const ShapeIndex& operand_index() const { return operand_index_; }
@@ -109,12 +110,12 @@ class HloPoplarUse {
   virtual std::string ToString() const = 0;
 
  protected:
-  HloPoplarUse(HloInstruction* instruction, int64 operand_number,
+  HloPoplarUse(HloInstruction* instruction, int64_t operand_number,
                const ShapeIndex& operand_index, BufferUseKind kind);
 
  private:
   HloInstruction* instruction_;
-  const int64 operand_number_;
+  const int64_t operand_number_;
   const ShapeIndex operand_index_;
   const BufferUseKind kind_;
 };
@@ -125,7 +126,7 @@ std::ostream& operator<<(std::ostream& out, const HloPoplarUse& use);
 // output.
 class HloPoplarNoAliasUse : public HloPoplarUse {
  public:
-  HloPoplarNoAliasUse(HloInstruction* instruction, int64 operand_number,
+  HloPoplarNoAliasUse(HloInstruction* instruction, int64_t operand_number,
                       const ShapeIndex& operand_index);
 
   std::string ToString() const override;
@@ -144,7 +145,7 @@ class HloPoplarAliasUseBase : public HloPoplarUse {
   std::string ToString() const override;
 
  protected:
-  HloPoplarAliasUseBase(HloInstruction* instruction, int64 operand_number,
+  HloPoplarAliasUseBase(HloInstruction* instruction, int64_t operand_number,
                         const ShapeIndex& operand_index,
                         const std::vector<ShapeIndex> output_indices,
                         BufferUseKind kind);
@@ -157,7 +158,7 @@ class HloPoplarAliasUseBase : public HloPoplarUse {
 // however the values are *not* modified.
 class HloPoplarAliasReadOnlyUse : public HloPoplarAliasUseBase {
  public:
-  HloPoplarAliasReadOnlyUse(HloInstruction* instruction, int64 operand_number,
+  HloPoplarAliasReadOnlyUse(HloInstruction* instruction, int64_t operand_number,
                             const ShapeIndex& operand_index,
                             const std::vector<ShapeIndex> output_indices);
 };
@@ -166,7 +167,8 @@ class HloPoplarAliasReadOnlyUse : public HloPoplarAliasUseBase {
 // however the values are modified.
 class HloPoplarAliasReadWriteUse : public HloPoplarAliasUseBase {
  public:
-  HloPoplarAliasReadWriteUse(HloInstruction* instruction, int64 operand_number,
+  HloPoplarAliasReadWriteUse(HloInstruction* instruction,
+                             int64_t operand_number,
                              const ShapeIndex& operand_index,
                              const std::vector<ShapeIndex> output_indices);
 };
@@ -206,7 +208,7 @@ using HloPoplarBufferDescriptions = std::vector<HloPoplarBufferDescription>;
 // Class used to represent a single buffer tensor.
 class HloPoplarBuffer {
  public:
-  using Id = int64;
+  using Id = int64_t;
   // Predicate comparing HloPoplarBuffers by increasing id, useful for
   // std::sort.
   static bool IdLessThan(const HloPoplarBuffer* a, const HloPoplarBuffer* b) {
@@ -250,7 +252,7 @@ class HloPoplarBuffer {
   bool operator==(const HloPoplarBuffer& other) const;
   bool operator!=(const HloPoplarBuffer& other) const;
 
-  int64 SizeInBytes() const;
+  int64_t SizeInBytes() const;
 
   std::string ToString() const;
 
@@ -280,7 +282,7 @@ class HloPoplarBufferSet {
   // unique and stably sorted by buffer id.
   const std::vector<HloPoplarBuffer*>& buffers() const { return buffers_; }
 
-  int64 size() const { return buffers_.size(); }
+  int64_t size() const { return buffers_.size(); }
 
   // Returns a unique buffer (if there is one).
   const HloPoplarBuffer& GetUniqueBuffer() const;
@@ -368,10 +370,10 @@ using InstructionBufferSets =
 
 // Return the sizes of the device memory buffers in the given
 // HloPoplarBufferSet.
-absl::flat_hash_map<HloPoplarBuffer::Id, int64> DeviceMemoryBufferSizesInBytes(
-    const HloPoplarBufferSet& buffers);
-absl::flat_hash_map<HloPoplarBuffer::Id, int64> DeviceMemoryBufferSizesInBytes(
-    const InstructionPoplarBufferSet& buffers);
+absl::flat_hash_map<HloPoplarBuffer::Id, int64_t>
+DeviceMemoryBufferSizesInBytes(const HloPoplarBufferSet& buffers);
+absl::flat_hash_map<HloPoplarBuffer::Id, int64_t>
+DeviceMemoryBufferSizesInBytes(const InstructionPoplarBufferSet& buffers);
 
 // Utilities for checking whether all the buffers in a HloPoplarBufferSet meet
 // some criteria.

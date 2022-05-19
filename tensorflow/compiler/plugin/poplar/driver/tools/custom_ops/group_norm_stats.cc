@@ -32,14 +32,14 @@ const HloInstruction* HloGroupNormStatsInstruction::operand() const {
   return HloInstruction::operand(0);
 }
 
-absl::flat_hash_set<int64> HloGroupNormStatsInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloGroupNormStatsInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloGroupNormStatsInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloGroupNormStatsInstruction::LayoutDependencies() const {
   return {};
 }

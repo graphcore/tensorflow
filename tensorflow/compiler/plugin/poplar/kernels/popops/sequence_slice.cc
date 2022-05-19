@@ -71,7 +71,7 @@ class PopopsSequenceSliceUnpackOp : public PopopsSequenceSliceOp {
  public:
   explicit PopopsSequenceSliceUnpackOp(OpKernelConstruction* ctx)
       : PopopsSequenceSliceOp(ctx) {
-    int64 total_elements;
+    int64_t total_elements;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("total_elements", &total_elements));
     attribute_map_.AddAttribute("total_elements", total_elements);
   }

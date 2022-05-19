@@ -98,7 +98,7 @@ HloInstruction* BitcastingOperandOfReshapeOrCopyChainHelper(
 
 bool IsUnstridedSlice(const HloInstruction* hlo) {
   return absl::c_all_of(hlo->slice_strides(),
-                        [](int64 stride) { return stride == 1; });
+                        [](int64_t stride) { return stride == 1; });
 }
 
 HloInstruction* PreserveFrontendAttributesIfNeeded(

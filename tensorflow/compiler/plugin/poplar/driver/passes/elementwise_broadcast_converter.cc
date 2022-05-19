@@ -25,17 +25,17 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-bool InputIsBroadcast(const HloInstruction* inst, int64 operand_idx) {
+bool InputIsBroadcast(const HloInstruction* inst, int64_t operand_idx) {
   return inst->operand(operand_idx)->opcode() == HloOpcode::kBroadcast;
 }
 
 StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
   HloComputation* comp = inst->parent();
   // Find all the operands which are broadcasting.
-  absl::flat_hash_set<int64> constant_broadcast_operands;
-  absl::flat_hash_set<int64> broadcast_operands;
-  absl::flat_hash_set<int64> non_broadcast_operands;
-  for (int64 i = 0; i < inst->operand_count(); i++) {
+  absl::flat_hash_set<int64_t> constant_broadcast_operands;
+  absl::flat_hash_set<int64_t> broadcast_operands;
+  absl::flat_hash_set<int64_t> non_broadcast_operands;
+  for (int64_t i = 0; i < inst->operand_count(); i++) {
     if (InputIsBroadcast(inst, i)) {
       auto broadcast_input = inst->operand(i)->operand(0);
       if (broadcast_input->opcode() == HloOpcode::kConstant &&
@@ -95,7 +95,7 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
 
   // Create a fused computation, and pull in the broadcasts (and constants),
   // into the fusion.
-  const int64 num_inputs =
+  const int64_t num_inputs =
       broadcast_operands.size() + non_broadcast_operands.size();
   // Inputs to the fusion.
   std::vector<HloInstruction*> fusion_inputs(num_inputs);
@@ -104,8 +104,8 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
 
   auto builder = HloComputation::Builder(op_name);
   // Clone all the operands.
-  int64 next_param_idx = 0;
-  for (int64 i = 0; i < inst->operand_count(); i++) {
+  int64_t next_param_idx = 0;
+  for (int64_t i = 0; i < inst->operand_count(); i++) {
     HloInstruction* old_operand = inst->mutable_operand(i);
     // New operand which will be used inside the fusion.
     HloInstruction* new_operand;
@@ -159,7 +159,7 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
     CHECK_EQ(inplace_operands.size(), 1);
     // Adjust the inplace operand depending on the whether other operands have
     // been lowered in.
-    for (int64 input_index = 0, operand_index = 0;
+    for (int64_t input_index = 0, operand_index = 0;
          input_index != inst->operand_count(); ++input_index) {
       if (input_index == inplace_operands[0]) {
         HloPoplarUseDescription inplace_description{

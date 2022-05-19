@@ -35,7 +35,7 @@ namespace {
 
 using MultiUpdateCombinerTest = HloTestBase;
 
-int64 GetNumMultiUpdateAdds(const HloComputation* comp) {
+int64_t GetNumMultiUpdateAdds(const HloComputation* comp) {
   return absl::c_count_if(comp->instructions(),
                           IsPoplarInstruction(PoplarOp::MultiUpdateAdd));
 }
@@ -111,10 +111,10 @@ main {
           .ValueOrDie();
 
   ShapeUtil::ForEachIndex(result.shape(),
-                          [&](absl::Span<const int64> output_index) {
+                          [&](absl::Span<const int64_t> output_index) {
                             EXPECT_EQ(output_index.size(), 2);
                             float value = result.Get<float>(output_index);
-                            int64 y = output_index[0];
+                            int64_t y = output_index[0];
                             if (y < 100) {
                               EXPECT_EQ(value, 0);
                             } else if (100 <= y && y < 110) {
@@ -171,7 +171,7 @@ main {
   EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 3);
   MultiUpdateCombiner mu_combiner(annotations);
-  int64 execution_count = -1;
+  int64_t execution_count = -1;
   bool changed = false;
   do {
     HloCSE cse(false);
@@ -239,7 +239,7 @@ main {
   EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 3);
   MultiUpdateCombiner mu_combiner(annotations);
-  int64 execution_count = -1;
+  int64_t execution_count = -1;
   bool changed = false;
   do {
     HloCSE cse(false);
@@ -311,7 +311,7 @@ main {
   EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
   MultiUpdateCombiner mu_combiner(annotations);
-  int64 execution_count = -1;
+  int64_t execution_count = -1;
   bool changed = false;
   do {
     HloCSE cse(false);

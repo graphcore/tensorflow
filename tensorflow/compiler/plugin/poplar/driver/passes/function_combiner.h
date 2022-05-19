@@ -54,8 +54,8 @@ class FunctionCombiner : public HloModulePass {
 
   // Helper struct for storing permutations when combining functions.
   struct Permutations {
-    std::vector<int64> old_to_new_inputs_permutation;
-    std::vector<int64> old_to_new_outputs_permutation;
+    std::vector<int64_t> old_to_new_inputs_permutation;
+    std::vector<int64_t> old_to_new_outputs_permutation;
   };
 
   // Create permutation of inputs and outputs to make sure all the remote

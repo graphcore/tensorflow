@@ -60,7 +60,7 @@ class UserOpImpl : public PoplarOpDef {
 
     // Get the function pointer from the HLO.
     poplar::program::Program (*as_function_ptr_gradient)(
-        poplar::Graph&, int64 partial_derivative_index,
+        poplar::Graph&, int64_t partial_derivative_index,
         const std::vector<poplar::Tensor>& gradients_in,
         const std::vector<poplar::Tensor>& fwd_outputs,
         const std::vector<poplar::Tensor>& fwd_inputs,
@@ -252,7 +252,7 @@ class UserOpImpl : public PoplarOpDef {
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     const HloInstruction* inst = tensor_target.tgt;
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
 
     const HloUserOpInstruction* user_op = Cast<HloUserOpInstruction>(inst);
 

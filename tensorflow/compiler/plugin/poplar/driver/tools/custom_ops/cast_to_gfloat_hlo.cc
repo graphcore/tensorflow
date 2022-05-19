@@ -68,14 +68,14 @@ HloGfloatParamsInstruction::ExtraPoplarAttributesToStringImpl(
   return attributes;
 }
 
-absl::flat_hash_set<int64> HloGfloatParamsInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloGfloatParamsInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloGfloatParamsInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloGfloatParamsInstruction::LayoutDependencies() const {
   return {};
 }
@@ -198,8 +198,8 @@ HloCastNativeToGfloatInstruction::ExtraPoplarAttributesToStringImpl(
   return attributes;
 }
 
-absl::flat_hash_set<int64> HloCastNativeToGfloatInstruction::AllocatingIndices()
-    const {
+absl::flat_hash_set<int64_t>
+HloCastNativeToGfloatInstruction::AllocatingIndices() const {
   return {};
 }
 
@@ -207,7 +207,7 @@ bool HloCastNativeToGfloatInstruction::AllocatingOutput() const {
   return false;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloCastNativeToGfloatInstruction::LayoutDependencies() const {
   return {};
 }
@@ -302,8 +302,8 @@ HloCastGfloatToNativeInstruction::ExtraPoplarAttributesToStringImpl(
   return attributes;
 }
 
-absl::flat_hash_set<int64> HloCastGfloatToNativeInstruction::AllocatingIndices()
-    const {
+absl::flat_hash_set<int64_t>
+HloCastGfloatToNativeInstruction::AllocatingIndices() const {
   return {};
 }
 
@@ -311,7 +311,7 @@ bool HloCastGfloatToNativeInstruction::AllocatingOutput() const {
   return false;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloCastGfloatToNativeInstruction::LayoutDependencies() const {
   return {};
 }

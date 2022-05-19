@@ -31,14 +31,14 @@ class HloWeightsTransposeChansFlipXYInstruction : public HloPoplarInstruction {
       HloInstruction* operand,
       const ConvolutionDimensionNumbers& conv_dimension_numbers,
       const Shape& conv_input_shape, const Shape& conv_output_shape,
-      xla::Window window, int64 feature_group_count);
+      xla::Window window, int64_t feature_group_count);
 
   const Shape& ConvInputShape() const;
   const Shape& ConvOutputShape() const;
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
@@ -65,7 +65,7 @@ std::unique_ptr<HloInstruction> CreateHloWeightsTransposeChansFlipXY(
     HloInstruction* operand,
     const ConvolutionDimensionNumbers& conv_dimension_numbers,
     const Shape& conv_input_shape, const Shape& conv_output_shape,
-    xla::Window window, int64 feature_group_count);
+    xla::Window window, int64_t feature_group_count);
 
 }  // namespace poplarplugin
 }  // namespace xla

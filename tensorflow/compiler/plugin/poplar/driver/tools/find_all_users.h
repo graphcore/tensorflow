@@ -45,7 +45,7 @@ class FindAllUsers {
 
  private:
   void FindUsers(HloInstruction* tgt, const InstructionList& stack,
-                 int64 index);
+                 int64_t index);
 
   InstructionList path;
   std::set<InstructionList> paths;

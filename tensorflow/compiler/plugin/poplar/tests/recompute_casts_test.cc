@@ -38,7 +38,7 @@ struct RecomputeCastsTest : HloTestBase {
   }
 
   const HloInstruction* GetOperandForInstruction(
-      const std::string& instruction_name, int64 index) {
+      const std::string& instruction_name, int64_t index) {
     const auto instruction = FindInstruction(module_, instruction_name);
     return instruction->operand(index);
   }

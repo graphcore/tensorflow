@@ -89,9 +89,9 @@ bool AllInstructionIndependent(
 // Take the remote buffer inputs into into account to make sure to only combine
 // functions which will cause the same number of syncronisations.
 struct CrossShardFunctionKey {
-  int64 num_occurrences;
-  int64 num_modified_remote_buffer_inputs;
-  int64 num_unmodified_remote_buffer_inputs;
+  int64_t num_occurrences;
+  int64_t num_modified_remote_buffer_inputs;
+  int64_t num_unmodified_remote_buffer_inputs;
 
   bool operator<(const CrossShardFunctionKey& other) const {
     return std::make_tuple(num_occurrences, num_modified_remote_buffer_inputs,
@@ -106,8 +106,8 @@ struct CrossShardFunctionKey {
 // that the remote buffers will be in the function shape).
 struct SizeSortedHloPtrComparator {
   bool operator()(const HloInstruction* a, const HloInstruction* b) const {
-    const int64 a_size = GetByteSizeOfTotalShape(a->shape());
-    const int64 b_size = GetByteSizeOfTotalShape(b->shape());
+    const int64_t a_size = GetByteSizeOfTotalShape(a->shape());
+    const int64_t b_size = GetByteSizeOfTotalShape(b->shape());
 
     if (a_size != b_size) {
       return a_size > b_size;
@@ -123,7 +123,7 @@ using SizeSortedFunctions =
     std::set<HloInstruction*, SizeSortedHloPtrComparator>;
 
 // Structure to map from a shard to set of functions.
-using ShardToFunctions = std::map<int64, SizeSortedFunctions>;
+using ShardToFunctions = std::map<int64_t, SizeSortedFunctions>;
 
 // Structure which maps all the functions which can be combined together across
 // the shards.
@@ -151,10 +151,10 @@ FunctionsToCombine FunctionCombiner::GetFunctionsToCombine(
   CrossShardFunctions cross_shard_functions;
   for (auto& pair : iso_functions) {
     HloInstruction* functions_key = pair.first;
-    const int64 shard = *functions_key->sharding_unique_device();
-    const int64 num_modified_remote_buffer_inputs =
+    const int64_t shard = *functions_key->sharding_unique_device();
+    const int64_t num_modified_remote_buffer_inputs =
         GetFunctionNumberModifiedRemoteBufferInputs(functions_key);
-    const int64 num_unmodified_remote_buffer_inputs =
+    const int64_t num_unmodified_remote_buffer_inputs =
         GetFunctionNumberUnmodifiedRemoteBufferInputs(functions_key);
 
     CrossShardFunctionKey cross_shard_key{pair.second->size(),
@@ -179,7 +179,7 @@ FunctionsToCombine FunctionCombiner::GetFunctionsToCombine(
     // candidates.
     while (shard_to_functions.size() > 1) {
       std::vector<HloInstruction*> functions_to_merge;
-      std::vector<int64> keys_to_erase;
+      std::vector<int64_t> keys_to_erase;
       // Get the largest function from each shard.
       for (auto& func_pairs : shard_to_functions) {
         auto func_itr = func_pairs.second.begin();
@@ -201,7 +201,7 @@ FunctionsToCombine FunctionCombiner::GetFunctionsToCombine(
         per_combination_functions.push_back(functions_to_merge);
       }
 
-      for (int64 shard : keys_to_erase) {
+      for (int64_t shard : keys_to_erase) {
         shard_to_functions.erase(shard);
       }
     }
@@ -226,30 +226,30 @@ FunctionsToCombine FunctionCombiner::GetFunctionsToCombine(
 FunctionCombiner::Permutations FunctionCombiner::GetInputsOutputsPermutation(
     const std::vector<HloInstruction*>& functions) {
   CHECK_GE(functions.size(), 1);
-  const int64 num_functions = functions.size();
+  const int64_t num_functions = functions.size();
   const HloInstruction* function = functions[0];
 
   // All the functions are expected to have the same number of remote buffers
   // (see CrossShardFunctionKey).
-  const int64 num_modified_remote_buffer_inputs =
+  const int64_t num_modified_remote_buffer_inputs =
       GetFunctionNumberModifiedRemoteBufferInputs(function);
-  const int64 num_unmodified_remote_buffer_inputs =
+  const int64_t num_unmodified_remote_buffer_inputs =
       GetFunctionNumberUnmodifiedRemoteBufferInputs(function);
 
-  const int64 num_remote_buffer_inputs =
+  const int64_t num_remote_buffer_inputs =
       num_modified_remote_buffer_inputs + num_unmodified_remote_buffer_inputs;
 
-  std::vector<int64> old_to_new_inputs_permutation;
-  std::vector<int64> old_to_new_outputs_permutation;
+  std::vector<int64_t> old_to_new_inputs_permutation;
+  std::vector<int64_t> old_to_new_outputs_permutation;
 
   {
-    int64 next_modified_remote_buffer_input = 0;
-    int64 next_unmodified_remote_buffer_input =
+    int64_t next_modified_remote_buffer_input = 0;
+    int64_t next_unmodified_remote_buffer_input =
         num_modified_remote_buffer_inputs * num_functions;
-    int64 next_input = num_remote_buffer_inputs * num_functions;
+    int64_t next_input = num_remote_buffer_inputs * num_functions;
 
     for (const HloInstruction* func : functions) {
-      for (int64 operand_idx = 0; operand_idx != func->operand_count();
+      for (int64_t operand_idx = 0; operand_idx != func->operand_count();
            ++operand_idx) {
         if (operand_idx < num_modified_remote_buffer_inputs) {
           old_to_new_inputs_permutation.push_back(
@@ -268,12 +268,12 @@ FunctionCombiner::Permutations FunctionCombiner::GetInputsOutputsPermutation(
   }
 
   {
-    int64 next_modified_remote_buffer_output = 0;
-    int64 next_output = num_modified_remote_buffer_inputs * num_functions;
+    int64_t next_modified_remote_buffer_output = 0;
+    int64_t next_output = num_modified_remote_buffer_inputs * num_functions;
 
     for (const HloInstruction* func : functions) {
-      const int64 num_outputs = ShapeUtil::TupleElementCount(func->shape());
-      for (int64 output_idx = 0; output_idx != num_outputs; ++output_idx) {
+      const int64_t num_outputs = ShapeUtil::TupleElementCount(func->shape());
+      for (int64_t output_idx = 0; output_idx != num_outputs; ++output_idx) {
         if (output_idx < num_modified_remote_buffer_inputs) {
           old_to_new_outputs_permutation.push_back(
               next_modified_remote_buffer_output++);
@@ -291,7 +291,7 @@ FunctionCombiner::Permutations FunctionCombiner::GetInputsOutputsPermutation(
 
 StatusOr<std::vector<HloInstruction*>> FunctionCombiner::CombineFunctions(
     const std::vector<Functions>& per_shard_functions) {
-  const int64 num_functions = per_shard_functions.size();
+  const int64_t num_functions = per_shard_functions.size();
   // Get a function from each shard which is being combined.
   std::vector<HloInstruction*> functions(num_functions);
   absl::c_transform(per_shard_functions, functions.begin(),
@@ -313,9 +313,9 @@ StatusOr<std::vector<HloInstruction*>> FunctionCombiner::CombineFunctions(
 
   // All the functions are expected to have the same number of remote buffers
   // (see CrossShardFunctionKey).
-  const int64 num_modified_remote_buffer_inputs =
+  const int64_t num_modified_remote_buffer_inputs =
       GetFunctionNumberModifiedRemoteBufferInputs(func);
-  const int64 num_unmodified_remote_buffer_inputs =
+  const int64_t num_unmodified_remote_buffer_inputs =
       GetFunctionNumberUnmodifiedRemoteBufferInputs(func);
 
   // Clone the functions into a single computation.
@@ -349,17 +349,17 @@ StatusOr<std::vector<HloInstruction*>> FunctionCombiner::CombineFunctions(
   };
 
   std::vector<HloInstruction*> old_roots;
-  int64 function_start_parameter_idx = 0;
-  for (int64 func_idx = 0; func_idx != num_functions; ++func_idx) {
+  int64_t function_start_parameter_idx = 0;
+  for (int64_t func_idx = 0; func_idx != num_functions; ++func_idx) {
     HloInstruction* function = functions[func_idx];
     HloComputation* comp = function->to_apply();
 
     for (HloInstruction* old_inst : comp->MakeInstructionPostOrder()) {
       if (old_inst->opcode() == HloOpcode::kParameter) {
-        const int64 parameter_number =
+        const int64_t parameter_number =
             function_start_parameter_idx + old_inst->parameter_number();
 
-        const int64 new_parameter_number =
+        const int64_t new_parameter_number =
             permutation.old_to_new_inputs_permutation.at(parameter_number);
 
         // Create a parameter.
@@ -387,13 +387,13 @@ StatusOr<std::vector<HloInstruction*>> FunctionCombiner::CombineFunctions(
   // Create GTEs from each root and then create a single root tuple instruction
   // with all the outputs correctly permuted.
   std::vector<HloInstruction*> all_outputs;
-  for (int64 func_idx = 0; func_idx != num_functions; ++func_idx) {
+  for (int64_t func_idx = 0; func_idx != num_functions; ++func_idx) {
     HloInstruction* function = functions[func_idx];
     HloInstruction* old_root = function->to_apply()->root_instruction();
     HloInstruction* new_root = context.GetInstruction(old_root);
-    const int64 shard = *new_root->sharding().UniqueDevice();
-    const int64 num_outputs = ShapeUtil::TupleElementCount(new_root->shape());
-    for (int64 output_idx = 0; output_idx != num_outputs; ++output_idx) {
+    const int64_t shard = *new_root->sharding().UniqueDevice();
+    const int64_t num_outputs = ShapeUtil::TupleElementCount(new_root->shape());
+    for (int64_t output_idx = 0; output_idx != num_outputs; ++output_idx) {
       const HloInstruction* operand = new_root->operand(output_idx);
       HloInstruction* gte =
           builder.AddInstruction(HloInstruction::CreateGetTupleElement(
@@ -441,12 +441,12 @@ StatusOr<std::vector<HloInstruction*>> FunctionCombiner::CombineFunctions(
                     });
 
   std::vector<HloInstruction*> combined_functions;
-  for (int64 i = 0; i != per_shard_functions[0].size(); ++i) {
+  for (int64_t i = 0; i != per_shard_functions[0].size(); ++i) {
     // Get a function from each shard, their operands and output GTEs.
     std::vector<HloInstruction*> operands;
     std::vector<HloInstruction*> gtes;
     VLOG(2) << "Combining functions: ";
-    for (int64 func_num = 0; func_num != num_functions; ++func_num) {
+    for (int64_t func_num = 0; func_num != num_functions; ++func_num) {
       HloInstruction* function = *per_shard_iterators[func_num];
       VLOG(2) << "* " << function->ToString();
       functions[func_num] = function;
@@ -455,8 +455,9 @@ StatusOr<std::vector<HloInstruction*>> FunctionCombiner::CombineFunctions(
                       function->operands().end());
 
       // Get the output GTEs.
-      const int64 num_outputs = ShapeUtil::TupleElementCount(function->shape());
-      for (int64 output_idx = 0; output_idx != num_outputs; ++output_idx) {
+      const int64_t num_outputs =
+          ShapeUtil::TupleElementCount(function->shape());
+      for (int64_t output_idx = 0; output_idx != num_outputs; ++output_idx) {
         TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                             GetUniqueGTEUser(function, output_idx));
         gtes.push_back(gte);
@@ -496,7 +497,7 @@ StatusOr<std::vector<HloInstruction*>> FunctionCombiner::CombineFunctions(
     gtes = Permute(gtes, permutation.old_to_new_outputs_permutation);
     // Rewire all the GTEs to use the new function call at the right tuple
     // index.
-    for (int64 output_idx = 0; output_idx != gtes.size(); ++output_idx) {
+    for (int64_t output_idx = 0; output_idx != gtes.size(); ++output_idx) {
       HloInstruction* gte = gtes.at(output_idx);
       TF_RETURN_IF_ERROR(
           gte->ReplaceOperandWithDifferentShape(0, new_function));

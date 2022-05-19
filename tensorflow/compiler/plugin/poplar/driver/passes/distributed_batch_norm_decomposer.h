@@ -42,7 +42,7 @@ namespace poplarplugin {
 class DistributedBatchNormDecomposer : public HloModulePass {
  public:
   explicit DistributedBatchNormDecomposer(bool allow_recomputation,
-                                          int64 replica_group_size);
+                                          int64_t replica_group_size);
 
   absl::string_view name() const override {
     return "distributed-batch-norm-decomposer";
@@ -52,7 +52,7 @@ class DistributedBatchNormDecomposer : public HloModulePass {
 
  private:
   const bool allow_recomputation_;
-  const int64 replica_group_size_;
+  const int64_t replica_group_size_;
 };
 
 }  // namespace poplarplugin

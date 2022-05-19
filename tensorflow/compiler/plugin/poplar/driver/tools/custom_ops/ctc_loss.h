@@ -30,12 +30,12 @@ class HloCTCInferenceAndLossBase : public HloPoplarInstruction {
   explicit HloCTCInferenceAndLossBase(
       PoplarOp op_type, const Shape& shape,
       absl::Span<HloInstruction* const> operands, PrimitiveType in_dtype,
-      PrimitiveType out_dtype, int64 blank_index);
+      PrimitiveType out_dtype, int64_t blank_index);
 
  public:
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
@@ -44,11 +44,11 @@ class HloCTCInferenceAndLossBase : public HloPoplarInstruction {
   bool IsPopOpsElementwise() const override;
 
   PrimitiveType in_dtype() const;
-  int64 blank_index() const;
+  int64_t blank_index() const;
 
  private:
   PrimitiveType in_dtype_;
-  int64 blank_index_;
+  int64_t blank_index_;
 };
 
 class HloCTCLossInstructionBase : public HloCTCInferenceAndLossBase {
@@ -57,7 +57,7 @@ class HloCTCLossInstructionBase : public HloCTCInferenceAndLossBase {
                                      absl::Span<HloInstruction* const> operands,
                                      PrimitiveType in_dtype,
                                      PrimitiveType out_dtype,
-                                     int64 blank_index);
+                                     int64_t blank_index);
 
  public:
   PrimitiveType out_dtype() const;
@@ -75,27 +75,28 @@ class HloCTCInferenceInstructionBase : public HloCTCInferenceAndLossBase {
   explicit HloCTCInferenceInstructionBase(
       PoplarOp op_type, const Shape& shape,
       absl::Span<HloInstruction* const> operands, PrimitiveType in_dtype,
-      int64 beam_width, int64 blank_index, int64 top_paths);
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+      int64_t beam_width, int64_t blank_index, int64_t top_paths);
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
 
  public:
-  int64 beam_width() const;
-  int64 top_paths() const;
+  int64_t beam_width() const;
+  int64_t top_paths() const;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
 
  private:
-  int64 beam_width_;
-  int64 top_paths_;
+  int64_t beam_width_;
+  int64_t top_paths_;
 };
 
 class HloCTCLossWithLogitsInstruction : public HloCTCLossInstructionBase {
  public:
   explicit HloCTCLossWithLogitsInstruction(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
-      PrimitiveType in_dtype, xla::PrimitiveType out_dtype, int64 blank_index);
+      PrimitiveType in_dtype, xla::PrimitiveType out_dtype,
+      int64_t blank_index);
 
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
@@ -106,7 +107,7 @@ class HloCTCLossWithLogProbsInstruction : public HloCTCLossInstructionBase {
  public:
   explicit HloCTCLossWithLogProbsInstruction(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
-      PrimitiveType in_dtype, PrimitiveType out_dtype, int64 blank_index);
+      PrimitiveType in_dtype, PrimitiveType out_dtype, int64_t blank_index);
 
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
@@ -118,8 +119,8 @@ class HloCTCBeamSearchDecoderWithLogits
  public:
   explicit HloCTCBeamSearchDecoderWithLogits(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
-      PrimitiveType in_dtype, int64 beam_width, int64 blank_index,
-      int64 top_paths);
+      PrimitiveType in_dtype, int64_t beam_width, int64_t blank_index,
+      int64_t top_paths);
 
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
@@ -131,8 +132,8 @@ class HloCTCBeamSearchDecoderWithLogProbs
  public:
   explicit HloCTCBeamSearchDecoderWithLogProbs(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
-      PrimitiveType in_dtype, int64 beam_width, int64 blank_index,
-      int64 top_paths);
+      PrimitiveType in_dtype, int64_t beam_width, int64_t blank_index,
+      int64_t top_paths);
 
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const> operands,

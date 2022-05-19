@@ -44,7 +44,7 @@ namespace poplarplugin {
 
 VariablesOffloadAndPartition::VariablesOffloadAndPartition(
     CompilerAnnotations& annotations, bool remote_memory_supported,
-    int64 minimum_remote_tensor_size, int64 partition_replication_factor)
+    int64_t minimum_remote_tensor_size, int64_t partition_replication_factor)
     : annotations_(annotations),
       remote_memory_supported_(remote_memory_supported),
       minimum_remote_tensor_size_(minimum_remote_tensor_size),
@@ -87,7 +87,7 @@ namespace {
  */
 StatusOr<HloInstruction*> InsertReplicatedLoadInstructions(
     HloComputation* computation, HloInstruction* parameter,
-    int64 partition_replication_factor) {
+    int64_t partition_replication_factor) {
   HloInstruction* load =
       computation->AddInstruction(CreateHloRemoteParameterLoad(
           {parameter}, {partition_replication_factor}));
@@ -173,7 +173,7 @@ StatusOr<HloInstruction*> InsertReplicatedLoadInstructions(
 
 StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
     HloComputation* computation, HloInstruction* remote_buffer,
-    HloInstruction* to_store, int64 partition_replication_factor) {
+    HloInstruction* to_store, int64_t partition_replication_factor) {
   if (partition_replication_factor > 1) {
     HloModule* module = computation->parent();
     HloComputation::Builder builder(GetReplicatedParameterStoreFusionName());
@@ -184,7 +184,7 @@ StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
 
     const PrimitiveType element_type = to_store->shape().element_type();
 
-    const int64 element_count = PartitionedElementCountPerReplica(
+    const int64_t element_count = PartitionedElementCountPerReplica(
         ShapeUtil::ElementsIn(to_store->shape()), partition_replication_factor);
 
     HloInstruction* output = to_store_parameter;
@@ -266,9 +266,9 @@ struct OffloadedResourceInfo {
   enum class Type { NotModified, Modified };
   Type type;
   // Index of this resource in the entry computation.
-  int64 entry_param_number;
+  int64_t entry_param_number;
   // Operand index of the parameter in call.
-  int64 call_operand_idx;
+  int64_t call_operand_idx;
   // Input to the call in the entry computation.
   HloInstruction* input_to_call;
   // Input inside of the call computation.
@@ -303,7 +303,7 @@ StatusOr<ThreeState> VariablesOffloadAndPartition::ShouldOffloadInPipeline(
     case THREESTATE_UNDEFINED: {
       // Only offload by default when using batch serialization with sequential
       // schedule.
-      const int64 batch_serialization_iterations =
+      const int64_t batch_serialization_iterations =
           GetPipelineBatchSerializationIterations(pipeline_op);
       TF_ASSIGN_OR_RETURN(const auto schedule,
                           GetPipelineSchedule(pipeline_op));
@@ -333,7 +333,7 @@ StatusOr<bool> VariablesOffloadAndPartition::ShouldPartitionInPipeline(
         return false;
       }
 
-      const int64 batch_serialization_iterations =
+      const int64_t batch_serialization_iterations =
           GetPipelineBatchSerializationIterations(pipeline_op);
       TF_ASSIGN_OR_RETURN(const auto schedule,
                           GetPipelineSchedule(pipeline_op));
@@ -351,7 +351,7 @@ StatusOr<bool> VariablesOffloadAndPartition::ShouldPartitionInPipeline(
 StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
   // Find how many resource updates there are - for pipeliening there can be at
   // most one, for loops there has to be one.
-  const int64 num_resource_updates =
+  const int64_t num_resource_updates =
       absl::c_count_if(call_op->to_apply()->instructions(), IsResourceUpdate);
 
   // For repeat loops there always needs to be a resource update to do
@@ -386,13 +386,13 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
   HloInstruction* entry_root = entry_comp->root_instruction();
 
   // Make sure all call op users are unique GTEs.
-  absl::flat_hash_map<int64, HloInstruction*> call_gte_users;
+  absl::flat_hash_map<int64_t, HloInstruction*> call_gte_users;
   for (HloInstruction* output : call_op->users()) {
     if (output->opcode() != HloOpcode::kGetTupleElement) {
       return changed;
     }
     // Make sure the GTE is unique.
-    const int64 tuple_index = output->tuple_index();
+    const int64_t tuple_index = output->tuple_index();
     if (call_gte_users.contains(tuple_index)) {
       return changed;
     }
@@ -414,8 +414,8 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
   CHECK_EQ(call_root->opcode(), HloOpcode::kTuple);
 
   std::vector<OffloadedResourceInfo> offload_infos;
-  for (int64 call_operand_idx = 0; call_operand_idx != call_op->operand_count();
-       ++call_operand_idx) {
+  for (int64_t call_operand_idx = 0;
+       call_operand_idx != call_op->operand_count(); ++call_operand_idx) {
     HloInstruction* call_input = call_op->mutable_operand(call_operand_idx);
     HloInstruction* call_parameter =
         call_comp->parameter_instruction(call_operand_idx);
@@ -428,7 +428,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
     if (call_input->opcode() != HloOpcode::kParameter) {
       continue;
     }
-    const int64 entry_param_number = call_input->parameter_number();
+    const int64_t entry_param_number = call_input->parameter_number();
 
     // Also expect the call input to be unique.
     if (call_input->user_count() != 1 ||
@@ -504,7 +504,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
       }
       users.erase(it);
 
-      const int64 resource_update_input_index =
+      const int64_t resource_update_input_index =
           resource_update->operand_index(call_parameter);
       HloInstruction* resource_update_output =
           call_root->mutable_operand(call_operand_idx);
@@ -532,7 +532,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
       }
 
       // Only offload if the input is aliasing the output.
-      const int64 entry_output_idx = output_indices[0];
+      const int64_t entry_output_idx = output_indices[0];
       const auto& output_info =
           annotations_.input_output_aliasing_map.GetEntryOutputInfos().at(
               entry_output_idx);

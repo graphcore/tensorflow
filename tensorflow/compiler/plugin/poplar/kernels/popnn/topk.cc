@@ -82,7 +82,7 @@ class TopKOp : public XlaOpKernel, IpuOpKernel {
 
     // Set the last dimension to be K as poplar will be returning [batches][K]
     // elements which we will reshape into input[:-1][k].
-    std::vector<int64> dims;
+    std::vector<int64_t> dims;
 
     // This is just a sort operation if "K" is the same size as the dimensions
     // we should be looking at.
@@ -135,7 +135,7 @@ class TopKOp : public XlaOpKernel, IpuOpKernel {
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(TopKOp);
 
-  int64 num_k;
+  int64_t num_k;
 
   bool sorted;
 };

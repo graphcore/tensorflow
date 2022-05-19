@@ -217,7 +217,7 @@ using Tracepoint = TensorflowPoplarPluginTracepoint;
 
 std::once_flag help_flag_printed;
 
-int64 SizeFunction(const BufferValue& buffer) {
+int64_t SizeFunction(const BufferValue& buffer) {
   if (buffer.shape().IsOpaque()) {
     return 0;
   }
@@ -376,7 +376,7 @@ bool HasPipeliningWithDefaultSharding(const HloModule* module) {
     }
     // Make sure the order of forward stages is strictly increasing by one.
     PipelineStages stages = stages_or.ValueOrDie();
-    int64 next_stage_id = 0;
+    int64_t next_stage_id = 0;
     for (HloInstruction* stage : stages.forward) {
       if (next_stage_id++ != stage->sharding().GetUniqueDevice()) {
         return false;
@@ -419,8 +419,8 @@ StatusOr<bool> ModuleExecutionCanStall(const HloModule* module,
   }
 }
 
-int64 MaximalShard(const HloModule* module) {
-  int64 maximal_shard = 0;
+int64_t MaximalShard(const HloModule* module) {
+  int64_t maximal_shard = 0;
   for (const auto* comp : module->MakeNonfusionComputations()) {
     for (const auto* inst : comp->instructions()) {
       if (inst->has_sharding()) {
@@ -437,13 +437,13 @@ int64 MaximalShard(const HloModule* module) {
   return maximal_shard;
 }
 
-int64 NumIPUsInShards(const HloModule* module) {
-  int64 num_explicit_shards = MaximalShard(module) + 1;
+int64_t NumIPUsInShards(const HloModule* module) {
+  int64_t num_explicit_shards = MaximalShard(module) + 1;
   // Round it up to the next highest power of 2.
   if (num_explicit_shards <= 1LL) {
     return 1LL;
   }
-  int64 rounded = 2;
+  int64_t rounded = 2;
   num_explicit_shards--;
   while (num_explicit_shards >>= 1LL) {
     rounded <<= 1LL;
@@ -630,7 +630,7 @@ bool EnableProgressBar(const HloModule* module) {
       return false;
     }
 
-    int64 num_expensive_ops = 0;
+    int64_t num_expensive_ops = 0;
     for (const HloComputation* comp : module->computations()) {
       for (const HloInstruction* inst : comp->instructions()) {
         switch (inst->opcode()) {
@@ -678,7 +678,7 @@ void setFpBehaviour(DriverGraph& graph,
 void PrintHelpString() { LOG(INFO) << PoplarXlaFlags::GetFlagUsageString(); }
 
 StatusOr<int> GetNumIoTiles(const PoplarExecutor* poplar_executor) {
-  const int64 value = poplar_executor->GetNumIoTiles();
+  const int64_t value = poplar_executor->GetNumIoTiles();
   if (value == 0) {
     return 0;
   }
@@ -784,14 +784,14 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   if (ShardingEnabled(module)) {
     IpuSelectionOrder order = GetIpuSelectionOrder(module, poplar_executor);
 
-    absl::flat_hash_set<int64> shards_with_io_instructions;
+    absl::flat_hash_set<int64_t> shards_with_io_instructions;
     for (const HloComputation* comp : module->computations()) {
       for (const HloInstruction* inst : comp->instructions()) {
         TF_ASSIGN_OR_RETURN(const Tileset tileset, GetTileset(inst));
         if (tileset == TILESET_IO_TILES) {
-          const std::vector<int64>& sharding =
+          const std::vector<int64_t>& sharding =
               GetShardingDeviceIdVector(inst->sharding());
-          for (const int64 shard : sharding) {
+          for (const int64_t shard : sharding) {
             if (!shards_with_io_instructions.contains(shard)) {
               shards_with_io_instructions.insert(shard);
             }
@@ -873,7 +873,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     }
     VLOG(1) << "Created " << num_ipus << " IPU shards";
     VLOG(1) << "Shards have been mapped to the following IPUs:";
-    int64 next_shard_id = 0;
+    int64_t next_shard_id = 0;
     for (unsigned hw_id : resources.shard_to_ipu_id) {
       VLOG(1) << "  * Shard " << next_shard_id++ << " mapped to IPU " << hw_id;
     }
@@ -1105,7 +1105,7 @@ struct ExecutableCacheLock {
 
 Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
                     HloResources& resources, const poplar::Target& target,
-                    const int64 ipu_link_domain_replication_factor) {
+                    const int64_t ipu_link_domain_replication_factor) {
   Tracepoint tracepoint("HloOptimizerPipeline");
   std::unique_ptr<PVTICompilerStats> pipeline_compiler_stats =
       absl::make_unique<PVTICompilerStats>();

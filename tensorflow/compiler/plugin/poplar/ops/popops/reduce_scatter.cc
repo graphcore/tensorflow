@@ -29,7 +29,7 @@ REGISTER_OP("IpuReduceScatter")
       int32 replication_factor;
       TF_RETURN_IF_ERROR(c->GetAttr("replication_factor", &replication_factor));
 
-      for (int64 i = 0; i != c->num_inputs(); ++i) {
+      for (int64_t i = 0; i != c->num_inputs(); ++i) {
         shape_inference::ShapeHandle input_shape;
         TF_RETURN_IF_ERROR(c->WithRank(c->input(i), 1, &input_shape));
 
@@ -37,9 +37,9 @@ REGISTER_OP("IpuReduceScatter")
         if (!c->ValueKnown(d)) {
           return errors::InvalidArgument("Unknown input tensor shape.");
         }
-        const int64 input_length = c->Value(d);
-        const int64 output_length =
-            MathUtil::CeilOfRatio<int64>(input_length, replication_factor);
+        const int64_t input_length = c->Value(d);
+        const int64_t output_length =
+            MathUtil::CeilOfRatio<int64_t>(input_length, replication_factor);
 
         c->set_output(i, c->MakeShape({output_length}));
       }

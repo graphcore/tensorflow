@@ -32,14 +32,14 @@ HloSendRecvBarrierInstruction::HloSendRecvBarrierInstruction()
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64> HloSendRecvBarrierInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloSendRecvBarrierInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloSendRecvBarrierInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloSendRecvBarrierInstruction::LayoutDependencies() const {
   return {};
 }

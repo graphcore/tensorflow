@@ -406,7 +406,7 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleWhile(
 Status ValuesIdenticalAcrossReplicasVisitor::HandleAllGather(
     const HloInstruction* inst) {
   const HloModule* module = inst->GetModule();
-  const int64 replica_count = module->config().replica_count();
+  const int64_t replica_count = module->config().replica_count();
 
   const auto* all_gather = Cast<HloPoplarAllGatherInstruction>(inst);
   const PoplarReplicaGroups replica_group =
@@ -426,7 +426,7 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleAllGather(
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleRepeatLoop(
     const HloInstruction* call, const HloComputation* body,
-    int64 repeat_count) {
+    int64_t repeat_count) {
   CHECK_GT(repeat_count, 0);
 
   if (repeat_count > 1) {
@@ -473,7 +473,7 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleUserOp(
   // user op returns a tuple then the values of that tuple are identical if
   // their index is in this set. Otherwise we only produce a single value and so
   // are replica identical if the set contains index 0.
-  const absl::flat_hash_set<int64>& replica_identical_output_indices =
+  const absl::flat_hash_set<int64_t>& replica_identical_output_indices =
       user_op->ReplicaIdenticalOutputIndices();
 
   const auto user_op_shape = user_op->shape();
@@ -481,7 +481,7 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleUserOp(
     value_category_mapping_[inst] = ValueCategoryTree(user_op_shape);
 
     bool all_values_identical = true;
-    for (int64 i = 0, end = ShapeUtil::TupleElementCount(user_op_shape);
+    for (int64_t i = 0, end = ShapeUtil::TupleElementCount(user_op_shape);
          i < end; ++i) {
       const bool output_identical =
           replica_identical_output_indices.contains(i);

@@ -50,7 +50,7 @@ class DropoutOp : public XlaOpKernel, public IpuOpKernel {
       : XlaOpKernel(ctx), IpuOpKernel() {
     float rate;
     float scale;
-    std::vector<int64> noise_shape;
+    std::vector<int64_t> noise_shape;
 
     OP_REQUIRES_OK(ctx, ctx->GetAttr("rate", &rate));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("scale", &scale));

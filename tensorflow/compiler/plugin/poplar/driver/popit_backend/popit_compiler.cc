@@ -53,7 +53,7 @@ StatusOr<std::vector<std::unique_ptr<Executable>>> PopItCompiler::Compile(
   }
   std::vector<std::unique_ptr<Executable>> result;
   result.reserve(hlo_modules.size());
-  for (int64 i = 0; i < hlo_modules.size(); ++i) {
+  for (int64_t i = 0; i < hlo_modules.size(); ++i) {
     if (stream_exec[i].size() != 1) {
       return tensorflow::errors::Unimplemented(
           "Only support cases where number of stream executors "

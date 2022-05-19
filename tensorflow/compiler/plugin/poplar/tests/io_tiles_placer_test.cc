@@ -57,10 +57,10 @@ ENTRY top {
 }
   )";
 
-  const int64 num_io_tiles = 1;
-  const int64 bytes_per_io_tile = fits_on_io_tiles ? 1024 : 4;
+  const int64_t num_io_tiles = 1;
+  const int64_t bytes_per_io_tile = fits_on_io_tiles ? 1024 : 4;
   // This is set to zero just so can still check changed value correctly
-  int64 resource_num_io_tiles = 0;
+  int64_t resource_num_io_tiles = 0;
 
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
@@ -113,10 +113,10 @@ TEST_P(TestInfeedGtes, DoTest) {
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  const int64 num_io_tiles = 1;
-  const int64 bytes_per_io_tile = fits_on_io_tiles ? 1024 : 4;
+  const int64_t num_io_tiles = 1;
+  const int64_t bytes_per_io_tile = fits_on_io_tiles ? 1024 : 4;
   // This is set to zero just so can still check changed value correctly
-  int64 resource_num_io_tiles = 0;
+  int64_t resource_num_io_tiles = 0;
 
   EXPECT_EQ(IoTilesPlacer(/*enabled=*/true, num_io_tiles, bytes_per_io_tile,
                           0.5, resource_num_io_tiles)

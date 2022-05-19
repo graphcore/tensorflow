@@ -68,12 +68,12 @@ std::vector<xla::ReplicaGroup> PoplarReplicaGroups::ToXlaReplicaGroups() const {
   // know how many groups to generate. Therefore we generate only enough groups
   // to satisfy the HLO verifier. During lowering the correct number of groups
   // will be used based on the total number of replicas.
-  const int64 group_size = *group_size_;
-  const int64 num_groups = group_type_ == Type::Consecutive ? 1 : 2;
+  const int64_t group_size = *group_size_;
+  const int64_t num_groups = group_type_ == Type::Consecutive ? 1 : 2;
 
   std::vector<xla::ReplicaGroup> result(num_groups);
-  for (int64 i = 0; i < num_groups; ++i) {
-    for (int64 j = 0; j < group_size; ++j) {
+  for (int64_t i = 0; i < num_groups; ++i) {
+    for (int64_t j = 0; j < group_size; ++j) {
       result[i].add_replica_ids(j * num_groups + i);
     }
   }
@@ -87,13 +87,13 @@ PoplarReplicaGroups::FromXlaReplicaGroups(
     return PoplarReplicaGroups();
   }
 
-  const int64 num_groups = groups.size();
-  const int64 group_size = groups[0].replica_ids_size();
+  const int64_t num_groups = groups.size();
+  const int64_t group_size = groups[0].replica_ids_size();
   if (group_size == 0) {
     return xla::InvalidArgument("Unsupported empty replica group");
   }
 
-  for (int64 i = 0; i < num_groups; ++i) {
+  for (int64_t i = 0; i < num_groups; ++i) {
     const xla::ReplicaGroup& group = groups[i];
     if (group.replica_ids_size() != group_size) {
       return xla::InvalidArgumentStrCat(
@@ -101,9 +101,9 @@ PoplarReplicaGroups::FromXlaReplicaGroups(
           group.replica_ids_size());
     }
 
-    for (int64 j = 0; j < group_size; ++j) {
-      const int64 expected = j * num_groups + i;
-      const int64 actual = group.replica_ids(j);
+    for (int64_t j = 0; j < group_size; ++j) {
+      const int64_t expected = j * num_groups + i;
+      const int64_t actual = group.replica_ids(j);
       if (expected != actual) {
         return xla::InvalidArgumentStrCat(
             "Unsupported replica group: Expected ", expected, " at index ", j,

@@ -38,7 +38,7 @@ namespace {
 
 using RepeatLoopCopyInserterTest = HloTestBase;
 
-int64 resource = 0;
+int64_t resource = 0;
 
 TEST_F(RepeatLoopCopyInserterTest, CopyIOOutput) {
   const auto hlo_string = R"(

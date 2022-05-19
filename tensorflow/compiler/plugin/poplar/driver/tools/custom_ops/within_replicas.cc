@@ -31,14 +31,14 @@ HloWithinReplicaInstruction::HloWithinReplicaInstruction(
     PoplarOp op)
     : HloPoplarInstruction(output_shape, inputs, op) {}
 
-absl::flat_hash_set<int64> HloWithinReplicaInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloWithinReplicaInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloWithinReplicaInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloWithinReplicaInstruction::LayoutDependencies() const {
   return {};
 }

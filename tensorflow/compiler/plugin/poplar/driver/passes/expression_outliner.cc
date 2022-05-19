@@ -88,7 +88,7 @@ bool IsSupportedElementwise(const HloInstruction* inst) {
 }
 }  // namespace
 
-ExpressionOutliner::ExpressionOutliner(int64 maximum_num_elements)
+ExpressionOutliner::ExpressionOutliner(int64_t maximum_num_elements)
     : maximum_num_elements_(maximum_num_elements) {}
 
 StatusOr<bool> ExpressionOutliner::ModuleExpressionOutliner(

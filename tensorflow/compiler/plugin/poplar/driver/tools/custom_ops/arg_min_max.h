@@ -24,16 +24,16 @@ namespace poplarplugin {
 
 class HloArgMinMaxBase : public HloPoplarInstruction {
  protected:
-  HloArgMinMaxBase(HloInstruction* input, const Shape& output_shape, int64 axis,
-                   const PoplarOp& opcode);
+  HloArgMinMaxBase(HloInstruction* input, const Shape& output_shape,
+                   int64_t axis, const PoplarOp& opcode);
 
  public:
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
 
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
 
-  int64 Axis() const { return axis; }
+  int64_t Axis() const { return axis; }
 
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -49,12 +49,12 @@ class HloArgMinMaxBase : public HloPoplarInstruction {
       const HloPrintOptions& options) const override;
 
  private:
-  const int64 axis;
+  const int64_t axis;
 };
 
 class HloArgMax : public HloArgMinMaxBase {
  public:
-  HloArgMax(HloInstruction* input, const Shape& output_shape, int64 axis)
+  HloArgMax(HloInstruction* input, const Shape& output_shape, int64_t axis)
       : HloArgMinMaxBase(input, output_shape, axis, PoplarOp::ArgMax) {}
 
  private:
@@ -64,11 +64,12 @@ class HloArgMax : public HloArgMinMaxBase {
 };
 
 std::unique_ptr<HloInstruction> CreateHloArgMax(HloInstruction* input,
-                                                const Shape& shape, int64 axis);
+                                                const Shape& shape,
+                                                int64_t axis);
 
 class HloArgMin : public HloArgMinMaxBase {
  public:
-  HloArgMin(HloInstruction* input, const Shape& output_shape, int64 axis)
+  HloArgMin(HloInstruction* input, const Shape& output_shape, int64_t axis)
       : HloArgMinMaxBase(input, output_shape, axis, PoplarOp::ArgMin) {}
 
  private:
@@ -78,11 +79,13 @@ class HloArgMin : public HloArgMinMaxBase {
 };
 
 std::unique_ptr<HloInstruction> CreateHloArgMin(HloInstruction* input,
-                                                const Shape& shape, int64 axis);
+                                                const Shape& shape,
+                                                int64_t axis);
 
 class HloMaxAndArgMax : public HloArgMinMaxBase {
  public:
-  HloMaxAndArgMax(HloInstruction* input, const Shape& output_shape, int64 axis)
+  HloMaxAndArgMax(HloInstruction* input, const Shape& output_shape,
+                  int64_t axis)
       : HloArgMinMaxBase(input, output_shape, axis, PoplarOp::MaxAndArgMax) {}
 
  private:
@@ -93,11 +96,12 @@ class HloMaxAndArgMax : public HloArgMinMaxBase {
 
 std::unique_ptr<HloInstruction> CreateHloMaxAndArgMax(HloInstruction* input,
                                                       const Shape& shape,
-                                                      int64 axis);
+                                                      int64_t axis);
 
 class HloMinAndArgMin : public HloArgMinMaxBase {
  public:
-  HloMinAndArgMin(HloInstruction* input, const Shape& output_shape, int64 axis)
+  HloMinAndArgMin(HloInstruction* input, const Shape& output_shape,
+                  int64_t axis)
       : HloArgMinMaxBase(input, output_shape, axis, PoplarOp::MinAndArgMin) {}
 
  private:
@@ -108,7 +112,7 @@ class HloMinAndArgMin : public HloArgMinMaxBase {
 
 std::unique_ptr<HloInstruction> CreateHloMinAndArgMin(HloInstruction* input,
                                                       const Shape& shape,
-                                                      int64 axis);
+                                                      int64_t axis);
 
 }  // namespace poplarplugin
 }  // namespace xla

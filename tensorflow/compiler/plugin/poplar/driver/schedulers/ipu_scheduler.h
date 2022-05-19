@@ -39,7 +39,7 @@ struct CompilerAnnotations;
 
 using IpuSchedulerAlgorithm = std::function<StatusOr<HloInstructionSequence>(
     HloComputation*, const HloPoplarDataflowAnalysis&,
-    const absl::flat_hash_map<const HloComputation*, int64>&)>;
+    const absl::flat_hash_map<const HloComputation*, int64_t>&)>;
 
 struct NamedIpuSchedulerAlgorithm {
   std::string name;
@@ -48,11 +48,11 @@ struct NamedIpuSchedulerAlgorithm {
       : name(std::move(name)), function(std::move(function)) {}
 };
 
-using MemoryEstimator = std::function<StatusOr<int64>(
+using MemoryEstimator = std::function<StatusOr<int64_t>(
     const HloComputation& computation, const HloInstructionSequence& sequence,
     const HloAliasAnalysis& alias_analysis,
     const LogicalBuffer::SizeFunction& size_function,
-    const absl::flat_hash_map<const HloComputation*, int64>*)>;
+    const absl::flat_hash_map<const HloComputation*, int64_t>*)>;
 
 MemoryEstimator HeapMemoryEstimator();
 

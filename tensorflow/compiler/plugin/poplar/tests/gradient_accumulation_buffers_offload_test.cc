@@ -33,7 +33,7 @@ namespace {
 
 using GradientAccumulationBuffersOffloadTest = HloTestBase;
 
-std::string GetHlo(int64 schedule, ThreeState offload_accumulators) {
+std::string GetHlo(int64_t schedule, ThreeState offload_accumulators) {
   constexpr absl::string_view hlo_format = R"(
 HloModule top
 

@@ -97,7 +97,7 @@ class Conv2DOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                         GetConvolutionOptionsForInst(inst, res));
 
-    TF_ASSIGN_OR_RETURN(int64 group_count, GetBatchGroupCount(inst));
+    TF_ASSIGN_OR_RETURN(int64_t group_count, GetBatchGroupCount(inst));
     TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers conv_dims,
                         GetConvolutionDims(inst));
 
@@ -146,7 +146,7 @@ class Conv2DOp : public PoplarOpDef {
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "Conv2DOp");
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
 
     const HloInstruction* inst = tensor_target.tgt;
 
@@ -198,7 +198,7 @@ class Conv2DReverseOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                         GetConvolutionOptionsForInst(inst, res));
 
-    TF_ASSIGN_OR_RETURN(int64 group_count, GetBatchGroupCount(inst));
+    TF_ASSIGN_OR_RETURN(int64_t group_count, GetBatchGroupCount(inst));
     TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers conv_dims,
                         GetConvolutionDims(inst));
 
@@ -286,7 +286,7 @@ class ConvScaledInplaceOp : public PoplarOpDef {
     const auto* root_inst = inst->fused_expression_root();
     auto op_type = root_inst->opcode();
 
-    TF_ASSIGN_OR_RETURN(int64 group_count, GetBatchGroupCount(inst));
+    TF_ASSIGN_OR_RETURN(int64_t group_count, GetBatchGroupCount(inst));
     poplar::DebugNameAndId debug_name_and_id(debug_info);
     auto func = [&graph, &res, params, opts, group_count, conv_dims, op_type,
                  inst, debug_name_and_id](std::vector<poplar::Tensor>& args,
@@ -356,7 +356,7 @@ GetMultiConvCreateArgs(const HloMultiConvInstruction* inst,
   TF_ASSIGN_OR_RETURN(std::vector<poplin::ConvParams> conv_params,
                       GetConvolutionParametersForMultiConv(inst));
 
-  for (int64 i = 0; i != convolution_specs.size(); ++i) {
+  for (int64_t i = 0; i != convolution_specs.size(); ++i) {
     conv_args[i] = {conv_params[i], opts, absl::StrCat(name, "/SubConv", i)};
   }
 
@@ -369,14 +369,14 @@ class MultiConvOp : public PoplarOpDef {
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiConvOp");
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
     const HloMultiConvInstruction* inst =
         Cast<HloMultiConvInstruction>(tensor_target.tgt);
 
     const auto& convolution_specs = inst->GetConvolutionSpecs();
     // Operands [0, n) are inputs and [n, 2n) are kernels.
     const bool is_conv_input = input_index < convolution_specs.size();
-    const int64 conv_index =
+    const int64_t conv_index =
         input_index - (is_conv_input ? 0 : convolution_specs.size());
     CHECK_LT(conv_index, convolution_specs.size());
     auto convolution_spec = convolution_specs[conv_index];
@@ -520,7 +520,7 @@ class MultiConvOp : public PoplarOpDef {
           graph, conv_args, all_transpose_and_flip_weights, prog,
           {debug_name_and_id}, multi_conv_options, &res.planning_cache);
 
-      for (int64 i = 0; i != convolution_specs.size(); ++i) {
+      for (int64_t i = 0; i != convolution_specs.size(); ++i) {
         poplar::Tensor output = outputs[i];
         const auto& convolution_spec = convolution_specs[i];
         // Process the outputs, which is dependent on the convolution type.
@@ -543,7 +543,7 @@ class MultiConvOp : public PoplarOpDef {
     poputil::graphfn::Signature inputs_signature;
     poputil::graphfn::Signature kernels_signature;
     poputil::graphfn::Signature outputs_signature;
-    for (int64 i = 0; i != convolution_specs.size(); ++i) {
+    for (int64_t i = 0; i != convolution_specs.size(); ++i) {
       // Find the input tensor.
       TF_ASSIGN_OR_RETURN(args[i],
                           FindInstructionInput(tensor_map, res, inst, i, seq,
@@ -576,7 +576,7 @@ class MultiConvOp : public PoplarOpDef {
         multi_conv_inst->LayoutDependencies()));
 
     // Set the outputs.
-    for (int64 i = 0; i != convolution_specs.size(); ++i) {
+    for (int64_t i = 0; i != convolution_specs.size(); ++i) {
       TF_CHECK_OK(AddOutputTensor(
           tensor_map, inst, i,
           DriverTensor(args[2 * convolution_specs.size() + i], graph)));

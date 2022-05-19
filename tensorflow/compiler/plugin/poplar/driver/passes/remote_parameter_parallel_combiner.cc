@@ -213,7 +213,7 @@ bool IndependentlySchedulable(
   return true;
 }
 
-StatusOr<int64> GetParameterNumberImpl(const HloInstruction* inst) {
+StatusOr<int64_t> GetParameterNumberImpl(const HloInstruction* inst) {
   switch (inst->operand(0)->opcode()) {
     case HloOpcode::kParameter: {
       return inst->operand(0)->parameter_number();
@@ -228,7 +228,7 @@ StatusOr<int64> GetParameterNumberImpl(const HloInstruction* inst) {
   }
 }
 
-int64 GetParameterNumber(const HloInstruction* inst) {
+int64_t GetParameterNumber(const HloInstruction* inst) {
   auto statusor_num = GetParameterNumberImpl(inst);
   TF_CHECK_OK(statusor_num.status());
   return statusor_num.ValueOrDie();
@@ -243,8 +243,8 @@ struct DecreasingSizeComparator {
     }
 
     // If the size is the same, order by parameter index.
-    const int64 a_index = GetParameterNumber(a);
-    const int64 b_index = GetParameterNumber(b);
+    const int64_t a_index = GetParameterNumber(a);
+    const int64_t b_index = GetParameterNumber(b);
     if (a_index != b_index) {
       return a_index > b_index;
     }
@@ -260,7 +260,7 @@ using DecreasingSizeQueue =
                         DecreasingSizeComparator>;
 
 StatusOr<std::vector<HloInstruction*>> CombineFromDifferentShards(
-    HloComputation* comp, std::map<int64, DecreasingSizeQueue> shard_queues) {
+    HloComputation* comp, std::map<int64_t, DecreasingSizeQueue> shard_queues) {
   std::vector<HloInstruction*> combined;
 
   while (true) {
@@ -403,8 +403,8 @@ Status AddSchedulingConstraints(
 
 StatusOr<bool> RunForOpTypes(HloComputation* comp, PoplarOp load_op_type,
                              PoplarOp store_op_type) {
-  std::map<int64, DecreasingSizeQueue> shard_loads;
-  std::map<int64, DecreasingSizeQueue> shard_stores;
+  std::map<int64_t, DecreasingSizeQueue> shard_loads;
+  std::map<int64_t, DecreasingSizeQueue> shard_stores;
 
   for (auto* inst : comp->MakeInstructionPostOrder()) {
     if (auto shard = inst->sharding_unique_device()) {

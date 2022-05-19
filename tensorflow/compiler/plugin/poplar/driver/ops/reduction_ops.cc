@@ -130,7 +130,7 @@ bool IsPoplibsPool(const HloInstruction* inst,
   }
 
   unsigned reduction_count = 0;
-  for (int64 i = 0; i < window.dimensions_size(); i++) {
+  for (int64_t i = 0; i < window.dimensions_size(); i++) {
     auto& d = window.dimensions(i);
     if (d.size() != 1 || d.stride() != 1 || d.padding_low() != 0 ||
         d.padding_high() != 0) {
@@ -177,10 +177,10 @@ static const std::string& SelectionVertexBaseName(const HloInstruction* inst) {
   }
 }
 
-static std::vector<int64> MaxWindowOverlap(const Window& window) {
-  std::vector<int64> overlap;
+static std::vector<int64_t> MaxWindowOverlap(const Window& window) {
+  std::vector<int64_t> overlap;
   for (auto& d : window.dimensions()) {
-    int64 o = ((d.size() + d.stride() - 1) / d.stride());
+    int64_t o = ((d.size() + d.stride() - 1) / d.stride());
     overlap.push_back(o);
   }
   return overlap;
@@ -200,7 +200,7 @@ static std::size_t GetOverlapLayerNum(const Tpos& pos, const Tlimit& limit) {
 
 std::set<unsigned int> GetPoolingReductionDims(const Window& window) {
   std::set<unsigned int> reduction_dims;
-  for (int64 i = 0; i < window.dimensions_size(); i++) {
+  for (int64_t i = 0; i < window.dimensions_size(); i++) {
     auto& d = window.dimensions(i);
     if (d.size() != 1 || d.stride() != 1 || d.padding_low() != 0 ||
         d.padding_high() != 0) {
@@ -451,16 +451,16 @@ StatusOr<DriverProgramSequence> CreateSimpleWindowReduction(
     poplar::Tensor out_flat = out.flatten();
 
     auto cs = graph.addComputeSet({debug_name_and_id});
-    const int64 N = ShapeUtil::ElementsIn(output_shape);
-    const int64 rank = output_shape.rank();
+    const int64_t N = ShapeUtil::ElementsIn(output_shape);
+    const int64_t rank = output_shape.rank();
 
     // Find the within window strides in case subsampling is required.
     std::vector<uint32> strides(rank, 1);
-    for (int64 d = 0; d != rank; d++) {
+    for (int64_t d = 0; d != rank; d++) {
       const auto& dim = window.dimensions(d);
       if (dim.window_dilation() > dim.base_dilation()) {
         bool valid = false;
-        for (int64 i = 0; i != dim.size(); ++i) {
+        for (int64_t i = 0; i != dim.size(); ++i) {
           if ((((i + 1) * dim.window_dilation()) % dim.base_dilation()) == 0) {
             strides[d] =
                 ((i + 1) * dim.window_dilation()) / dim.base_dilation();
@@ -477,12 +477,12 @@ StatusOr<DriverProgramSequence> CreateSimpleWindowReduction(
 
     // Vector for walking the window through the tensor
     std::vector<std::size_t> pos(rank, 0);
-    for (int64 i = 0; i != N; ++i) {
+    for (int64_t i = 0; i != N; ++i) {
       // Find the window boundries.
       std::vector<std::size_t> start(rank);
       std::vector<std::size_t> end(rank);
       bool valid = true;
-      for (int64 d = 0; d != rank; d++) {
+      for (int64_t d = 0; d != rank; d++) {
         const auto& dim = window.dimensions(d);
         const size_t max_idx = to_reduce.dim(d);
 
@@ -495,7 +495,7 @@ StatusOr<DriverProgramSequence> CreateSimpleWindowReduction(
         };
 
         // Find the first valid start index.
-        for (int64 i = 0; i != dim.size(); ++i) {
+        for (int64_t i = 0; i != dim.size(); ++i) {
           if (!is_valid_idx(start_idx)) {
             start_idx += dim.window_dilation();
           } else {
@@ -503,7 +503,7 @@ StatusOr<DriverProgramSequence> CreateSimpleWindowReduction(
           }
         }
         // Find the last valid index.
-        for (int64 i = 0; i != dim.size(); ++i) {
+        for (int64_t i = 0; i != dim.size(); ++i) {
           if (!is_valid_idx(end_idx)) {
             end_idx -= dim.window_dilation();
           } else {
@@ -527,7 +527,7 @@ StatusOr<DriverProgramSequence> CreateSimpleWindowReduction(
       poplar::Tensor tensor_window = to_reduce.slice(start, end);
 
       if (valid) {
-        for (int64 d = 0; d != rank; d++) {
+        for (int64_t d = 0; d != rank; d++) {
           if (strides[d] > 1) {
             tensor_window = tensor_window.subSample(strides[d], d);
           }
@@ -544,7 +544,7 @@ StatusOr<DriverProgramSequence> CreateSimpleWindowReduction(
       graph.setPerfEstimate(v, 1);
 
       // Advance the window.
-      for (int64 d = rank - 1; d >= 0; d--) {
+      for (int64_t d = rank - 1; d >= 0; d--) {
         pos[d]++;
         if (pos[d] < output_shape.dimensions(d)) {
           break;
@@ -835,9 +835,10 @@ StatusOr<DriverProgramSequence> CreateSimpleSelectAndScatter(
 
   const Window& window(inst->window());
 
-  std::vector<int64> overlap(MaxWindowOverlap(window));
-  int64 overlap_count(std::accumulate(overlap.begin(), overlap.end(), 1,
-                                      [](int64 a, int64 b) { return a * b; }));
+  std::vector<int64_t> overlap(MaxWindowOverlap(window));
+  int64_t overlap_count(
+      std::accumulate(overlap.begin(), overlap.end(), 1,
+                      [](int64_t a, int64_t b) { return a * b; }));
 
   // Create a partials tensor for reduction
   std::vector<std::size_t> poplar_shape = operand.shape();
@@ -847,7 +848,7 @@ StatusOr<DriverProgramSequence> CreateSimpleSelectAndScatter(
   poplar::Tensor partial =
       graph.clone(extended_operand, {debug_name_and_id, "partial"});
 
-  for (int64 i = 1; i < overlap_count; i++) {
+  for (int64_t i = 1; i < overlap_count; i++) {
     partial = poplar::concat(
         partial, graph.clone(extended_operand, {debug_name_and_id, "partial"}),
         partial.rank() - 1);
@@ -871,7 +872,7 @@ StatusOr<DriverProgramSequence> CreateSimpleSelectAndScatter(
 
   // Find the number of windows in each dimension
   std::vector<unsigned> window_count(output_shape.rank());
-  for (int64 d = 0; d < window.dimensions().size(); d++) {
+  for (int64_t d = 0; d < window.dimensions().size(); d++) {
     std::size_t input_dim(operand.dim(d));
     input_dim += window.dimensions(d).padding_low();
     input_dim += window.dimensions(d).padding_high();
@@ -1015,7 +1016,7 @@ StatusOr<DriverProgramSequence> CreateReplicatedAllReduce(
                                       GetReplicatedCollectiveOptions(res));
   }
 
-  for (int64 i = 0; i != flat_tensors.size(); ++i) {
+  for (int64_t i = 0; i != flat_tensors.size(); ++i) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
                                 DriverTensor(flat_tensors[i], graph)));
   }

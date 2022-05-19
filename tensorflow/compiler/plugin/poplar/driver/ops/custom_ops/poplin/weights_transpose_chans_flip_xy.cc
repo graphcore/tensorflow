@@ -133,7 +133,7 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
                                     "WeightsTransposeChansFlipXYOp");
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
     const HloInstruction* inst = tensor_target.tgt;
 
     poplar::Tensor out;

@@ -115,7 +115,7 @@ StatusOr<poplar::TargetType> ParsePoplarTargetType(
 
 StatusOr<poplar::Device> GetIpuDevice(const poplar::TargetType target_type,
                                       const std::string target_arch_string,
-                                      const int64 num_IPUs,
+                                      const int64_t num_IPUs,
                                       const bool gateway_mode,
                                       const bool supports_remote_buffers) {
   VLOG(2) << "Getting a device.";
@@ -147,8 +147,8 @@ StatusOr<poplar::Device> GetIpuDevice(const poplar::TargetType target_type,
 struct IOItem {
   std::string name;
   std::string handle;
-  int64 argument;
-  int64 tuple_index;
+  int64_t argument;
+  int64_t tuple_index;
 
   DataType datatype;
   TensorShape shape;
@@ -226,10 +226,10 @@ class IOConfig {
     DataType datatype = PrimitiveTypeToDataType(primitive_type);
     TensorShape shape;
     if (shape_proto.dimensions_size() == 0) {
-      int64 dims[] = {1};
+      int64_t dims[] = {1};
       TensorShapeUtils::MakeShape(dims, 0, &shape);
     } else {
-      std::vector<int64> dimensions;
+      std::vector<int64_t> dimensions;
       for (auto& dim : shape_proto.dimensions()) {
         dimensions.push_back(dim);
       }
@@ -638,7 +638,7 @@ class PrefetchCallback : public poplar::StreamCallback {
  private:
   CommunicationManager* comm_mgr_;
   const std::string name_;
-  std::atomic<int64> look_ahead_;
+  std::atomic<int64_t> look_ahead_;
 };
 
 class EngineResource {
@@ -843,7 +843,7 @@ class EngineResource {
   poplar::Device device_;
   poplar::Engine engine_;
   CommunicationManager communication_manager_;
-  std::map<int64, std::vector<unsigned char>> input_buffers_;
+  std::map<int64_t, std::vector<unsigned char>> input_buffers_;
 
   // Thread which keeps running the engine until the communication manager is
   // asked to exit.
@@ -892,7 +892,7 @@ class EngineManager {
     // Copy the input tensors to an internal storage incase the engine needs
     // restarting.
     TensorVector input_tensors(input_list.size());
-    for (int64 i = 0; i != input_list.size(); ++i) {
+    for (int64_t i = 0; i != input_list.size(); ++i) {
       tensorflow::Tensor input = input_list[i];
       tensorflow::Tensor copy(input.dtype(), input.shape());
       tensorflow::StringPiece from = input.tensor_data();
@@ -1006,7 +1006,7 @@ class ApplicationRuntime : public OpKernel {
     ctx->input_list("filename", &filename_list);
     CHECK_EQ(filename_list.size(), 1);
     const tensorflow::Tensor& filepath_tensor = filename_list[0];
-    static constexpr int64 unlimited_entries = -1;
+    static constexpr int64_t unlimited_entries = -1;
     const auto filepath = filepath_tensor.SummarizeValue(unlimited_entries);
 
     OP_REQUIRES_OK(ctx, engine_mgr.CreateEngine(engine_name_, filepath,
@@ -1019,7 +1019,7 @@ class ApplicationRuntime : public OpKernel {
 
  private:
   std::string engine_name_;
-  int64 timeout_us_;
+  int64_t timeout_us_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(ApplicationRuntime);
 };

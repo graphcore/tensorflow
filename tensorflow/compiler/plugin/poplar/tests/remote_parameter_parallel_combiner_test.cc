@@ -91,9 +91,9 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[1]) {
 
   // Check that the inputs and outputs are wired correctly, irrespective of the
   // order in which they were combind.
-  const int64 gte0_index =
+  const int64_t gte0_index =
       Cast<HloGetTupleElementInstruction>(root->operand(0))->tuple_index();
-  const int64 gte1_index =
+  const int64_t gte1_index =
       Cast<HloGetTupleElementInstruction>(root->operand(1))->tuple_index();
 
   const auto* param0 =
@@ -164,9 +164,9 @@ ENTRY %top {
 
   // Check that the inputs and outputs are wired correctly, irrespective of the
   // order in which they were combind.
-  const int64 gte0_index =
+  const int64_t gte0_index =
       Cast<HloGetTupleElementInstruction>(root->operand(0))->tuple_index();
-  const int64 gte1_index =
+  const int64_t gte1_index =
       Cast<HloGetTupleElementInstruction>(root->operand(1))->tuple_index();
 
   const auto* buffer0 = load_inst->RemoteBuffers().at(gte0_index);
@@ -281,9 +281,9 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
 
   // Check that the inputs and outputs are wired correctly, irrespective of the
   // order in which they were combind.
-  const int64 gte0_index =
+  const int64_t gte0_index =
       Cast<HloGetTupleElementInstruction>(root->operand(0))->tuple_index();
-  const int64 gte1_index =
+  const int64_t gte1_index =
       Cast<HloGetTupleElementInstruction>(root->operand(1))->tuple_index();
 
   const auto* buffer0 = store_inst->RemoteBuffers().at(gte0_index);
@@ -356,9 +356,9 @@ ENTRY %top {
 
   // Check that the inputs and outputs are wired correctly, irrespective of the
   // order in which they were combind.
-  const int64 gte0_index =
+  const int64_t gte0_index =
       Cast<HloGetTupleElementInstruction>(root->operand(0))->tuple_index();
-  const int64 gte1_index =
+  const int64_t gte1_index =
       Cast<HloGetTupleElementInstruction>(root->operand(1))->tuple_index();
 
   const auto* buffer0 = store_inst->RemoteBuffers().at(gte0_index);
@@ -547,7 +547,7 @@ ENTRY top {
                   .RunOnComputation(module->entry_computation())
                   .ValueOrDie());
 
-  int64 num_loads = 0;
+  int64_t num_loads = 0;
 
   for (auto* s : module->entry_computation()->MakeInstructionPostOrder()) {
     if (is_load(s)) {

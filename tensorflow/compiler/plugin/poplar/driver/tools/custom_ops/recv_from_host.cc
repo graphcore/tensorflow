@@ -37,10 +37,10 @@ HloRecvFromHostInstruction::HloRecvFromHostInstruction(
   }
 }
 
-absl::flat_hash_set<int64> HloRecvFromHostInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloRecvFromHostInstruction::AllocatingIndices()
     const {
-  absl::flat_hash_set<int64> result;
-  for (int64 i = 0; i < operand_count(); ++i) {
+  absl::flat_hash_set<int64_t> result;
+  for (int64_t i = 0; i < operand_count(); ++i) {
     result.insert(i);
   }
   return result;
@@ -48,7 +48,7 @@ absl::flat_hash_set<int64> HloRecvFromHostInstruction::AllocatingIndices()
 
 bool HloRecvFromHostInstruction::AllocatingOutput() const { return true; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloRecvFromHostInstruction::LayoutDependencies() const {
   return {};
 }

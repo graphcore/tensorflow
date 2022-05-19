@@ -210,7 +210,7 @@ class SequenceCosts {
 
 StatusOr<HloInstructionSequence> ScheduleInstructions(
     HloComputation* comp, const HloPoplarDataflowAnalysis& dataflow_analysis,
-    const absl::flat_hash_map<const HloComputation*, int64>&
+    const absl::flat_hash_map<const HloComputation*, int64_t>&
         memory_by_computation) {
   SequenceCosts seq_costs;
   // The algorithm "only" supports computations with 2^63 - 1 instructions as
@@ -224,7 +224,7 @@ StatusOr<HloInstructionSequence> ScheduleInstructions(
 StatusOr<HloInstructionSequence> ShortestPathScheduler(
     HloComputation* computation,
     const HloPoplarDataflowAnalysis& dataflow_analysis,
-    const absl::flat_hash_map<const HloComputation*, int64>&
+    const absl::flat_hash_map<const HloComputation*, int64_t>&
         memory_by_computation) {
   TF_ASSIGN_OR_RETURN(auto sched,
                       ScheduleInstructions(computation, dataflow_analysis,
@@ -240,7 +240,7 @@ IpuSchedulerAlgorithm CreateShortestPathScheduler(
     const CompilerInformation& information) {
   return [=](HloComputation* computation,
              const HloPoplarDataflowAnalysis& dataflow_analysis,
-             const absl::flat_hash_map<const HloComputation*, int64>&
+             const absl::flat_hash_map<const HloComputation*, int64_t>&
                  memory_by_computation) {
     return ShortestPathScheduler(computation, dataflow_analysis,
                                  memory_by_computation);

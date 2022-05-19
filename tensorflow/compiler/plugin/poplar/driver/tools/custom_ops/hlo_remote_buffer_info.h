@@ -23,8 +23,8 @@ namespace poplarplugin {
 
 struct HloRemoteBufferInfo {
   std::string name;
-  int64 num_merged;
-  int64 merge_offset;
+  int64_t num_merged;
+  int64_t merge_offset;
 };
 
 }  // namespace poplarplugin

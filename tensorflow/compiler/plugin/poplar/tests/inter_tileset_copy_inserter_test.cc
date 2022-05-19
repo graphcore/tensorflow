@@ -37,7 +37,7 @@ namespace {
 
 using InterTilesetCopyInserterTest = HloTestBase;
 
-int64 resource = 0;
+int64_t resource = 0;
 
 TEST_F(InterTilesetCopyInserterTest, RemoteParameterLoadStore) {
   const auto hlo_string = R"(

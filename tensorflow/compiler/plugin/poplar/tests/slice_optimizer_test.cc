@@ -58,8 +58,8 @@ ENTRY c1 {
   EXPECT_TRUE(so.Run(module0).ValueOrDie());
 
   HloInstruction* input = module0->entry_computation()->root_instruction();
-  int64 end_index = 5;
-  for (int64 i = 0; i != 4; ++i) {
+  int64_t end_index = 5;
+  for (int64_t i = 0; i != 4; ++i) {
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApply)(input));
     HloInstruction* lhs = input->mutable_operand(0);
     const HloInstruction* rhs = input->operand(1);
@@ -68,7 +68,7 @@ ENTRY c1 {
     auto* casted = Cast<HloSliceApply>(input);
     EXPECT_EQ(casted->GetOperation(), HloOpcode::kAdd);
     EXPECT_EQ(casted->GetApplyDimension(), 0);
-    int64 slice_size = rhs->shape().dimensions(casted->GetApplyDimension());
+    int64_t slice_size = rhs->shape().dimensions(casted->GetApplyDimension());
     EXPECT_EQ(casted->GetStartIndex(), end_index - slice_size);
 
     // Check the instruction operands.
@@ -125,8 +125,8 @@ ENTRY c1 {
 
   const HloInstruction* c = FindInstruction(module0, "c");
   HloInstruction* input = module0->entry_computation()->root_instruction();
-  int64 end_index = 16;
-  for (int64 i = 0; i != 4; ++i) {
+  int64_t end_index = 16;
+  for (int64_t i = 0; i != 4; ++i) {
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApplyabY)(input));
     HloInstruction* lhs = input->mutable_operand(0);
     const HloInstruction* rhs = input->operand(1);
@@ -135,7 +135,7 @@ ENTRY c1 {
     auto* casted = Cast<HloSliceApplyabY>(input);
     EXPECT_EQ(casted->GetOperation(), HloOpcode::kSubtract);
     EXPECT_EQ(casted->GetApplyDimension(), 2);
-    int64 slice_size = rhs->shape().dimensions(casted->GetApplyDimension());
+    int64_t slice_size = rhs->shape().dimensions(casted->GetApplyDimension());
     EXPECT_EQ(casted->GetStartIndex(), end_index - slice_size);
 
     // Check the instruction operands.
@@ -193,8 +193,8 @@ ENTRY c1 {
 
   const HloInstruction* c = FindInstruction(module0, "c");
   HloInstruction* input = module0->entry_computation()->root_instruction();
-  int64 end_index = 4;
-  for (int64 i = 0; i != 4; ++i) {
+  int64_t end_index = 4;
+  for (int64_t i = 0; i != 4; ++i) {
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApplyaXb)(input));
     HloInstruction* lhs = input->mutable_operand(0);
     const HloInstruction* rhs = input->operand(1);
@@ -203,7 +203,7 @@ ENTRY c1 {
     auto* casted = Cast<HloSliceApplyaXb>(input);
     EXPECT_EQ(casted->GetOperation(), HloOpcode::kSubtract);
     EXPECT_EQ(casted->GetApplyDimension(), 3);
-    int64 slice_size = rhs->shape().dimensions(casted->GetApplyDimension());
+    int64_t slice_size = rhs->shape().dimensions(casted->GetApplyDimension());
     EXPECT_EQ(casted->GetStartIndex(), end_index - slice_size);
 
     // Check the instruction operands.
@@ -265,8 +265,8 @@ ENTRY c1 {
   const HloInstruction* c1 = FindInstruction(module0, "c1");
   const HloInstruction* c2 = FindInstruction(module0, "c2");
   HloInstruction* input = module0->entry_computation()->root_instruction();
-  int64 end_index = 4;
-  for (int64 i = 0; i != 4; ++i) {
+  int64_t end_index = 4;
+  for (int64_t i = 0; i != 4; ++i) {
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApplyaXbY)(input));
     HloInstruction* lhs = input->mutable_operand(0);
     const HloInstruction* rhs = input->operand(1);
@@ -275,7 +275,7 @@ ENTRY c1 {
     auto* casted = Cast<HloSliceApplyaXbY>(input);
     EXPECT_EQ(casted->GetOperation(), HloOpcode::kSubtract);
     EXPECT_EQ(casted->GetApplyDimension(), 3);
-    int64 slice_size = rhs->shape().dimensions(casted->GetApplyDimension());
+    int64_t slice_size = rhs->shape().dimensions(casted->GetApplyDimension());
     EXPECT_EQ(casted->GetStartIndex(), end_index - slice_size);
 
     // Check the instruction operands.
@@ -338,13 +338,13 @@ ENTRY c1 {
   SliceOptimizer so(annotations);
   EXPECT_TRUE(so.Run(module0).ValueOrDie());
 
-  int64 start_index = 0;
-  int64 parameter_index = 0;
+  int64_t start_index = 0;
+  int64_t parameter_index = 0;
   HloInstruction* input = p4;
   const std::vector<bool> is_constant{false, false, true, false, false, true};
-  const std::vector<int64> offsets{5, 2, 2, 2, 2, 3};
+  const std::vector<int64_t> offsets{5, 2, 2, 2, 2, 3};
 
-  for (int64 i = 0; i != 6; ++i) {
+  for (int64_t i = 0; i != 6; ++i) {
     if (!is_constant[i]) {
       EXPECT_EQ(input->user_count(), 1);
       input = input->users()[0];
@@ -418,14 +418,14 @@ ENTRY c1 {
   SliceOptimizer so(annotations);
   EXPECT_TRUE(so.Run(module0).ValueOrDie());
 
-  int64 start_index = 0;
-  int64 parameter_index = 0;
+  int64_t start_index = 0;
+  int64_t parameter_index = 0;
   HloInstruction* input = p4;
   const std::vector<bool> is_constant{false, false, true, false, false, true};
-  const std::vector<int64> offsets{5, 2, 2, 2, 2, 3};
+  const std::vector<int64_t> offsets{5, 2, 2, 2, 2, 3};
 
   const HloInstruction* scale = FindInstruction(module0, "scale");
-  for (int64 i = 0; i != 6; ++i) {
+  for (int64_t i = 0; i != 6; ++i) {
     if (!is_constant[i]) {
       EXPECT_EQ(input->user_count(), 1);
       input = input->users()[0];

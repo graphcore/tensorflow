@@ -49,7 +49,7 @@ REGISTER_OP("IpuSequenceSliceUnpack")
     .Attr("dtype: {float16, float32, int32}")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       // Get the total number of rows to be sliced.
-      int64 total_elements;
+      int64_t total_elements;
       c->GetAttr("total_elements", &total_elements);
 
       // Output shape is input shape with outermost dimension

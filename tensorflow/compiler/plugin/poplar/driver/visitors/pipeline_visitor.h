@@ -42,10 +42,10 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   PipelineVisitor(
       DriverGraph& graph,
       PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule,
-      int64 stage_count, const std::vector<int>& stage_ipu_mapping,
+      int64_t stage_count, const std::vector<int>& stage_ipu_mapping,
       const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
       const absl::flat_hash_set<int> stages_with_recomputation,
-      int64 num_backward_stages, CompilerResources& res,
+      int64_t num_backward_stages, CompilerResources& res,
       const DeferredArgRBVectors& inputs,
       const HloPoplarInplaceDescription& description,
       const poplar::DebugNameAndId& debug_name_and_id);
@@ -122,7 +122,7 @@ class PipelineVisitor : public InplaceDeferredVisitor {
         : graph(graph), count(std::move(count)) {}
   };
 
-  using IterationsType = absl::variant<int64, CountAndGraph>;
+  using IterationsType = absl::variant<int64_t, CountAndGraph>;
 
   virtual IterationsType RampDownAdditionalIterations(
       IterationsType iterations, const size_t overlap_length,
@@ -181,13 +181,13 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   std::vector<int> stage_ipu_mapping_;
   absl::flat_hash_map<const HloInstruction*, int> inst_stage_mapping_;
   absl::flat_hash_set<int> stages_with_recomputation_;
-  const int64 num_backward_stages_;
+  const int64_t num_backward_stages_;
   absl::flat_hash_map<int, std::unique_ptr<PipelineStageVisitor>>
       fwd_stage_visitors_;
 
   struct RepeatBlock {
     DriverProgramSequence program;
-    int64 iterations;
+    int64_t iterations;
   };
 
   virtual RepeatBlock GetPipelineRampUpSequence(

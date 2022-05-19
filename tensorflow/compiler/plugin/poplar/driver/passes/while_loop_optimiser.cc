@@ -85,17 +85,17 @@ std::vector<HloInstruction*> FindSingleUseParameters(HloComputation* comp) {
   }
   std::vector<HloInstruction*> result(
       ShapeUtil::TupleElementCount(input_tuple->shape()));
-  std::vector<int64> use_count(result.size(), 0);
+  std::vector<int64_t> use_count(result.size(), 0);
   for (auto* inst : input_tuple->users()) {
     if (inst->opcode() == HloOpcode::kGetTupleElement) {
-      int64 index = inst->tuple_index();
+      int64_t index = inst->tuple_index();
       result[index] = inst;
       ++use_count[index];
     } else {
       return {};
     }
   }
-  for (int64 i = 0; i < result.size(); ++i) {
+  for (int64_t i = 0; i < result.size(); ++i) {
     if (use_count[i] != 1) {
       result[i] = nullptr;
     }
@@ -104,11 +104,11 @@ std::vector<HloInstruction*> FindSingleUseParameters(HloComputation* comp) {
 }
 
 struct SliceAndIndex {
-  int64 input_index;
+  int64_t input_index;
   HloInstruction* dynamic_update;
-  int64 index_index;
-  SliceAndIndex(int64 input_index, HloInstruction* dynamic_update,
-                int64 index_index)
+  int64_t index_index;
+  SliceAndIndex(int64_t input_index, HloInstruction* dynamic_update,
+                int64_t index_index)
       : input_index(input_index),
         dynamic_update(dynamic_update),
         index_index(index_index) {}
@@ -149,7 +149,7 @@ absl::flat_hash_set<HloInstruction*> FindTripCounters(
   auto* root = body->root_instruction();
   auto* while_init = while_op->mutable_operand(0);
   absl::flat_hash_set<HloInstruction*> result;
-  for (int64 i = 0; i < root->operand_count(); ++i) {
+  for (int64_t i = 0; i < root->operand_count(); ++i) {
     if (!while_init->operand(i)->IsConstant() ||
         !while_init->operand(i)->literal().IsAll(0)) {
       continue;
@@ -220,7 +220,7 @@ std::vector<SliceAndIndex> FindTensorListBroadcasts(HloInstruction* while_op) {
     }
     // We have the only user of the gte element as a dynamic update, now
     // check that this is fed to the root tuple at the same index as the gte
-    int64 parameter_index = candidate_gte->tuple_index();
+    int64_t parameter_index = candidate_gte->tuple_index();
     CHECK(parameter_index < root->operand_count());
     if (root->mutable_operand(parameter_index) != updated_data) {
       VLOG(10) << "Not at correct index to be an inplace update "
@@ -267,7 +267,7 @@ bool IsWhileLoopInvariant(HloInstruction* inst, HloInstruction* user,
   }
   // Before adding this to the pipeline remove this for loop
   // as I expect it is too expensive
-  for (int64 i = 0; i < user->operands().size(); ++i) {
+  for (int64_t i = 0; i < user->operands().size(); ++i) {
     if (i == inst->tuple_index()) {
       if (inst == user->operand(i)) {
         continue;
@@ -284,14 +284,15 @@ bool IsWhileLoopInvariant(HloInstruction* inst, HloInstruction* user,
 
 // Check if we have got to the end that, it's not a get tuple
 // index of wrong element and so wouldn't be a real use.
-bool IsActualUse(HloInstruction* user, const std::stack<int64>& tuple_indices) {
+bool IsActualUse(HloInstruction* user,
+                 const std::stack<int64_t>& tuple_indices) {
   return user->opcode() != HloOpcode::kGetTupleElement ||
          user->tuple_index() == tuple_indices.top();
 }
 
 template <class ArgsTemplate>
 void FindNonTrivialUses(HloInstruction* inst, ArgsTemplate& args,
-                        std::stack<int64>& tuple_indices) {
+                        std::stack<int64_t>& tuple_indices) {
   for (auto* user : inst->users()) {
     if (user == user->parent()->root_instruction() &&
         IsActualUse(user, tuple_indices)) {
@@ -318,7 +319,7 @@ void FindNonTrivialUses(HloInstruction* inst, ArgsTemplate& args,
         break;
       }
       case HloOpcode::kTuple: {
-        for (int64 i = 0; i < user->operands().size(); ++i) {
+        for (int64_t i = 0; i < user->operands().size(); ++i) {
           args.TupleAction(user);
           if (user->mutable_operand(i) == inst) {
             tuple_indices.push(i);
@@ -361,7 +362,7 @@ struct FindUsesTemplate {
 };
 
 Uses FindNonTrivialUses(HloInstruction* inst,
-                        std::stack<int64> starting_gte_stack) {
+                        std::stack<int64_t> starting_gte_stack) {
   FindUsesTemplate args;
   FindNonTrivialUses(inst, args, starting_gte_stack);
   return {std::move(args.result)};
@@ -527,7 +528,7 @@ bool CanGuarenteeUnknownIndexIsLess(HloInstruction* while_loop,
                                     HloInstruction* slice) {
   auto call_graph = CallGraph::Build(slice->GetModule());
   KnownScalarIntegers known_numbers;
-  std::stack<int64> starting_stack;
+  std::stack<int64_t> starting_stack;
   starting_stack.push(broadcast.index_index);
   absl::InlinedVector<HloInstruction*, 1> to_visit =
       std::move(FindNonTrivialUses(while_loop, starting_stack).uses);
@@ -546,7 +547,7 @@ bool CanGuarenteeUnknownIndexIsLess(HloInstruction* while_loop,
                                             *call_graph);
     }
     if (CanWorkOutAndLessThan(inst, known_numbers)) {
-      auto new_uses = FindNonTrivialUses(inst, std::stack<int64>());
+      auto new_uses = FindNonTrivialUses(inst, std::stack<int64_t>());
       to_visit.insert(to_visit.end(), new_uses.uses.begin(),
                       new_uses.uses.end());
       known_numbers.hit_one_definately_less |= OpIsAlwaysLess(inst);
@@ -583,7 +584,7 @@ std::vector<BroadcastAndSlice> FindBroadcastsOnlyUsedBySlices(
   std::vector<BroadcastAndSlice> result;
   result.reserve(broadcasts.size());
   for (auto& broadcast : broadcasts) {
-    std::stack<int64> start;
+    std::stack<int64_t> start;
     start.push(0);
     start.push(broadcast.input_index);
     auto users = FindNonTrivialUses(while_loop, start);
@@ -687,7 +688,7 @@ static std::vector<InstructionAndShape> FindMismatchedParmeters(
   std::vector<InstructionAndShape> result;
   switch (inst->opcode()) {
     case HloOpcode::kCall: {
-      for (int64 i = 0; i < inst->operand_count(); ++i) {
+      for (int64_t i = 0; i < inst->operand_count(); ++i) {
         auto* param = inst->to_apply()->parameter_instruction(i);
         const Shape& new_shape = inst->operand(i)->shape();
         if (new_shape != param->shape()) {
@@ -806,7 +807,7 @@ StatusOr<HoistedOutput> HoistBroardcastInputs(
   TF_ASSIGN_OR_RETURN(auto live_in, WhileUtil::MakeInstructionsLiveIn(
                                         while_op, replacement_instructions));
 
-  for (int64 i = 0; i < instructions_to_replace.size(); i++) {
+  for (int64_t i = 0; i < instructions_to_replace.size(); i++) {
     auto* old_inst = FindOrDie(live_in.while_body_instruction_map,
                                instructions_to_replace[i]);
     TF_RETURN_IF_ERROR(
@@ -821,7 +822,7 @@ HloInstruction* CreateNewTupleOutput(
     const std::vector<BroadcastAndSlice>& params) {
   auto* while_inst = while_op.new_while_op;
   const auto orig_users = while_inst->users();
-  absl::flat_hash_map<int64, HloInstruction*> to_replace_outputs;
+  absl::flat_hash_map<int64_t, HloInstruction*> to_replace_outputs;
   for (const auto& param : params) {
     // The dynamic slice in the broadcast was updated to the hoisted instruction
     // in the hoisting phase
@@ -831,7 +832,7 @@ HloInstruction* CreateNewTupleOutput(
   auto* comp = while_inst->parent();
   std::vector<HloInstruction*> tuple_operands(
       ShapeUtil::TupleElementCount(while_inst->shape()), nullptr);
-  for (int64 i = 0; i < tuple_operands.size(); ++i) {
+  for (int64_t i = 0; i < tuple_operands.size(); ++i) {
     auto it = to_replace_outputs.find(i);
     if (it == to_replace_outputs.end()) {
       tuple_operands[i] =
@@ -868,8 +869,8 @@ Status RemoveTensorListBroadcasts(HloInstruction* inst,
 
 bool MakeInputsUninitialised(HloInstruction* while_loop,
                              const BroadcastAndSlice& broadcast,
-                             int64& num_uninitialised) {
-  int64 index = broadcast.broadcast.input_index;
+                             int64_t& num_uninitialised) {
+  int64_t index = broadcast.broadcast.input_index;
   auto* while_init = while_loop->mutable_operand(0);
   auto* orig = while_init->operand(index);
   if (IsPoplarInstruction(PoplarOp::Uninitialised)(orig)) {
@@ -885,7 +886,7 @@ bool MakeInputsUninitialised(HloInstruction* while_loop,
 bool MakeInputsUninitialised(
     HloInstruction* while_loop,
     const std::vector<BroadcastAndSlice>& slice_only_broadcast_params,
-    int64& num_uninitialised) {
+    int64_t& num_uninitialised) {
   bool changed = false;
   for (const auto& broadcast : slice_only_broadcast_params) {
     changed |=
@@ -896,9 +897,9 @@ bool MakeInputsUninitialised(
 
 struct IndexAndInstruction {
   HloInstruction* instruction;
-  int64 index;
+  int64_t index;
   HloInstruction* loop;
-  IndexAndInstruction(HloInstruction* instruction, int64 index,
+  IndexAndInstruction(HloInstruction* instruction, int64_t index,
                       HloInstruction* loop)
       : instruction(instruction), index(index), loop(loop) {}
   std::string ToString() const {
@@ -920,7 +921,7 @@ std::vector<IndexAndInstruction> FindWhileInvariants(HloInstruction* loop) {
 std::vector<IndexAndInstruction> FindRepeatInvariants(HloInstruction* loop) {
   std::vector<IndexAndInstruction> result;
   auto* root = loop->to_apply()->root_instruction();
-  for (int64 i = 0; i < root->operand_count(); ++i) {
+  for (int64_t i = 0; i < root->operand_count(); ++i) {
     HloInstruction* operand = root->mutable_operand(i);
     if (operand->opcode() == HloOpcode::kParameter &&
         operand->parameter_number() == i) {
@@ -977,7 +978,7 @@ google::protobuf::RepeatedField<std::int64_t> GetContractingDimensions(
 }
 
 bool IsWorthRemapping(const AllocationGroup& group) {
-  absl::flat_hash_map<HloInstruction*, int64> dot_to_contracting_dim;
+  absl::flat_hash_map<HloInstruction*, int64_t> dot_to_contracting_dim;
   for (const auto& input : group.inputs_only) {
     if (input.instruction->opcode() != HloOpcode::kDot) {
       continue;
@@ -992,7 +993,7 @@ bool IsWorthRemapping(const AllocationGroup& group) {
   // If they all have the same contracting dim then they are all ok to
   // have the same mapping
   if (absl::c_all_of(dot_to_contracting_dim,
-                     [&](const std::pair<HloInstruction*, int64>& val) {
+                     [&](const std::pair<HloInstruction*, int64_t>& val) {
                        return val.second ==
                               dot_to_contracting_dim.begin()->second;
                      })) {
@@ -1020,9 +1021,9 @@ Status RemapInput(const InputLocation& location, const CallGraph& call_graph) {
   auto* input = operand->opcode() == HloOpcode::kReshape
                     ? operand->mutable_operand(0)
                     : operand;
-  int64 index = input->opcode() == HloOpcode::kParameter
-                    ? input->parameter_number()
-                    : input->tuple_index();
+  int64_t index = input->opcode() == HloOpcode::kParameter
+                      ? input->parameter_number()
+                      : input->tuple_index();
   const auto& callsites =
       call_graph.GetNode(operand->parent()).caller_callsites();
   auto* loop = callsites[0].instruction();

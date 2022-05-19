@@ -47,7 +47,7 @@ Status DistributedBatchNormDecompose(HloInstruction* const inst) {
   HloInstruction* scale = inst->mutable_operand(1);
   HloInstruction* offset = inst->mutable_operand(2);
   const float epsilon = bn_training->epsilon();
-  const int64 feature_index = bn_training->feature_index();
+  const int64_t feature_index = bn_training->feature_index();
   const Shape& mean_var_shape = ShapeUtil::GetSubshape(inst->shape(), {1});
   CHECK_EQ(mean_var_shape, ShapeUtil::GetSubshape(inst->shape(), {2}));
 
@@ -114,7 +114,7 @@ StatusOr<bool> DistributedBatchNormDecomposer::Run(HloModule* module) {
 }
 
 DistributedBatchNormDecomposer::DistributedBatchNormDecomposer(
-    bool allow_recomputation, int64 replica_group_size)
+    bool allow_recomputation, int64_t replica_group_size)
     : allow_recomputation_(allow_recomputation),
       replica_group_size_(replica_group_size) {}
 

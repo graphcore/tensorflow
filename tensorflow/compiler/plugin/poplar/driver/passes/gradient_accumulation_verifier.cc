@@ -88,7 +88,7 @@ Status GradientAccumulationVerifier::VerifyStatefulGradientAccumulation(
     if (IsRepeatLoop(caller)) {
       // Expect the number of mini batches to accumulate to divide the
       // repeat count.
-      const int64 repeat_count = GetRepeatLoopCount(caller);
+      const int64_t repeat_count = GetRepeatLoopCount(caller);
       if (repeat_count % num_mini_batches) {
         return FailedPrecondition(
             "Detected a gradient accumulation operation with %d number of "
@@ -150,12 +150,12 @@ static Status HasGradientAccumulationInstruction(const HloInstruction* inst) {
                      inst->name());
 }
 
-StatusOr<int64> VerifyGradientAccumulationInsideComputation(
-    const HloComputation* computation, int64 parameter_index) {
+StatusOr<int64_t> VerifyGradientAccumulationInsideComputation(
+    const HloComputation* computation, int64_t parameter_index) {
   // Expect the gradient accumulator to be used serially, with the final use in
   // the root tuple. We expect all the uses to be inplace on the buffer and look
   // inside of repeat loops.
-  int64 output_index = parameter_index;
+  int64_t output_index = parameter_index;
   HloInstruction* inner_user =
       computation->parameter_instruction(parameter_index);
   do {
@@ -181,7 +181,7 @@ StatusOr<int64> VerifyGradientAccumulationInsideComputation(
           "an operand once, but it is used ",
           next_user_indices.size(), " times.");
     }
-    const int64 next_user_index = next_user_indices[0];
+    const int64_t next_user_index = next_user_indices[0];
 
     if (IsPoplarInstruction(PoplarOp::RemoteParameterStore)(next_user)) {
       inner_user = next_user;
@@ -204,7 +204,7 @@ StatusOr<int64> VerifyGradientAccumulationInsideComputation(
             "operand once, but it is used ",
             indices.size(), " times.");
       }
-      TF_ASSIGN_OR_RETURN(int64 gte_output_index,
+      TF_ASSIGN_OR_RETURN(int64_t gte_output_index,
                           VerifyGradientAccumulationInsideComputation(
                               inplace_modifier->to_apply(), indices[0]));
       TF_ASSIGN_OR_RETURN(HloInstruction * gte,
@@ -319,7 +319,7 @@ Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
 
     // Make sure that the number of iterations divides the number of mini
     // batches to accumulate.
-    const int64 repeat_count = GetRepeatLoopCount(caller);
+    const int64_t repeat_count = GetRepeatLoopCount(caller);
     const auto num_batches_to_accumulate =
         GetResourceUpdateBatchesToAccumulate(resource_update);
     if (!num_batches_to_accumulate) {
@@ -398,7 +398,7 @@ Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
                                    " to have been lowered inplace.");
       }
       HloComputation* pipeline_stage_comp = user->to_apply();
-      TF_ASSIGN_OR_RETURN(int64 output_index,
+      TF_ASSIGN_OR_RETURN(int64_t output_index,
                           VerifyGradientAccumulationInsideComputation(
                               pipeline_stage_comp, indices[0]));
 

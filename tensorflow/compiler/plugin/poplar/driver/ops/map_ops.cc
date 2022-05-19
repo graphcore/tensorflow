@@ -102,7 +102,7 @@ StatusOr<DriverProgramSequence> CreateParallelMap(
       TensorOrRemoteBufferVectors inputs,
       FindInplaceOutputs(tensor_map, res, inst, seq, debug_name_and_id));
   CHECK_EQ(inputs.size(), inst->operand_count());
-  for (int64 op = 0; op < inst->operand_count(); op++) {
+  for (int64_t op = 0; op < inst->operand_count(); op++) {
     CHECK_EQ(inputs[op].size(), CountShapes(inst->operand(op)->shape()));
   }
   MapVisitor visitor(res, inputs, output, debug_name_and_id);
@@ -174,7 +174,7 @@ StatusOr<DriverProgramSequence> CreateFusionOp(
       TensorOrRemoteBufferVectors inputs,
       FindInplaceOutputs(tensor_map, res, inst, seq, debug_name_and_id));
   CHECK_EQ(inputs.size(), inst->operand_count());
-  for (int64 op = 0; op < inst->operand_count(); op++) {
+  for (int64_t op = 0; op < inst->operand_count(); op++) {
     CHECK_EQ(inputs[op].size(), CountShapes(inst->operand(op)->shape()));
   }
 
@@ -555,7 +555,7 @@ StatusOr<std::unique_ptr<RepeatLoopVisitor>> CreateLoopVisitor(
                       ComputationHasIoTileInstructions(inst->to_apply()));
 
   // We can't overlap the IO on a loop with too few iterations.
-  const int64 repeat_count = GetRepeatLoopCount(inst);
+  const int64_t repeat_count = GetRepeatLoopCount(inst);
 
   // We also can't overlap small gradient accumulation factors.
   const bool small_gradient_accumulation =
@@ -585,7 +585,7 @@ StatusOr<DriverProgramSequence> CreateRepeatOp(
   auto& inplace_operand_set = inplace_description.GetInplaceOperandSet();
 
   // Reallocate any inputs which are inplace and non parallel-writeable
-  for (int64 i = 0; i != inst->operand_count(); ++i) {
+  for (int64_t i = 0; i != inst->operand_count(); ++i) {
     const auto& op_inputs = inputs[i];
     reallocate_input_info[i].resize(op_inputs.size());
 
@@ -635,7 +635,7 @@ TensorOrRemoteBufferVectors GetAllInstructionInputs(
     DriverProgramSequence& seq, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   TensorOrRemoteBufferVectors inputs(inst->operand_count());
-  for (int64 i = 0; i != inst->operand_count(); ++i) {
+  for (int64_t i = 0; i != inst->operand_count(); ++i) {
     inputs[i] =
         FindInstructionInputs(tensor_map, res, inst, i, seq, debug_name_and_id);
   }
@@ -677,11 +677,11 @@ StatusOr<DriverProgramSequence> CreateFunctionOp(
   }
 
   // Get information about remote buffer inputs.
-  const int64 num_modified_remote_buffer_inputs =
+  const int64_t num_modified_remote_buffer_inputs =
       GetFunctionNumberModifiedRemoteBufferInputs(inst);
-  const int64 num_unmodified_remote_buffer_inputs =
+  const int64_t num_unmodified_remote_buffer_inputs =
       GetFunctionNumberUnmodifiedRemoteBufferInputs(inst);
-  const int64 num_remote_buffer_inputs =
+  const int64_t num_remote_buffer_inputs =
       num_modified_remote_buffer_inputs + num_unmodified_remote_buffer_inputs;
   const bool partitioned_elementwise_cluster =
       GetFunctionPartitionedElementwiseCluster(inst);
@@ -707,7 +707,7 @@ StatusOr<DriverProgramSequence> CreateFunctionOp(
   // Now that the all the inputs have been allocated and propagated, get them.
   TensorOrRemoteBufferVectors inputs =
       GetAllInstructionInputs(res, inst, seq, tensor_map, debug_name_and_id);
-  for (int64 o = 0; o < inst->operand_count(); o++) {
+  for (int64_t o = 0; o < inst->operand_count(); o++) {
     auto& comp_inputs = subcomp_visitor->inputs()[o];
     auto& inst_inputs = inputs[o];
     if (comp_inputs.size() != inst_inputs.size()) {
@@ -755,12 +755,12 @@ StatusOr<DriverProgramSequence> CreateFunctionOp(
 
   // Propagate the outputs.
   auto& outputs = subcomp_visitor->outputs();
-  int64 flat_tuple_index = 0;
+  int64_t flat_tuple_index = 0;
   auto output_locations = ShapeUtil::GetLeafShapes(output);
 
   for (const auto& output_location : output_locations) {
     const ShapeIndex& shape_index = output_location.index;
-    const int64 tuple_index = shape_index.empty() ? 0 : shape_index[0];
+    const int64_t tuple_index = shape_index.empty() ? 0 : shape_index[0];
     auto& output = outputs[flat_tuple_index];
 
     if (tuple_index < num_modified_remote_buffer_inputs) {
@@ -818,7 +818,7 @@ StatusOr<DriverProgramSequence> CreatePipelineOp(
 
 static DriverTensor GetGradientAccumulationCountTensor(
     const HloInstruction* inst, DeferredArgRBVectors& inputs) {
-  int64 index = GetAccumulationCountOperandIndex(inst);
+  int64_t index = GetAccumulationCountOperandIndex(inst);
   const auto& input = inputs[index];
   CHECK_EQ(input.size(), 1);
   CHECK(static_cast<bool>(input[0]));
@@ -849,7 +849,7 @@ StatusOr<DriverProgramSequence> CreatePipelineOp(
 
   auto gradient_accumulation_count = GetGradientAccumulationCount(inst);
 
-  int64 repeat_count = cfg.call_config().pipeline_config().repeat_count();
+  int64_t repeat_count = cfg.call_config().pipeline_config().repeat_count();
 
   CHECK_EQ(inputs.size(), inst->operand_count());
 
@@ -1080,7 +1080,7 @@ StatusOr<DriverProgramSequence> CreateConditionalOp(
                                 {debug_name_and_id}));
   } else {
     std::vector<std::pair<int32, poplar::program::Program>> cases;
-    for (int64 c = 0; c < static_cast<int64>(seqs.size()) - 1; c++) {
+    for (int64_t c = 0; c < static_cast<int64_t>(seqs.size()) - 1; c++) {
       cases.push_back(std::make_pair(c, seqs[c]));
     }
     seq.add(

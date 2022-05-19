@@ -29,17 +29,18 @@ namespace xla {
 namespace poplarplugin {
 
 HloArgMinMaxBase::HloArgMinMaxBase(HloInstruction* input,
-                                   const Shape& output_shape, int64 axis,
+                                   const Shape& output_shape, int64_t axis,
                                    const PoplarOp& opcode)
     : HloPoplarInstruction(output_shape, {input}, opcode, axis), axis(axis) {}
 
-absl::flat_hash_set<int64> HloArgMinMaxBase::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloArgMinMaxBase::AllocatingIndices() const {
   return {};
 }
 
 bool HloArgMinMaxBase::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloArgMinMaxBase::LayoutDependencies() const {
+absl::flat_hash_map<int64_t, int64_t> HloArgMinMaxBase::LayoutDependencies()
+    const {
   return {};
 }
 
@@ -77,7 +78,7 @@ std::unique_ptr<HloInstruction> HloArgMax::CloneWithNewOperandsImpl(
 
 std::unique_ptr<HloInstruction> CreateHloArgMax(HloInstruction* input,
                                                 const Shape& shape,
-                                                int64 axis) {
+                                                int64_t axis) {
   return absl::make_unique<HloArgMax>(input, shape, axis);
 }
 
@@ -90,7 +91,7 @@ std::unique_ptr<HloInstruction> HloArgMin::CloneWithNewOperandsImpl(
 
 std::unique_ptr<HloInstruction> CreateHloArgMin(HloInstruction* input,
                                                 const Shape& shape,
-                                                int64 axis) {
+                                                int64_t axis) {
   return absl::make_unique<HloArgMin>(input, shape, axis);
 }
 
@@ -103,7 +104,7 @@ std::unique_ptr<HloInstruction> HloMaxAndArgMax::CloneWithNewOperandsImpl(
 
 std::unique_ptr<HloInstruction> CreateHloMaxAndArgMax(HloInstruction* input,
                                                       const Shape& shape,
-                                                      int64 axis) {
+                                                      int64_t axis) {
   return absl::make_unique<HloMaxAndArgMax>(input, shape, axis);
 }
 
@@ -116,7 +117,7 @@ std::unique_ptr<HloInstruction> HloMinAndArgMin::CloneWithNewOperandsImpl(
 
 std::unique_ptr<HloInstruction> CreateHloMinAndArgMin(HloInstruction* input,
                                                       const Shape& shape,
-                                                      int64 axis) {
+                                                      int64_t axis) {
   return absl::make_unique<HloMinAndArgMin>(input, shape, axis);
 }
 
@@ -127,7 +128,8 @@ static HloPoplarInstructionFactory argmax_factory(
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
-      TF_ASSIGN_OR_RETURN(int64 axis, attribute_map.GetAttributeAsInt("axis"));
+      TF_ASSIGN_OR_RETURN(int64_t axis,
+                          attribute_map.GetAttributeAsInt("axis"));
 
       return CreateHloArgMax(call->mutable_operand(0), call->shape(), axis);
     });
@@ -137,7 +139,8 @@ static HloPoplarInstructionFactory argmin_factory(
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
-      TF_ASSIGN_OR_RETURN(int64 axis, attribute_map.GetAttributeAsInt("axis"));
+      TF_ASSIGN_OR_RETURN(int64_t axis,
+                          attribute_map.GetAttributeAsInt("axis"));
 
       return CreateHloArgMin(call->mutable_operand(0), call->shape(), axis);
     });

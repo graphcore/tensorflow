@@ -64,11 +64,11 @@ xla::StatusOr<ipu::TensorShape> ConvertShapeToIpuTensorInfo(
   TF_ASSIGN_OR_RETURN(ipu::DataType data_type,
                       PrimitiveTypeToDataType(xla_shape.element_type()));
 
-  // Convert from vector<int64> to vector<int64_t> (long long int vs long
+  // Convert from vector<int64_t> to vector<int64_t> (long long int vs long
   // int)
   std::vector<int64_t> dimensions;
   absl::c_transform(xla_shape.dimensions(), std::back_inserter(dimensions),
-                    [](int64 dim) { return dim; });
+                    [](int64_t dim) { return dim; });
 
   return ipu::TensorShape{dimensions, data_type};
 }
@@ -202,7 +202,7 @@ class DatasetExtractor : public OpKernel {
           std::vector<int64_t> dimensions;
           absl::c_transform(xla_shape.dimensions(),
                             std::back_inserter(dimensions),
-                            [](int64 dim) { return dim; });
+                            [](int64_t dim) { return dim; });
           ipu::TensorShape shape(dimensions, data_type);
           std::string name;
           if (name_.empty()) {

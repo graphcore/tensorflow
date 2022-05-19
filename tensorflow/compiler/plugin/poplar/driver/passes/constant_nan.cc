@@ -43,11 +43,11 @@ StatusOr<bool> ConstantNaN::Run(HloModule* module) {
       const Literal& literal = inst->literal();
 
       if (ShapeUtil::ElementIsFloating(shape)) {
-        int64 num_elements = ShapeUtil::ElementsIn(shape);
+        int64_t num_elements = ShapeUtil::ElementsIn(shape);
         TF_ASSIGN_OR_RETURN(Literal literal_flat,
                             literal.Reshape({num_elements}));
 
-        for (int64 i = 0; i < num_elements; i++) {
+        for (int64_t i = 0; i < num_elements; i++) {
           bool error = false;
           switch (type) {
             case F16: {

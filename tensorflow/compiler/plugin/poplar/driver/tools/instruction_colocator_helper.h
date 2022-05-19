@@ -47,14 +47,14 @@ class InstructionColocatorHelper {
   virtual bool CanColocateSharding(const HloInstruction* a,
                                    const HloInstruction* b) const;
   // Returns how many bytes to colocate.
-  virtual int64 GetColocateBufferSize(
+  virtual int64_t GetColocateBufferSize(
       const CompilerInformation& information) const = 0;
 
-  int64 GetID() const;
+  int64_t GetID() const;
 
   // Returns size in bytes of the given instruction, to be compared with the
   // remaining buffer size to determine whether to include it in the cluster.
-  virtual int64 ByteSizeOf(const HloInstruction* inst) const;
+  virtual int64_t ByteSizeOf(const HloInstruction* inst) const;
 
   virtual StatusOr<std::vector<HloInstruction*>>
   CombineAndReplaceColocatedInstructions(
@@ -68,8 +68,8 @@ class InstructionColocatorHelper {
 
  private:
   // ID used for determinism in scheduling.
-  static int64 GetNextID();
-  int64 id_;
+  static int64_t GetNextID();
+  int64_t id_;
 
   bool requires_matching_element_types_;
 };
@@ -103,7 +103,7 @@ class ColocatorCluster {
 
   // Add an element to cluster. Returns whether all the clusters should be
   // scheduled given the collocator type.
-  bool Add(ClusterType cluster, int64 size) {
+  bool Add(ClusterType cluster, int64_t size) {
     cluster_.push_back(cluster);
     cluster_size_ += size;
     return cluster_size_ >=
@@ -125,7 +125,7 @@ class ColocatorCluster {
   std::vector<ClusterType> cluster_;
   const InstructionColocatorHelper* collocator_type_;
   const CompilerInformation& information_;
-  int64 cluster_size_;
+  int64_t cluster_size_;
 };
 
 }  // namespace poplarplugin

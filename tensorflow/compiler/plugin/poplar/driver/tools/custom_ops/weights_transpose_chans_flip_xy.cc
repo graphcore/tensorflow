@@ -31,7 +31,7 @@ namespace poplarplugin {
 namespace {
 Shape GetWeightsShape(const Shape& shape,
                       const ConvolutionDimensionNumbers& conv_dims) {
-  std::vector<int64> dims;
+  std::vector<int64_t> dims;
   absl::c_copy(shape.dimensions(), std::back_inserter(dims));
   std::swap(dims[conv_dims.kernel_input_feature_dimension()],
             dims[conv_dims.kernel_output_feature_dimension()]);
@@ -44,7 +44,7 @@ HloWeightsTransposeChansFlipXYInstruction::
         HloInstruction* operand,
         const ConvolutionDimensionNumbers& conv_dimension_numbers,
         const Shape& conv_input_shape, const Shape& conv_output_shape,
-        xla::Window window, int64 feature_group_count)
+        xla::Window window, int64_t feature_group_count)
     : HloPoplarInstruction(
           GetWeightsShape(operand->shape(), conv_dimension_numbers), {operand},
           PoplarOp::WeightsTransposeChansFlipXY),
@@ -64,7 +64,7 @@ const Shape& HloWeightsTransposeChansFlipXYInstruction::ConvOutputShape()
   return conv_output_shape_;
 }
 
-absl::flat_hash_set<int64>
+absl::flat_hash_set<int64_t>
 HloWeightsTransposeChansFlipXYInstruction::AllocatingIndices() const {
   return {0};
 }
@@ -73,7 +73,7 @@ bool HloWeightsTransposeChansFlipXYInstruction::AllocatingOutput() const {
   return false;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloWeightsTransposeChansFlipXYInstruction::LayoutDependencies() const {
   return {};
 }
@@ -136,7 +136,7 @@ std::unique_ptr<HloInstruction> CreateHloWeightsTransposeChansFlipXY(
     HloInstruction* operand,
     const ConvolutionDimensionNumbers& conv_dimension_numbers,
     const Shape& conv_input_shape, const Shape& conv_output_shape,
-    xla::Window window, int64 feature_group_count) {
+    xla::Window window, int64_t feature_group_count) {
   return absl::make_unique<HloWeightsTransposeChansFlipXYInstruction>(
       operand, conv_dimension_numbers, conv_input_shape, conv_output_shape,
       window, feature_group_count);

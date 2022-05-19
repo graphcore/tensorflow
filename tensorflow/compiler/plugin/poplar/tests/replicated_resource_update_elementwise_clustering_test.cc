@@ -298,7 +298,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 2);
 
-  for (int64 i = 0; i != 2; i++) {
+  for (int64_t i = 0; i != 2; i++) {
     auto& cluster = clusters[1 - i];
     HloInstruction* offloaded_reshape =
         offloaded_inputs_new[i]->mutable_operand(1);
@@ -410,7 +410,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
 
-  const int64 shard_size = replica_partition ? 64 : 128;
+  const int64_t shard_size = replica_partition ? 64 : 128;
   auto& cluster = *std::begin(clusters);
   EXPECT_THAT(cluster.GetClusterSize(), 128);
   EXPECT_THAT(cluster.GetAlignedClusterSize(), 128);
@@ -611,7 +611,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   ASSERT_THAT(clusters.size(), 1);
 
   auto& cluster = *std::begin(clusters);
-  const int64 shard_size = replica_partition ? 64 : 128;
+  const int64_t shard_size = replica_partition ? 64 : 128;
   EXPECT_THAT(cluster.GetClusterSize(), 128);
   EXPECT_THAT(cluster.GetAlignedClusterSize(), 128);
   EXPECT_THAT(cluster.GetShardSize(), shard_size);
@@ -803,7 +803,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
 
-  const int64 shard_size = replica_partition ? 64 : 128;
+  const int64_t shard_size = replica_partition ? 64 : 128;
   auto& cluster = *std::begin(clusters);
   EXPECT_THAT(cluster.GetClusterSize(), 128);
   EXPECT_THAT(cluster.GetAlignedClusterSize(), 128);
@@ -901,7 +901,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
 }
 
 std::string GetHlo(bool partition_offloaded_variables,
-                   const std::vector<int64>& dimensions,
+                   const std::vector<int64_t>& dimensions,
                    const PrimitiveType& element_type,
                    const PrimitiveType& remote_buffer_element_type) {
   const std::string hlo = R"(
@@ -981,10 +981,10 @@ std::string GetHlo(bool partition_offloaded_variables,
 
 struct ReplicatedResourceUpdateElementwiseClusteringShapeTestSpec {
   bool partition_offloaded_variables;
-  std::vector<int64> dimensions;
-  int64 cluster_size;
-  int64 aligned_cluster_size;
-  int64 shard_size;
+  std::vector<int64_t> dimensions;
+  int64_t cluster_size;
+  int64_t aligned_cluster_size;
+  int64_t shard_size;
   PrimitiveType element_type;
   PrimitiveType remote_buffer_element_type;
   bool padded_and_sliced;
@@ -1255,9 +1255,9 @@ INSTANTIATE_TEST_SUITE_P(
              4, 2, 2, 0, 0},
         }));
 
-int64 GetCount(const HloComputation* comp,
-               std::function<bool(const HloInstruction*)> pred) {
-  int64 count = 0;
+int64_t GetCount(const HloComputation* comp,
+                 std::function<bool(const HloInstruction*)> pred) {
+  int64_t count = 0;
   for (auto inst : comp->instructions()) {
     count += pred(inst);
     for (auto called_comp : inst->called_computations()) {
@@ -1408,8 +1408,8 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
   }
   )";
 
-  const int64 partition_replication_factor = 2;
-  const int64 global_replication_factor = 8;
+  const int64_t partition_replication_factor = 2;
+  const int64_t global_replication_factor = 8;
 
   auto config = GetModuleConfigForTest();
   config.set_argument_input_indices({});
@@ -1451,7 +1451,7 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
 
-  const int64 shard_size = 128 / partition_replication_factor;
+  const int64_t shard_size = 128 / partition_replication_factor;
   auto& cluster = *std::begin(clusters);
   EXPECT_THAT(cluster.GetClusterSize(), 128);
   EXPECT_THAT(cluster.GetAlignedClusterSize(), 128);

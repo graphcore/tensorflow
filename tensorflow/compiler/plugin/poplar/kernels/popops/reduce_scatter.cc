@@ -40,15 +40,15 @@ class PopopsReduceScatter : public XlaOpKernel, IpuOpKernel {
     // Build xla output shape.
     std::vector<xla::Shape> xla_output_shapes;
     xla_output_shapes.reserve(ctx->num_inputs());
-    for (int64 i = 0; i < ctx->num_inputs(); i++) {
+    for (int64_t i = 0; i < ctx->num_inputs(); i++) {
       const TensorShape input_shape = ctx->InputShape(i);
       OP_REQUIRES(ctx, TensorShapeUtils::IsVector(input_shape),
                   errors::InvalidArgument("All inputs must be vectors"));
 
       // Calculate output shape based on input shape and number of replicas.
-      const int64 input_length = input_shape.dim_size(0);
-      const int64 output_length =
-          MathUtil::CeilOfRatio<int64>(input_length, replica_group_size_);
+      const int64_t input_length = input_shape.dim_size(0);
+      const int64_t output_length =
+          MathUtil::CeilOfRatio<int64_t>(input_length, replica_group_size_);
 
       TensorShape output_shape;
       output_shape.AddDim(output_length);
@@ -78,7 +78,7 @@ class PopopsReduceScatter : public XlaOpKernel, IpuOpKernel {
         xla_output_shape, attribute_map_.Serialise());
 
     // Get each output value with a GTE.
-    for (int64 i = 0; i != ctx->num_inputs(); ++i) {
+    for (int64_t i = 0; i != ctx->num_inputs(); ++i) {
       ctx->SetOutput(i, xla::GetTupleElement(call_output, i));
     }
   }
@@ -86,7 +86,7 @@ class PopopsReduceScatter : public XlaOpKernel, IpuOpKernel {
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsReduceScatter);
 
-  int64 replica_group_size_;
+  int64_t replica_group_size_;
   std::string op_;
 };
 

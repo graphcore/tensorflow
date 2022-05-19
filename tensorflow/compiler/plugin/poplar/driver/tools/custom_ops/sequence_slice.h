@@ -41,8 +41,8 @@ class HloSequenceSliceInstruction : public HloPoplarInstruction {
                               HloInstruction* const dst_offsets,
                               bool zero_unused, PoplarOp op);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool AllocatingOutput() const override;
@@ -72,16 +72,16 @@ class HloSequenceSliceUnpackInstruction : public HloSequenceSliceInstruction {
                                     HloInstruction* const num_elems,
                                     HloInstruction* const src_offsets,
                                     HloInstruction* const dst_offsets,
-                                    bool zero_unused, int64 total_elements);
+                                    bool zero_unused, int64_t total_elements);
 
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool AllocatingOutput() const override;
 
-  int64 TotalElements() const;
+  int64_t TotalElements() const;
 
  protected:
-  const int64 total_elements;
+  const int64_t total_elements;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(

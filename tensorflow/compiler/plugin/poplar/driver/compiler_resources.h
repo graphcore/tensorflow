@@ -57,9 +57,9 @@ struct HloResources {
       uint32 partition_replication_factor, bool merge_infeed_io_copies,
       bool always_rearrange_copies_on_host,
       IpuSchedulingAlgorithm scheduler_selection, bool recomputation_enabled,
-      int64 experimental_distributed_batch_norm_replica_group_size,
+      int64_t experimental_distributed_batch_norm_replica_group_size,
       bool remote_memory_supported, bool enable_experimental_prng_stability,
-      bool enable_fast_math, int64 num_io_tiles,
+      bool enable_fast_math, int64_t num_io_tiles,
       double io_tile_available_memory_proportion, bool enable_progress_bar)
       : annotations(module),
         information(std::move(information)),
@@ -112,7 +112,7 @@ struct HloResources {
 
   bool recomputation_enabled;
 
-  int64 experimental_distributed_batch_norm_replica_group_size;
+  int64_t experimental_distributed_batch_norm_replica_group_size;
 
   bool remote_memory_supported;
 
@@ -120,11 +120,11 @@ struct HloResources {
 
   bool enable_fast_math;
 
-  int64 num_io_tiles;
+  int64_t num_io_tiles;
 
   double io_tile_available_memory_proportion;
 
-  int64 num_uninitialised = 0;  // to help guarentee they are all unique
+  int64_t num_uninitialised = 0;  // to help guarentee they are all unique
 
   absl::flat_hash_map<const HloInstruction*, std::uint64_t>
       hlo_instruction_to_debug_id_mapping;
@@ -195,9 +195,9 @@ struct CompilerResources : public HloResources {
 
   poplar::OptionFlags gcl_options;
 
-  int64 triangular_solve_expander_block_size;
+  int64_t triangular_solve_expander_block_size;
 
-  int64 cholesky_block_size;
+  int64_t cholesky_block_size;
 
   std::unique_ptr<CallGraph> module_call_graph;
 
@@ -241,12 +241,12 @@ struct CompilerResources : public HloResources {
       bool always_rearrange_copies_on_host,
       IpuSchedulingAlgorithm scheduler_selection, bool recomputation_enabled,
       bool use_stable_norm_statistics,
-      int64 experimental_distributed_batch_norm_replica_group_size,
+      int64_t experimental_distributed_batch_norm_replica_group_size,
       bool remote_memory_supported, poplar::OptionFlags gcl_options,
-      int64 triangular_solve_expander_block_size, int64 cholesky_block_size,
+      int64_t triangular_solve_expander_block_size, int64_t cholesky_block_size,
       bool enable_experimental_remote_buffer_embedding,
       bool enable_experimental_prng_stability, bool enable_fast_math,
-      int64 num_io_tiles, double io_tile_available_memory_proportion,
+      int64_t num_io_tiles, double io_tile_available_memory_proportion,
       bool enable_progress_bar)
       : HloResources(
             module, information, floating_point_behaviour, replication_factor,

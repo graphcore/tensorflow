@@ -31,8 +31,8 @@ namespace {
 
 using OutlineRemoteBuffersTest = HloTestBase;
 
-std::string GetValidHlo(int64 n = 0, int64 replication_factor = 1,
-                        int64 shard_size = 0) {
+std::string GetValidHlo(int64_t n = 0, int64_t replication_factor = 1,
+                        int64_t shard_size = 0) {
   std::string hlo = R"(
 HloModule module
 
@@ -162,8 +162,9 @@ ENTRY main {
   return hlo;
 }
 
-std::string GetElementwiseClusterHlo(int64 n = 0, int64 replication_factor = 1,
-                                     int64 shard_size = 0) {
+std::string GetElementwiseClusterHlo(int64_t n = 0,
+                                     int64_t replication_factor = 1,
+                                     int64_t shard_size = 0) {
   std::string hlo = R"(
 HloModule module
 

@@ -37,37 +37,37 @@ class RemoteBufferInputsOutputsInfos {
 
   // Get the replication factor for a parameter load instruction - the index is
   // *before* permutation.
-  uint64 GetLoadReplicationFactor(int64 index) const;
+  uint64 GetLoadReplicationFactor(int64_t index) const;
 
   // Number of inputs/outputs which are loaded/stored.
-  int64 GetNumModifiedLoadStores() const;
+  int64_t GetNumModifiedLoadStores() const;
 
   // Number of inputs which are loaded only.
-  int64 GetNumUnmodifiedLoads() const;
+  int64_t GetNumUnmodifiedLoads() const;
 
   // Number of total load inputs (both modified and unmodified).
-  int64 GetNumLoadInputs() const;
+  int64_t GetNumLoadInputs() const;
 
   // Get the replication factors.
-  const absl::flat_hash_map<int64, uint64>& GetReplicationFactors() const;
+  const absl::flat_hash_map<int64_t, uint64>& GetReplicationFactors() const;
 
-  const std::vector<int64>& GetInputsOldToNewPermutation() const;
-  const std::vector<int64>& GetInputsNewToOldPermutation() const;
-  const std::vector<int64>& GetOutputsOldToNewPermutation() const;
-  const std::vector<int64>& GetOutputsNewToOldPermutation() const;
+  const std::vector<int64_t>& GetInputsOldToNewPermutation() const;
+  const std::vector<int64_t>& GetInputsNewToOldPermutation() const;
+  const std::vector<int64_t>& GetOutputsOldToNewPermutation() const;
+  const std::vector<int64_t>& GetOutputsNewToOldPermutation() const;
 
   bool operator==(const RemoteBufferInputsOutputsInfos& other) const;
   bool operator!=(const RemoteBufferInputsOutputsInfos& other) const;
 
  private:
   // Store both kinds of permutations for quick lookup.
-  std::vector<int64> inputs_old_to_new_permutation_;
-  std::vector<int64> inputs_new_to_old_permutation_;
-  std::vector<int64> outputs_old_to_new_permutation_;
-  std::vector<int64> outputs_new_to_old_permutation_;
-  absl::flat_hash_map<int64, uint64> input_to_replication_factor_;
-  int64 num_modified_load_stores_;
-  int64 num_unmodified_loads_;
+  std::vector<int64_t> inputs_old_to_new_permutation_;
+  std::vector<int64_t> inputs_new_to_old_permutation_;
+  std::vector<int64_t> outputs_old_to_new_permutation_;
+  std::vector<int64_t> outputs_new_to_old_permutation_;
+  absl::flat_hash_map<int64_t, uint64> input_to_replication_factor_;
+  int64_t num_modified_load_stores_;
+  int64_t num_unmodified_loads_;
 };
 
 /**

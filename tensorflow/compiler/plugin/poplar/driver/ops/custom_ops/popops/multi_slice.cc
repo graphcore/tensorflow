@@ -60,7 +60,7 @@ absl::optional<std::vector<unsigned>> GetConstantIndices(
     }
 
     const auto dim_product =
-        absl::c_accumulate(dims, 1, std::multiplies<int64>());
+        absl::c_accumulate(dims, 1, std::multiplies<int64_t>());
 
     if (*max_dim != dim_product) {
       return absl::nullopt;
@@ -195,7 +195,7 @@ class MultiSliceOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiSliceOp");
     const HloInstruction* inst = tensor_target.tgt;
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
     switch (input_index) {
       case 0: {
@@ -365,7 +365,7 @@ class MultiUpdateOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiUpdateOp");
     const HloInstruction* inst = tensor_target.tgt;
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
     switch (input_index) {
       case 0: {
@@ -492,7 +492,7 @@ class StaticMultiUpdateAddOp : public PoplarOpDef {
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "StaticMultiUpdateAddOp");
-    const int64 allocation_index = tensor_target.input_index;
+    const int64_t allocation_index = tensor_target.input_index;
     const auto inst =
         Cast<HloStaticMultiUpdateAddInstruction>(tensor_target.tgt);
 
@@ -502,7 +502,7 @@ class StaticMultiUpdateAddOp : public PoplarOpDef {
     }
 
     const HloInstruction* layout = *tensor_target.layout;
-    const int64 layout_output_idx = *tensor_target.layout_output_idx;
+    const int64_t layout_output_idx = *tensor_target.layout_output_idx;
     const auto outputs = FindInstructionOutputs(tensor_map, res, layout);
     const DriverTensor layout_tensor = outputs[layout_output_idx];
 

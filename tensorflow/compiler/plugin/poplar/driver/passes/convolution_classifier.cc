@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 
 #include <set>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
@@ -97,14 +98,14 @@ bool IsOuterProductOfVectors(const HloInstruction* inst) {
 HloInstruction* FindOperand(HloInstruction* inst,
                             const std::unique_ptr<CallGraph>& call_graph) {
   HloInstruction* source = inst;
-  std::vector<int64> tuple_stack;
+  std::vector<int64_t> tuple_stack;
   bool done = false;
   while (!done) {
     if (source->opcode() == HloOpcode::kParameter) {
       const auto* comp = source->parent();
       const auto& sites = call_graph->GetNode(comp).caller_callsites();
       if (sites.size() > 0) {
-        int64 param_num = source->parameter_number();
+        int64_t param_num = source->parameter_number();
         source = sites[0].instruction()->mutable_operand(param_num);
       } else {
         done = true;
@@ -115,7 +116,7 @@ HloInstruction* FindOperand(HloInstruction* inst,
       source = source->mutable_operand(0);
     } else if (source->opcode() == HloOpcode::kTuple) {
       // pull tuple element index off stack and move to that operand
-      int64 op_num = tuple_stack.back();
+      int64_t op_num = tuple_stack.back();
       tuple_stack.pop_back();
       source = source->mutable_operand(op_num);
     } else if (IsTransposeLike(source)) {

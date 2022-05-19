@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
 
+#include <map>
 #include <queue>
 #include <set>
 #include <stack>
@@ -37,11 +38,11 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-absl::optional<int64> GetOperandIndexForNodeId(
+absl::optional<int64_t> GetOperandIndexForNodeId(
     const HloMatcherNode& pattern_node, const NodeId& operand_id) {
   auto it = absl::c_find(pattern_node.GetOperands(), operand_id);
   return it != pattern_node.GetOperands().end()
-             ? absl::optional<int64>(
+             ? absl::optional<int64_t>(
                    std::distance(pattern_node.GetOperands().begin(), it))
              : absl::nullopt;
 }
@@ -461,7 +462,7 @@ std::pair<MatcherGraph, MatcherGraph> HloMatcherPattern::VerifyAndGetGraphs() {
   // Make sure inputs are unique and that they point to a label in the pattern.
   absl::flat_hash_set<NodeId> inputs_set;
   for (auto input : inputs) {
-    if (input < 0 || input >= static_cast<int64>(pattern_nodes.size())) {
+    if (input < 0 || input >= static_cast<int64_t>(pattern_nodes.size())) {
       throw std::invalid_argument(prefix + "Input with label " +
                                   std::to_string(input) +
                                   " does not exist in the pattern.");
@@ -478,7 +479,7 @@ std::pair<MatcherGraph, MatcherGraph> HloMatcherPattern::VerifyAndGetGraphs() {
   // Make sure outputs are unique and that they point to a label in the pattern.
   absl::flat_hash_set<NodeId> outputs_set;
   for (auto output : outputs) {
-    if (output < 0 || output >= static_cast<int64>(pattern_nodes.size())) {
+    if (output < 0 || output >= static_cast<int64_t>(pattern_nodes.size())) {
       throw std::invalid_argument(prefix + "Output with label " +
                                   std::to_string(output) +
                                   " does not exist in the pattern.");
@@ -504,7 +505,7 @@ std::pair<MatcherGraph, MatcherGraph> HloMatcherPattern::VerifyAndGetGraphs() {
 
   const auto get_operands = [this, &prefix](NodeId label) {
     // Verify that the node with label is defined in the pattern.
-    if (label < 0 || label >= static_cast<int64>(pattern_nodes.size())) {
+    if (label < 0 || label >= static_cast<int64_t>(pattern_nodes.size())) {
       throw std::invalid_argument(prefix + "Unknown node " +
                                   std::to_string(label) +
                                   " which was not defined in the pattern.");
@@ -642,10 +643,10 @@ std::set<HloInstruction*> HloMatcher::GetAssociativeSet(HloInstruction* root) {
     if (current_inst->opcode() == root->opcode() &&
         ShapeUtil::Equal(current_inst->shape(), root->shape())) {
       result.insert(current_inst);
-      for (int64 i = 0; i < current_inst->operand_count(); i++) {
+      for (int64_t i = 0; i < current_inst->operand_count(); i++) {
         auto* operand = current_inst->mutable_operand(i);
         if (result.count(operand) == 0 && operand->user_count() == 1 &&
-            current_depth < static_cast<int64>(look_through_max_depth_)) {
+            current_depth < static_cast<int64_t>(look_through_max_depth_)) {
           to_visit.insert({operand, current_depth + 1});
         }
       }
@@ -704,7 +705,7 @@ absl::optional<Trace> HloMatcher::FindNextMatchingOp(
         current.back().inst->mutable_operand(current.back().op_idx);
     visited.insert(current_inst);
 
-    for (int64 i = 0; i < current_inst->operand_count(); i++) {
+    for (int64_t i = 0; i < current_inst->operand_count(); i++) {
       auto* operand = current_inst->mutable_operand(i);
 
       auto next_trace = current;
@@ -739,7 +740,7 @@ StatusOr<bool> HloMatcher::MatchPatternSingleOutput(
       pattern.GetPatternNodes().size());
 
   // Create lookup for input indexes to parameter number
-  std::map<NodeId, int64> input_id_to_param_num;
+  std::map<NodeId, int64_t> input_id_to_param_num;
   for (size_t i = 0; i < pattern.GetInputs().size(); i++) {
     input_id_to_param_num[pattern.GetInputs()[i]] = i;
   }
@@ -866,11 +867,11 @@ StatusOr<bool> HloMatcher::MatchPattern(HloInstruction* root,
 
   if (matched) {
     // Optional unique device this fusion will be performed on.
-    absl::optional<int64> sharding_device = absl::nullopt;
+    absl::optional<int64_t> sharding_device = absl::nullopt;
     if (requires_unique_sharding_) {
       // Check that all the instructions have compatible sharding - i.e. all
       // non-input instructions in the pattern are using the same unique device.
-      absl::flat_hash_set<int64> sharding_devices;
+      absl::flat_hash_set<int64_t> sharding_devices;
 
       for (auto pair : match.instruction_mapping) {
         NodeId id = pair.first;
@@ -1082,7 +1083,7 @@ Status HloMatcher::RemoveUnusedInstructions(const HloMatcherMatched& matched) {
 StatusOr<HloInstruction*> HloMatcher::OutlineExpressionFromComputation(
     const HloMatcherMatched& matched,
     const std::string& outlined_computation_name,
-    const absl::optional<int64> sharding_device,
+    const absl::optional<int64_t> sharding_device,
     std::vector<HloInstruction*>&& forced_parameters) {
   const auto& pattern = patterns_[matched.pattern_idx];
   return !pattern.GetReplaceFn()
@@ -1097,7 +1098,7 @@ StatusOr<HloInstruction*> HloMatcher::OutlineExpressionFromComputation(
 StatusOr<HloInstruction*> HloMatcher::OutlineFusionFromComputation(
     const HloMatcherMatched& matched,
     const std::string& outlined_computation_name,
-    const absl::optional<int64> sharding_device,
+    const absl::optional<int64_t> sharding_device,
     std::vector<HloInstruction*>&& forced_parameters) {
   HloComputation* computation = matched.computation;
   const auto& pattern = patterns_[matched.pattern_idx];
@@ -1178,7 +1179,7 @@ StatusOr<HloInstruction*> HloMatcher::OutlineFusionFromComputation(
     outlined[node_id] = new_inst;
     outlined_node_ids.insert(node_id);
     // Replace all the operands
-    for (int64 operand = 0; operand < new_inst->operand_count(); ++operand) {
+    for (int64_t operand = 0; operand < new_inst->operand_count(); ++operand) {
       auto& operands = pattern.GetPatternNodes()[node_id].GetOperands();
       if (operand >= operands.size()) {
         return InvalidArgument(
@@ -1320,7 +1321,7 @@ StatusOr<HloInstruction*> HloMatcher::OutlineFusionFromComputation(
 StatusOr<HloInstruction*> HloMatcher::OutlineCustomOpFromComputation(
     const HloMatcherMatched& matched,
     const std::string& outlined_computation_name,
-    const absl::optional<int64> sharding_device,
+    const absl::optional<int64_t> sharding_device,
     std::vector<HloInstruction*>&& forced_parameters) {
   HloComputation* computation = matched.computation;
   const auto& pattern = patterns_[matched.pattern_idx];

@@ -35,7 +35,7 @@ namespace poplarplugin {
 
 struct UserPositions {
   HloInstruction* instruction;
-  std::vector<int64> indices;
+  std::vector<int64_t> indices;
 
   std::string ToString() const;
 };
@@ -84,15 +84,15 @@ class ElementwiseCluster {
       HloInstruction* inst) const;
 
   // The dimensions of the operations in the cluster before it is partitioned.
-  const std::vector<int64>& GetClusterDimensions() const;
+  const std::vector<int64_t>& GetClusterDimensions() const;
   // The dimensions of the operations in the cluster after it is partitioned.
-  const std::vector<int64>& GetShardDimensions() const;
+  const std::vector<int64_t>& GetShardDimensions() const;
   // The size of the cluster before it is partitioned.
-  int64 GetClusterSize() const;
+  int64_t GetClusterSize() const;
   // The size of the cluster taking the padding on all-gathers into account.
-  int64 GetAlignedClusterSize() const;
+  int64_t GetAlignedClusterSize() const;
   // The size of the partitioned shape.
-  int64 GetShardSize() const;
+  int64_t GetShardSize() const;
   // Whether this cluster is replica partitioned.
   bool IsReplicaPartitioned() const;
   // Returns original shape of the top-level instruction.
@@ -129,12 +129,12 @@ class ElementwiseCluster {
   std::vector<HloInstruction*> post_order_;
   std::vector<HloInstruction*> outputs_;
   HloInstructionMap<std::vector<UserPositions>> outputs_to_users_;
-  std::vector<int64> cluster_dimensions_;
-  std::vector<int64> shard_dimensions_;
+  std::vector<int64_t> cluster_dimensions_;
+  std::vector<int64_t> shard_dimensions_;
   absl::flat_hash_set<HloInstruction*> allowed_scalars_;
-  int64 cluster_size_;
-  int64 shard_size_;
-  int64 aligned_cluster_size_;
+  int64_t cluster_size_;
+  int64_t shard_size_;
+  int64_t aligned_cluster_size_;
 };
 
 }  // namespace poplarplugin

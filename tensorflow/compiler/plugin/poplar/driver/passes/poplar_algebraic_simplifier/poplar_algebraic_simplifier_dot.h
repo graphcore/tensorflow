@@ -27,8 +27,8 @@ StatusOr<HloInstruction*> OptimizeDotOfConcat(
 
 StatusOr<HloInstruction*> OptimizeDotOfConcatHelper(
     AlgebraicSimplifierVisitor* visitor, const HloInstruction& dot,
-    HloInstruction* lhs, int64 lhs_contracting_dim, HloInstruction* rhs,
-    int64 rhs_contracting_dim, bool swapped);
+    HloInstruction* lhs, int64_t lhs_contracting_dim, HloInstruction* rhs,
+    int64_t rhs_contracting_dim, bool swapped);
 
 StatusOr<HloInstruction*> OptimizeDotOfGather(
     AlgebraicSimplifierVisitor* visitor, HloInstruction* dot);

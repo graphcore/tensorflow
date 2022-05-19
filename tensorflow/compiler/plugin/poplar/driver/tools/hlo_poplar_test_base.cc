@@ -78,7 +78,7 @@ std::unique_ptr<CompilerResources> HloPoplarTestBase::GetMockResources(
 
 std::unique_ptr<CompilerResources> HloPoplarTestBase::GetMockResources(
     poplar::Device& device, HloModule* module, bool merge_infeeds,
-    int number_of_vgraphs, int64 max_inter_ipu_copies_buffer_size) {
+    int number_of_vgraphs, int64_t max_inter_ipu_copies_buffer_size) {
   const auto info = CompilerInformation().set_max_inter_ipu_copies_buffer_size(
       max_inter_ipu_copies_buffer_size);
   auto resources = HloPoplarTestBase::GetMockResources(

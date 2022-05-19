@@ -66,9 +66,9 @@ StatusOr<HloInstruction*> GetAllReduceInput(HloInstruction* inst) {
   return inst;
 }
 
-int64 GetCount(const HloComputation* comp,
-               std::function<bool(const HloInstruction*)> pred) {
-  int64 count = 0;
+int64_t GetCount(const HloComputation* comp,
+                 std::function<bool(const HloInstruction*)> pred) {
+  int64_t count = 0;
   for (auto inst : comp->instructions()) {
     count += pred(inst);
     for (auto called_comp : inst->called_computations()) {
@@ -79,8 +79,8 @@ int64 GetCount(const HloComputation* comp,
 }
 
 struct ResourceUpdateElementwiseClusteringShapeTestSpec {
-  std::vector<int64> dimensions;
-  int64 cluster_size;
+  std::vector<int64_t> dimensions;
+  int64_t cluster_size;
   PrimitiveType element_type;
   PrimitiveType remote_buffer_element_type;
   bool padded_and_sliced;
@@ -392,7 +392,7 @@ TEST_F(ResourceUpdateElementwiseClusteringOutlineTests, TestSameCluster) {
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
-  int64 replication_factor = 1;
+  int64_t replication_factor = 1;
   CompilerAnnotations annotations(module.get());
   HloInstruction* resource_update =
       FindInstruction(module.get(), "resource_update");
@@ -494,7 +494,7 @@ TEST_F(ResourceUpdateElementwiseClusteringOutlineTests, TestDifferentCluster) {
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
-  int64 replication_factor = 1;
+  int64_t replication_factor = 1;
   CompilerAnnotations annotations(module.get());
   HloInstruction* resource_update =
       FindInstruction(module.get(), "resource_update");
@@ -589,7 +589,7 @@ TEST_F(ResourceUpdateElementwiseClusteringOutlineTests, TestCycle) {
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
-  int64 replication_factor = 1;
+  int64_t replication_factor = 1;
   CompilerAnnotations annotations(module.get());
   HloInstruction* resource_update =
       FindInstruction(module.get(), "resource_update");

@@ -33,7 +33,7 @@ using tu = HloPoplarTestUtil;
 struct OffloadingUtilRemoteBufferNumberTestSpec {
   std::string hlo;
   std::string short_name;
-  std::vector<int64> param_nums;
+  std::vector<int64_t> param_nums;
 };
 
 std::ostream& operator<<(std::ostream& os,
@@ -91,8 +91,8 @@ TEST_P(OffloadingUtilRemoteBufferNumberTest, DoTest) {
   }
   CHECK_NOTNULL(resource_update);
   HloComputation* resource_update_comp = resource_update->to_apply();
-  std::vector<int64> param_nums;
-  for (int64 i = 0; i < resource_update_comp->num_parameters(); ++i) {
+  std::vector<int64_t> param_nums;
+  for (int64_t i = 0; i < resource_update_comp->num_parameters(); ++i) {
     auto param = resource_update_comp->parameter_instruction(i);
     auto result = GetRemoteBufferEntryParameterNumber(*dfa, param);
     if (result.ok()) {

@@ -24,14 +24,14 @@ DistinctReplicaSeedGenerator::DistinctReplicaSeedGenerator(unsigned seed)
     : seed_generator_(seed) {}
 
 void DistinctReplicaSeedGenerator::PrepareSeedsForReplicas(
-    int64 replication_factor) {
+    int64_t replication_factor) {
   buffer_.resize(replication_factor);
-  for (int64 i = 0; i != replication_factor; ++i) {
+  for (int64_t i = 0; i != replication_factor; ++i) {
     buffer_[i] = seed_generator_();
   }
 }
 
-uint64 DistinctReplicaSeedGenerator::Get(int64 replica_idx) const {
+uint64 DistinctReplicaSeedGenerator::Get(int64_t replica_idx) const {
   CHECK(static_cast<size_t>(replica_idx) < buffer_.size());
   return buffer_.at(replica_idx);
 }
@@ -40,11 +40,11 @@ IdenticalReplicaSeedGenerator::IdenticalReplicaSeedGenerator(unsigned seed)
     : seed_generator_(seed) {}
 
 void IdenticalReplicaSeedGenerator::PrepareSeedsForReplicas(
-    int64 /*replication_factor*/) {
+    int64_t /*replication_factor*/) {
   value_ = seed_generator_();
 }
 
-uint64 IdenticalReplicaSeedGenerator::Get(int64 /*replica_idx*/) const {
+uint64 IdenticalReplicaSeedGenerator::Get(int64_t /*replica_idx*/) const {
   return value_;
 }
 

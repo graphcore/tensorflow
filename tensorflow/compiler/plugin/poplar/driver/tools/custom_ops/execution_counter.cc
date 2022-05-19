@@ -29,13 +29,13 @@ HloExecutionCounter::HloExecutionCounter(bool lower_into_pipeline_stage)
                            lower_into_pipeline_stage),
       lower_into_pipeline_stage_(lower_into_pipeline_stage) {}
 
-absl::flat_hash_set<int64> HloExecutionCounter::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloExecutionCounter::AllocatingIndices() const {
   return {};
 }
 
 bool HloExecutionCounter::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloExecutionCounter::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloExecutionCounter::LayoutDependencies()
     const {
   return {};
 }

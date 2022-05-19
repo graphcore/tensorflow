@@ -67,7 +67,7 @@ void TensorMaps::AddTensorMapForComputation(const std::string& computation_name,
 }
 
 Status TensorMap::AddOutputTensor(const HloInstruction* inst,
-                                  int64 output_index, DriverTensor tensor) {
+                                  int64_t output_index, DriverTensor tensor) {
   VLOG(2) << "Adding output tensor for instruction " << inst->name()
           << " at output index " << output_index;
 
@@ -84,7 +84,7 @@ Status TensorMap::AddOutputTensor(const HloInstruction* inst,
 }
 
 Status TensorMap::AddOutputOpaque(const HloInstruction* inst,
-                                  int64 output_index, absl::any opaque) {
+                                  int64_t output_index, absl::any opaque) {
   VLOG(2) << "Adding output opaque for instruction " << inst->name()
           << " at output index " << output_index;
 
@@ -100,7 +100,7 @@ Status TensorMap::AddOutputOpaque(const HloInstruction* inst,
   return Status::OK();
 }
 
-Status TensorMap::AddOutput(const HloInstruction* inst, int64 output_index,
+Status TensorMap::AddOutput(const HloInstruction* inst, int64_t output_index,
                             TensorOrRemoteBuffer torb) {
   VLOG(3) << "Adding output for instruction " << inst->name()
           << " at output index " << output_index;
@@ -143,8 +143,8 @@ Status TensorMap::UpdateTensor(TensorLocation location, DriverTensor tensor) {
 void TensorMap::Clear() { _map.clear(); }
 
 TensorOrRemoteBufferVector TensorMap::FindInstructionOutputs(
-    const HloInstruction* inst, absl::optional<int64> opt_tensors_start,
-    absl::optional<int64> opt_tensors_end) const {
+    const HloInstruction* inst, absl::optional<int64_t> opt_tensors_start,
+    absl::optional<int64_t> opt_tensors_end) const {
   NamedTensorLocationVector tensor_vector = FindInstructionNamedTensorLocations(
       inst, opt_tensors_start, opt_tensors_end);
   TensorOrRemoteBufferVector outputs;
@@ -156,8 +156,8 @@ TensorOrRemoteBufferVector TensorMap::FindInstructionOutputs(
 }
 
 StatusOr<TensorVector> TensorMap::FindInstructionOutputTensors(
-    const HloInstruction* inst, absl::optional<int64> opt_tensors_start,
-    absl::optional<int64> opt_tensors_end) const {
+    const HloInstruction* inst, absl::optional<int64_t> opt_tensors_start,
+    absl::optional<int64_t> opt_tensors_end) const {
   TensorOrRemoteBufferVector outputs =
       FindInstructionOutputs(inst, opt_tensors_start, opt_tensors_end);
 
@@ -178,8 +178,8 @@ StatusOr<TensorVector> TensorMap::FindInstructionOutputTensors(
 
 TensorMap::NamedTensorLocationVector
 TensorMap::FindInstructionNamedTensorLocations(
-    const HloInstruction* inst, absl::optional<int64> opt_tensors_start,
-    absl::optional<int64> opt_tensors_end) const {
+    const HloInstruction* inst, absl::optional<int64_t> opt_tensors_start,
+    absl::optional<int64_t> opt_tensors_end) const {
   TensorLocation lower(inst, DefaultToFirst(opt_tensors_start));
   TensorLocation upper(inst, DefaultToLast(opt_tensors_end) - 1);
 
@@ -193,7 +193,7 @@ TensorMap::FindInstructionNamedTensorLocations(
   return outputs;
 }
 DriverTensor TensorMap::FindTensorByName(const std::string& name,
-                                         int64 output_index) const {
+                                         int64_t output_index) const {
   for (auto it : _map) {
     if (it.first.instruction->name() == name &
         it.first.flattened_output_tuple_index == output_index) {

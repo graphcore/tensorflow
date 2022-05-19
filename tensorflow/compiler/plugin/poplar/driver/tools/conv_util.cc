@@ -86,7 +86,7 @@ StatusOr<ConvolutionDimensionNumbers> GetConvolutionDims(
   }
 }
 
-StatusOr<int64> GetFeatureGroupCount(const HloInstruction* inst) {
+StatusOr<int64_t> GetFeatureGroupCount(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kFusion) {
     TF_ASSIGN_OR_RETURN(auto cfg, inst->backend_config<PoplarBackendConfig>());
     return cfg.fusion_config().feature_group_count();
@@ -108,7 +108,7 @@ StatusOr<int64> GetFeatureGroupCount(const HloInstruction* inst) {
   }
 }
 
-StatusOr<int64> GetBatchGroupCount(const HloInstruction* inst) {
+StatusOr<int64_t> GetBatchGroupCount(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kFusion) {
     TF_ASSIGN_OR_RETURN(auto cfg, inst->backend_config<PoplarBackendConfig>());
     return cfg.fusion_config().batch_group_count();

@@ -65,7 +65,7 @@ class HloGRUFwdInstruction : public HloRNNFwdInstruction,
                                 xla::PrimitiveType partials_type,
                                 bool reset_after, const std::string& options);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
 
  private:
@@ -116,7 +116,7 @@ class HloDynamicGRUFwdInstruction : public HloRNNFwdInstruction,
       xla::PrimitiveType partials_type, bool reset_after,
       const std::string& options);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
 
  private:
@@ -165,7 +165,7 @@ class HloAUGRUFwdInstruction : public HloRNNFwdInstruction,
       xla::PrimitiveType partials_type, bool reset_after,
       const std::string& options);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
 
  private:

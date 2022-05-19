@@ -45,13 +45,13 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-bool operator==(const int64 lhs, const Devices rhs) {
-  return lhs == static_cast<int64>(rhs);
+bool operator==(const int64_t lhs, const Devices rhs) {
+  return lhs == static_cast<int64_t>(rhs);
 }
 
-bool operator==(const Devices lhs, const int64 rhs) { return (rhs == lhs); }
-bool operator!=(const int64 lhs, const Devices rhs) { return !(lhs == rhs); }
-bool operator!=(const Devices lhs, const int64 rhs) { return !(lhs == rhs); }
+bool operator==(const Devices lhs, const int64_t rhs) { return (rhs == lhs); }
+bool operator!=(const int64_t lhs, const Devices rhs) { return !(lhs == rhs); }
+bool operator!=(const Devices lhs, const int64_t rhs) { return !(lhs == rhs); }
 
 void StripAllInstructionLayouts(const HloModule* module) {
   for (auto* comp : module->computations()) {
@@ -126,8 +126,8 @@ const HloSharding& GetShardingOfOutputTensor(const HloInstruction* inst) {
   return inst->sharding();
 }
 
-std::vector<int64> GetShardingDeviceIdVector(const HloSharding& sharding) {
-  std::vector<int64> ids;
+std::vector<int64_t> GetShardingDeviceIdVector(const HloSharding& sharding) {
+  std::vector<int64_t> ids;
   if (sharding.IsTuple()) {
     for (const auto& s : sharding.tuple_elements()) {
       ids.push_back(s.GetUniqueDevice());
@@ -167,7 +167,7 @@ bool HaveSharding(HloModule* module) {
   return false;
 }
 
-int64 GetSingleShardingDeviceId(const HloInstruction* inst) {
+int64_t GetSingleShardingDeviceId(const HloInstruction* inst) {
   if (inst->has_sharding()) {
     return GetShardingDeviceIdVector(inst->sharding())[0];
   } else {
@@ -202,10 +202,10 @@ void CopyShardingIfPresent(HloInstruction* const from,
   }
 }
 
-int64 CountShapes(const Shape& shape) {
-  int64 n = 0;
+int64_t CountShapes(const Shape& shape) {
+  int64_t n = 0;
   if (shape.IsTuple()) {
-    for (int64 i = 0; i < ShapeUtil::TupleElementCount(shape); i++) {
+    for (int64_t i = 0; i < ShapeUtil::TupleElementCount(shape); i++) {
       n += CountShapes(ShapeUtil::GetTupleElementShape(shape, i));
     }
     return n;
@@ -216,24 +216,24 @@ int64 CountShapes(const Shape& shape) {
 
 ShapeIndex RootShapeIndex() { return {}; }
 
-int64 InsertIntoTuple(const Shape& tuple, int64 tuple_index,
-                      int64 original_index) {
+int64_t InsertIntoTuple(const Shape& tuple, int64_t tuple_index,
+                        int64_t original_index) {
   // Count up the base tensors inside all tuple element preceeding the
   // tuple_index one.
-  int64 tensor_count = 0;
-  for (int64 i = 0; i < tuple_index; i++) {
+  int64_t tensor_count = 0;
+  for (int64_t i = 0; i < tuple_index; i++) {
     tensor_count += CountShapes(ShapeUtil::GetTupleElementShape(tuple, i));
   }
   return tensor_count + original_index;
 }
 
-int64 ExtractFromTuple(const Shape& tuple, int64 tuple_index,
-                       int64 original_index) {
-  int64 index = original_index;
-  for (int64 i = 0; i < tuple_index; i++) {
+int64_t ExtractFromTuple(const Shape& tuple, int64_t tuple_index,
+                         int64_t original_index) {
+  int64_t index = original_index;
+  for (int64_t i = 0; i < tuple_index; i++) {
     index -= CountShapes(ShapeUtil::GetTupleElementShape(tuple, i));
   }
-  int64 n = CountShapes(ShapeUtil::GetTupleElementShape(tuple, tuple_index));
+  int64_t n = CountShapes(ShapeUtil::GetTupleElementShape(tuple, tuple_index));
   if (index < 0 || index >= n) {
     return -1;
   }
@@ -257,14 +257,14 @@ std::vector<Shape> FlattenedXlaShape(const Shape& shape) {
   return out;
 }
 
-int64 GetByteSizeOfTotalShape(const Shape& shape) {
-  int64 size = 0;
+int64_t GetByteSizeOfTotalShape(const Shape& shape) {
+  int64_t size = 0;
   WalkShape(shape, [&](const Shape& s) { size += ShapeUtil::ByteSizeOf(s); });
   return size;
 }
 
-int64 GetByteSizeOfTotalShapeSafe(const Shape& shape) {
-  int64 size = 0;
+int64_t GetByteSizeOfTotalShapeSafe(const Shape& shape) {
+  int64_t size = 0;
   WalkShape(shape, [&](const Shape& s) {
     if (s.IsOpaque()) {
       return;
@@ -327,7 +327,7 @@ template StatusOr<uint64> LiteralScalarToNativeType(const Literal& lit);
 template StatusOr<int8> LiteralScalarToNativeType(const Literal& lit);
 template StatusOr<int16> LiteralScalarToNativeType(const Literal& lit);
 template StatusOr<int32> LiteralScalarToNativeType(const Literal& lit);
-template StatusOr<int64> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<int64_t> LiteralScalarToNativeType(const Literal& lit);
 template StatusOr<half> LiteralScalarToNativeType(const Literal& lit);
 template StatusOr<bfloat16> LiteralScalarToNativeType(const Literal& lit);
 template StatusOr<float> LiteralScalarToNativeType(const Literal& lit);
@@ -343,7 +343,7 @@ template StatusOr<bool> LiteralScalarToNativeType(const Literal& lit);
   template StatusOr<std::vector<int8>> func;         \
   template StatusOr<std::vector<int16>> func;        \
   template StatusOr<std::vector<int32>> func;        \
-  template StatusOr<std::vector<int64>> func;        \
+  template StatusOr<std::vector<int64_t>> func;      \
   template StatusOr<std::vector<half>> func;         \
   template StatusOr<std::vector<bfloat16>> func;     \
   template StatusOr<std::vector<float>> func;        \
@@ -406,11 +406,11 @@ bool CallConfigHasType(const HloInstruction* inst,
   }
   return false;
 }
-int64 PipelineBatchSerializationIterations(const HloInstruction* inst) {
+int64_t PipelineBatchSerializationIterations(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kCall) {
     PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
     if (cfg.call_config().has_pipeline_config()) {
-      return std::max<int64>(
+      return std::max<int64_t>(
           1,
           cfg.call_config().pipeline_config().batch_serialization_iterations());
     }
@@ -423,7 +423,7 @@ bool IsRepeatLoop(const HloInstruction* inst) {
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::RepeatLoop);
 }
 
-int64 GetRepeatLoopCount(const HloInstruction* inst) {
+int64_t GetRepeatLoopCount(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().repeat_config().repeat_count();
 }
@@ -469,12 +469,12 @@ bool IsBatchSerializedPipelineOp(const HloInstruction* inst) {
   return IsPipelineOp(inst) && (PipelineBatchSerializationIterations(inst) > 1);
 }
 
-int64 GetPipelineRepeatCount(const HloInstruction* inst) {
+int64_t GetPipelineRepeatCount(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().pipeline_config().repeat_count();
 }
 
-int64 GetAccumulationCountOperandIndex(const HloInstruction* inst) {
+int64_t GetAccumulationCountOperandIndex(const HloInstruction* inst) {
   CHECK(IsPipelineOp(inst));
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().pipeline_config().gradient_accumulation_index();
@@ -482,7 +482,7 @@ int64 GetAccumulationCountOperandIndex(const HloInstruction* inst) {
 
 const HloInstruction* GetGradientAccumulationCountInstruction(
     const HloInstruction* inst) {
-  int64 index = GetAccumulationCountOperandIndex(inst);
+  int64_t index = GetAccumulationCountOperandIndex(inst);
   CHECK_LT(index, inst->operands().size());
   return inst->operand(index);
 }
@@ -521,7 +521,7 @@ template absl::optional<uint64> GetConstantValue(const HloInstruction* inst);
 template absl::optional<int8> GetConstantValue(const HloInstruction* inst);
 template absl::optional<int16> GetConstantValue(const HloInstruction* inst);
 template absl::optional<int32> GetConstantValue(const HloInstruction* inst);
-template absl::optional<int64> GetConstantValue(const HloInstruction* inst);
+template absl::optional<int64_t> GetConstantValue(const HloInstruction* inst);
 template absl::optional<half> GetConstantValue(const HloInstruction* inst);
 template absl::optional<bfloat16> GetConstantValue(const HloInstruction* inst);
 template absl::optional<float> GetConstantValue(const HloInstruction* inst);
@@ -529,19 +529,20 @@ template absl::optional<double> GetConstantValue(const HloInstruction* inst);
 template absl::optional<complex64> GetConstantValue(const HloInstruction* inst);
 template absl::optional<bool> GetConstantValue(const HloInstruction* inst);
 
-absl::optional<int64> GetAccumulationConstantsValue(
+absl::optional<int64_t> GetAccumulationConstantsValue(
     const HloInstruction* inst) {
-  return GetConstantValue<int64>(inst);
+  return GetConstantValue<int64_t>(inst);
 }
 
-absl::optional<int64> GetGradientAccumulationCount(const HloInstruction* inst) {
+absl::optional<int64_t> GetGradientAccumulationCount(
+    const HloInstruction* inst) {
   const auto gradient_accumulation_operand =
       GetGradientAccumulationCountInstruction(inst);
   auto result = GetAccumulationConstantsValue(gradient_accumulation_operand);
   return result;
 }
 
-int64 GetPipelineBatchSerializationIterations(const HloInstruction* inst) {
+int64_t GetPipelineBatchSerializationIterations(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().pipeline_config().batch_serialization_iterations();
 }
@@ -569,7 +570,7 @@ ThreeState GetPipelineOffloadVariables(const HloInstruction* inst) {
   return cfg.call_config().pipeline_config().offload_variables();
 }
 
-int64 GetPipelineStageID(const HloInstruction* inst) {
+int64_t GetPipelineStageID(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().pipeline_stage_config().stage_id();
 }
@@ -604,7 +605,7 @@ HloInstruction* GetResourceUpdateNumMiniBatchesInstruction(
   return it->mutable_operand(0);
 }
 
-absl::optional<int64> GetResourceUpdateBatchesToAccumulate(
+absl::optional<int64_t> GetResourceUpdateBatchesToAccumulate(
     const HloInstruction* inst) {
   auto result = GetAccumulationConstantsValue(
       GetResourceUpdateNumMiniBatchesInstruction(inst));
@@ -639,14 +640,15 @@ bool GetFunctionUniqueSharding(const HloInstruction* inst) {
   return cfg.call_config().function_config().unique_sharding();
 }
 
-int64 GetFunctionNumberModifiedRemoteBufferInputs(const HloInstruction* inst) {
+int64_t GetFunctionNumberModifiedRemoteBufferInputs(
+    const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config()
       .function_config()
       .num_modified_remote_buffer_inputs();
 }
 
-int64 GetFunctionNumberUnmodifiedRemoteBufferInputs(
+int64_t GetFunctionNumberUnmodifiedRemoteBufferInputs(
     const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config()
@@ -817,7 +819,7 @@ HloInstruction* OutlineExpressionFromComputationWithFusion(
       instructions_to_outline.begin(), instructions_to_outline.end());
   std::vector<HloInstruction*> arguments;
   std::vector<HloInstruction*> outputs;
-  int64 parameter_count = 0;
+  int64_t parameter_count = 0;
 
   for (HloInstruction* parameter : explicit_parameters) {
     arguments.push_back(parameter);
@@ -833,7 +835,7 @@ HloInstruction* OutlineExpressionFromComputationWithFusion(
         builder.AddInstruction(instruction_to_outline->Clone());
 
     // Replace its operands to their counterparts in the new function.
-    for (int64 operand_num = 0;
+    for (int64_t operand_num = 0;
          operand_num < outlined_instruction->operand_count(); ++operand_num) {
       HloInstruction* old_operand =
           outlined_instruction->mutable_operand(operand_num);
@@ -926,7 +928,7 @@ SliceInfo GetSliceInfo(const std::vector<size_t>& shape_to_slice,
 }
 
 Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
-                           const int64 dimension) {
+                           const int64_t dimension) {
   std::vector<const Shape*> inst_shapes;
   absl::c_transform(insts, std::back_inserter(inst_shapes),
                     [](HloInstruction* inst) { return &inst->shape(); });
@@ -938,7 +940,7 @@ Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
 }
 
 StatusOr<HloInstruction*> GetUniqueGTEUser(HloInstruction* inst,
-                                           int64 tuple_index) {
+                                           int64_t tuple_index) {
   absl::flat_hash_set<HloInstruction*> gtes;
   for (HloInstruction* user : inst->users()) {
     CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
@@ -955,7 +957,7 @@ StatusOr<HloInstruction*> GetUniqueGTEUser(HloInstruction* inst,
 }
 
 bool AllUsersUniqueGTEs(const HloInstruction* inst) {
-  absl::flat_hash_map<int64, int64> gtes;
+  absl::flat_hash_map<int64_t, int64_t> gtes;
   for (const HloInstruction* user : inst->users()) {
     if (user->opcode() == HloOpcode::kGetTupleElement) {
       gtes[user->tuple_index()]++;
@@ -970,9 +972,10 @@ bool AllUsersUniqueGTEs(const HloInstruction* inst) {
   }
 
   // Check each GTE is unique.
-  return absl::c_all_of(gtes, [](const std::pair<int64, int64>& pair) -> bool {
-    return pair.second == 1;
-  });
+  return absl::c_all_of(gtes,
+                        [](const std::pair<int64_t, int64_t>& pair) -> bool {
+                          return pair.second == 1;
+                        });
 }
 
 size_t HloComputationHash::operator()(const HloComputation* comp) const {
@@ -1040,7 +1043,7 @@ StatusOr<HloInstruction*> CloneComputationSubtree(HloInstruction* root,
   while (!to_clone.empty()) {
     HloInstruction* next = to_clone.front();
     to_clone.pop();
-    for (int64 op_idx = 0; op_idx < next->operand_count(); ++op_idx) {
+    for (int64_t op_idx = 0; op_idx < next->operand_count(); ++op_idx) {
       const HloInstruction* op = next->operand(op_idx);
       HloInstruction* clone = context ? context->FindInstruction(op) : nullptr;
       if (!clone) {
@@ -1054,14 +1057,14 @@ StatusOr<HloInstruction*> CloneComputationSubtree(HloInstruction* root,
 }
 
 namespace {
-StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
+StatusOr<absl::flat_hash_map<int64_t, absl::flat_hash_set<int64_t>>>
 GetDuplicateOperands(const HloInstruction* inst) {
-  absl::flat_hash_map<const HloInstruction*, int64> first_occurrence;
-  absl::flat_hash_map<int64, absl::flat_hash_set<int64>> duplicate_operands;
+  absl::flat_hash_map<const HloInstruction*, int64_t> first_occurrence;
+  absl::flat_hash_map<int64_t, absl::flat_hash_set<int64_t>> duplicate_operands;
   // Go through all the operands in order. First time we see it, add to
   // first_occurrence when we first saw it, next time we see it add it to the
   // duplicate operands.
-  for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
+  for (int64_t op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
     const HloInstruction* operand = inst->operand(op_idx);
     auto itr = first_occurrence.find(operand);
     if (itr == first_occurrence.end()) {
@@ -1074,23 +1077,23 @@ GetDuplicateOperands(const HloInstruction* inst) {
 }
 }  // anonymous namespace
 
-StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
+StatusOr<absl::flat_hash_map<int64_t, absl::flat_hash_set<int64_t>>>
 GetDuplicateCallOutputs(const HloInstruction* call) {
   return GetDuplicateOperands(call->to_apply()->root_instruction());
 }
 
-StatusOr<absl::flat_hash_map<int64, absl::flat_hash_set<int64>>>
+StatusOr<absl::flat_hash_map<int64_t, absl::flat_hash_set<int64_t>>>
 GetDuplicateCallInputs(const HloInstruction* call) {
   return GetDuplicateOperands(call);
 }
 
-StatusOr<absl::flat_hash_set<int64>> GetUnusedCallOutputIndices(
+StatusOr<absl::flat_hash_set<int64_t>> GetUnusedCallOutputIndices(
     const HloInstructionSet& calls) {
-  absl::flat_hash_set<int64> unused_outputs;
+  absl::flat_hash_set<int64_t> unused_outputs;
   if (!calls.empty()) {
     // An arbitrary call.
     const HloInstruction* inst = *calls.begin();
-    for (int64 i = 0; i != ShapeUtil::TupleElementCount(inst->shape()); ++i) {
+    for (int64_t i = 0; i != ShapeUtil::TupleElementCount(inst->shape()); ++i) {
       unused_outputs.insert(i);
     }
   }
@@ -1112,17 +1115,17 @@ StatusOr<absl::flat_hash_set<int64>> GetUnusedCallOutputIndices(
   return unused_outputs;
 }
 
-StatusOr<absl::flat_hash_set<int64>> GetUnusedCallOutputIndices(
+StatusOr<absl::flat_hash_set<int64_t>> GetUnusedCallOutputIndices(
     HloInstruction* call) {
   HloInstructionSet call_set{call};
   return GetUnusedCallOutputIndices(call_set);
 }
 
-StatusOr<absl::flat_hash_set<int64>> GetUnusedParametersInCall(
+StatusOr<absl::flat_hash_set<int64_t>> GetUnusedParametersInCall(
     const HloInstruction* call) {
   const HloComputation* called_computation = call->to_apply();
-  absl::flat_hash_set<int64> unused_params;
-  for (int64 param_number = 0;
+  absl::flat_hash_set<int64_t> unused_params;
+  for (int64_t param_number = 0;
        param_number != called_computation->num_parameters(); ++param_number) {
     const HloInstruction* parameter =
         called_computation->parameter_instruction(param_number);
@@ -1136,10 +1139,10 @@ StatusOr<absl::flat_hash_set<int64>> GetUnusedParametersInCall(
 
 Status ReplaceDuplicateCallOutputs(
     HloInstruction* call,
-    const absl::flat_hash_map<int64, absl::flat_hash_set<int64>>&
+    const absl::flat_hash_map<int64_t, absl::flat_hash_set<int64_t>>&
         duplicate_outputs) {
   // Get all the GTEs by tuple index.
-  absl::flat_hash_map<int64, HloInstructionSet> gte_users;
+  absl::flat_hash_map<int64_t, HloInstructionSet> gte_users;
   for (HloInstruction* user : call->users()) {
     CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
     gte_users[user->tuple_index()].insert(user);
@@ -1147,12 +1150,12 @@ Status ReplaceDuplicateCallOutputs(
 
   // Change tuple indices all to the same value for gtes targeting duplicates.
   for (auto pair : duplicate_outputs) {
-    int64 output_idx = pair.first;
-    const absl::flat_hash_set<int64>& duplicate_indices = pair.second;
+    int64_t output_idx = pair.first;
+    const absl::flat_hash_set<int64_t>& duplicate_indices = pair.second;
     VLOG(3) << "Replacing duplicate output indices "
             << absl::StrJoin(duplicate_indices, ", ") << " with output index "
             << output_idx;
-    for (int64 duplicate_idx : duplicate_indices) {
+    for (int64_t duplicate_idx : duplicate_indices) {
       for (HloInstruction* gte : gte_users[duplicate_idx]) {
         gte->set_tuple_index(output_idx);
       }
@@ -1163,19 +1166,19 @@ Status ReplaceDuplicateCallOutputs(
 
 Status ReplaceDuplicateCallInputs(
     HloInstruction* call,
-    const absl::flat_hash_map<int64, absl::flat_hash_set<int64>>&
+    const absl::flat_hash_map<int64_t, absl::flat_hash_set<int64_t>>&
         duplicate_inputs) {
   HloComputation* called_comp = call->to_apply();
   // Replace any duplicate inputs which will make parameters unused.
   for (auto pair : duplicate_inputs) {
-    int64 param_number = pair.first;
-    const absl::flat_hash_set<int64>& duplicate_indices = pair.second;
+    int64_t param_number = pair.first;
+    const absl::flat_hash_set<int64_t>& duplicate_indices = pair.second;
     VLOG(3) << "Replacing duplicate parameter numbers "
             << absl::StrJoin(duplicate_indices, ", ")
             << " with parameter number " << param_number;
     HloInstruction* parameter =
         called_comp->parameter_instruction(param_number);
-    for (int64 duplicate_idx : duplicate_indices) {
+    for (int64_t duplicate_idx : duplicate_indices) {
       HloInstruction* parameter_to_replace =
           called_comp->parameter_instruction(duplicate_idx);
       TF_RETURN_IF_ERROR(parameter_to_replace->ReplaceAllUsesWith(parameter));
@@ -1185,12 +1188,13 @@ Status ReplaceDuplicateCallInputs(
 }
 
 Status RemoveOutputsFromCall(
-    HloInstruction* call, const absl::flat_hash_set<int64>& outputs_to_remove) {
+    HloInstruction* call,
+    const absl::flat_hash_set<int64_t>& outputs_to_remove) {
   // Nothing to remove.
   if (outputs_to_remove.empty()) {
     return Status::OK();
   }
-  const int64 num_outputs_old = ShapeUtil::TupleElementCount(call->shape());
+  const int64_t num_outputs_old = ShapeUtil::TupleElementCount(call->shape());
   HloComputation* call_computation = call->to_apply();
   HloInstruction* root = call_computation->root_instruction();
 
@@ -1198,7 +1202,7 @@ Status RemoveOutputsFromCall(
           << " from " << call->ToString();
 
   // Get all the GTEs.
-  absl::flat_hash_map<int64, absl::flat_hash_set<HloInstruction*>>
+  absl::flat_hash_map<int64_t, absl::flat_hash_set<HloInstruction*>>
       tuple_index_to_gte;
   for (HloInstruction* user : call->users()) {
     CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
@@ -1208,7 +1212,7 @@ Status RemoveOutputsFromCall(
   // Get the new outputs, preserving the relative order.
   std::vector<HloInstruction*> new_outputs;
   new_outputs.reserve(num_outputs_old - outputs_to_remove.size());
-  for (int64 output_idx = 0; output_idx != num_outputs_old; ++output_idx) {
+  for (int64_t output_idx = 0; output_idx != num_outputs_old; ++output_idx) {
     if (outputs_to_remove.contains(output_idx)) {
       // Sanity check that this output has no users.
       CHECK(tuple_index_to_gte[output_idx].empty());
@@ -1328,7 +1332,7 @@ StatusOr<HloInstruction*> ReplaceCallWith(
 
 StatusOr<HloInstruction*> RemoveParametersFromCall(
     HloInstruction* call,
-    const absl::flat_hash_set<int64>& parameters_to_remove,
+    const absl::flat_hash_set<int64_t>& parameters_to_remove,
     HloCloneContext* context,
     const std::function<void(const HloCloneContext*)>&
         instructions_cloned_callback) {
@@ -1340,7 +1344,7 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
   HloComputation* call_computation = call->to_apply();
 
   VLOG(3) << "Removing the following parameters from " << call->ToString();
-  for (int64 param_number : parameters_to_remove) {
+  for (int64_t param_number : parameters_to_remove) {
     VLOG(3)
         << "\t* " << param_number << " "
         << call_computation->parameter_instruction(param_number)->ToString();
@@ -1351,10 +1355,10 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
   auto builder = HloComputation::Builder(call_computation->name());
 
   // Lower/remove the parameters first.
-  const int64 old_num_parameters = call_computation->num_parameters();
+  const int64_t old_num_parameters = call_computation->num_parameters();
   std::vector<HloInstruction*> new_call_operands;
   new_call_operands.reserve(old_num_parameters - parameters_to_remove.size());
-  for (int64 param_number = 0; param_number != old_num_parameters;
+  for (int64_t param_number = 0; param_number != old_num_parameters;
        ++param_number) {
     HloInstruction* old_parameter =
         call_computation->parameter_instruction(param_number);
@@ -1422,7 +1426,7 @@ StatusOr<HloInstruction*> AddParametersToCall(
 
   HloComputation* call_computation = call->to_apply();
 
-  int64 param_number = call->operand_count();
+  int64_t param_number = call->operand_count();
   VLOG(3) << "Adding the following parameters to " << call->ToString();
   for (const HloInstruction* parameter : parameters_to_add) {
     VLOG(3) << "\t* " << param_number++ << " " << parameter->ToString();
@@ -1499,11 +1503,11 @@ Status SetCopyCloneMethod(HloInstruction* inst,
 }
 
 StatusOr<HloInstruction*> TransposeToFront(HloInstruction* inst,
-                                           absl::Span<const int64> dims) {
-  std::vector<int64> permutations;
+                                           absl::Span<const int64_t> dims) {
+  std::vector<int64_t> permutations;
   permutations.reserve(inst->shape().rank());
   absl::c_copy(dims, std::back_inserter(permutations));
-  for (int64 dim = 0; dim != inst->shape().rank(); ++dim) {
+  for (int64_t dim = 0; dim != inst->shape().rank(); ++dim) {
     if (absl::c_find(dims, dim) == dims.end()) {
       permutations.push_back(dim);
     }
@@ -1512,9 +1516,9 @@ StatusOr<HloInstruction*> TransposeToFront(HloInstruction* inst,
 }
 
 StatusOr<HloInstruction*> InverseTranspose(
-    HloInstruction* inst, absl::Span<const int64> permutation) {
-  std::vector<int64> inverse_permutation(permutation.size());
-  for (int64 i = 0; i != permutation.size(); ++i) {
+    HloInstruction* inst, absl::Span<const int64_t> permutation) {
+  std::vector<int64_t> inverse_permutation(permutation.size());
+  for (int64_t i = 0; i != permutation.size(); ++i) {
     inverse_permutation[permutation[i]] = i;
   }
   return MakeTransposeHlo(inst, inverse_permutation);
@@ -1529,7 +1533,7 @@ StatusOr<HloInstruction*> ReshapeIfDifferent(HloInstruction* inst,
 }
 
 StatusOr<HloInstruction*> ReshapeIfDifferent(HloInstruction* inst,
-                                             absl::Span<const int64> shape) {
+                                             absl::Span<const int64_t> shape) {
   if (absl::c_equal(shape, inst->shape().dimensions())) {
     return inst;
   }
@@ -1540,7 +1544,7 @@ StatusOr<HloInstruction*> Flatten(HloInstruction* inst) {
   if (inst->shape().rank() == 1) {
     return inst;
   }
-  std::vector<int64> shape(1, ShapeUtil::ElementsIn(inst->shape()));
+  std::vector<int64_t> shape(1, ShapeUtil::ElementsIn(inst->shape()));
   return MakeReshapeHlo(shape, inst);
 }
 

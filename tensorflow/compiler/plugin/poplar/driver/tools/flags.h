@@ -25,7 +25,7 @@ limitations under the License.
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/util/command_line_flags.h"
 
-using tensorflow::int64;
+using ::int64_t;
 
 namespace xla {
 namespace poplarplugin {
@@ -65,15 +65,15 @@ class PoplarXlaFlags {
   // brute force method to simulate the conditional part of the while and find
   // the number of iterations. This flag sets how many iterations of the while
   // loop we should try and brute force it for (default 128).
-  int64 while_loop_brute_force_max_trip_count = 128;
+  int64_t while_loop_brute_force_max_trip_count = 128;
 
   // The maximum number of threads Poplar should use during compilation of the
   // graph.
-  int64 max_compilation_threads = -1;
+  int64_t max_compilation_threads = -1;
 
   // The maximum number of threads which each infeed queue is allowed to use
   // when accessing data from datasets.
-  int64 max_infeed_threads = -1;
+  int64_t max_infeed_threads = -1;
 
   // Path to a directory where the Poplar vertex graph should be saved to.
   std::string save_vertex_graph = "";
@@ -103,19 +103,19 @@ class PoplarXlaFlags {
   // When using 'ON_DEMAND' connection type, configure how often to poll for the
   // device (in milliseconds) when a device is not available - defaults to
   // 1000ms. Minimum is 100ms.
-  int64 on_demand_device_poll_time = 1000;
+  int64_t on_demand_device_poll_time = 1000;
 
   // When using 'ON_DEMAND' connection type, configure how long to wait (in
   // milliseconds) for a device before timing out - defaults to 3600000ms (1
   // hour).
-  int64 on_demand_device_timeout = 3600000;
+  int64_t on_demand_device_timeout = 3600000;
 
   // When specified and when using the Poplar IPUModel target, sets the number
   // of tiles for the IPUModel device created. This flag has no effect if the
   // ``--use_ipu_model`` flag is not used. This flag is ignored if the
   // ``IPUConfig.ipu_model.tiles_per_ipu`` is set.
 
-  int64 ipu_model_tiles = -1;
+  int64_t ipu_model_tiles = -1;
 
   // Synchronise the starting point of each replica's main program.
   bool sync_replica_start = false;

@@ -159,8 +159,8 @@ Status AddPlan(const PlanType& plan_type,
   // Get the type information for the plan.
   const Shape operand_shape = operand->shape();
   TF_ASSIGN_OR_RETURN(poplar::Type data_type, PoplarDataType(operand_shape));
-  const int64 input_size = operand_shape.dimensions(0);
-  const int64 output_size = operand_shape.dimensions(1);
+  const int64_t input_size = operand_shape.dimensions(0);
+  const int64_t output_size = operand_shape.dimensions(1);
 
   // Get the options.
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
@@ -168,7 +168,7 @@ Status AddPlan(const PlanType& plan_type,
   opts = PopulateWithOptionsForPlan(plan_type, opts);
 
   // Get all the shards for operand/insts.
-  absl::flat_hash_set<int64> shards;
+  absl::flat_hash_set<int64_t> shards;
   if (operand->has_sharding()) {
     // If there is sharding, we expect it to be unique.
     auto get_shard = [](const HloInstruction* inst) {
@@ -225,7 +225,7 @@ Status PopulatePlans(const InputToSliceUsersMap& user_map,
                                  lookups, operand, slice_ops, res));
     } else {
       // Unsupported mix - make a plan for each instruction.
-      for (int64 i = 0; i != slice_ops.size(); ++i) {
+      for (int64_t i = 0; i != slice_ops.size(); ++i) {
         const HloInstruction* inst = slice_ops[i];
         const std::size_t lookup = lookups[i];
 

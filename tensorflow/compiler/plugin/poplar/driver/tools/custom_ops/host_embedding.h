@@ -34,14 +34,14 @@ class HloHostEmbeddingLookupInstruction : public HloPoplarInstruction {
       const xla::Shape& embedding_shape,
       HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
 
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
 
   bool AllocatingOutput() const override;
 
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
 
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -82,10 +82,10 @@ class HloHostEmbeddingUpdateInstruction : public HloPoplarInstruction {
       const std::string& embedding_id, const xla::Shape& embedding_shape,
       HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
 
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
 
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -126,10 +126,10 @@ class HloHostEmbeddingNotifyInstruction : public HloPoplarInstruction {
  public:
   explicit HloHostEmbeddingNotifyInstruction(const std::string& embedding_id);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
 
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
 
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;

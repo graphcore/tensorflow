@@ -16,6 +16,7 @@ limitations under the License.
 
 #include <functional>
 #include <list>
+#include <map>
 #include <memory>
 #include <queue>
 #include <set>
@@ -171,8 +172,8 @@ Status RemovePipelineStageDeadUsers(HloInstruction* stage,
   return Status::OK();
 }
 
-int64 GetNextStageID(int64& current,
-                     const std::vector<HloInstruction*>& stages) {
+int64_t GetNextStageID(int64_t& current,
+                       const std::vector<HloInstruction*>& stages) {
   if (static_cast<size_t>(current + 1) < stages.size()) {
     current++;
   }
@@ -199,13 +200,13 @@ StatusOr<bool> PipelineFixer::BreakUpElementwiseOperations() {
       // Currently only try to breakup if all the values come from different
       // backward pipeline stages which are placed on the same shard.
       HloValueSet value_set = analysis->GetOperandsValueSet(inst);
-      absl::flat_hash_set<int64> backward_pipeline_stages;
-      absl::flat_hash_set<int64> shards;
+      absl::flat_hash_set<int64_t> backward_pipeline_stages;
+      absl::flat_hash_set<int64_t> shards;
       for (const HloValue* value : value_set.values()) {
         HloInstruction* producer = value->instruction();
         if (IsPipelineStageBackward(producer)) {
           TF_ASSIGN_OR_RETURN(StageID stage_id, analysis->GetStageID(producer));
-          TF_ASSIGN_OR_RETURN(const int64 shard,
+          TF_ASSIGN_OR_RETURN(const int64_t shard,
                               analysis->GetShardForStage(stage_id));
 
           backward_pipeline_stages.insert(stage_id.id);
@@ -305,7 +306,7 @@ StatusOr<bool> PipelineFixer::BreakUpGradientAccumulationOperations() {
   // stage is executed first and that stage needs to scale the gradient
   // accumulation buffer.
   using GradientSourcesInfo =
-      std::map<int64, std::vector<HloInstruction*>, std::greater<int64>>;
+      std::map<int64_t, std::vector<HloInstruction*>, std::greater<int64_t>>;
 
   // Find all the gradient accumulation add operations which have gradients
   // originating from different pipeline stages.
@@ -405,7 +406,7 @@ StatusOr<bool> PipelineFixer::BreakUpGradientAccumulationOperations() {
 
     std::vector<HloInstruction*> new_accumulation_adds;
     for (auto& stage_pair : info) {
-      const int64 stage_id = stage_pair.first;
+      const int64_t stage_id = stage_pair.first;
       std::vector<HloInstruction*> gradients = stage_pair.second;
       // Reverse the order of the gradients so that they are combined in the
       // same order as before to prevent changes to the liveness of the graph.
@@ -532,11 +533,11 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
     // GTE has been de-duplicated.
     // Store the tuple index from each user gte.
     HloInstruction* pipeline_root = stage->parent()->root_instruction();
-    std::map<int64, HloInstructionSet> output_users;
+    std::map<int64_t, HloInstructionSet> output_users;
     for (HloInstruction* gte : previous_stage->users()) {
       CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
       CHECK_EQ(gte->user_count(), 1);
-      int64 tuple_index = gte->tuple_index();
+      int64_t tuple_index = gte->tuple_index();
       HloInstruction* gte_user = gte->users()[0];
       // Do not track usage if it is:
       // * the current stage - this has already been lowered,
@@ -600,10 +601,10 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
 
     // Store parameter number and instruction which needs lowering.
     // Stored in order by parameter number.
-    std::map<int64, HloInstruction*> parameters_to_replace;
+    std::map<int64_t, HloInstruction*> parameters_to_replace;
 
     // Check if any operands need lowering.
-    for (int64 operand_idx = 0; operand_idx != stage->operand_count();
+    for (int64_t operand_idx = 0; operand_idx != stage->operand_count();
          ++operand_idx) {
       HloInstruction* operand = stage->mutable_operand(operand_idx);
       TF_ASSIGN_OR_RETURN(bool operand_needs_lowering,
@@ -667,13 +668,13 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
                         AddInstructionsToPipelineStage(stage, ordered_lowering,
                                                        parameters_to_replace));
     // Check that after lowering the parameters are now unused.
-    TF_ASSIGN_OR_RETURN(absl::flat_hash_set<int64> unused_parameters,
+    TF_ASSIGN_OR_RETURN(absl::flat_hash_set<int64_t> unused_parameters,
                         GetUnusedParametersInCall(stage));
     bool lowered_all_params =
         parameters_to_replace.size() <= unused_parameters.size() &&
         absl::c_all_of(
             parameters_to_replace,
-            [&unused_parameters](std::pair<int64, HloInstruction*> replaced) {
+            [&unused_parameters](std::pair<int64_t, HloInstruction*> replaced) {
               return unused_parameters.contains(replaced.first);
             });
     if (!lowered_all_params) {
@@ -794,7 +795,8 @@ Status PipelineFixer::RemovePipelineWrapper(HloComputation* pipeline_comp) {
 }
 
 StatusOr<bool> PipelineFixer::FixConstantGradients(
-    int64 batch_serialization_iterations, const HloInstruction* pipeline_inst) {
+    int64_t batch_serialization_iterations,
+    const HloInstruction* pipeline_inst) {
   if (!stages_.resource_update) {
     return false;
   }
@@ -810,7 +812,8 @@ StatusOr<bool> PipelineFixer::FixConstantGradients(
   bool changed = false;
 
   // Go through all the gradient accumulator sinks.
-  for (int64 op_idx = 0; op_idx != resource_update->operand_count(); ++op_idx) {
+  for (int64_t op_idx = 0; op_idx != resource_update->operand_count();
+       ++op_idx) {
     HloInstruction* operand = resource_update->mutable_operand(op_idx);
     if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(operand)) {
       continue;
@@ -938,9 +941,10 @@ StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs(
 
   TF_ASSIGN_OR_RETURN(auto analysis,
                       PipelineDataflowAnalysis::GetAnalysis(stages_));
-  absl::flat_hash_set<int64> unused_op_indices;
+  absl::flat_hash_set<int64_t> unused_op_indices;
   // Go through all the operands and lower the ones which need lowering.
-  for (int64 op_idx = 0; op_idx != resource_update->operand_count(); ++op_idx) {
+  for (int64_t op_idx = 0; op_idx != resource_update->operand_count();
+       ++op_idx) {
     HloInstruction* operand = resource_update->mutable_operand(op_idx);
     TF_ASSIGN_OR_RETURN(bool lower, analysis->HasToBeLowered(operand));
     if (!lower) {
@@ -1002,8 +1006,8 @@ Status PipelineFixer::InsertDummyBackwardStages(HloComputation* pipeline_comp) {
   }
 
   // Find the missing backward stages.
-  std::list<int64> missing;
-  int64 back_idx = -1;
+  std::list<int64_t> missing;
+  int64_t back_idx = -1;
   size_t stage_id = GetNextStageID(back_idx, stages.backward);
   for (size_t i = 0; i != stages.forward.size(); ++i) {
     if (stage_id == i) {
@@ -1014,7 +1018,7 @@ Status PipelineFixer::InsertDummyBackwardStages(HloComputation* pipeline_comp) {
   }
 
   // Create dummy stages for the missing indices.
-  for (int64 missing_id : missing) {
+  for (int64_t missing_id : missing) {
     HloInstruction* input = stages.forward[missing_id];
     std::string name = input->to_apply()->name() + "_grad";
     TF_RETURN_IF_ERROR(

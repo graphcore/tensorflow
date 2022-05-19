@@ -32,7 +32,7 @@ namespace {
 
 using RedundantTriangularMaskRemoverTest = HloTestBase;
 
-int64 GetNumMultiUpdateAdds(const HloComputation* comp) {
+int64_t GetNumMultiUpdateAdds(const HloComputation* comp) {
   return absl::c_count_if(comp->instructions(),
                           IsPoplarInstruction(PoplarOp::MultiUpdateAdd));
 }

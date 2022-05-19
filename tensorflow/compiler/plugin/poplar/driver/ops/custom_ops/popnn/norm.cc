@@ -221,8 +221,8 @@ StatusOr<poplar::Tensor> AddNormOffsetTensor(
   return poplin::createNormBeta(graph, shuffled, {debug_name_and_id});
 }
 
-int64 CalculateNormBatchSize(const poplar::Tensor& t,
-                             int64 replica_group_size) {
+int64_t CalculateNormBatchSize(const poplar::Tensor& t,
+                               int64_t replica_group_size) {
   CHECK_GT(t.rank(), 1);
   return t.dim(0) * replica_group_size;
 }
@@ -255,9 +255,9 @@ class NormInferenceAndTrainingOp : public PoplarOpDef {
     PoplarOpDefDebugInfo debug_info(debug_context,
                                     "NormInferenceAndTrainingOp");
     const HloInstruction* inst = tensor_target.tgt;
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
     absl::optional<const HloInstruction*> layout = tensor_target.layout;
-    absl::optional<int64> layout_output_idx = tensor_target.layout_output_idx;
+    absl::optional<int64_t> layout_output_idx = tensor_target.layout_output_idx;
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
 
     switch (input_index) {

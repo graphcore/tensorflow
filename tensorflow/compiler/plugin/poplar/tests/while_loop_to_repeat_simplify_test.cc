@@ -370,8 +370,8 @@ ENTRY entry {
   EXPECT_TRUE(IsRepeatLoop(repeat_inst));
   const HloInstruction* counter = repeat_inst->operand(0);
   EXPECT_EQ(counter->opcode(), HloOpcode::kConstant);
-  int64 loop_counter =
-      LiteralScalarToNativeType<int64>(counter->literal()).ValueOrDie();
+  int64_t loop_counter =
+      LiteralScalarToNativeType<int64_t>(counter->literal()).ValueOrDie();
   EXPECT_EQ(loop_counter, 10);
 }
 
@@ -467,8 +467,8 @@ ENTRY entry {
   EXPECT_TRUE(IsRepeatLoop(repeat_inst));
   const HloInstruction* counter = repeat_inst->operand(0);
   EXPECT_EQ(counter->opcode(), HloOpcode::kConstant);
-  int64 loop_counter =
-      LiteralScalarToNativeType<int64>(counter->literal()).ValueOrDie();
+  int64_t loop_counter =
+      LiteralScalarToNativeType<int64_t>(counter->literal()).ValueOrDie();
   EXPECT_EQ(loop_counter, 10);
 }
 
@@ -525,11 +525,12 @@ ENTRY entry {
   const HloInstruction* unused_counter = repeat_inst->operand(2);
   EXPECT_EQ(counter->opcode(), HloOpcode::kConstant);
   EXPECT_EQ(unused_counter->opcode(), HloOpcode::kConstant);
-  int64 loop_counter =
-      LiteralScalarToNativeType<int64>(counter->literal()).ValueOrDie();
+  int64_t loop_counter =
+      LiteralScalarToNativeType<int64_t>(counter->literal()).ValueOrDie();
   EXPECT_EQ(loop_counter, 10);
-  int64 loop_unused_counter =
-      LiteralScalarToNativeType<int64>(unused_counter->literal()).ValueOrDie();
+  int64_t loop_unused_counter =
+      LiteralScalarToNativeType<int64_t>(unused_counter->literal())
+          .ValueOrDie();
   // Note that the other counter started at 10
   EXPECT_EQ(loop_unused_counter, 20);
 }
@@ -589,11 +590,12 @@ ENTRY entry {
   const HloInstruction* unused_counter = repeat_inst->operand(2);
   EXPECT_EQ(counter->opcode(), HloOpcode::kConstant);
   EXPECT_EQ(unused_counter->opcode(), HloOpcode::kConstant);
-  int64 loop_counter =
-      LiteralScalarToNativeType<int64>(counter->literal()).ValueOrDie();
+  int64_t loop_counter =
+      LiteralScalarToNativeType<int64_t>(counter->literal()).ValueOrDie();
   EXPECT_EQ(loop_counter, 10);
-  int64 loop_unused_counter =
-      LiteralScalarToNativeType<int64>(unused_counter->literal()).ValueOrDie();
+  int64_t loop_unused_counter =
+      LiteralScalarToNativeType<int64_t>(unused_counter->literal())
+          .ValueOrDie();
   EXPECT_EQ(loop_unused_counter, 251);
 }
 
@@ -656,7 +658,8 @@ ENTRY entry {
   // Expect that the loop got simplified to just a return constant
   HloInstruction* root = module.get()->entry_computation()->root_instruction();
   EXPECT_EQ(root->opcode(), HloOpcode::kConstant);
-  int64 result = LiteralScalarToNativeType<int64>(root->literal()).ValueOrDie();
+  int64_t result =
+      LiteralScalarToNativeType<int64_t>(root->literal()).ValueOrDie();
   EXPECT_EQ(result, 251);
 }
 
@@ -721,7 +724,8 @@ ENTRY entry {
   // Expect that the loop got simplified to just a return constant
   HloInstruction* root = module.get()->entry_computation()->root_instruction();
   EXPECT_EQ(root->opcode(), HloOpcode::kConstant);
-  int64 result = LiteralScalarToNativeType<int64>(root->literal()).ValueOrDie();
+  int64_t result =
+      LiteralScalarToNativeType<int64_t>(root->literal()).ValueOrDie();
   EXPECT_EQ(result, 255);
 }
 
@@ -773,8 +777,8 @@ ENTRY entry {
   EXPECT_TRUE(IsRepeatLoop(repeat_inst));
   const HloInstruction* counter = repeat_inst->operand(0);
   EXPECT_EQ(counter->opcode(), HloOpcode::kConstant);
-  int64 loop_start =
-      LiteralScalarToNativeType<int64>(counter->literal()).ValueOrDie();
+  int64_t loop_start =
+      LiteralScalarToNativeType<int64_t>(counter->literal()).ValueOrDie();
   EXPECT_EQ(loop_start, 0);
 }
 

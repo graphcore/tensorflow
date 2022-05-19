@@ -39,10 +39,10 @@ namespace poplarplugin {
  *                         `void(ElemType, void(ElemType))`.
  * @tparam GrossCostFunc The schedule element gross cost callable type.
  *                       This must be callable with a signature
- *                       `int64(ElemType)`.
+ *                       `int64_t(ElemType)`.
  * @tparam TempCostFunc The schedule element temporary cost callable type.
  *                      This must be callable with a signature
- *                      `int64(Set<ElemType> live, ElemType)`.
+ *                      `int64_t(Set<ElemType> live, ElemType)`.
  * @tparam ElemCompFunc The comparison type for ordering ElemType.
  */
 template <typename ElemType, typename ElemPreVisitor, typename ElemPostVisitor,
@@ -53,14 +53,13 @@ class ScheduleTree
           ScheduleTree<ElemType, ElemPreVisitor, ElemPostVisitor, GrossCostFunc,
                        TempCostFunc, ElemCompFunc>> {
  public:
-  using int64 = tensorflow::int64;
   using ThisType = ScheduleTree<ElemType, ElemPreVisitor, ElemPostVisitor,
                                 GrossCostFunc, TempCostFunc, ElemCompFunc>;
   using ThisTypePtr = std::shared_ptr<ThisType const>;
-  using InstructionCostMap = absl::flat_hash_map<ElemType, int64>;
+  using InstructionCostMap = absl::flat_hash_map<ElemType, int64_t>;
   using InstructionWaitList =
-      absl::flat_hash_map<int64, std::set<ElemType, ElemCompFunc>>;
-  using InverseInstructionWaitList = absl::flat_hash_map<ElemType, int64>;
+      absl::flat_hash_map<int64_t, std::set<ElemType, ElemCompFunc>>;
+  using InverseInstructionWaitList = absl::flat_hash_map<ElemType, int64_t>;
 
   ScheduleTree(const std::vector<ElemType>& elems,
                ElemPreVisitor elem_pre_visit = {},
@@ -83,9 +82,9 @@ class ScheduleTree
    *          horizon.
    */
   ThisTypePtr BestChild(
-      int64 search_limit = std::numeric_limits<int64>::max()) const {
+      int64_t search_limit = std::numeric_limits<int64_t>::max()) const {
     ThisTypePtr best = nullptr;
-    int64 best_max_liveness = std::numeric_limits<int64>::max();
+    int64_t best_max_liveness = std::numeric_limits<int64_t>::max();
 
     if (children_.size() == 1) {
       return *children_.begin();
@@ -109,8 +108,8 @@ class ScheduleTree
    *
    * @returns The current liveness in bytes.
    */
-  int64 CurrentLiveness() const {
-    if (current_liveness_ == std::numeric_limits<int64>::max()) {
+  int64_t CurrentLiveness() const {
+    if (current_liveness_ == std::numeric_limits<int64_t>::max()) {
       current_liveness_ =
           temp_cost_f_(GetCurrentlyLive(), schedule_prefix_.back());
       for (auto pair : inv_live_list_) {
@@ -130,9 +129,9 @@ class ScheduleTree
    *
    * @returns The minimum max-liveness found from this this node.
    */
-  int64 MaxLiveness(
-      int64 max_liveness = std::numeric_limits<int64>::max(),
-      int64 search_limit = std::numeric_limits<int64>::max()) const {
+  int64_t MaxLiveness(
+      int64_t max_liveness = std::numeric_limits<int64_t>::max(),
+      int64_t search_limit = std::numeric_limits<int64_t>::max()) const {
     auto current_liveness = CurrentLiveness();
 
     if ((children_.empty()) || (current_liveness >= max_liveness) ||
@@ -140,8 +139,8 @@ class ScheduleTree
       return current_liveness;
     }
 
-    int64 best_max_liveness =
-        std::min(max_liveness, std::numeric_limits<int64>::max());
+    int64_t best_max_liveness =
+        std::min(max_liveness, std::numeric_limits<int64_t>::max());
     search_limit = (search_limit - 1) / children_.size();
     for (auto& child : children_) {
       best_max_liveness =
@@ -239,8 +238,9 @@ class ScheduleTree
    *
    * @returns The new tree node, which has been grown.
    */
-  ThisTypePtr Grow(int depth = 1, int64 search_limit =
-                                      std::numeric_limits<int64>::max()) const {
+  ThisTypePtr Grow(
+      int depth = 1,
+      int64_t search_limit = std::numeric_limits<int64_t>::max()) const {
     if (depth <= 0 || search_limit <= 1) {
       return this->shared_from_this();
     }
@@ -260,7 +260,7 @@ class ScheduleTree
 
       for (auto elem : result->GetReady()) {
         auto child = std::make_shared<ThisType>(*this);
-        child->current_liveness_ = std::numeric_limits<int64>::max();
+        child->current_liveness_ = std::numeric_limits<int64_t>::max();
 
         child->Schedule(elem);
 
@@ -291,7 +291,7 @@ class ScheduleTree
   template <typename UnaryPredicateType>
   ThisTypePtr TakeAllReady(UnaryPredicateType predicate) const {
     auto result = std::make_shared<ThisType>(*this);
-    result->current_liveness_ = std::numeric_limits<int64>::max();
+    result->current_liveness_ = std::numeric_limits<int64_t>::max();
 
     auto ready = GetReady();
     for (auto elem : ready) {
@@ -336,16 +336,16 @@ class ScheduleTree
         elem_pre_visit_(elem_pre_visit),
         elem_post_visit_(elem_post_visit) {}
 
-  int64 GetOperandCount(ElemType elem) const {
-    int64 result = 0;
+  int64_t GetOperandCount(ElemType elem) const {
+    int64_t result = 0;
 
     elem_pre_visit_(elem, [&](ElemType) mutable { result++; });
 
     return result;
   }
 
-  int64 GetUserCount(ElemType elem) const {
-    int64 result = 0;
+  int64_t GetUserCount(ElemType elem) const {
+    int64_t result = 0;
 
     elem_post_visit_(elem, [&](ElemType) mutable { result++; });
 
@@ -362,7 +362,7 @@ class ScheduleTree
   InverseInstructionWaitList inv_wait_list_;
   InstructionWaitList live_list_;
   InverseInstructionWaitList inv_live_list_;
-  mutable int64 current_liveness_ = std::numeric_limits<int64>::max();
+  mutable int64_t current_liveness_ = std::numeric_limits<int64_t>::max();
 };
 
 }  // namespace poplarplugin

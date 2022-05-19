@@ -27,7 +27,7 @@ namespace poplarplugin {
 
 IpuSchedulerAlgorithm CreatePostOrderScheduler() {
   return [](HloComputation* computation, const HloPoplarDataflowAnalysis&,
-            const absl::flat_hash_map<const HloComputation*, int64>&) {
+            const absl::flat_hash_map<const HloComputation*, int64_t>&) {
     HloInstructionSequence sequence(computation->MakeInstructionPostOrder());
     return sequence;
   };

@@ -24,19 +24,19 @@ namespace poplarplugin {
 
 class HloOneHotInstruction : public HloPoplarInstruction {
  public:
-  explicit HloOneHotInstruction(HloInstruction* indices, int64 depth,
+  explicit HloOneHotInstruction(HloInstruction* indices, int64_t depth,
                                 int32 axis, HloInstruction* on,
                                 HloInstruction* off, const Shape outputShape);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
 
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
 
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
-  int64 Depth() const { return depth_; }
+  int64_t Depth() const { return depth_; }
 
   int32 Axis() const { return axis_; }
 
@@ -55,7 +55,7 @@ class HloOneHotInstruction : public HloPoplarInstruction {
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
 
-  int64 depth_;
+  int64_t depth_;
   int32 axis_;
 };
 

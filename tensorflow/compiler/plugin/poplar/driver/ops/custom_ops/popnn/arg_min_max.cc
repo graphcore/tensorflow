@@ -72,7 +72,7 @@ class ArgMinMaxOp : public PoplarOpDef {
         poplar::Tensor input,
         FindInstructionInput(tensor_map, res, inst, 0, seq, debug_info));
 
-    const int64 axis = Cast<HloArgMinMaxBase>(inst)->Axis();
+    const int64_t axis = Cast<HloArgMinMaxBase>(inst)->Axis();
     std::vector<std::size_t> output_dimensions;
     if (inst->operand(0)->shape().rank() > 1) {
       // Roll the axis dim to the end.

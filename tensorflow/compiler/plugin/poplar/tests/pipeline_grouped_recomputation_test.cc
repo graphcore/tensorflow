@@ -416,7 +416,7 @@ ENTRY cluster {
     auto stage_id = pair.first;
     auto recomp_stage = pair.second;
     auto fwd_stage = stages.forward[stage_id];
-    for (int64 op_idx = 0; op_idx != fwd_stage->operand_count(); ++op_idx) {
+    for (int64_t op_idx = 0; op_idx != fwd_stage->operand_count(); ++op_idx) {
       auto operand = fwd_stage->operand(op_idx);
       if (operand->opcode() == HloOpcode::kParameter) {
         EXPECT_THAT(operand, recomp_stage->operand(op_idx));

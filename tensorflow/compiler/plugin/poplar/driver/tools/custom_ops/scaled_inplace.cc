@@ -33,13 +33,13 @@ HloScaledInplaceBase::HloScaledInplaceBase(
                            operation),
       operation_(operation) {}
 
-absl::flat_hash_set<int64> HloScaledInplaceBase::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloScaledInplaceBase::AllocatingIndices() const {
   return {};
 }
 
 bool HloScaledInplaceBase::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloScaledInplaceBase::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloScaledInplaceBase::LayoutDependencies()
     const {
   return {{0, 1}, {1, 0}};
 }

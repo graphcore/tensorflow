@@ -37,7 +37,7 @@ HloLSTMFwdInstruction::HloLSTMFwdInstruction(
                            activation, recurrent_activation, num_channels,
                            partials_type, options) {}
 
-absl::flat_hash_set<int64> HloLSTMFwdInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloLSTMFwdInstruction::AllocatingIndices() const {
   return {0, 1, 2, 3, 4};
 }
 
@@ -100,7 +100,7 @@ HloDynamicLSTMFwdInstruction::HloDynamicLSTMFwdInstruction(
                            preserve_final_state),
       preserve_final_state_(preserve_final_state) {}
 
-absl::flat_hash_set<int64> HloDynamicLSTMFwdInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloDynamicLSTMFwdInstruction::AllocatingIndices()
     const {
   return {0, 1, 2, 3, 4, 5};
 }

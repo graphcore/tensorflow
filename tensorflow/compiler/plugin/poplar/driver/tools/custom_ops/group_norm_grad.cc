@@ -53,14 +53,14 @@ const HloInstruction* HloGroupNormGradInstruction::grad_output() const {
   return HloInstruction::operand(4);
 }
 
-absl::flat_hash_set<int64> HloGroupNormGradInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloGroupNormGradInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloGroupNormGradInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloGroupNormGradInstruction::LayoutDependencies() const {
   return {};
 }

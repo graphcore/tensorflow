@@ -33,7 +33,7 @@ using DataInitializerTest = HloTestBase;
 
 const std::vector<PrimitiveType> supported_types = {
     PRED, S8, U8, S16, U16, S32, U32, S64, U64, F16, F32};
-const std::vector<std::vector<int64>> dimensions_to_test = {{}, {4}, {4, 4}};
+const std::vector<std::vector<int64_t>> dimensions_to_test = {{}, {4}, {4, 4}};
 
 TEST_F(DataInitializerTest, TestRandomDataInitializer) {
   // Check that the initializer parses correctly.
@@ -45,10 +45,10 @@ TEST_F(DataInitializerTest, TestRandomDataInitializer) {
       TF_ASSERT_OK_AND_ASSIGN(auto literal, initializer->GetData(shape));
       // For floating point, check that non of the values are NaNs/Infs.
       if (ShapeUtil::ElementIsFloating(shape)) {
-        int64 num_elements = ShapeUtil::ElementsIn(shape);
+        int64_t num_elements = ShapeUtil::ElementsIn(shape);
         TF_ASSERT_OK_AND_ASSIGN(auto literal_flat,
                                 literal.Reshape({num_elements}));
-        for (int64 i = 0; i < num_elements; i++) {
+        for (int64_t i = 0; i < num_elements; i++) {
           float value;
           switch (type) {
             case F16:
@@ -81,10 +81,10 @@ TEST_F(DataInitializerTest, TestRandomNormalDataInitializer) {
       TF_ASSERT_OK_AND_ASSIGN(auto literal, initializer->GetData(shape));
       // For floating point, check that non of the values are NaNs/Infs.
       if (ShapeUtil::ElementIsFloating(shape)) {
-        int64 num_elements = ShapeUtil::ElementsIn(shape);
+        int64_t num_elements = ShapeUtil::ElementsIn(shape);
         TF_ASSERT_OK_AND_ASSIGN(auto literal_flat,
                                 literal.Reshape({num_elements}));
-        for (int64 i = 0; i < num_elements; i++) {
+        for (int64_t i = 0; i < num_elements; i++) {
           float value;
           switch (type) {
             case F16:

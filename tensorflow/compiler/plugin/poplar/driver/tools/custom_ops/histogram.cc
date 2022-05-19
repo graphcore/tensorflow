@@ -34,12 +34,13 @@ HloHistogramInstruction::HloHistogramInstruction(const Shape& shape,
                            absolute_of_input),
       absolute_of_input_(absolute_of_input) {}
 
-absl::flat_hash_set<int64> HloHistogramInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloHistogramInstruction::AllocatingIndices()
+    const {
   return {};
 }
 
-absl::flat_hash_map<int64, int64> HloHistogramInstruction::LayoutDependencies()
-    const {
+absl::flat_hash_map<int64_t, int64_t>
+HloHistogramInstruction::LayoutDependencies() const {
   return {};
 }
 
@@ -109,12 +110,12 @@ HloHistogramUpdateInstruction::HloHistogramUpdateInstruction(
                            PoplarOp::HistogramUpdate, absolute_of_input),
       absolute_of_input_(absolute_of_input) {}
 
-absl::flat_hash_set<int64> HloHistogramUpdateInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloHistogramUpdateInstruction::AllocatingIndices()
     const {
   return {};
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloHistogramUpdateInstruction::LayoutDependencies() const {
   return {};
 }

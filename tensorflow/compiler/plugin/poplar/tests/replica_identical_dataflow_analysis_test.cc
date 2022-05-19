@@ -54,8 +54,8 @@ struct ReplicaIdenticalDataflowAnalysisTest : HloTestFixture {
         HloTestFixture(/*test platform*/ GetPlatform("Poplar"),
                        /*reference platform*/ GetPlatform("interpreter")) {}
 
-  ::testing::AssertionResult SetUpHloFlattenedModule(const std::string& hlo,
-                                                     int64 replica_count = 1) {
+  ::testing::AssertionResult SetUpHloFlattenedModule(
+      const std::string& hlo, int64_t replica_count = 1) {
     auto module_setup_result =
         HloTestFixture::SetUpHloModule(hlo, replica_count);
     if (module_setup_result == ::testing::AssertionSuccess()) {

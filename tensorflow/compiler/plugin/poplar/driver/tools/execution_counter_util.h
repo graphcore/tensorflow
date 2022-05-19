@@ -93,7 +93,7 @@ class ExecutionCounters {
   ExecutionCounters Clone(const poplar::DebugNameAndId& debug_name_and_id);
 
   // Get a counter for a particular shard and mark it as live.
-  StatusOr<DriverTensor> GetCounter(int64 shard);
+  StatusOr<DriverTensor> GetCounter(int64_t shard);
 
   // Copy counters from `source`. Any counters which are live in `this` are
   // marked as live in `source`.

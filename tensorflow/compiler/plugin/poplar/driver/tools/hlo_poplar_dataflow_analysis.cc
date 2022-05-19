@@ -123,7 +123,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
   }
 
   Status HandleGetTupleElement(HloInstruction* inst) override {
-    const int64 tuple_index = inst->tuple_index();
+    const int64_t tuple_index = inst->tuple_index();
     HloInstruction* input = inst->mutable_operand(0);
     // Forward the buffers from the right shape tree index.
     for (auto& indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
@@ -290,8 +290,8 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
     } else if (IsResourceUpdate(inst) || IsAnyPipelineStageOp(inst)) {
       return HandleInplaceVisitor(inst, comp);
     } else {
-      int64 num_inplace_operands = 0;
-      int64 num_inplace_outputs = 0;
+      int64_t num_inplace_operands = 0;
+      int64_t num_inplace_outputs = 0;
       if (IsFunction(inst)) {
         // Functions are inplace on remote buffer inputs.
         // Assume that the first "num_modified_remote_buffers" inputs are remote
@@ -299,9 +299,9 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
         // "num_modified_remote_buffers" outputs.
         // Assume that the next "num_unmodified_remote_buffers" inputs are
         // remote buffers which are only loaded.
-        const int64 num_modified_remote_buffers =
+        const int64_t num_modified_remote_buffers =
             GetFunctionNumberModifiedRemoteBufferInputs(inst);
-        const int64 num_unmodified_remote_buffers =
+        const int64_t num_unmodified_remote_buffers =
             GetFunctionNumberUnmodifiedRemoteBufferInputs(inst);
         num_inplace_operands =
             num_modified_remote_buffers + num_unmodified_remote_buffers;
@@ -321,7 +321,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
       // the buffers through for inplace operands and create new buffers for
       // non-inplace operands.
       std::vector<InstructionPoplarBufferSet> parameter_sets;
-      for (int64 i = 0; i != inst->operand_count(); ++i) {
+      for (int64_t i = 0; i != inst->operand_count(); ++i) {
         const HloInstruction* operand = inst->operand(i);
         HloInstruction* parameter = comp->parameter_instruction(i);
         if (i < num_inplace_operands) {
@@ -341,7 +341,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
       }
 
       ComputationInputBufferSets input_buffer_sets(inst->operand_count());
-      for (int64 i = 0; i != inst->operand_count(); ++i) {
+      for (int64_t i = 0; i != inst->operand_count(); ++i) {
         input_buffer_sets[i] = &parameter_sets[i];
       }
 
@@ -547,7 +547,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
   // instruction of that computation.
   Status HandleInplaceVisitor(HloInstruction* inst, HloComputation* comp) {
     ComputationInputBufferSets map_input_buffer_sets(inst->operand_count());
-    for (int64 i = 0; i != inst->operand_count(); ++i) {
+    for (int64_t i = 0; i != inst->operand_count(); ++i) {
       map_input_buffer_sets[i] =
           &analysis_->GetInstructionBufferSet(inst->operand(i));
     }
@@ -602,7 +602,7 @@ class DataflowAnalysisBufferVisitor : public DfsHloVisitorWithDefault {
                                          InstructionPoplarBufferSet(shape));
       return Status::OK();
     }
-    for (int64 i = 0; i != inst->operand_count(); ++i) {
+    for (int64_t i = 0; i != inst->operand_count(); ++i) {
       HloInstruction* operand = inst->mutable_operand(i);
       for (auto& indexed_shape : ShapeUtil::GetLeafShapes(operand->shape())) {
         const HloPoplarPosition input_position{operand, indexed_shape.index};

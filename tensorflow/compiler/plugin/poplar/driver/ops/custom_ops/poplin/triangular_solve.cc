@@ -129,7 +129,7 @@ class TriangularSolveOp : public PoplarOpDef {
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "TriangularSolveAllocator");
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
 
     const HloInstruction* inst = tensor_target.tgt;
     const Shape& aShape = inst->operand(0)->shape();

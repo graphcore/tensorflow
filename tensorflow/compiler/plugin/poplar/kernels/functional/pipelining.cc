@@ -58,7 +58,7 @@ class PipelineStageOp : public poplarplugin::FunctionBaseOp {
 
  private:
   PoplarBackendConfig_CallConfig_Type call_config_type_;
-  int64 stage_id_;
+  int64_t stage_id_;
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineStageOp);
 };
 REGISTER_IPU_OP("PipelineStage", PipelineStageOp);
@@ -164,7 +164,7 @@ REGISTER_IPU_OP("ResourceUpdate", ResourceUpdateOp);
 // been removed resource update indices are wrong. To get round this
 // count how many constants there are before the resources so we can
 // subtrack these off the returned indices
-static int64 FindNumberOfConstantParameters(
+static int64_t FindNumberOfConstantParameters(
     const std::vector<XlaCompiler::Argument>& arguments) {
   bool hit_resource = false;
   return absl::c_count_if(arguments, [&](const XlaCompiler::Argument& arg) {
@@ -173,7 +173,8 @@ static int64 FindNumberOfConstantParameters(
   });
 }
 
-static int64 GetIndexWithoutConstants(const int64 orig, const int64 offset) {
+static int64_t GetIndexWithoutConstants(const int64_t orig,
+                                        const int64_t offset) {
   return orig - offset;
 }
 
@@ -208,7 +209,7 @@ class PipelineOp : public XlaOpKernel {
   xla::StatusOr<xla::XlaComputation> CreateInnerPipeline(
       XlaOpKernelContext* ctx, const std::vector<xla::XlaOp>& inputs,
       const XlaCompiler::CompilationResult& result,
-      const int64 num_constants) const {
+      const int64_t num_constants) const {
     // For pipelines we make sure that the inputs and outputs have the same
     // shape and that the values for every output at index `i` are:
     // 1. the input value `i` if the input is not a resource variable
@@ -269,7 +270,7 @@ class PipelineOp : public XlaOpKernel {
       const XlaCompiler::CompilationResult& result, XlaOpKernelContext* ctx,
       const xla::XlaOp& outputs,
       const std::vector<XlaCompiler::Argument>& arguments,
-      xla::XlaBuilder* builder, const int64 num_constants) {
+      xla::XlaBuilder* builder, const int64_t num_constants) {
     // We can use the input index to index into the outputs because we have
     // ensured that the inputs and outputs are aligned.
     for (const XlaCompiler::ResourceUpdate& update : result.resource_updates) {
@@ -384,9 +385,9 @@ class PipelineOp : public XlaOpKernel {
  private:
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
-  int64 batch_serialization_iterations_;
-  int64 repeat_count_;
-  int64 schedule_;
+  int64_t batch_serialization_iterations_;
+  int64_t repeat_count_;
+  int64_t schedule_;
   std::string pipeline_poplar_config_;
   std::string offload_activations_;
   std::string offload_gradient_accumulation_buffers_;

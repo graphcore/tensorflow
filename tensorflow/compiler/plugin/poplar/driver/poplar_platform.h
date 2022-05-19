@@ -36,8 +36,6 @@ limitations under the License.
 
 namespace se = stream_executor;
 
-using int64 = tensorflow::int64;
-
 namespace tensorflow {
 class IpuTraceEvent;
 }
@@ -89,7 +87,7 @@ class PoplarPlatform : public se::Platform {
   // PoplarPlatform::ExecuteForDevice is made.
   Status GetIpuOptions(std::vector<IpuOptions>& out);
 
-  StatusOr<int64> GetNumIpusForDevice(int ordinal);
+  StatusOr<int64_t> GetNumIpusForDevice(int ordinal);
 
   Status ResetSeed(int ordinal, int seed, bool identical_replicas);
 

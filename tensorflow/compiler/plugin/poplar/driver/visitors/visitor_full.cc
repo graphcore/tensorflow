@@ -69,7 +69,7 @@ Status FullVisitor::HandleConcatenate(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   DriverProgramSequence seq(graph, debug_name_and_id);
 
-  int64 dimension(inst->concatenate_dimension());
+  int64_t dimension(inst->concatenate_dimension());
   TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, resources_, inst,
                                                seq, debug_name_and_id, false));

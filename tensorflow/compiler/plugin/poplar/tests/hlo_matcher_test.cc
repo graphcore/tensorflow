@@ -39,7 +39,7 @@ class TestMatcher : public HloMatcher {
  private:
   StatusOr<bool> HandleMatch(
       HloMatcherMatched& match,
-      const absl::optional<int64> sharding_device) override {
+      const absl::optional<int64_t> sharding_device) override {
     auto& pattern = match.pattern;
     TF_ASSIGN_OR_RETURN(
         auto inst, OutlineExpressionFromComputation(match, pattern.GetType(),

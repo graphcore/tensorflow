@@ -34,7 +34,7 @@ class HloLSTMFwdInstruction : public HloRNNFwdInstruction {
       rnn_helper::ActivationType recurrent_activation, int32 num_channels,
       xla::PrimitiveType partials_type, const std::string& options);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
 
  private:
@@ -78,7 +78,7 @@ class HloDynamicLSTMFwdInstruction : public HloRNNFwdInstruction {
       bool preserve_final_state, int32 num_channels,
       xla::PrimitiveType partials_type, const std::string& options);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
   bool preserve_final_state() const;
 

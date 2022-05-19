@@ -38,7 +38,7 @@ HloMultiConvInstruction::HloMultiConvInstruction(
       option_flags_(option_flags),
       is_weight_update_(is_weight_update) {
   // Find indices for which we can allocate.
-  for (int64 i = 0; i != convolution_specs_.size(); ++i) {
+  for (int64_t i = 0; i != convolution_specs_.size(); ++i) {
     const ConvolutionSpec& convolution_spec = convolution_specs_[i];
     switch (convolution_spec.type) {
       case ConvType::Conv: {
@@ -52,14 +52,15 @@ HloMultiConvInstruction::HloMultiConvInstruction(
   }
 }
 
-absl::flat_hash_set<int64> HloMultiConvInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloMultiConvInstruction::AllocatingIndices()
+    const {
   return allocating_indices_;
 }
 
 bool HloMultiConvInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloMultiConvInstruction::LayoutDependencies()
-    const {
+absl::flat_hash_map<int64_t, int64_t>
+HloMultiConvInstruction::LayoutDependencies() const {
   return {};
 }
 
@@ -108,7 +109,7 @@ HloMultiConvInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> output(convolution_specs_.size() + 1);
   output[0] = absl::StrCat("is_weight_update=", is_weight_update_);
-  for (int64 i = 0; i != convolution_specs_.size(); ++i) {
+  for (int64_t i = 0; i != convolution_specs_.size(); ++i) {
     const ConvolutionSpec& convolution_spec = convolution_specs_[i];
     output[i + 1] = absl::StrCat(
         "conv_", i, "={conv_type=", ConvType_Name(convolution_spec.type),

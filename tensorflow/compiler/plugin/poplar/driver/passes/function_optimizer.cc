@@ -75,12 +75,12 @@ StatusOr<bool> RemoveOutputInputParameters(HloInstruction* function) {
   CHECK_EQ(root->opcode(), HloOpcode::kTuple);
 
   struct InputOutputInfo {
-    int64 input_index;
-    int64 output_index;
+    int64_t input_index;
+    int64_t output_index;
   };
 
   std::vector<InputOutputInfo> input_output_parameters;
-  for (int64 i = 0; i != root->operand_count(); ++i) {
+  for (int64_t i = 0; i != root->operand_count(); ++i) {
     const HloInstruction* operand = root->operand(i);
     if (operand->opcode() == HloOpcode::kParameter) {
       VLOG(2) << "Function " << function->ToString() << " output " << i
@@ -97,7 +97,7 @@ StatusOr<bool> RemoveOutputInputParameters(HloInstruction* function) {
   TF_RETURN_IF_ERROR(ConvertAllUsersToGTEs(function).status());
 
   // Find all the gtes.
-  absl::flat_hash_map<int64, HloInstructionSet> gtes;
+  absl::flat_hash_map<int64_t, HloInstructionSet> gtes;
   for (HloInstruction* user : function->users()) {
     CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
     gtes[user->tuple_index()].insert(user);
@@ -116,7 +116,7 @@ StatusOr<bool> RemoveOutputInputParameters(HloInstruction* function) {
 
   if (gtes.size()) {
     // Remove these parameter outputs if the function is still there.
-    absl::flat_hash_set<int64> outputs_to_remove;
+    absl::flat_hash_set<int64_t> outputs_to_remove;
     for (const InputOutputInfo& info : input_output_parameters) {
       outputs_to_remove.insert(info.output_index);
     }

@@ -130,7 +130,7 @@ void ResourceHandlePruner::UpdateNonResourceArgsIndices(
     const FunctionBody& fbody) const {
   static constexpr const char* const kIndexAttr = "index";
 
-  int64 index = 0;
+  int64_t index = 0;
   for (std::size_t i = 0; i < fbody.arg_types.size(); ++i) {
     if (fbody.arg_types[i] != DT_RESOURCE) {
       Node* node = fbody.arg_nodes[i];
@@ -208,7 +208,7 @@ void ResourceHandlePruner::RemoveRetvalFromResource(
     const FunctionBody& fbody) const {
   static constexpr const char* const kIndexAttr = "index";
 
-  int64 index = 0;
+  int64_t index = 0;
   for (Node* node : fbody.ret_nodes) {
     if (node->in_edges().empty()) {
       fbody.graph->RemoveNode(node);

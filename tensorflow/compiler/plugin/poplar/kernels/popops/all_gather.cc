@@ -38,7 +38,7 @@ class PopopsAllGather : public XlaOpKernel, IpuOpKernel {
     // Build xla output shape.
     std::vector<xla::Shape> xla_output_shapes;
     xla_output_shapes.reserve(ctx->num_inputs());
-    for (int64 i = 0; i < ctx->num_inputs(); i++) {
+    for (int64_t i = 0; i < ctx->num_inputs(); i++) {
       // The output should be [replicationFactor][inputShape] shaped.
       TensorShape output_shape = ctx->InputShape(i);
       output_shape.InsertDim(0, replica_group_size_);
@@ -67,7 +67,7 @@ class PopopsAllGather : public XlaOpKernel, IpuOpKernel {
                         xla_output_shape, attribute_map_.Serialise());
 
     // Get each output value with a GTE.
-    for (int64 i = 0; i != ctx->num_inputs(); ++i) {
+    for (int64_t i = 0; i != ctx->num_inputs(); ++i) {
       ctx->SetOutput(i, xla::GetTupleElement(call_output, i));
     }
   }
@@ -75,7 +75,7 @@ class PopopsAllGather : public XlaOpKernel, IpuOpKernel {
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsAllGather);
 
-  tensorflow::int64 replica_group_size_;
+  std::int64_t replica_group_size_;
 };
 
 REGISTER_XLA_OP(Name("IpuAllGather").Device(DEVICE_IPU_XLA_JIT),

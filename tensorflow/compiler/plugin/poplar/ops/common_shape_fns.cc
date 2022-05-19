@@ -41,7 +41,7 @@ Status ShapeFromOutputShapeAttribute(InferenceContext* c) {
 }
 
 Status UnchangedTupleShape(InferenceContext* c) {
-  for (int64 i = 0; i != c->num_outputs(); ++i) {
+  for (int64_t i = 0; i != c->num_outputs(); ++i) {
     c->set_output(i, c->input(i));
     auto* handle_data = c->input_handle_shapes_and_types(i);
     if (handle_data != nullptr) {

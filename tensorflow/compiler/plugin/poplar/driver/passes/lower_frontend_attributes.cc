@@ -85,7 +85,7 @@ Status LowerPipelineFrontendAttributes(HloInstruction* pipeline_op,
   // Lower the configs into recomputation stages.
   // Recomputation stages use the forward stage options.
   for (auto recomp_pair : stages.recomputation) {
-    int64 stage_id = recomp_pair.first;
+    int64_t stage_id = recomp_pair.first;
     HloInstruction* stage = recomp_pair.second;
     TF_RETURN_IF_ERROR(LowerPipelineFrontendAttributesIntoStage(
         stage, config.forward_stages(stage_id), call_graph));

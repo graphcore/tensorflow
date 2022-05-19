@@ -30,7 +30,7 @@ namespace poplarplugin {
 namespace {
 
 std::vector<xla::Shape> GetOutputShapes(const xla::Shape& output_shape,
-                                        int64 num_outputs) {
+                                        int64_t num_outputs) {
   if (num_outputs > 1) {
     CHECK(output_shape.IsTuple());
     return output_shape.tuple_shapes();
@@ -42,7 +42,7 @@ std::vector<xla::Shape> GetOutputShapes(const xla::Shape& output_shape,
 
 StatusOr<TensorVector> GetOutputTensors(
     DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
-    const std::vector<xla::Shape>& output_shapes, int64 num_outputs,
+    const std::vector<xla::Shape>& output_shapes, int64_t num_outputs,
     TensorMap& tensor_map, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
   TensorVector result(num_outputs);
@@ -53,13 +53,13 @@ StatusOr<TensorVector> GetOutputTensors(
                         FindInplaceOutputTensors(tensor_map, res, inst, seq,
                                                  debug_name_and_id));
     CHECK_EQ(nested.size(), num_outputs);
-    for (int64 i = 0; i < num_outputs; ++i) {
+    for (int64_t i = 0; i < num_outputs; ++i) {
       CHECK_EQ(nested[i].size(), 1);
       result[i] = nested[i][0];
     }
   } else {
     // Otherwise, allocate new tensors with layout optimised for host copies.
-    for (int64 i = 0; i < num_outputs; ++i) {
+    for (int64_t i = 0; i < num_outputs; ++i) {
       TF_ASSIGN_OR_RETURN(
           result[i],
           AddHostCopyTensor(graph, {debug_name_and_id}, output_shapes[i]));
@@ -78,7 +78,7 @@ class RecvFromHostOp : public PoplarOpDef {
     DriverProgramSequence seq(graph, {debug_info});
 
     const auto* recv = Cast<HloRecvFromHostInstruction>(inst);
-    const int64 num_outputs = recv->RendezvousKeys().size();
+    const int64_t num_outputs = recv->RendezvousKeys().size();
     CHECK_GT(num_outputs, 0);
 
     // Either none or all inputs must be provided.
@@ -100,7 +100,7 @@ class RecvFromHostOp : public PoplarOpDef {
 
     // As long as the stream copies are scheduled right after each other,
     // Poplar will attempt to merge them according to `opt.maxCopyMergeSize`.
-    for (int64 i = 0; i < num_outputs; ++i) {
+    for (int64_t i = 0; i < num_outputs; ++i) {
       const std::string& rendezvous_key = recv->RendezvousKeys()[i];
       const xla::Shape& shape = output_shapes[i];
       poplar::Tensor& tensor = output_tensors[i];
@@ -127,7 +127,7 @@ class RecvFromHostOp : public PoplarOpDef {
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "RecvFromHostOp");
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
     const Shape& input_shape = tensor_target.tgt->operand(input_index)->shape();
     return AddHostCopyTensor(graph, {debug_info}, input_shape);
   }

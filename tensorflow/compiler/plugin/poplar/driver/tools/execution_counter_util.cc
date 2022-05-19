@@ -34,7 +34,7 @@ namespace poplarplugin {
 
 StatusOr<DriverTensor> GetExecutionCounter(CompilerResources& resources,
                                            const HloInstruction* inst) {
-  int64 shard = 0;
+  int64_t shard = 0;
   if (inst->has_sharding()) {
     auto optional_shard = inst->sharding_unique_device();
     if (!optional_shard) {
@@ -104,7 +104,7 @@ ExecutionCounters ExecutionCounters::Clone(
   return cloned;
 }
 
-StatusOr<DriverTensor> ExecutionCounters::GetCounter(int64 shard) {
+StatusOr<DriverTensor> ExecutionCounters::GetCounter(int64_t shard) {
   CHECK_LT(shard, counters_.size());
   if (!live_counters_[shard]) {
     // Requesting a counter which was not live, create it.

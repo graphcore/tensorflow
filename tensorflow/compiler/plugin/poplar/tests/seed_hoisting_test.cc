@@ -127,7 +127,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(
       auto module, ParseAndReturnVerifiedModule(hlo, GetModuleConfigForTest()));
   EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
-  int64 exec_counter = 0;
+  int64_t exec_counter = 0;
   while (SeedHoisting().Run(module.get()).ValueOrDie()) {
     exec_counter++;
   }

@@ -28,9 +28,9 @@ StatusOr<Window> GetConvolutionWindow(const HloInstruction* inst);
 StatusOr<ConvolutionDimensionNumbers> GetConvolutionDims(
     const HloInstruction* inst);
 
-StatusOr<int64> GetFeatureGroupCount(const HloInstruction* inst);
+StatusOr<int64_t> GetFeatureGroupCount(const HloInstruction* inst);
 
-StatusOr<int64> GetBatchGroupCount(const HloInstruction* inst);
+StatusOr<int64_t> GetBatchGroupCount(const HloInstruction* inst);
 
 StatusOr<PrecisionConfig> GetPrecisionConfig(const HloInstruction* inst);
 

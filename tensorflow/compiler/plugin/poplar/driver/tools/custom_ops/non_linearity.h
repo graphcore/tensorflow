@@ -34,9 +34,9 @@ class HloNonLinearity : public HloPoplarInstruction {
   explicit HloNonLinearity(HloInstruction* const operand)
       : HloPoplarInstruction(operand->shape(), {operand}, Op) {}
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override { return {}; }
   bool AllocatingOutput() const override { return false; }
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override {
     return {};
   }
 
@@ -107,10 +107,10 @@ class HloNonLinearityGrad : public HloPoplarInstruction {
   HloNonLinearityGrad(HloInstruction* const out, HloInstruction* const grad)
       : HloPoplarInstruction(out->shape(), {out, grad}, Op) {}
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override { return {}; }
   bool AllocatingOutput() const override { return false; }
 
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override {
     return {};
   }
   HloPoplarUseDescriptions GetUseDescriptions() const {

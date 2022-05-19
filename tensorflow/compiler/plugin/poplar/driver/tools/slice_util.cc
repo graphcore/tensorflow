@@ -32,19 +32,20 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-void ShuffleSpan(absl::Span<int64> values, int64 dim, bool reverse = false) {
+void ShuffleSpan(absl::Span<int64_t> values, int64_t dim,
+                 bool reverse = false) {
   auto front_index = reverse ? 1 : dim;
   std::rotate(values.begin(), values.begin() + front_index,
               values.begin() + dim + 1);
 }
 
 std::unique_ptr<HloInstruction> CreateShuffledInput(HloInstruction* input,
-                                                    int64 dim,
+                                                    int64_t dim,
                                                     bool reverse = false) {
   auto shuffled_shape = input->shape();
   ShuffleSpan(shuffled_shape.mutable_dimensions(), dim, reverse);
 
-  std::vector<int64> shuffled_dim_order(shuffled_shape.dimensions_size(), 0);
+  std::vector<int64_t> shuffled_dim_order(shuffled_shape.dimensions_size(), 0);
   std::iota(shuffled_dim_order.begin(), shuffled_dim_order.end(), 0);
   ShuffleSpan(absl::MakeSpan(shuffled_dim_order), dim, reverse);
 
@@ -62,7 +63,8 @@ std::unique_ptr<HloInstruction> CreateFlattened2DInput(HloInstruction* input) {
 }
 
 HloInstruction* Transform1DSliceInput(HloComputation* comp,
-                                      HloInstruction* input, int64 slice_dim) {
+                                      HloInstruction* input,
+                                      int64_t slice_dim) {
   // Shuffle⋅the⋅dimension⋅being⋅sliced⋅to⋅the⋅front,⋅since
   // the multi slice ops⋅are⋅hard⋅coded⋅to⋅slice⋅dim⋅0.
   auto* shuffled_input =
@@ -78,7 +80,7 @@ HloInstruction* Transform1DSliceInput(HloComputation* comp,
 
 HloInstruction* Transform1DSliceOffset(HloComputation* comp,
                                        HloDynamicIndexInstruction* inst,
-                                       int64 slice_dim) {
+                                       int64_t slice_dim) {
   // Reshape the offset since dynamic-slice offsets are scalar.
   auto* dim_offset =
       inst->mutable_operand(inst->first_index_operand_number() + slice_dim);
@@ -92,7 +94,7 @@ HloInstruction* Transform1DSliceOffset(HloComputation* comp,
 HloInstruction* Restore1DSliceOutput(HloComputation* comp,
                                      HloInstruction* replacement,
                                      const HloDynamicIndexInstruction* instr,
-                                     int64 slice_dim) {
+                                     int64_t slice_dim) {
   // Undo the input transformation to get back a tensor of the original
   // shape.
   auto shuffled_output_shape = instr->shape();
@@ -209,7 +211,7 @@ struct ReplacementDescription {
 };
 
 StatusOr<HloInstruction*> Replace1DDynamicWithMultiSlice(
-    ReplacementDescription replacement_desc, int64 slice_dim) {
+    ReplacementDescription replacement_desc, int64_t slice_dim) {
   auto* dynamic_slice = replacement_desc.root();
   auto* comp = dynamic_slice->parent();
 
@@ -219,7 +221,7 @@ StatusOr<HloInstruction*> Replace1DDynamicWithMultiSlice(
 
   HloInstruction* multislice = nullptr;
   if (replacement_desc.ReplaceDynamicSlice()) {
-    const int64 slice_dim_size = dynamic_slice->shape().dimensions(slice_dim);
+    const int64_t slice_dim_size = dynamic_slice->shape().dimensions(slice_dim);
     CHECK_EQ(slice_dim_size, 1);
     multislice = Create1DMultiSlice(comp, transformed_input, offset);
   } else {
@@ -334,14 +336,14 @@ DynamicSliceHelper::DynamicSliceHelper(const HloDynamicIndexInstruction* inst) {
   const Shape input_shape = inst->operand(0)->shape();
 
   // Get the slice sizes in the dynamic and constant dimensions.
-  std::vector<int64> slice_sizes;
+  std::vector<int64_t> slice_sizes;
   if (inst->opcode() == HloOpcode::kDynamicSlice) {
     auto* dyn_slice = Cast<HloDynamicSliceInstruction>(inst);
     slice_sizes = dyn_slice->dynamic_slice_sizes();
   } else {
     auto* dyn_update_slice = Cast<HloDynamicUpdateSliceInstruction>(inst);
     auto dims = dyn_update_slice->operand(1)->shape().dimensions();
-    slice_sizes = std::vector<int64>(dims.begin(), dims.end());
+    slice_sizes = std::vector<int64_t>(dims.begin(), dims.end());
   }
 
   Shape dynamic_slice_shape = input_shape;
@@ -350,7 +352,7 @@ DynamicSliceHelper::DynamicSliceHelper(const HloDynamicIndexInstruction* inst) {
   // For each operand find whether it is a slice dimension.
   for (uint64 dim = 0; dim != index_operands.size(); ++dim) {
     size_t slice_size = slice_sizes[dim];
-    if (input_shape.dimensions(dim) != static_cast<int64>(slice_size)) {
+    if (input_shape.dimensions(dim) != static_cast<int64_t>(slice_size)) {
       if (index_operands[dim]->opcode() == HloOpcode::kConstant) {
         constant_slice_shape.set_dimensions(dim, slice_size);
         has_constant_slice = true;
@@ -371,25 +373,25 @@ bool Is1DSliceInFirstDimension(const HloInstruction* slice) {
          ShapeUtil::GetDimension(slice->shape(), 0) == 1;
 }
 
-StatusOr<HloInstruction*> ReduceIndices(HloInstruction* indices, int64 dim,
-                                        absl::Span<const int64> sizes) {
+StatusOr<HloInstruction*> ReduceIndices(HloInstruction* indices, int64_t dim,
+                                        absl::Span<const int64_t> sizes) {
   CHECK(dim < indices->shape().rank());
-  int64 num_index_dims = indices->shape().dimensions(dim);
+  int64_t num_index_dims = indices->shape().dimensions(dim);
   CHECK(sizes.size() == num_index_dims);
 
-  int64 size = 1;
-  std::vector<int64> rhs_values(num_index_dims);
+  int64_t size = 1;
+  std::vector<int64_t> rhs_values(num_index_dims);
   // Generate coefficients to multiply the indices with before reducing them.
   // If the sizes of the dims being indexed are a, b, and c then the
   // coefficients will be [b*c, c, 1].
-  for (int64 i = num_index_dims - 1; i != -1; --i) {
+  for (int64_t i = num_index_dims - 1; i != -1; --i) {
     rhs_values[i] = size;
     size *= sizes[i];
   }
   auto type = indices->shape().element_type();
   TF_ASSIGN_OR_RETURN(
       HloInstruction * coefficients,
-      MakeR1ConstantHlo<int64>(indices->parent(), type, rhs_values));
+      MakeR1ConstantHlo<int64_t>(indices->parent(), type, rhs_values));
 
   coefficients =
       MakeBroadcastHlo(coefficients, {dim}, indices->shape().dimensions());

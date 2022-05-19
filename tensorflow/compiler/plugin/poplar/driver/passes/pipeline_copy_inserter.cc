@@ -30,7 +30,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 StatusOr<bool> AddCopyIfParameterModifiedInplace(HloInstruction* call,
-                                                 int64 parameter_number) {
+                                                 int64_t parameter_number) {
   HloComputation* comp = call->to_apply();
   HloInstruction* parameter = comp->parameter_instruction(parameter_number);
   if (IsOutputModifiedInplace(parameter)) {
@@ -56,7 +56,7 @@ StatusOr<bool> InsertStageInputCopies(PipelineStages& pipeline_stages) {
       // not inplace, but that might result in higher memory usage (for example
       // a tuple going into a loop is now not inplace).
       // TODO(T10387)
-      for (int64 op_idx = 0; op_idx != stage->operand_count(); ++op_idx) {
+      for (int64_t op_idx = 0; op_idx != stage->operand_count(); ++op_idx) {
         if (!IsPipelineStageReadOnlyInput(stage->operand(op_idx))) {
           continue;
         }
@@ -82,7 +82,7 @@ StatusOr<bool> InsertReadOnlyVariableCopies(HloInstruction* pipeline_op) {
         "Expected the Pipeline to have %d outputs, but has %d",
         root->operand_count(), pipeline_comp->num_parameters());
   }
-  for (int64 param_idx = 0; param_idx != pipeline_comp->num_parameters();
+  for (int64_t param_idx = 0; param_idx != pipeline_comp->num_parameters();
        ++param_idx) {
     HloInstruction* param_inst =
         pipeline_comp->parameter_instruction(param_idx);
@@ -102,7 +102,7 @@ StatusOr<bool> InsertReadOnlyVariableCopies(HloInstruction* pipeline_op) {
       CHECK(IsAnyPipelineStageOpOrResourceUpdate(user));
       // Go through each use of the parameter in the user and insert kCopy
       // instructions if necessary.
-      for (int64 index : user->OperandIndices(param_inst)) {
+      for (int64_t index : user->OperandIndices(param_inst)) {
         TF_ASSIGN_OR_RETURN(bool added,
                             AddCopyIfParameterModifiedInplace(user, index));
         changed |= added;
@@ -119,7 +119,7 @@ StatusOr<bool> InsertIntraIPUCopies(PipelineStages& stages) {
   // tensor.
   for (auto& stages : {stages.forward, stages.backward}) {
     for (HloInstruction* stage : stages) {
-      for (int64 op_idx = 0; op_idx != stage->operand_count(); ++op_idx) {
+      for (int64_t op_idx = 0; op_idx != stage->operand_count(); ++op_idx) {
         const HloInstruction* operand = stage->operand(op_idx);
         if (operand->opcode() == HloOpcode::kGetTupleElement) {
           if (IsPipelineStageOrBackwardOp(operand->operand(0))) {

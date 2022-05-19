@@ -24,16 +24,16 @@ namespace xla {
 namespace poplarplugin {
 
 // Constructor.
-HloTopK::HloTopK(HloInstruction* input, const Shape shape, int64 K, bool sort)
+HloTopK::HloTopK(HloInstruction* input, const Shape shape, int64_t K, bool sort)
     : HloPoplarInstruction(shape, {input}, PoplarOp::TopK, K, sort),
       num_k(K),
       sorted(sort) {}
 
-absl::flat_hash_set<int64> HloTopK::AllocatingIndices() const { return {0}; }
+absl::flat_hash_set<int64_t> HloTopK::AllocatingIndices() const { return {0}; }
 
 bool HloTopK::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloTopK::LayoutDependencies() const {
+absl::flat_hash_map<int64_t, int64_t> HloTopK::LayoutDependencies() const {
   return {};
 }
 
@@ -56,7 +56,7 @@ bool HloTopK::IsPopOpsElementwise() const { return false; }
 
 // Creates an instance of a HloOneHotInstruction
 std::unique_ptr<HloInstruction> CreateHloTopK(HloInstruction* input,
-                                              const Shape& shape, int64 K,
+                                              const Shape& shape, int64_t K,
                                               bool sorted) {
   return absl::make_unique<HloTopK>(input, shape, K, sorted);
 }
@@ -84,7 +84,7 @@ static HloPoplarInstructionFactory argmax_factory(
         -> StatusOr<std::unique_ptr<HloInstruction>> {
       // Get the num_k and sorted attributes.
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
-      TF_ASSIGN_OR_RETURN(int64 num_k,
+      TF_ASSIGN_OR_RETURN(int64_t num_k,
                           attribute_map.GetAttributeAsInt("num_k"));
 
       TF_ASSIGN_OR_RETURN(bool sorted,

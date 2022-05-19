@@ -38,16 +38,16 @@ string GetTestType(bool is_select) {
 }
 
 struct SparseTestSpec {
-  SparseTestSpec(int64 batch_size, int64 num_classes, bool allow_out_of_range,
-                 bool use_half, bool use_signed)
+  SparseTestSpec(int64_t batch_size, int64_t num_classes,
+                 bool allow_out_of_range, bool use_half, bool use_signed)
       : batch_size(batch_size),
         num_classes(num_classes),
         allow_out_of_range(allow_out_of_range),
         use_half(use_half),
         use_signed(use_signed) {}
 
-  int64 batch_size;
-  int64 num_classes;
+  int64_t batch_size;
+  int64_t num_classes;
   bool allow_out_of_range;
   bool use_half;
   bool use_signed;
@@ -65,7 +65,7 @@ struct SparseTestSpec {
 
 static std::vector<SparseTestSpec> GetTestCases() {
   std::vector<SparseTestSpec> config_set;
-  std::vector<std::vector<int64>> config_options = {
+  std::vector<std::vector<int64_t>> config_options = {
       {1, 1}, {1000, 1}, {1, 1000}, {1000, 1000}};
 
   for (auto allow_out_of_range : {true, false}) {
@@ -145,7 +145,7 @@ POPLAR_TEST_P(SelectScalarFromRowsTest, DoIt) {
   Literal indices = LiteralUtil::CreateR1<uint32>(indices_vals);
   Literal result = Execute(std::move(module), {&params, &indices}).ValueOrDie();
 
-  for (int64 batch = 0; batch < spec.batch_size; ++batch) {
+  for (int64_t batch = 0; batch < spec.batch_size; ++batch) {
     if (spec.use_half) {
       EXPECT_TRUE(SelectValueOk<Eigen::half>(result, params, indices, batch,
                                              spec.num_classes));
@@ -203,7 +203,7 @@ POPLAR_TEST_P(UpdateScalarInRowsTest, DoIt) {
   Literal indices = LiteralUtil::CreateR1<uint32>(indices_vals);
   Literal result = Execute(std::move(module), {&params, &indices}).ValueOrDie();
 
-  for (int64 batch = 0; batch < spec.batch_size; ++batch) {
+  for (int64_t batch = 0; batch < spec.batch_size; ++batch) {
     if (spec.use_half) {
       EXPECT_TRUE(UpdateValueOk<Eigen::half>(0.1f, result, params, indices,
                                              batch, spec.num_classes));

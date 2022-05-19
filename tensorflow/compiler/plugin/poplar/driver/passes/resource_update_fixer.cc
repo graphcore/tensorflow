@@ -52,11 +52,11 @@ StatusOr<bool> FixResourceUpdate(HloInstruction* resource_update,
 
   CHECK_EQ(comp_root->opcode(), HloOpcode::kTuple);
   CHECK_EQ(resource_update_root->opcode(), HloOpcode::kTuple);
-  const int64 num_resource_update_outputs =
+  const int64_t num_resource_update_outputs =
       ShapeUtil::TupleElementCount(resource_update->shape());
 
   // Find all the gtes for the resource update.
-  std::map<int64, std::vector<HloInstruction*>> all_gtes;
+  std::map<int64_t, std::vector<HloInstruction*>> all_gtes;
   for (HloInstruction* user : resource_update->users()) {
     if (user->opcode() != HloOpcode::kGetTupleElement ||
         absl::c_any_of(user->users(),
@@ -71,19 +71,19 @@ StatusOr<bool> FixResourceUpdate(HloInstruction* resource_update,
   }
 
   struct DuplicateOutput {
-    int64 tuple_index;
-    int64 root_operand_index;
+    int64_t tuple_index;
+    int64_t root_operand_index;
   };
 
   std::vector<DuplicateOutput> duplicate_outputs;
   for (auto pair : all_gtes) {
-    const int64 tuple_index = pair.first;
+    const int64_t tuple_index = pair.first;
     const std::vector<HloInstruction*>& gtes = pair.second;
     // Zeroth GTE is allowed a single user, all other uses are duplicates.
-    for (int64 i = 0; i != gtes.size(); ++i) {
-      const int64 offset = i == 0;
+    for (int64_t i = 0; i != gtes.size(); ++i) {
+      const int64_t offset = i == 0;
       const auto& root_indices = comp_root->OperandIndices(gtes[i]);
-      for (int64 j = offset; j != root_indices.size(); ++j) {
+      for (int64_t j = offset; j != root_indices.size(); ++j) {
         duplicate_outputs.push_back({tuple_index, root_indices[j]});
       }
     }
@@ -121,7 +121,7 @@ StatusOr<bool> FixResourceUpdate(HloInstruction* resource_update,
   if (resource_update_root->user_count()) {
     // Wire outputs of the new root as inputs to the old tuple so that the users
     // don't have to be modified.
-    for (int64 i = 0; i != num_resource_update_outputs; ++i) {
+    for (int64_t i = 0; i != num_resource_update_outputs; ++i) {
       TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                           MakeGetTupleElementHlo(new_resource_update_root, i));
       TF_RETURN_IF_ERROR(resource_update_root->ReplaceOperandWith(i, gte));
@@ -133,8 +133,8 @@ StatusOr<bool> FixResourceUpdate(HloInstruction* resource_update,
 
   // Add new GTEs from the updated resource update and use them in the root
   // instruction.
-  for (int64 i = 0; i != duplicate_outputs.size(); ++i) {
-    const int64 root_operand_index = duplicate_outputs[i].root_operand_index;
+  for (int64_t i = 0; i != duplicate_outputs.size(); ++i) {
+    const int64_t root_operand_index = duplicate_outputs[i].root_operand_index;
     TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                         MakeGetTupleElementHlo(
                             resource_update, num_resource_update_outputs + i));

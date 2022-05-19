@@ -44,7 +44,7 @@ class CTCLossOpBase : public PoplarOpDef {
   virtual std::pair<poplar::Tensor, poplar::Tensor> CalcLossAndGradient(
       poplar::Graph&, const poplar::Type&, const poplar::Tensor&,
       const poplar::Tensor&, const poplar::Tensor&, const poplar::Tensor&,
-      DriverProgramSequence&, const int64, const popnn::ctc::Plan&,
+      DriverProgramSequence&, const int64_t, const popnn::ctc::Plan&,
       const poplar::DebugInfo&) const = 0;
 
  public:
@@ -75,7 +75,7 @@ class CTCLossOpBase : public PoplarOpDef {
                         FindInstructionInput(tensor_map, res, inst, 3, seq,
                                              {debug_info}, false));
 
-    int64 blank_index = ctc_inst->blank_index();
+    int64_t blank_index = ctc_inst->blank_index();
     TF_ASSIGN_OR_RETURN(poplar::Type output_type,
                         PoplarDataType(ctc_inst->out_dtype()));
 
@@ -104,7 +104,7 @@ class CTCLossOpBase : public PoplarOpDef {
     const HloInstruction* inst = tensor_target.tgt;
     const HloCTCLossInstructionBase* ctc_inst =
         Cast<HloCTCLossInstructionBase>(inst);
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
 
     TF_ASSIGN_OR_RETURN(const popnn::ctc::Plan* plan, GetCTCPlan(res, inst));
 
@@ -113,7 +113,7 @@ class CTCLossOpBase : public PoplarOpDef {
 
     auto data_shape = inst->operand(0)->shape();
     auto labels_shape = inst->operand(1)->shape();
-    const int64 batch_size = ShapeUtil::GetDimension(data_shape, 1);
+    const int64_t batch_size = ShapeUtil::GetDimension(data_shape, 1);
 
     switch (input_index) {
       case 0: {
@@ -126,14 +126,15 @@ class CTCLossOpBase : public PoplarOpDef {
               "input dtype (%s)",
               dtype.toString(), in_dtype.toString());
         }
-        const int64 max_time = ShapeUtil::GetDimension(data_shape, 0);
-        const int64 num_classes = ShapeUtil::GetDimension(data_shape, 2);
+        const int64_t max_time = ShapeUtil::GetDimension(data_shape, 0);
+        const int64_t num_classes = ShapeUtil::GetDimension(data_shape, 2);
         return popnn::ctc::createDataInput(graph, dtype, batch_size, max_time,
                                            num_classes, *plan,
                                            {debug_info, "data"});
       }
       case 1: {
-        const int64 max_label_length = ShapeUtil::GetDimension(labels_shape, 1);
+        const int64_t max_label_length =
+            ShapeUtil::GetDimension(labels_shape, 1);
         return popnn::ctc::createLabelsInput(graph, dtype, batch_size,
                                              max_label_length, *plan,
                                              {debug_info, "labels"});
@@ -154,7 +155,7 @@ class CTCLossWithLogitsOp : public CTCLossOpBase {
       poplar::Graph& graph, const poplar::Type& out_type,
       const poplar::Tensor& logits, const poplar::Tensor& labels,
       const poplar::Tensor& data_lengths, const poplar::Tensor& label_lengths,
-      DriverProgramSequence& prog, const int64 blank_class,
+      DriverProgramSequence& prog, const int64_t blank_class,
       const popnn::ctc::Plan& plan,
       const poplar::DebugInfo& debug_info) const override {
     return popnn::ctc::calcLossAndGradientLogits(
@@ -172,7 +173,7 @@ class CTCLossWithLogProbsOp : public CTCLossOpBase {
       poplar::Graph& graph, const poplar::Type& out_type,
       const poplar::Tensor& log_probs, const poplar::Tensor& labels,
       const poplar::Tensor& data_lengths, const poplar::Tensor& label_lengths,
-      DriverProgramSequence& prog, const int64 blank_class,
+      DriverProgramSequence& prog, const int64_t blank_class,
       const popnn::ctc::Plan& plan,
       const poplar::DebugInfo& debug_info) const override {
     return popnn::ctc::calcLossAndGradientLogProbabilities(
@@ -197,7 +198,7 @@ class CTCBeamSearchOpBase : public PoplarOpDef {
   virtual BeamSearchReturns PerformBeamSearch(
       poplar::Graph& graph, const poplar::Tensor& data,
       const poplar::Tensor& dataLengths, DriverProgramSequence& prog,
-      int64 blankClass, int64 beamwidth, int64 topPaths,
+      int64_t blankClass, int64_t beamwidth, int64_t topPaths,
       const popnn::ctc::Plan& plan,
       const poplar::DebugNameAndId& debug_name_and_id) const = 0;
 
@@ -223,9 +224,9 @@ class CTCBeamSearchOpBase : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::Type in_type,
                         PoplarDataType(ctc_inst->in_dtype()));
 
-    int64 blank_index = ctc_inst->blank_index();
-    int64 beam_width = ctc_inst->beam_width();
-    int64 top_paths = ctc_inst->top_paths();
+    int64_t blank_index = ctc_inst->blank_index();
+    int64_t beam_width = ctc_inst->beam_width();
+    int64_t top_paths = ctc_inst->top_paths();
 
     TF_ASSIGN_OR_RETURN(const popnn::ctc::Plan* plan, GetCTCPlan(res, inst));
 
@@ -250,7 +251,7 @@ class CTCBeamSearchOpBase : public PoplarOpDef {
     const HloInstruction* inst = tensor_target.tgt;
     const HloCTCInferenceInstructionBase* ctc_inst =
         Cast<HloCTCInferenceInstructionBase>(inst);
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
     if (input_index != 0) {
       return xla::FailedPrecondition(
           "Invalid allocation index %d for instruction", input_index,
@@ -261,9 +262,9 @@ class CTCBeamSearchOpBase : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(allocation_shape));
     TF_ASSIGN_OR_RETURN(poplar::Type in_dtype,
                         PoplarDataType(ctc_inst->in_dtype()));
-    const int64 batch_size = ShapeUtil::GetDimension(allocation_shape, 1);
-    const int64 max_time = ShapeUtil::GetDimension(allocation_shape, 0);
-    const int64 num_classes = ShapeUtil::GetDimension(allocation_shape, 2);
+    const int64_t batch_size = ShapeUtil::GetDimension(allocation_shape, 1);
+    const int64_t max_time = ShapeUtil::GetDimension(allocation_shape, 0);
+    const int64_t num_classes = ShapeUtil::GetDimension(allocation_shape, 2);
     if (in_dtype != dtype) {
       return xla::FailedPrecondition(
           "dtype of the data input tensor (%s) "
@@ -283,7 +284,7 @@ class CTCBeamSearchWithLogitsOp : public CTCBeamSearchOpBase {
   CTCBeamSearchOpBase::BeamSearchReturns PerformBeamSearch(
       poplar::Graph& graph, const poplar::Tensor& data,
       const poplar::Tensor& data_lengths, DriverProgramSequence& prog,
-      int64 blank_class, int64 beam_width, int64 top_paths,
+      int64_t blank_class, int64_t beam_width, int64_t top_paths,
       const popnn::ctc::Plan& plan,
       const poplar::DebugNameAndId& debug_name_and_id) const override {
     poplar::Tensor input_lengths =
@@ -318,7 +319,7 @@ class CTCBeamSearchWithLogProbsOp : public CTCBeamSearchOpBase {
   CTCBeamSearchOpBase::BeamSearchReturns PerformBeamSearch(
       poplar::Graph& graph, const poplar::Tensor& data,
       const poplar::Tensor& data_lengths, DriverProgramSequence& prog,
-      int64 blank_class, int64 beam_width, int64 top_paths,
+      int64_t blank_class, int64_t beam_width, int64_t top_paths,
       const popnn::ctc::Plan& plan,
       const poplar::DebugNameAndId& debug_name_and_id) const override {
     CTCBeamSearchOpBase::BeamSearchReturns result;

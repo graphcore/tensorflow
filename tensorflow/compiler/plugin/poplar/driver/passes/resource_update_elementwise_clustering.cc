@@ -167,7 +167,7 @@ Status ResourceUpdateElementwiseClustering::ValidateResourceUpdateAndClusters(
 // computation.
 StatusOr<HloInstruction*>
 ResourceUpdateElementwiseClustering::AddClusterInputToOutlinedComputation(
-    int64 param_idx, const ElementwiseCluster& cluster,
+    int64_t param_idx, const ElementwiseCluster& cluster,
     HloInstruction* cluster_input, HloComputation::Builder* builder,
     HloCloneContext* context) const {
   HloComputation* input_comp = cluster_input->parent();
@@ -225,7 +225,7 @@ ResourceUpdateElementwiseClustering::AddClusterInputToOutlinedComputation(
 }
 
 StatusOr<HloInstruction*> ResourceUpdateElementwiseClustering::AddClusterInput(
-    int64 param_idx, const ElementwiseCluster& cluster,
+    int64_t param_idx, const ElementwiseCluster& cluster,
     HloInstruction* cluster_input, HloComputation::Builder* builder,
     HloCloneContext* context) const {
   HloComputation* input_comp = cluster_input->parent();
@@ -355,7 +355,7 @@ StatusOr<HloInstruction*> ResourceUpdateElementwiseClustering::OutlineCluster(
   TF_RETURN_IF_ERROR(call->set_backend_config(backend_config));
 
   // Connect up all the users of the cluster output.
-  int64 output_idx = 0;
+  int64_t output_idx = 0;
   for (auto cluster_output : cluster.GetOutputs()) {
     VLOG(2) << "Replacing cluster output " << cluster_output->ToString();
     TF_ASSIGN_OR_RETURN(HloInstruction * gte,
@@ -364,7 +364,7 @@ StatusOr<HloInstruction*> ResourceUpdateElementwiseClustering::OutlineCluster(
 
     for (auto user : computation_output_users.at(cluster_output)) {
       HloInstruction* to_replace_with = gte;
-      for (int64 index : user.indices) {
+      for (int64_t index : user.indices) {
         TF_RETURN_IF_ERROR(
             user.instruction->ReplaceOperandWith(index, to_replace_with));
       }
@@ -425,10 +425,10 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::RewriteCall(
 
   // Only outline the clusters which occur multiple times.
   HloInstructionSet non_unique_clusters;
-  for (int64 i = 0; i != outlined_clusters.size(); ++i) {
+  for (int64_t i = 0; i != outlined_clusters.size(); ++i) {
     HloInstruction* i_call = outlined_clusters[i];
     HloComputation* i_comp = i_call->to_apply();
-    for (int64 j = 0; j != i; ++j) {
+    for (int64_t j = 0; j != i; ++j) {
       HloInstruction* j_call = outlined_clusters[j];
       HloComputation* j_comp = j_call->to_apply();
       if (HloComputationEquals()(i_comp, j_comp)) {

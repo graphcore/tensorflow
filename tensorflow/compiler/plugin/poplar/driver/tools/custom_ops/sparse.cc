@@ -24,7 +24,7 @@ HloSelectScalarFromRowsInstruction::HloSelectScalarFromRowsInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands)
     : HloPoplarInstruction(shape, operands, PoplarOp::SelectScalarFromRows) {}
 
-absl::flat_hash_set<int64>
+absl::flat_hash_set<int64_t>
 HloSelectScalarFromRowsInstruction::AllocatingIndices() const {
   return {};
 }
@@ -33,7 +33,7 @@ bool HloSelectScalarFromRowsInstruction::AllocatingOutput() const {
   return false;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloSelectScalarFromRowsInstruction::LayoutDependencies() const {
   return {};
 }
@@ -85,8 +85,8 @@ HloUpdateScalarInRowsInstruction::HloUpdateScalarInRowsInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands)
     : HloPoplarInstruction(shape, operands, PoplarOp::UpdateScalarInRows) {}
 
-absl::flat_hash_set<int64> HloUpdateScalarInRowsInstruction::AllocatingIndices()
-    const {
+absl::flat_hash_set<int64_t>
+HloUpdateScalarInRowsInstruction::AllocatingIndices() const {
   return {};
 }
 
@@ -94,7 +94,7 @@ bool HloUpdateScalarInRowsInstruction::AllocatingOutput() const {
   return false;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloUpdateScalarInRowsInstruction::LayoutDependencies() const {
   return {};
 }

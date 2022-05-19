@@ -37,7 +37,7 @@ Shape ComputePerReplicaLoadShape(Shape remote_buffer_shape,
     return remote_buffer_shape;
   }
 
-  const int64 element_count = PartitionedElementCountPerReplica(
+  const int64_t element_count = PartitionedElementCountPerReplica(
       ShapeUtil::ElementsIn(remote_buffer_shape), replication_factor);
 
   return ShapeUtil::MakeShape(remote_buffer_shape.element_type(),
@@ -49,7 +49,7 @@ Shape ComputePerReplicaLoadShape(
     const std::vector<uint64>& replication_factors) {
   CHECK_EQ(rbuffers.size(), replication_factors.size());
   std::vector<Shape> result_shape(rbuffers.size());
-  for (int64 i = 0; i != rbuffers.size(); ++i) {
+  for (int64_t i = 0; i != rbuffers.size(); ++i) {
     result_shape[i] = ComputePerReplicaLoadShape(rbuffers[i]->shape(),
                                                  replication_factors[i]);
   }
@@ -81,7 +81,7 @@ HloAbstractRemoteLoadStore::HloAbstractRemoteLoadStore(
                            absl::StrJoin(replication_factors, ".")),
       replication_factors_(replication_factors) {}
 
-uint64 HloAbstractRemoteLoadStore::GetReplicationFactor(int64 index) const {
+uint64 HloAbstractRemoteLoadStore::GetReplicationFactor(int64_t index) const {
   CHECK_GE(index, 0);
   CHECK_LT(static_cast<std::size_t>(index), replication_factors_.size());
   return replication_factors_[index];
@@ -111,14 +111,14 @@ absl::Span<HloInstruction* const> HloRemoteParameterLoad::RemoteBuffers()
   return operands();
 }
 
-absl::flat_hash_set<int64> HloRemoteParameterLoad::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloRemoteParameterLoad::AllocatingIndices() const {
   return {};
 }
 
 bool HloRemoteParameterLoad::AllocatingOutput() const { return true; }
 
-absl::flat_hash_map<int64, int64> HloRemoteParameterLoad::LayoutDependencies()
-    const {
+absl::flat_hash_map<int64_t, int64_t>
+HloRemoteParameterLoad::LayoutDependencies() const {
   return {};
 }
 
@@ -166,21 +166,22 @@ HloRemoteParameterStore::HloRemoteParameterStore(
   CHECK_GE(rbuffers_and_values.size(), 2);
   CHECK_EQ(rbuffers_and_values.size() % 2, 0);
   CHECK_EQ(rbuffers_and_values.size() / 2, replication_factors.size());
-  const int64 half_size = rbuffers_and_values.size() / 2;
-  for (int64 i = 0; i != half_size; ++i) {
+  const int64_t half_size = rbuffers_and_values.size() / 2;
+  for (int64_t i = 0; i != half_size; ++i) {
     CHECK_EQ(rbuffers_and_values[i]->shape().element_type(),
              rbuffers_and_values[i + half_size]->shape().element_type());
   }
 }
 
-absl::flat_hash_set<int64> HloRemoteParameterStore::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloRemoteParameterStore::AllocatingIndices()
+    const {
   return {};
 }
 
 bool HloRemoteParameterStore::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloRemoteParameterStore::LayoutDependencies()
-    const {
+absl::flat_hash_map<int64_t, int64_t>
+HloRemoteParameterStore::LayoutDependencies() const {
   return {};
 }
 
@@ -285,13 +286,14 @@ HloCreateBuffer::HloCreateBuffer(
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64> HloCreateBuffer::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloCreateBuffer::AllocatingIndices() const {
   return {};
 }
 
 bool HloCreateBuffer::AllocatingOutput() const { return !IsRemoteBuffer(); }
 
-absl::flat_hash_map<int64, int64> HloCreateBuffer::LayoutDependencies() const {
+absl::flat_hash_map<int64_t, int64_t> HloCreateBuffer::LayoutDependencies()
+    const {
   return {};
 }
 
@@ -381,13 +383,13 @@ HloBufferLoadSlice::HloBufferLoadSlice(
   CHECK_EQ(rbuffers_and_offsets.size() / 2, replication_factors.size());
 }
 
-absl::flat_hash_set<int64> HloBufferLoadSlice::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloBufferLoadSlice::AllocatingIndices() const {
   return {};
 }
 
 bool HloBufferLoadSlice::AllocatingOutput() const { return true; }
 
-absl::flat_hash_map<int64, int64> HloBufferLoadSlice::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloBufferLoadSlice::LayoutDependencies()
     const {
   return {};
 }

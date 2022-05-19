@@ -39,7 +39,7 @@ class BarrierOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                         FindInplaceOutputTensors(tensor_map, res, inst, seq,
                                                  debug_info, false));
-    int64 flat_tuple_index = 0;
+    int64_t flat_tuple_index = 0;
     for (auto& operand_tensors : inputs) {
       for (auto& tensor : operand_tensors) {
         TF_CHECK_OK(

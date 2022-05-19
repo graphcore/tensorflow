@@ -131,7 +131,7 @@ Shape GetOutfeedShape(const Shape& output_shape,
   if (replication_factor > 1) {
     // When the graph is replicated, we expect an extra dimension at the front
     // of the output.
-    std::vector<int64> dimensions = {replication_factor};
+    std::vector<int64_t> dimensions = {replication_factor};
     absl::c_copy(output_shape.dimensions(), std::back_inserter(dimensions));
     return ShapeUtil::MakeShape(output_shape.element_type(), dimensions);
   } else {
@@ -148,7 +148,7 @@ std::vector<Shape> GetOutfeedShapes(const std::vector<Shape>& output_shapes,
   return result;
 }
 
-int64 GetConfigHash(const IpuOptions& to_hash) {
+int64_t GetConfigHash(const IpuOptions& to_hash) {
   IpuOptions hashable_config = to_hash;
 
   // Remove elements which do not contribute to a difference in the
@@ -178,8 +178,8 @@ int64 GetConfigHash(const IpuOptions& to_hash) {
   return std::hash<string>()(config_proto_str);
 }
 
-std::vector<int64> GetGclHashes() {
-  std::vector<int64> hashes;
+std::vector<int64_t> GetGclHashes() {
+  std::vector<int64_t> hashes;
 
   // Add a hash for each environment variable known to impact the GCL
   // compilation result.
@@ -194,9 +194,9 @@ std::vector<int64> GetGclHashes() {
   return hashes;
 }
 
-int64 CombinedHash(const std::vector<int64>& components) {
-  int64 hash = 42;
-  for (int64 h : components) {
+int64_t CombinedHash(const std::vector<int64_t>& components) {
+  int64_t hash = 42;
+  for (int64_t h : components) {
     hash = tensorflow::Hash64Combine(hash, h);
   }
   return hash;
@@ -218,10 +218,10 @@ bool HasIpuHardware() {
 // global number of IPUs, but execute on the subset of those IPUs that belong
 // to the current process using the Poplar "runtime replica subset" feature.
 poplar::Target CreateMultiReplicaDistributionTarget(
-    const poplar::Target& target, int64 process_count) {
-  const int64 num_ipus = target.getNumIPUs();
+    const poplar::Target& target, int64_t process_count) {
+  const int64_t num_ipus = target.getNumIPUs();
   CHECK_GT(process_count, 0);
-  const int64 global_num_ipus = process_count * num_ipus;
+  const int64_t global_num_ipus = process_count * num_ipus;
   return poplar::Target::createIPUTarget(
       global_num_ipus, target.getTargetArchString(), target.getTargetOptions());
 }
@@ -252,12 +252,12 @@ std::unique_ptr<SeedGenerator> CreateDefaultSeedGenerator() {
 
 }  // namespace
 
-PoplarExecutor::ArgHandle::ArgHandle(int64 parameter_index,
-                                     int64 flat_tensor_index)
+PoplarExecutor::ArgHandle::ArgHandle(int64_t parameter_index,
+                                     int64_t flat_tensor_index)
     : parameter_index(parameter_index), flat_tensor_index(flat_tensor_index) {}
 
-PoplarExecutor::ArgHandle::ArgHandle(int64 parameter_index,
-                                     int64 flat_tensor_index,
+PoplarExecutor::ArgHandle::ArgHandle(int64_t parameter_index,
+                                     int64_t flat_tensor_index,
                                      const std::string& name)
     : parameter_index(parameter_index),
       flat_tensor_index(flat_tensor_index),
@@ -318,7 +318,7 @@ PoplarExecutor::TensorControl::~TensorControl() {
 
 PoplarExecutor::OutfeedContext::OutfeedContext(const PoplarFeedConfig& config,
                                                const Shape& shape,
-                                               int64 replication_factor)
+                                               int64_t replication_factor)
     : config(config),
       replication_factor(replication_factor),
       shapes(GetOutfeedShapes(FlattenedXlaShape(shape), replication_factor)),
@@ -333,9 +333,10 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const PoplarFeedConfig& config,
 
     // Set up the queue per tensor per replica.
     CHECK_GT(replication_factor, 0);
-    const int64 num_bytes_per_replica =
+    const int64_t num_bytes_per_replica =
         ShapeUtil::ByteSizeOf(shapes[i]) / replication_factor;
-    for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
+    for (int64_t replica_id = 0; replica_id < replication_factor;
+         replica_id++) {
       void* buffer =
           tensorflow::port::AlignedMalloc(sizeof(OutfeedQueueType), 64);
       callback_to_io_thread_queues[i].emplace_back(
@@ -349,7 +350,7 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const PoplarFeedConfig& config,
 }
 
 bool PoplarExecutor::OutfeedContext::Matches(
-    const TranslatedFeedInfo& other, int64 other_replication_factor) const {
+    const TranslatedFeedInfo& other, int64_t other_replication_factor) const {
   const auto s = GetOutfeedShapes(FlattenedXlaShape(other.canonical_info.shape),
                                   other_replication_factor);
   if (s != shapes) {
@@ -378,7 +379,8 @@ Status PoplarExecutor::GetAndResetExecutorStatus() {
   return status;
 }
 
-se::DeviceMemoryBase PoplarExecutor::Allocate(uint64 size, int64 memory_space) {
+se::DeviceMemoryBase PoplarExecutor::Allocate(uint64 size,
+                                              int64_t memory_space) {
   TENSORFLOW_TRACEPOINT();
   TensorControl* allocated = new TensorControl(size);
   {
@@ -449,7 +451,7 @@ Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
     return Status::OK();
   }
 
-  const int64 num_replicas = current_replication_factor_;
+  const int64_t num_replicas = current_replication_factor_;
 
   for (const SendRecvInfo& send : send_infos) {
     VLOG(1) << "Connecting Poplar IPU->host stream to rendezvous key '"
@@ -470,7 +472,7 @@ Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
     // `this` which holds a refcount of it should outlive the engine.
     auto* rendezvous = GetRendezvous();
 
-    for (int64 replica_id = 0; replica_id < num_replicas; ++replica_id) {
+    for (int64_t replica_id = 0; replica_id < num_replicas; ++replica_id) {
       if (replica_id == 0) {
         current_engine_->connectStreamToCallback(
             send.stream_handle, replica_id,
@@ -597,7 +599,7 @@ Status PoplarExecutor::ConnectHostEmbeddingLookup(
   }
 
   for (int replica = 0;
-       replica < std::max<int64>(1, current_replication_factor_); ++replica) {
+       replica < std::max<int64_t>(1, current_replication_factor_); ++replica) {
     current_engine_->connectHostFunction(
         lookup_info.stream_handle + lookup_info.embedding_id, replica,
         [replica, indices_shape, embedding_interface](
@@ -630,7 +632,7 @@ Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
       update_info.indices_shape, &indices_shape));
 
   for (int replica = 0;
-       replica < std::max<int64>(1, current_replication_factor_); ++replica) {
+       replica < std::max<int64_t>(1, current_replication_factor_); ++replica) {
     current_engine_->connectHostFunction(
         update_info.stream_handle + update_info.embedding_id, replica,
         [replica, indices_shape, embedding_interface](
@@ -658,7 +660,7 @@ Status PoplarExecutor::ConnectHostEmbeddingNotify(
   }
 
   for (int replica = 0;
-       replica < std::max<int64>(1, current_replication_factor_); ++replica) {
+       replica < std::max<int64_t>(1, current_replication_factor_); ++replica) {
     // Connect the notify callback.
     current_engine_->connectStreamToCallback(
         notify_info.stream_handle + notify_info.embedding_id + "_notify",
@@ -863,7 +865,7 @@ Status PoplarExecutor::SetupInfeedReplication(
     const TranslatedInfeedInfos& infeed_infos) {
   std::unique_lock<std::mutex> l(infeeds_mutex_);
   for (auto& infeed_info : infeed_infos) {
-    const int64 replication_factor = current_replication_factor_;
+    const int64_t replication_factor = current_replication_factor_;
     const std::string& feed_id = infeed_info.stream_prefix;
 
     auto iter = infeed_iterators_.find(feed_id);
@@ -1119,7 +1121,7 @@ IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
         for (size_t tuple_idx = 0; tuple_idx < outfeed_context->shapes.size();
              ++tuple_idx) {
           // Dequeue tensors from each replica.
-          for (int64 replica_id = 0; replica_id < replicas; replica_id++) {
+          for (int64_t replica_id = 0; replica_id < replicas; replica_id++) {
             auto& queue =
                 outfeed_context
                     ->callback_to_io_thread_queues[tuple_idx][replica_id];
@@ -1437,12 +1439,12 @@ bool PoplarExecutor::HasPoplarTarget() const {
   return PoplarXlaFlags::Get().use_ipu_model || ipu_.TargetConfigured();
 }
 
-int64 PoplarExecutor::GetNumIpusInLocalProcess(
+int64_t PoplarExecutor::GetNumIpusInLocalProcess(
     const poplar::Target& target) const {
-  const int64 num_target_ipus = target.getNumIPUs();
+  const int64_t num_target_ipus = target.getNumIPUs();
   if (HasMultiReplicaDistributionOptions()) {
     // With multi-replica distribution, we run only on our subset of the IPUs.
-    const int64 process_count = GetMultiReplicaProcessCount();
+    const int64_t process_count = GetMultiReplicaProcessCount();
     CHECK_GT(process_count, 0);
     CHECK_EQ(num_target_ipus % process_count, 0);
     return num_target_ipus / process_count;
@@ -1577,7 +1579,7 @@ Status PoplarExecutor::AttachToPoplarDevice() {
       // Poplar device would already be set if we were using the model.
       CHECK(HasIpuHardware());
       const poplar::Target& target = GetOrCreatePoplarTarget();
-      const int64 num_local_ipus = GetNumIpusInLocalProcess(target);
+      const int64_t num_local_ipus = GetNumIpusInLocalProcess(target);
 
       // Hardware devices
       auto device_list =
@@ -1649,8 +1651,8 @@ Status PoplarExecutor::CreatePoplarTarget() {
           "found. (Are you sure you enabled the Poplar driver ?)");
     }
     // Try to extract info from the user configuration if it was provided.
-    absl::optional<int64> device_index;
-    absl::optional<int64> num_devices;
+    absl::optional<int64_t> device_index;
+    absl::optional<int64_t> num_devices;
     if (has_user_config) {
       // User has specified a configuration
       if (ordinal_ >= current_config_.device_config_size()) {
@@ -1690,9 +1692,9 @@ Status PoplarExecutor::CreatePoplarTarget() {
 
       // If there is an IPU version configured then use that.
       if (!current_config_.ipu_version().empty()) {
-        int64 num_target_devices = *num_devices;
+        int64_t num_target_devices = *num_devices;
         if (HasMultiReplicaDistributionOptions()) {
-          const int64 process_count = GetMultiReplicaProcessCount();
+          const int64_t process_count = GetMultiReplicaProcessCount();
           CHECK_GT(process_count, 0);
           num_target_devices *= process_count;
         }
@@ -1925,7 +1927,7 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   }
 
   // Generate Target hash
-  std::vector<int64> target_hash;
+  std::vector<int64_t> target_hash;
   target_hash.push_back(ipu_.Target().getNumTiles());
   target_hash.push_back(ipu_.Target().getDataPathWidth());
   target_hash.push_back(ipu_.Target().getBytesPerTile());
@@ -1933,11 +1935,12 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   target_hash.push_back(ipu_.Target().getTilesPerIPU());
   target_hash.push_back(ipu_.Target().getNumIPUs());
   target_hash.push_back(ipu_.Target().getInstanceSize());
-  target_hash.push_back(static_cast<int64>(ipu_.Target().getTargetType()));
+  target_hash.push_back(static_cast<int64_t>(ipu_.Target().getTargetType()));
   target_hash.push_back(
-      static_cast<int64>(ipu_.Target().getIpuLinkConfiguration()));
+      static_cast<int64_t>(ipu_.Target().getIpuLinkConfiguration()));
   target_hash.push_back(ipu_.Target().getIpuLinkDomainSize());
-  target_hash.push_back(static_cast<int64>(ipu_.Target().getIpuLinkTopology()));
+  target_hash.push_back(
+      static_cast<int64_t>(ipu_.Target().getIpuLinkTopology()));
   target_hash.push_back(ipu_.Target().getGatewayMode());
   target_hash.push_back(ipu_.Target().getMinIPUSyncDelay());
   target_hash.push_back(ipu_.Target().getMaxIPUSyncDelay());
@@ -2075,7 +2078,7 @@ std::string PoplarExecutor::ReportFileExtension() const {
 void PoplarExecutor::AddCompileEndEventRecord(const std::string& module_name,
                                               std::string&& tensor_map,
                                               std::string&& instruction_info,
-                                              int64 duration) {
+                                              int64_t duration) {
   auto evt = NewTraceEvent();
   evt.set_type(tensorflow::IpuTraceEvent::COMPILE_END);
 
@@ -2270,7 +2273,7 @@ void PoplarExecutor::UpdateOutputsHandleMap(const PoplarExecutable& executable,
   if (shape.IsTuple()) {
     TensorControl* tc = static_cast<TensorControl*>(retbuf.opaque());
     void** ptrs = reinterpret_cast<void**>(tc->data);
-    for (int64 i = 0; i < ShapeUtil::TupleElementCount(shape); i++) {
+    for (int64_t i = 0; i < ShapeUtil::TupleElementCount(shape); i++) {
       shapes.push_back(ShapeUtil::GetTupleElementShape(shape, i));
       outputs.push_back(ptrs[i]);
     }
@@ -2326,8 +2329,9 @@ PoplarExecutor::GetOutputAllocator(const PoplarExecutable& executable,
 
 StatusOr<se::DeviceMemoryBase>
 PoplarExecutor::ConstantOutputAllocation::AllocateBuffer(const Shape& shape,
-                                                         int64, int64) const {
-  const int64 size = ShapeUtil::ByteSizeOf(shape);
+                                                         int64_t,
+                                                         int64_t) const {
+  const int64_t size = ShapeUtil::ByteSizeOf(shape);
   TF_ASSIGN_OR_RETURN(auto allocated_owned,
                       allocator_->Allocate(ordinal_, size, false));
   se::DeviceMemoryBase allocated = allocated_owned.Release();
@@ -2335,11 +2339,11 @@ PoplarExecutor::ConstantOutputAllocation::AllocateBuffer(const Shape& shape,
 }
 
 Status PoplarExecutor::ConstantOutputAllocation::PopulateBuffer(
-    se::DeviceMemoryBase& buffer, const Shape& shape, int64 output_index,
-    int64 flat_tensor_index) const {
+    se::DeviceMemoryBase& buffer, const Shape& shape, int64_t output_index,
+    int64_t flat_tensor_index) const {
   CHECK(constants_);
   const auto& constant = constants_->at(output_index).at(flat_tensor_index);
-  const int64 size = ShapeUtil::ByteSizeOf(shape);
+  const int64_t size = ShapeUtil::ByteSizeOf(shape);
   TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
   tc->size = size;
   tc->element_type = shape.element_type();
@@ -2354,8 +2358,9 @@ Status PoplarExecutor::ConstantOutputAllocation::PopulateBuffer(
 
 StatusOr<se::DeviceMemoryBase>
 PoplarExecutor::PrecompileOutputAllocation::AllocateBuffer(const Shape& shape,
-                                                           int64, int64) const {
-  const int64 size = ShapeUtil::ByteSizeOf(shape);
+                                                           int64_t,
+                                                           int64_t) const {
+  const int64_t size = ShapeUtil::ByteSizeOf(shape);
   TF_ASSIGN_OR_RETURN(auto allocated_owned,
                       allocator_->Allocate(ordinal_, size, false));
   se::DeviceMemoryBase allocated = allocated_owned.Release();
@@ -2363,8 +2368,8 @@ PoplarExecutor::PrecompileOutputAllocation::AllocateBuffer(const Shape& shape,
 }
 
 Status PoplarExecutor::PrecompileOutputAllocation::PopulateBuffer(
-    se::DeviceMemoryBase& buffer, const Shape& shape, int64, int64) const {
-  const int64 size = ShapeUtil::ByteSizeOf(shape);
+    se::DeviceMemoryBase& buffer, const Shape& shape, int64_t, int64_t) const {
+  const int64_t size = ShapeUtil::ByteSizeOf(shape);
   TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
   tc->size = size;
   tc->element_type = shape.element_type();
@@ -2380,7 +2385,7 @@ Status PoplarExecutor::PrecompileOutputAllocation::PopulateBuffer(
 }
 
 bool PoplarExecutor::RemapOutputAllocation::AddRemapCopy(
-    int64 output_index) const {
+    int64_t output_index) const {
   bool make_a_copy = false;
 
   const auto& input_infos = io_map_.GetEntryInputInfos();
@@ -2397,8 +2402,8 @@ bool PoplarExecutor::RemapOutputAllocation::AddRemapCopy(
 
 StatusOr<PoplarExecutor::TensorControl*>
 PoplarExecutor::RemapOutputAllocation::GetRemapedTensorControl(
-    int64 output_index, int64 flat_tensor_index) const {
-  const int64 remap_idx = remap_map_.at(output_index);
+    int64_t output_index, int64_t flat_tensor_index) const {
+  const int64_t remap_idx = remap_map_.at(output_index);
 
   auto it = args_map_.find(ArgHandle{remap_idx, flat_tensor_index});
   if (it == args_map_.end()) {
@@ -2409,7 +2414,7 @@ PoplarExecutor::RemapOutputAllocation::GetRemapedTensorControl(
 
 StatusOr<se::DeviceMemoryBase>
 PoplarExecutor::RemapOutputAllocation::AllocateBuffer(
-    const Shape&, int64 output_index, int64 flat_tensor_index) const {
+    const Shape&, int64_t output_index, int64_t flat_tensor_index) const {
   TF_ASSIGN_OR_RETURN(TensorControl * original,
                       GetRemapedTensorControl(output_index, flat_tensor_index));
 
@@ -2427,8 +2432,8 @@ PoplarExecutor::RemapOutputAllocation::AllocateBuffer(
 }
 
 Status PoplarExecutor::RemapOutputAllocation::PopulateBuffer(
-    se::DeviceMemoryBase& buffer, const Shape&, int64 output_index,
-    int64 flat_tensor_index) const {
+    se::DeviceMemoryBase& buffer, const Shape&, int64_t output_index,
+    int64_t flat_tensor_index) const {
   TF_ASSIGN_OR_RETURN(TensorControl * original,
                       GetRemapedTensorControl(output_index, flat_tensor_index));
 
@@ -2444,7 +2449,7 @@ Status PoplarExecutor::RemapOutputAllocation::PopulateBuffer(
 
 StatusOr<se::DeviceMemoryBase>
 PoplarExecutor::BufferOutputAllocation::AllocateBuffer(
-    const Shape& shape, int64 output_index, int64 flat_tensor_index) const {
+    const Shape& shape, int64_t output_index, int64_t flat_tensor_index) const {
   const auto& output_info = io_map_.GetEntryOutputInfos().at(output_index);
   if (output_info.IsResourceModified()) {
     // The output is an in-place update of one of the inputs.
@@ -2459,7 +2464,7 @@ PoplarExecutor::BufferOutputAllocation::AllocateBuffer(
     return se::DeviceMemoryBase(tc, tc->size);
   } else {
     // The output is not one of the inputs.
-    const int64 size = ShapeUtil::ByteSizeOf(shape);
+    const int64_t size = ShapeUtil::ByteSizeOf(shape);
     TF_ASSIGN_OR_RETURN(auto allocated_owned,
                         allocator_->Allocate(ordinal_, size, false));
     se::DeviceMemoryBase allocated = allocated_owned.Release();
@@ -2468,8 +2473,8 @@ PoplarExecutor::BufferOutputAllocation::AllocateBuffer(
 }
 
 Status PoplarExecutor::BufferOutputAllocation::PopulateBuffer(
-    se::DeviceMemoryBase& buffer, const Shape& shape, int64 output_index,
-    int64 flat_tensor_index) const {
+    se::DeviceMemoryBase& buffer, const Shape& shape, int64_t output_index,
+    int64_t flat_tensor_index) const {
   const auto& output_info = io_map_.GetEntryOutputInfos().at(output_index);
   TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
   tc->size = ShapeUtil::ByteSizeOf(shape);
@@ -2498,8 +2503,8 @@ Status PoplarExecutor::BufferOutputAllocation::PopulateBuffer(
                                             /*current_flat_tuple_index=*/0);
   }
 
-  const int64 tuple_size = ShapeUtil::TupleElementCount(shape);
-  const int64 top_size = xla::ShapeUtil::ByteSizeOf(shape, sizeof(void*));
+  const int64_t tuple_size = ShapeUtil::TupleElementCount(shape);
+  const int64_t top_size = xla::ShapeUtil::ByteSizeOf(shape, sizeof(void*));
   TF_ASSIGN_OR_RETURN(auto top_buffer_owned,
                       allocator->Allocate(ordinal, top_size, false));
   se::DeviceMemoryBase top_buffer = top_buffer_owned.Release();
@@ -2512,7 +2517,7 @@ Status PoplarExecutor::BufferOutputAllocation::PopulateBuffer(
     ShapeTree<se::DeviceMemoryBase> buffer_tree(output_index_shape);
 
     // Note that this walk is in pre-order (DFT).
-    int64 flat_tuple_index = 0;
+    int64_t flat_tuple_index = 0;
     TF_RETURN_IF_ERROR(ShapeUtil::ForEachSubshapeWithStatus(
         output_index_shape,
         [&](const Shape& subshape, const ShapeIndex& index) -> Status {
@@ -2523,7 +2528,7 @@ Status PoplarExecutor::BufferOutputAllocation::PopulateBuffer(
           if (subshape.IsTuple()) {
             // If the shape is a tuple, create a buffer to point at all the
             // subshapes.
-            const int64 size =
+            const int64_t size =
                 xla::ShapeUtil::ByteSizeOf(subshape, sizeof(void*));
             TF_ASSIGN_OR_RETURN(auto owned_allocated,
                                 allocator->Allocate(ordinal, size, false));
@@ -2533,7 +2538,7 @@ Status PoplarExecutor::BufferOutputAllocation::PopulateBuffer(
             *node = se::DeviceMemoryBase(tc, size);
 
           } else {
-            const int64 current_flat_tuple_index = flat_tuple_index++;
+            const int64_t current_flat_tuple_index = flat_tuple_index++;
             TF_ASSIGN_OR_RETURN(
                 *node, output_allocator->AllocateBuffer(
                            subshape, output_index, current_flat_tuple_index));
@@ -2542,7 +2547,7 @@ Status PoplarExecutor::BufferOutputAllocation::PopulateBuffer(
           // Propagate the allocated buffer into the buffer above.
           if (!index.empty()) {
             ShapeIndex parent_index = index;
-            const int64 parent_output_index = parent_index.back();
+            const int64_t parent_output_index = parent_index.back();
             parent_index.pop_back();
 
             se::DeviceMemoryBase* parent_buffer =
@@ -2575,7 +2580,7 @@ Status PoplarExecutor::PopulateOutputBuffer(
        output_index != ShapeUtil::TupleElementCount(shape); ++output_index) {
     // Walk the shape for the current output index.
     const Shape& output_index_shape = shape.tuple_shapes(output_index);
-    int64 flat_tuple_index = 0;
+    int64_t flat_tuple_index = 0;
     // Only need to populate the leaf nodes.
     for (const auto& indexed_shape :
          ShapeUtil::GetLeafShapes(output_index_shape)) {
@@ -2658,8 +2663,8 @@ StatusOr<bool> PoplarExecutor::CheckRemapGraphNeedsOnDeviceBuffers(
       static_cast<const RemapOutputAllocation*>(&output_allocator);
 
   auto remap_requires_device_buffer =
-      [remap_allocator](int64 output_index,
-                        int64 flat_tuple_index) -> StatusOr<bool> {
+      [remap_allocator](int64_t output_index,
+                        int64_t flat_tuple_index) -> StatusOr<bool> {
     if (remap_allocator->AddRemapCopy(output_index)) {
       TF_ASSIGN_OR_RETURN(auto tc, remap_allocator->GetRemapedTensorControl(
                                        output_index, flat_tuple_index));
@@ -2678,7 +2683,7 @@ StatusOr<bool> PoplarExecutor::CheckRemapGraphNeedsOnDeviceBuffers(
     // Walk the shape for the current output index.
     const Shape& output_index_shape = shape.tuple_shapes(output_index);
 
-    for (int64 flat_tuple_index = 0;
+    for (int64_t flat_tuple_index = 0;
          flat_tuple_index != ShapeUtil::GetLeafCount(output_index_shape);
          ++flat_tuple_index) {
       TF_ASSIGN_OR_RETURN(
@@ -2723,7 +2728,7 @@ void PoplarExecutor::ConnectReplicatedDeviceToHost(
   void* dest = static_cast<void*>(tc->data);
   const std::size_t size = HostSizeToDeviceSize(tc->size, tc->element_type);
 
-  for (int64 replica_id = 0; replica_id < current_replication_factor_;
+  for (int64_t replica_id = 0; replica_id < current_replication_factor_;
        ++replica_id) {
     auto callback = [dest, size, replica_id](void* ptr) {
       if (replica_id == 0) {
@@ -2763,7 +2768,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
 
           const std::string buffer_name =
               tc->in_memory_remote_parameter_info->buffer_name;
-          const int64 buffer_offset =
+          const int64_t buffer_offset =
               tc->in_memory_remote_parameter_info->buffer_offset;
           buffer_size = tc->GetRemoteBufferSize();
 
@@ -2907,7 +2912,7 @@ Status PoplarExecutor::MoveHostToDevice() {
 
     for (auto arg : args_map_) {
       TensorControl* tc = arg.second.tc;
-      std::vector<std::pair<std::string, int64>> stream_list;
+      std::vector<std::pair<std::string, int64_t>> stream_list;
       void* buf(static_cast<void*>(tc->data));
       auto buffer_size = tc->size;
       if (!arg.second.streamed) {
@@ -2920,7 +2925,7 @@ Status PoplarExecutor::MoveHostToDevice() {
           buffer_size = tc->GetRemoteBufferSize();
           const std::string buffer_name =
               tc->in_memory_remote_parameter_info->buffer_name;
-          const int64 buffer_offset =
+          const int64_t buffer_offset =
               tc->in_memory_remote_parameter_info->buffer_offset;
 
           if (tc->in_memory_remote_parameter_info->is_replica_partitioned) {
@@ -3042,11 +3047,11 @@ Status PoplarExecutor::MoveHostToDevice() {
 /*static*/ StatusOr<se::DeviceMemoryBase> PoplarExecutor::GetBufferByShapeIndex(
     const se::DeviceMemoryBase& top, const ShapeIndex& index) {
   se::DeviceMemoryBase buffer = top;
-  for (int64 i : index) {
+  for (int64_t i : index) {
     const TensorControl* tc =
         reinterpret_cast<const TensorControl*>(buffer.opaque());
     void** bufs = reinterpret_cast<void**>(tc->data);
-    const int64 size = reinterpret_cast<const TensorControl*>(bufs[i])->size;
+    const int64_t size = reinterpret_cast<const TensorControl*>(bufs[i])->size;
     buffer = se::DeviceMemoryBase(bufs[i], size);
   }
   return buffer;
@@ -3267,7 +3272,7 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
   }
 }
 
-int64 PoplarExecutor::GetReplicationFactorForOutfeed(
+int64_t PoplarExecutor::GetReplicationFactorForOutfeed(
     const std::string& feed_id, bool warn_when_unconnected) const {
   OutfeedContext* outfeed_context = nullptr;
   std::lock_guard<std::mutex> outfeed_lock(outfeeds_mutex_);
@@ -3434,7 +3439,7 @@ Status TransformEvaluatorSubOutput(ShapeIndex& shape_index, const Shape& layout,
                                    std::vector<Literal>& sub_result) {
   if (layout.IsTuple()) {
     // Continue a depth-first traversal from each subshape.
-    for (int64 i = 0; i < layout.tuple_shapes_size(); i++) {
+    for (int64_t i = 0; i < layout.tuple_shapes_size(); i++) {
       // We need to traverse the shape tree down.
       shape_index.push_back(i);
       auto& sub_shape = layout.tuple_shapes(i);
@@ -3797,10 +3802,10 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
 }
 
 void PoplarExecutor::SetCurrentReplicationFactor(
-    int64 executable_replication_factor) {
+    int64_t executable_replication_factor) {
   if (HasMultiReplicaDistributionOptions()) {
-    const int64 process_index = GetMultiReplicaProcessIndex();
-    const int64 process_count = GetMultiReplicaProcessCount();
+    const int64_t process_index = GetMultiReplicaProcessIndex();
+    const int64_t process_count = GetMultiReplicaProcessCount();
     CHECK_GT(process_count, 0);
     CHECK_EQ(executable_replication_factor % process_count, 0);
 

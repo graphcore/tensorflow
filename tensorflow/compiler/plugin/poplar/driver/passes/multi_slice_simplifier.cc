@@ -29,7 +29,7 @@ namespace poplarplugin {
 
 static bool IsVector(const HloInstruction* instr) {
   const Shape& shape = instr->shape();
-  const absl::Span<const int64> dimensions = shape.dimensions();
+  const absl::Span<const int64_t> dimensions = shape.dimensions();
   const int dimensions_size = shape.dimensions_size();
   bool result = false;
   result |= dimensions_size == 1;                        // shape = [N]
@@ -65,7 +65,7 @@ static const std::vector<HloMatcherPattern> patterns = {
 // clang-format on
 
 static StatusOr<bool> HandleMultiSliceConstIndices(
-    HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
+    HloMatcherMatched& match, const absl::optional<int64_t> sharding_device) {
   HloComputation* comp = match.computation;
 
   HloMultiSliceInstruction* slice =
@@ -75,11 +75,11 @@ static StatusOr<bool> HandleMultiSliceConstIndices(
 
   // Flatten the indices literal.
   Literal indices_literal = indices->literal().Clone();
-  const int64 element_count = indices_literal.element_count();
+  const int64_t element_count = indices_literal.element_count();
   TF_ASSIGN_OR_RETURN(indices_literal,
                       indices_literal.Reshape({element_count}));
-  TF_ASSIGN_OR_RETURN(std::vector<int64> static_indices,
-                      LiteralVectorToNativeType<int64>(indices_literal));
+  TF_ASSIGN_OR_RETURN(std::vector<int64_t> static_indices,
+                      LiteralVectorToNativeType<int64_t>(indices_literal));
 
   HloInstruction* new_slice = comp->AddInstruction(CreateStaticMultiSlice(
       slice->shape(), inputs, std::move(static_indices)));
@@ -92,7 +92,7 @@ static StatusOr<bool> HandleMultiSliceConstIndices(
 }
 
 static StatusOr<bool> HandleMultiUpdateAddConstIndices(
-    HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
+    HloMatcherMatched& match, const absl::optional<int64_t> sharding_device) {
   HloComputation* comp = match.computation;
 
   HloMultiUpdateAddInstruction* update_add =
@@ -104,11 +104,11 @@ static StatusOr<bool> HandleMultiUpdateAddConstIndices(
 
   // Flatten the indices literal.
   Literal indices_literal = indices->literal().Clone();
-  const int64 element_count = indices_literal.element_count();
+  const int64_t element_count = indices_literal.element_count();
   TF_ASSIGN_OR_RETURN(indices_literal,
                       indices_literal.Reshape({element_count}));
-  TF_ASSIGN_OR_RETURN(std::vector<int64> static_indices,
-                      LiteralVectorToNativeType<int64>(indices_literal));
+  TF_ASSIGN_OR_RETURN(std::vector<int64_t> static_indices,
+                      LiteralVectorToNativeType<int64_t>(indices_literal));
 
   HloInstruction* new_update_add = comp->AddInstruction(
       CreateStaticMultiUpdateAdd(update_add->shape(), {inputs, updates, scale},
@@ -127,7 +127,7 @@ MultiSliceSimplifier::MultiSliceSimplifier(
                  /*requires_unique_sharding=*/true) {}
 
 StatusOr<bool> MultiSliceSimplifier::HandleMatch(
-    HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
+    HloMatcherMatched& match, const absl::optional<int64_t> sharding_device) {
   switch (match.pattern_idx) {
     case 0: {
       return HandleMultiSliceConstIndices(match, sharding_device);

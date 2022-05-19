@@ -70,7 +70,7 @@ class SubcomputationGraphCache {
       bool partitioned_elementwise_cluster = false);
 
  private:
-  int64 next_rearrangement_id_ = 1;
+  int64_t next_rearrangement_id_ = 1;
   std::unordered_map<
       const SubcomputationGraphCacheKey, std::shared_ptr<DeferredVisitor>,
       SubcomputationGraphCacheKeyHash, SubcomputationGraphCacheKeyEquals>

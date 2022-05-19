@@ -547,11 +547,11 @@ std::vector<std::vector<ElementType>> ConstructRampUpScheduleOverlapIO(
 // steps with the same stage_id executed before the corresponding bwd
 // stage.
 static bool ReplaceStageWithEmpty(
-    const std::vector<std::vector<int64>>& stage_schedule,
-    const std::vector<absl::flat_hash_set<int64>>& stage_schedule_lookup,
-    const int64 t1, const int64 stage_id, const int64 bwd_stage_id) {
+    const std::vector<std::vector<int64_t>>& stage_schedule,
+    const std::vector<absl::flat_hash_set<int64_t>>& stage_schedule_lookup,
+    const int64_t t1, const int64_t stage_id, const int64_t bwd_stage_id) {
   bool replace_with_empty_element = false;
-  for (int64 t2 = t1 + 1; t2 != stage_schedule.size(); ++t2) {
+  for (int64_t t2 = t1 + 1; t2 != stage_schedule.size(); ++t2) {
     if (stage_schedule_lookup[t2].contains(bwd_stage_id)) {
       // Found a corresponding bwd stage before another forward stage with
       // the same id, need to recompute.
@@ -585,7 +585,7 @@ static bool ReplaceStageWithEmpty(
 template <typename ElementType>
 std::vector<std::vector<ElementType>> ConstructRecomputationRampUpSchedule(
     const std::vector<int>& offsets, const std::vector<ElementType>& input,
-    int64 num_backward_stages, ElementType empty_element = {}) {
+    int64_t num_backward_stages, ElementType empty_element = {}) {
   // If there are no backward stages, there is no recomputation.
   if (num_backward_stages == 0) {
     return std::vector<std::vector<ElementType>>(
@@ -630,19 +630,19 @@ std::vector<std::vector<ElementType>> ConstructRecomputationRampUpSchedule(
 
   // Create an execution trace which shows which fwd/bwd stages are exected
   // during ramp up - a value of -1 indicates no stage being executed.
-  std::vector<int64> stages(input.size());
+  std::vector<int64_t> stages(input.size());
   absl::c_iota(stages, 0);
-  std::vector<std::vector<int64>> stage_schedule =
+  std::vector<std::vector<int64_t>> stage_schedule =
       ConstructRampUpSchedule(offsets, stages, -1L);
   // Transpose so that each row represents a single timestep.
   stage_schedule = TransposeSchedule(stage_schedule);
   // Create a lookup for what stages are executed in each timestep.
-  std::vector<absl::flat_hash_set<int64>> stage_schedule_lookup(
+  std::vector<absl::flat_hash_set<int64_t>> stage_schedule_lookup(
       stage_schedule.size());
   absl::c_transform(
       stage_schedule, stage_schedule_lookup.begin(),
-      [](const std::vector<int64>& timestep_schedule)
-          -> absl::flat_hash_set<int64> {
+      [](const std::vector<int64_t>& timestep_schedule)
+          -> absl::flat_hash_set<int64_t> {
         return {timestep_schedule.begin(), timestep_schedule.end()};
       });
 
@@ -653,9 +653,9 @@ std::vector<std::vector<ElementType>> ConstructRecomputationRampUpSchedule(
 
   // Go through all the elements in the ramp up schedule, and insert empty
   // elements as appropriate.
-  for (int64 t1 = 0; t1 != stage_schedule.size(); ++t1) {
-    for (int64 j = 0; j != stage_schedule[t1].size(); ++j) {
-      const int64 stage_id = stage_schedule[t1][j];
+  for (int64_t t1 = 0; t1 != stage_schedule.size(); ++t1) {
+    for (int64_t j = 0; j != stage_schedule[t1].size(); ++j) {
+      const int64_t stage_id = stage_schedule[t1][j];
       // Mask if the stage is not meant to be executed or it is a backward
       // stage.
       if (stage_id == -1 || stage_id >= num_backward_stages) {
@@ -663,7 +663,7 @@ std::vector<std::vector<ElementType>> ConstructRecomputationRampUpSchedule(
         continue;
       }
 
-      const int64 bwd_stage_id = num_backward_stages * 2 - 1 - stage_id;
+      const int64_t bwd_stage_id = num_backward_stages * 2 - 1 - stage_id;
       if (ReplaceStageWithEmpty(stage_schedule, stage_schedule_lookup, t1,
                                 stage_id, bwd_stage_id)) {
         result[t1][j] = empty_element;
@@ -696,7 +696,7 @@ template <typename ElementType>
 std::vector<std::vector<ElementType>>
 ConstructRecomputationRampUpScheduleOverlapIO(
     const std::vector<int>& offsets, const std::vector<ElementType>& input,
-    int64 num_backward_stages, std::size_t offset,
+    int64_t num_backward_stages, std::size_t offset,
     ElementType empty_element = {}) {
   CHECK_LT(offset, 3);
   auto result = ConstructRecomputationRampUpSchedule(
@@ -786,7 +786,7 @@ std::vector<std::vector<ElementType>> ConstructRampDownSchedule(
   auto result = ConstructScheduleInternal(offsets, input);
 
   return absl::visit(make_visitor<ElementType>(
-                         [&](const int64 i) {
+                         [&](const int64_t i) {
                            return MaskOutPastAdditional(
                                offsets, std::move(result),
                                std::move(empty_element), i);
@@ -852,7 +852,7 @@ std::vector<std::vector<ElementType>> ConstructRampDownScheduleOverlapIO(
 template <typename ElementType>
 std::vector<std::vector<ElementType>> ConstructRecomputationRampDownSchedule(
     const std::vector<int>& offsets, const std::vector<ElementType>& input,
-    int64 num_backward_stages, ElementType empty_element = {},
+    int64_t num_backward_stages, ElementType empty_element = {},
     const PipelineVisitor::IterationsType& additional_iterations = 0,
     const poplar::DebugContext debug_context = {}) {
   // If there are no backward stages, there is no recomputation.
@@ -902,28 +902,28 @@ std::vector<std::vector<ElementType>> ConstructRecomputationRampDownSchedule(
 
   // Create an execution trace which shows which fwd/bwd stages are exected
   // during ramp down.
-  std::vector<int64> stages(input.size());
+  std::vector<int64_t> stages(input.size());
   absl::c_iota(stages, 0);
-  std::vector<std::vector<int64>> ramp_down_schedule =
+  std::vector<std::vector<int64_t>> ramp_down_schedule =
       ConstructRampDownSchedule(offsets, stages, -1L, additional_iterations,
                                 debug_context);
 
   // Transpose so that each row represents a single timestep.
   ramp_down_schedule = TransposeSchedule(ramp_down_schedule);
   // Create a lookup for what stages are executed in each timestep.
-  std::vector<absl::flat_hash_set<int64>> ramp_down_schedule_lookup(
+  std::vector<absl::flat_hash_set<int64_t>> ramp_down_schedule_lookup(
       ramp_down_schedule.size());
   absl::c_transform(
       ramp_down_schedule, ramp_down_schedule_lookup.begin(),
-      [](const std::vector<int64>& timestep_schedule)
-          -> absl::flat_hash_set<int64> {
+      [](const std::vector<int64_t>& timestep_schedule)
+          -> absl::flat_hash_set<int64_t> {
         return {timestep_schedule.begin(), timestep_schedule.end()};
       });
 
   // Create an execution trace without ramp-down to show at what time slots the
   // recomputation has to be performed in (it has to be performed in a time-slot
   // for the corresponding forward stage).
-  std::vector<std::vector<int64>> stage_schedule =
+  std::vector<std::vector<int64_t>> stage_schedule =
       ConstructScheduleInternal(offsets, stages);
   // Transpose so that each row represents a single timestep.
   stage_schedule = TransposeSchedule(stage_schedule);
@@ -934,9 +934,9 @@ std::vector<std::vector<ElementType>> ConstructRecomputationRampDownSchedule(
   result = TransposeSchedule(result);
   // Go through all the elements in the ramp down schedule, and insert empty
   // elements as appropriate.
-  for (int64 t1 = 0; t1 != stage_schedule.size(); ++t1) {
-    for (int64 j = 0; j != stage_schedule[t1].size(); ++j) {
-      const int64 stage_id = stage_schedule[t1][j];
+  for (int64_t t1 = 0; t1 != stage_schedule.size(); ++t1) {
+    for (int64_t j = 0; j != stage_schedule[t1].size(); ++j) {
+      const int64_t stage_id = stage_schedule[t1][j];
       // Mask if the stage is a backward stage.
       if (stage_id >= num_backward_stages) {
         result[t1][j] = empty_element;
@@ -945,10 +945,10 @@ std::vector<std::vector<ElementType>> ConstructRecomputationRampDownSchedule(
       // Given the current stage at the current timestep, we only need to
       // perform recomputation if there is a corresponding bwd stage in a
       // future time step being executed.
-      const int64 bwd_stage_id = num_backward_stages * 2 - 1 - stage_id;
+      const int64_t bwd_stage_id = num_backward_stages * 2 - 1 - stage_id;
 
       bool replace_with_empty_element = true;
-      for (int64 t2 = t1 + 1; t2 != ramp_down_schedule.size(); ++t2) {
+      for (int64_t t2 = t1 + 1; t2 != ramp_down_schedule.size(); ++t2) {
         const auto& timestep_schedule = ramp_down_schedule[t2];
         if (ramp_down_schedule_lookup[t2].contains(bwd_stage_id)) {
           // Found a corresponding bwd stage, need to recompute.
@@ -987,7 +987,7 @@ template <typename ElementType>
 std::vector<std::vector<ElementType>>
 ConstructRecomputationRampDownScheduleOverlapIO(
     const std::vector<int>& offsets, const std::vector<ElementType>& input,
-    int64 num_backward_stages, std::size_t offset,
+    int64_t num_backward_stages, std::size_t offset,
     ElementType empty_element = {}) {
   CHECK_LT(offset, 3);
   auto result = ConstructRecomputationRampDownSchedule(
@@ -1173,12 +1173,12 @@ struct PipelineSchedulerUtil {
 
 inline DriverProgramSequence ForProgram(
     DriverGraph& graph,
-    const absl::variant<int64, PipelineVisitor::CountAndGraph>& count,
+    const absl::variant<int64_t, PipelineVisitor::CountAndGraph>& count,
     const DriverProgramSequence& body,
     const poplar::DebugContext& debug_context) {
   auto for_loop =
       absl::visit(make_visitor<poplar::program::Sequence>(
-                      [&](const int64 i) -> poplar::program::Sequence {
+                      [&](const int64_t i) -> poplar::program::Sequence {
                         return poplar::program::Sequence(
                             {poplar::program::Repeat(i, body, debug_context)});
                       },

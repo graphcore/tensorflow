@@ -50,8 +50,8 @@ StatusOr<void*> GetSymbolAddress(void* handle, const std::string& symbol_name) {
 HloUserOpInstruction::HloUserOpInstruction(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
     const std::string& path, void* fn_ptr, void* metadata_fn_ptr,
-    void* allocator_function_ptr, int64 gradient_size,
-    int64 partial_derivative_index, bool is_user_read_write,
+    void* allocator_function_ptr, int64_t gradient_size,
+    int64_t partial_derivative_index, bool is_user_read_write,
     const std::string& attributes)
     : HloPoplarInstruction(shape, inputs, PoplarOp::UserOp, fn_ptr,
                            metadata_fn_ptr, allocator_function_ptr, path,
@@ -86,15 +86,15 @@ HloUserOpInstruction::HloUserOpInstruction(
   set_custom_call_has_side_effect(!stateless);
 }
 
-absl::flat_hash_set<int64> HloUserOpInstruction::AllocatingIndices() const {
-  absl::flat_hash_set<int64> indices(metadata_.allocating_indices_.begin(),
-                                     metadata_.allocating_indices_.end());
+absl::flat_hash_set<int64_t> HloUserOpInstruction::AllocatingIndices() const {
+  absl::flat_hash_set<int64_t> indices(metadata_.allocating_indices_.begin(),
+                                       metadata_.allocating_indices_.end());
   return indices;
 }
 
-absl::flat_hash_set<int64> HloUserOpInstruction::ReplicaIdenticalOutputIndices()
-    const {
-  absl::flat_hash_set<int64> indices(
+absl::flat_hash_set<int64_t>
+HloUserOpInstruction::ReplicaIdenticalOutputIndices() const {
+  absl::flat_hash_set<int64_t> indices(
       metadata_.replica_identical_output_indices_.begin(),
       metadata_.replica_identical_output_indices_.end());
   return indices;
@@ -102,7 +102,7 @@ absl::flat_hash_set<int64> HloUserOpInstruction::ReplicaIdenticalOutputIndices()
 
 bool HloUserOpInstruction::AllocatingOutput() const { return IsReadWrite(); }
 
-absl::flat_hash_map<int64, int64> HloUserOpInstruction::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloUserOpInstruction::LayoutDependencies()
     const {
   return {};
 }
@@ -191,8 +191,8 @@ std::unique_ptr<HloInstruction> HloUserOpInstruction::CloneWithNewOperandsImpl(
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
     const std::string& gp_path, void* function_ptr, void* metadata_function_ptr,
-    void* allocator_function_ptr, int64 gradient_size,
-    int64 partial_derivative_index, bool is_user_read_write,
+    void* allocator_function_ptr, int64_t gradient_size,
+    int64_t partial_derivative_index, bool is_user_read_write,
     const std::string& attributes) {
   return absl::make_unique<HloUserOpInstruction>(
       inputs, shape, gp_path, function_ptr, metadata_function_ptr,
@@ -217,11 +217,11 @@ static HloPoplarInstructionFactory user_op_factory(
       TF_ASSIGN_OR_RETURN(std::string gp_path,
                           attribute_map.GetAttributeAsString("gp_path"));
 
-      TF_ASSIGN_OR_RETURN(int64 gradient_size,
+      TF_ASSIGN_OR_RETURN(int64_t gradient_size,
                           attribute_map.GetAttributeAsInt64("gradient_size"));
 
       TF_ASSIGN_OR_RETURN(
-          int64 partial_derivative_index,
+          int64_t partial_derivative_index,
           attribute_map.GetAttributeAsInt64("partial_derivative_index"));
 
       TF_ASSIGN_OR_RETURN(

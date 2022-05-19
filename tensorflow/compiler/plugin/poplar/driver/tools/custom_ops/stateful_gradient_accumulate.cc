@@ -48,14 +48,14 @@ HloStatefulGradientAccumulate::HloStatefulGradientAccumulate(
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64> HloStatefulGradientAccumulate::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloStatefulGradientAccumulate::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloStatefulGradientAccumulate::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloStatefulGradientAccumulate::LayoutDependencies() const {
   return {};
 }
@@ -147,7 +147,7 @@ HloStatefulGradientAccumulateWithMomentum::GetBufferDescriptions() const {
   return BufferDescriptionsNoAllocations();
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloStatefulGradientAccumulateWithMomentum::LayoutDependencies() const {
   return {{0, 1}};
 }
@@ -187,11 +187,11 @@ HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm::
   return BufferDescriptionsNoAllocations();
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm::
     LayoutDependencies() const {
   // The layouts of the accumulator depend on the layout of the gradient.
-  absl::flat_hash_map<int64, int64> deps;
+  absl::flat_hash_map<int64_t, int64_t> deps;
   const uint64 num_grads = operand_count() / 2;
   for (uint64 i = 0; i != num_grads; ++i) {
     deps[i] = num_grads + i;
@@ -247,14 +247,14 @@ HloGradientAccumulatorCreate::HloGradientAccumulatorCreate(
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64> HloGradientAccumulatorCreate::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloGradientAccumulatorCreate::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloGradientAccumulatorCreate::AllocatingOutput() const { return true; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloGradientAccumulatorCreate::LayoutDependencies() const {
   return {};
 }
@@ -341,7 +341,7 @@ HloGradientAccumulatorAddWithScale::HloGradientAccumulatorAddWithScale(
                            {accumulator, gradient, accumulator_scale},
                            PoplarOp::GradientAccumulatorAddWithScale) {}
 
-absl::flat_hash_set<int64>
+absl::flat_hash_set<int64_t>
 HloGradientAccumulatorAddWithScale::AllocatingIndices() const {
   return {};
 }
@@ -350,7 +350,7 @@ bool HloGradientAccumulatorAddWithScale::AllocatingOutput() const {
   return false;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloGradientAccumulatorAddWithScale::LayoutDependencies() const {
   return {};
 }
@@ -406,14 +406,14 @@ HloGradientAccumulatorSink::HloGradientAccumulatorSink(
     : HloPoplarInstruction(operands[0]->shape(), operands,
                            PoplarOp::GradientAccumulatorSink) {}
 
-absl::flat_hash_set<int64> HloGradientAccumulatorSink::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloGradientAccumulatorSink::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloGradientAccumulatorSink::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloGradientAccumulatorSink::LayoutDependencies() const {
   return {};
 }
@@ -421,7 +421,7 @@ HloGradientAccumulatorSink::LayoutDependencies() const {
 HloPoplarUseDescriptions HloGradientAccumulatorSink::GetUseDescriptions()
     const {
   HloPoplarUseDescriptions descriptions;
-  for (int64 i = 0; i != operand_count(); ++i) {
+  for (int64_t i = 0; i != operand_count(); ++i) {
     descriptions.push_back(HloPoplarUseDescription{
         i, ShapeIndex{}, ShapeIndex{}, BufferUseKind::USE_ALIAS_READ_ONLY});
   }
@@ -469,14 +469,14 @@ HloGradientAccumulationCount::HloGradientAccumulationCount(
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64> HloGradientAccumulationCount::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloGradientAccumulationCount::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloGradientAccumulationCount::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloGradientAccumulationCount::LayoutDependencies() const {
   return {};
 }

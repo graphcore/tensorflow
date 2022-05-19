@@ -175,7 +175,7 @@ static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path,
 // from one op to the next. and probably do something to do with in-place ops.
 // We allow the suffix path to have a GTE at the end of the path.
 // For valid paths, either returns the GTE index for the last node or 0.
-static absl::optional<int64> IsSuffixPathOk(
+static absl::optional<int64_t> IsSuffixPathOk(
     const std::vector<HloInstruction*>& path) {
   const auto is_node_ok_on_path = [](HloInstruction* inst,
                                      const unsigned path_idx,
@@ -254,7 +254,7 @@ static bool IsLayoutDependentTarget(const HloInstruction* target) {
 }
 
 // TODO - this should probably be in a more central location
-static absl::optional<int64> GetLayoutSensitiveOperandIndex(
+static absl::optional<int64_t> GetLayoutSensitiveOperandIndex(
     const HloInstruction* target, const HloInstruction* operand,
     const HloInstruction* layout_producer) {
   const auto op_idx = target->operand_index(operand);
@@ -265,8 +265,9 @@ static absl::optional<int64> GetLayoutSensitiveOperandIndex(
   return absl::nullopt;
 }
 
-static absl::optional<std::pair<int64, int64>> GetLayoutDependentOperandIndices(
-    const HloInstruction* target, const HloInstruction* operand) {
+static absl::optional<std::pair<int64_t, int64_t>>
+GetLayoutDependentOperandIndices(const HloInstruction* target,
+                                 const HloInstruction* operand) {
   const auto op_idx = target->operand_index(operand);
 
   // Some PopOps elementwise binary ops have more than two inputs (for example
@@ -279,7 +280,7 @@ static absl::optional<std::pair<int64, int64>> GetLayoutDependentOperandIndices(
   // For implicit broadcast instruction, we only consider allocation for the
   // operand which is being broadcasted (and the other operand is not).
   if (IsPopOpsFusion(target, "implicit_binary") && target->shape().rank() > 1) {
-    const int64 other_op_idx = (op_idx + 1) % 2;
+    const int64_t other_op_idx = (op_idx + 1) % 2;
     const HloInstruction* other_operand = target->operand(other_op_idx);
     if (operand->shape().dimensions() != target->shape().dimensions() &&
         other_operand->shape().dimensions() == target->shape().dimensions()) {
@@ -324,7 +325,7 @@ void ForwardAllocation::FlattenInputs(
   if (shape.IsTuple()) {
     // We can only defer allocation of tuples iff all the users of the inst are
     // unique GTEs with compatible sharding.
-    absl::flat_hash_set<int64> tuple_indexes;
+    absl::flat_hash_set<int64_t> tuple_indexes;
     for (HloInstruction* user : inst->users()) {
       if (user->opcode() == HloOpcode::kGetTupleElement) {
         auto tuple_index = user->tuple_index();
@@ -397,7 +398,7 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
 
   auto call_graph_node = call_graph->GetNode(comp);
   auto& callsites = call_graph_node.caller_callsites();
-  std::vector<int64> parameters_to_add;
+  std::vector<int64_t> parameters_to_add;
   // In pipeliening, do not add a parameter as an input location, unless it was
   // a parameter/gradient accumulation buffer in the outer scope.
   if (callsites.size() != 1 ||
@@ -406,7 +407,7 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
     absl::c_iota(parameters_to_add, 0);
   } else {
     HloInstruction* caller = callsites[0].instruction();
-    for (int64 i = 0; i != comp->num_parameters(); ++i) {
+    for (int64_t i = 0; i != comp->num_parameters(); ++i) {
       const HloInstruction* operand = caller->operand(i);
       if (operand->opcode() == HloOpcode::kParameter ||
           IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(operand)) {
@@ -415,7 +416,7 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
     }
   }
 
-  for (int64 param_number : parameters_to_add) {
+  for (int64_t param_number : parameters_to_add) {
     FlattenInputs(comp->parameter_instruction(param_number), deferred_inputs);
   }
 
@@ -447,8 +448,8 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
 
 bool ForwardAllocation::CreateForwardAllocationTarget(
     HloReachabilityMap* reachability_map, HloInstruction* source,
-    HloInstruction* target, const int64 input_index,
-    HloInstruction* layout_producer, const int64 layout_output_index,
+    HloInstruction* target, const int64_t input_index,
+    HloInstruction* layout_producer, const int64_t layout_output_index,
     const std::vector<HloInstruction*>& other_targets,
     const std::vector<HloInstruction*>& forward_path,
     const std::vector<HloInstruction*>& backward_path) {
@@ -721,7 +722,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
         if (!optional_op_idices) {
           continue;
         }
-        int64 op_idx, layout_operand_idx;
+        int64_t op_idx, layout_operand_idx;
         std::tie(op_idx, layout_operand_idx) = *optional_op_idices;
         // The path don't contain the source or target instructions
         prefix.erase(prefix.begin());

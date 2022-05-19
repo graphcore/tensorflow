@@ -95,7 +95,7 @@ Status GetRemoteLoadStoreUsers(HloInstruction* inst, HloInstruction** load,
         inst->name().c_str());
   }
 
-  const int64 load_user_idx =
+  const int64_t load_user_idx =
       IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst->users()[0]) ? 0
                                                                            : 1;
 
@@ -111,17 +111,17 @@ Status GetRemoteLoadStoreUsers(HloInstruction* inst, HloInstruction** load,
   return Status::OK();
 }
 
-int64 PartitionedElementCountPerReplica(int64 element_count,
-                                        int64 partition_replication_factor) {
+int64_t PartitionedElementCountPerReplica(
+    int64_t element_count, int64_t partition_replication_factor) {
   CHECK_GE(element_count, 0);
   CHECK_GT(partition_replication_factor, 0);
   return tensorflow::MathUtil::CeilOfRatio(element_count,
                                            partition_replication_factor);
 }
 
-std::size_t PartitionedByteCountPerReplica(std::size_t byte_count,
-                                           PrimitiveType element_type,
-                                           int64 partition_replication_factor) {
+std::size_t PartitionedByteCountPerReplica(
+    std::size_t byte_count, PrimitiveType element_type,
+    int64_t partition_replication_factor) {
   const std::size_t bytes_per_element =
       ShapeUtil::ByteSizeOfPrimitiveType(element_type);
 
@@ -136,7 +136,7 @@ std::size_t PartitionedByteCountPerReplica(std::size_t byte_count,
   return partitioned_element_count * bytes_per_element;
 }
 
-StatusOr<int64> GetRemoteBufferEntryParameterNumber(
+StatusOr<int64_t> GetRemoteBufferEntryParameterNumber(
     const HloInstruction* inst) {
   TF_ASSIGN_OR_RETURN(auto dfa,
                       HloDataflowAnalysis::Run(*inst->parent()->parent()));
@@ -144,7 +144,7 @@ StatusOr<int64> GetRemoteBufferEntryParameterNumber(
   return GetRemoteBufferEntryParameterNumber(*dfa, inst);
 }
 
-StatusOr<int64> GetRemoteBufferEntryParameterNumber(
+StatusOr<int64_t> GetRemoteBufferEntryParameterNumber(
     const HloDataflowAnalysis& dfa, const HloInstruction* inst) {
   VLOG(2) << "GetRemoteBufferParameterNumber " << inst->ToString();
 

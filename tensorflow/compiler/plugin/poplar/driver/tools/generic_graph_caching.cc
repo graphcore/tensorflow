@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 
+#include <list>
 #include <utility>
 #include <vector>
 
@@ -104,8 +105,8 @@ Status GenericGraphCache::ExecuteCached(
     CompilerResources& resources, poplar::program::Sequence& seq,
     PoplarFunction func, poputil::graphfn::Signature signature,
     std::vector<poplar::Tensor>& args,
-    const absl::flat_hash_set<int64>& allocating_indices,
-    const absl::flat_hash_map<int64, int64>& layout_dependencies,
+    const absl::flat_hash_set<int64_t>& allocating_indices,
+    const absl::flat_hash_map<int64_t, int64_t>& layout_dependencies,
     bool always_allocate) {
   // Check if we have already executed this instruction.
 
@@ -125,7 +126,7 @@ Status GenericGraphCache::ExecuteCached(
     itr->second(args, seq, {debug_name_and_id});
   } else {
     // Get the allocation order.
-    std::list<int64> alloc_order;
+    std::list<int64_t> alloc_order;
     for (size_t sig_idx = 0; sig_idx != signature.size(); ++sig_idx) {
       poputil::graphfn::ArgSig& sig = signature[sig_idx];
       if (sig.type == poputil::graphfn::ArgType::InputArg ||
@@ -142,7 +143,7 @@ Status GenericGraphCache::ExecuteCached(
     // need reallocating.
     // Note that we modify the signature and *not* the arguments.
     TensorMap local_map;
-    for (int64 arg_idx : alloc_order) {
+    for (int64_t arg_idx : alloc_order) {
       const HloInstruction* operand = inst->operand(arg_idx);
       poputil::graphfn::ArgSig& sig = signature[arg_idx];
       DriverTensor input = DriverTensor(sig.similarTensor, graph);
@@ -175,7 +176,7 @@ Status GenericGraphCache::ExecuteCached(
                                           {debug_name_and_id, name}));
         } else if (layout_dependencies.contains(arg_idx)) {
           // Need to allocate a tensor given a previously allocated tensor.
-          int64 dependent_arg_idx = layout_dependencies.at(arg_idx);
+          int64_t dependent_arg_idx = layout_dependencies.at(arg_idx);
           const HloInstruction* dependent_operand =
               inst->operand(dependent_arg_idx);
           TF_ASSIGN_OR_RETURN(

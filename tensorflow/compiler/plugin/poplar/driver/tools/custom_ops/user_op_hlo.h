@@ -34,15 +34,15 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
   explicit HloUserOpInstruction(absl::Span<HloInstruction* const> operands,
                                 const Shape& shape, const std::string& gp_path,
-                                void*, void*, void*, int64 gradient_size,
-                                int64 partial_derivative_index,
+                                void*, void*, void*, int64_t gradient_size,
+                                int64_t partial_derivative_index,
                                 bool is_user_read_write,
                                 const std::string& attributes);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
-  absl::flat_hash_set<int64> ReplicaIdenticalOutputIndices() const;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> ReplicaIdenticalOutputIndices() const;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
@@ -110,11 +110,11 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
   // When greater than zero, this is a gradient operation with given gradients,
   // rather than a forward pass operation.
-  int64 gradient_size_;
+  int64_t gradient_size_;
 
   // If this is a grad function, and it is the partial derivative for only one
   // input, then this is the index of that input.
-  int64 partial_derivative_index_;
+  int64_t partial_derivative_index_;
 
   // Is this a read/write user op. That is an operation which streams the
   // tensors to host, executes some processing, then streams the outputs back.
@@ -125,8 +125,8 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> operands, const Shape& shape,
-    const std::string& gp_path, void*, void*, void*, int64 gradient_size,
-    int64 partial_derivative_index, bool is_user_read_write,
+    const std::string& gp_path, void*, void*, void*, int64_t gradient_size,
+    int64_t partial_derivative_index, bool is_user_read_write,
     const std::string& attributes);
 
 }  // namespace poplarplugin

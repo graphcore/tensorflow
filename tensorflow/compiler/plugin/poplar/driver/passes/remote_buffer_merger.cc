@@ -198,7 +198,7 @@ Status HoistOffsets(HloInstruction* call,
 
   auto builder = HloComputation::Builder(comp->name());
 
-  const int64 num_parameters = comp->num_parameters();
+  const int64_t num_parameters = comp->num_parameters();
   std::vector<HloInstruction*> hoisted_arguments(offsets.size());
   for (std::size_t i = 0; i < offsets.size(); ++i) {
     auto* offset = offsets[i];
@@ -270,7 +270,7 @@ Status HoistOffsets(HloInstruction* call,
 StatusOr<bool> AddLoadStoreOffsets(
     CallGraph& call_graph, HloComputation* comp,
     const UserToCreator& user_to_creator,
-    const ConstHloInstructionMap<int64>& creator_to_offset,
+    const ConstHloInstructionMap<int64_t>& creator_to_offset,
     bool is_inside_function = false) {
   bool changed = false;
 
@@ -286,7 +286,7 @@ StatusOr<bool> AddLoadStoreOffsets(
         continue;
       }
 
-      const int64 offset = found_offset->second;
+      const int64_t offset = found_offset->second;
 
       if (IsPoplarInstruction(RemoteParameterLoad, inst) ||
           IsPoplarInstruction(RemoteParameterStore, inst)) {
@@ -310,10 +310,10 @@ StatusOr<bool> AddLoadStoreOffsets(
         // offset into the merged buffer in a "merge-major" order.
         const auto* buffer = inst->operand(0);
         CHECK(buffer->shape().IsArray());
-        const int64 num_repeats = ShapeUtil::GetDimension(buffer->shape(), 0);
-        const int64 merged_offset = num_repeats * offset;
+        const int64_t num_repeats = ShapeUtil::GetDimension(buffer->shape(), 0);
+        const int64_t merged_offset = num_repeats * offset;
 
-        const int64 offset_operand_index =
+        const int64_t offset_operand_index =
             IsPoplarInstruction(BufferLoadSlice, inst) ? 1 : 2;
 
         auto* existing_offset = inst->mutable_operand(offset_operand_index);
@@ -378,10 +378,10 @@ StatusOr<bool> AddLoadStoreOffsets(
 }
 
 struct RemoteBufferInfo {
-  std::vector<int64> dimensions;
+  std::vector<int64_t> dimensions;
   PrimitiveType type;
-  int64 num_repeats;
-  int64 sharding_device;
+  int64_t num_repeats;
+  int64_t sharding_device;
   bool is_replica_partitioned;
 };
 
@@ -413,7 +413,7 @@ RemoteBufferCreators FindRemoteBufferCreators(
         const auto shape = inst->shape();
         CHECK(shape.IsArray());
 
-        const int64 num_repeats =
+        const int64_t num_repeats =
             IsRemoteCreateBuffer(inst) ? ShapeUtil::GetDimension(shape, 0) : 1;
 
         const auto single_shape = IsRemoteCreateBuffer(inst)
@@ -421,7 +421,7 @@ RemoteBufferCreators FindRemoteBufferCreators(
                                       : shape;
         const auto& dimensions = single_shape.dimensions();
 
-        const int64 sharding_device = GetSingleShardingDeviceId(inst);
+        const int64_t sharding_device = GetSingleShardingDeviceId(inst);
 
         const bool is_replica_partitioned =
             IsReplicaPartitionedRemoteParameter(inst, annotations);
@@ -501,8 +501,8 @@ StatusOr<GroupedInstructions> ChooseCreatorsToMerge(
   };
 
   for (auto& group : buffer_creators) {
-    std::map<int64, std::vector<HloInstruction*>> to_merge;
-    absl::flat_hash_map<const HloComputation*, int64, HloComputationHash,
+    std::map<int64_t, std::vector<HloInstruction*>> to_merge;
+    absl::flat_hash_map<const HloComputation*, int64_t, HloComputationHash,
                         HloComputationEquals>
         cluster_ids;
 
@@ -512,7 +512,7 @@ StatusOr<GroupedInstructions> ChooseCreatorsToMerge(
       auto found_users = creator_to_users.find(creator);
       if (found_users != creator_to_users.end() &&
           absl::c_any_of(found_users->second, would_benefit_from_merging)) {
-        int64 cluster_id = -1;
+        int64_t cluster_id = -1;
         if (IsRemoteParameter(creator, annotations)) {
           for (HloInstruction* user : found_users->second) {
             auto* comp = user->parent();
@@ -574,7 +574,7 @@ Status AddMergedInfo(const GroupedInstructions& creators_to_merge,
     VLOG(2) << "Merged " << num_merged << " remote buffers into one with name '"
             << buffer_name << "'";
 
-    std::vector<int64> merged_params;
+    std::vector<int64_t> merged_params;
 
     for (const HloInstruction* inst : creators) {
       if (IsRemoteParameter(inst, annotations)) {
@@ -666,7 +666,7 @@ StatusOr<bool> RemoteBufferMerger::Run(HloModule* module) {
       ChooseCreatorsToMerge(annotations_, grouped_creators, creator_to_users,
                             *call_graph, merge_all));
 
-  ConstHloInstructionMap<int64> creator_to_offset;
+  ConstHloInstructionMap<int64_t> creator_to_offset;
   for (const auto& creators : creators_to_merge) {
     for (std::size_t i = 0; i < creators.size(); ++i) {
       creator_to_offset[creators[i]] = i;

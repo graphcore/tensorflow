@@ -34,14 +34,14 @@ HloPoplarAllGatherInstruction::HloPoplarAllGatherInstruction(
                            replica_groups),
       replica_groups_(replica_groups) {}
 
-absl::flat_hash_set<int64> HloPoplarAllGatherInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloPoplarAllGatherInstruction::AllocatingIndices()
     const {
   return {};
 }
 
 bool HloPoplarAllGatherInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloPoplarAllGatherInstruction::LayoutDependencies() const {
   return {};
 }

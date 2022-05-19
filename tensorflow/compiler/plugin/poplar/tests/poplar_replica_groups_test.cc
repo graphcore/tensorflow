@@ -193,7 +193,7 @@ std::unique_ptr<HloComputation> CreateSumReduction(const Shape& shape) {
 
 struct PoplarReplicaGroupsHloTest : public HloTestBase {
   std::unique_ptr<VerifiedHloModule> CreateModuleWithReplicaGroups(
-      const PoplarReplicaGroups& groups, int64 replica_count) {
+      const PoplarReplicaGroups& groups, int64_t replica_count) {
     auto module = CreateNewVerifiedModule("test", replica_count);
     auto shape = ShapeUtil::MakeShape(xla::F32, {});
 

@@ -50,7 +50,7 @@ namespace poplarplugin {
 using tu = HloPoplarTestUtil;
 namespace {
 
-std::string GetInfeedCopyHandle(const std::string& name, int64 shape_index) {
+std::string GetInfeedCopyHandle(const std::string& name, int64_t shape_index) {
   return tensorflow::strings::Printf("infeed_%s.%lld", name.c_str(),
                                      shape_index);
 }
@@ -74,7 +74,8 @@ class TestStreamCallback final : public poplar::StreamCallback {
   // start: initial value for the streamed data.
   // step: distance between values.
   // Gives the same data every time it is called.
-  TestStreamCallback(std::string name, int64 size, float start, float step = 1)
+  TestStreamCallback(std::string name, int64_t size, float start,
+                     float step = 1)
       : name_(name), size_(size), current_(start), step_(step) {}
 
  public:
@@ -96,7 +97,7 @@ class TestStreamCallback final : public poplar::StreamCallback {
 
  private:
   std::string name_;
-  int64 size_;
+  int64_t size_;
   float current_;
   float step_;
 };
@@ -187,7 +188,7 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
     auto& outputs = io_map.GetEntryOutputInfos();
     auto& remote_infos = annotations.remote_parameter_infos;
 
-    absl::flat_hash_map<int64, gcl::CollectiveBalancedHostRearrangement>
+    absl::flat_hash_map<int64_t, gcl::CollectiveBalancedHostRearrangement>
         host_rearrangements;
 
     // Give the resources data.

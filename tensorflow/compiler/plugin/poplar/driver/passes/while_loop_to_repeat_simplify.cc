@@ -37,13 +37,13 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 // Allow user to change the upper bound of the brute force method
-int64 GetMaxLoopTripCount() {
+int64_t GetMaxLoopTripCount() {
   auto max_trip_count =
       PoplarXlaFlags::Get().while_loop_brute_force_max_trip_count;
   return max_trip_count < 0 ? 128 : max_trip_count;
 }
 
-StatusOr<int64> ConvertWhileToRepeat(HloInstruction* while_inst) {
+StatusOr<int64_t> ConvertWhileToRepeat(HloInstruction* while_inst) {
   static const char* err_msg = "Unable to convert this while loop";
   HloComputation* while_condition = while_inst->while_condition();
   HloComputation* while_body = while_inst->while_body();
@@ -89,7 +89,7 @@ StatusOr<int64> ConvertWhileToRepeat(HloInstruction* while_inst) {
     }
   }
   HloInstruction* comp_gte = c_inst->mutable_operand(0);
-  const int64 tuple_index = comp_gte->tuple_index();
+  const int64_t tuple_index = comp_gte->tuple_index();
   HloInstruction* input_tuple = while_inst->mutable_operand(0);
   if (input_tuple->opcode() != HloOpcode::kTuple) {
     return FailedPrecondition("%s", err_msg);
@@ -108,7 +108,7 @@ StatusOr<int64> ConvertWhileToRepeat(HloInstruction* while_inst) {
 
   // Find corresponding GTE in the body
   HloInstruction* body_GTE = nullptr;
-  int64 matching_GTEs = 0;
+  int64_t matching_GTEs = 0;
   for (HloInstruction* inst : while_body->MakeInstructionPostOrder()) {
     const bool is_GTE_from_param_0 =
         WhileLoopUtil::IsGTEFromParamIndex(inst, 0);
@@ -126,7 +126,7 @@ StatusOr<int64> ConvertWhileToRepeat(HloInstruction* while_inst) {
   // Check that the mapped GTE instruction is modified by 1 (or -1 for greater
   // than (or equal)) and that the resulting increment is *only* used in the
   // output tuple of the while body in the same index
-  int64 delta;
+  int64_t delta;
   switch (c_inst->comparison_direction()) {
     case ComparisonDirection::kLt:
     case ComparisonDirection::kLe:
@@ -147,15 +147,15 @@ StatusOr<int64> ConvertWhileToRepeat(HloInstruction* while_inst) {
     return FailedPrecondition("%s", err_msg);
   }
 
-  TF_ASSIGN_OR_RETURN(int64 initial_value,
-                      LiteralScalarToNativeType<int64>(init_inst->literal()));
-  TF_ASSIGN_OR_RETURN(int64 compare_value,
-                      LiteralScalarToNativeType<int64>(limit_inst->literal()));
+  TF_ASSIGN_OR_RETURN(int64_t initial_value,
+                      LiteralScalarToNativeType<int64_t>(init_inst->literal()));
+  TF_ASSIGN_OR_RETURN(int64_t compare_value, LiteralScalarToNativeType<int64_t>(
+                                                 limit_inst->literal()));
 
   // Calculate the number of iterations and the final counter state
   // * Take caution when the condition was initially true (i.e. no iterations
   //   are executed) - to do that set the number of iterations to 0.
-  int64 number_of_iterations = 0;
+  int64_t number_of_iterations = 0;
 
   switch (c_inst->comparison_direction()) {
     case ComparisonDirection::kLt:
@@ -186,8 +186,8 @@ StatusOr<int64> ConvertWhileToRepeat(HloInstruction* while_inst) {
 
 template <typename NativeT>
 HloInstruction* GetFinalValue(HloInstruction* init_value_inst,
-                              const int64 number_of_iterations,
-                              const int64 delta) {
+                              const int64_t number_of_iterations,
+                              const int64_t delta) {
   NativeT value = LiteralScalarToNativeType<NativeT>(init_value_inst->literal())
                       .ValueOrDie();
   // Adjust the value in the right type.
@@ -197,7 +197,7 @@ HloInstruction* GetFinalValue(HloInstruction* init_value_inst,
 }
 
 Status ConvertToRepeat(HloInstruction* while_inst,
-                       const int64 number_of_iterations) {
+                       const int64_t number_of_iterations) {
   HloComputation* parent_computation = while_inst->parent();
   HloInstruction* input_tuple = while_inst->mutable_operand(0);
   // If the number of iterations is 0, don't create a loop.
@@ -235,8 +235,8 @@ Status ConvertToRepeat(HloInstruction* while_inst,
   // Also hoist out all the constants.
   // A map of scalar values which we know the value of after the loop has
   // completed.
-  std::map<int64, HloInstruction*> gte_to_final_value;
-  std::set<int64> dead_gtes;
+  std::map<int64_t, HloInstruction*> gte_to_final_value;
+  std::set<int64_t> dead_gtes;
 
   // Go through all the other scalar counters in the while loop and try and
   // determine their values given the number of iterations. A value can be
@@ -244,7 +244,7 @@ Status ConvertToRepeat(HloInstruction* while_inst,
   // * The input to the tuple is a constant
   // * The value is accessed from the input tuple at index x, modified by 1 (add
   // or subtract), stored in the output tuple at index x.
-  for (int64 tuple_index = 0; tuple_index < input_tuple->operand_count();
+  for (int64_t tuple_index = 0; tuple_index < input_tuple->operand_count();
        tuple_index++) {
     HloInstruction* operand = input_tuple->mutable_operand(tuple_index);
     // Skip if it is not a integer scalar constant
@@ -254,7 +254,7 @@ Status ConvertToRepeat(HloInstruction* while_inst,
 
     // Find corresponding GTE in the body
     HloInstruction* gte = nullptr;
-    int64 matching_GTEs = 0;
+    int64_t matching_GTEs = 0;
     for (HloInstruction* inst :
          repeat_body->parameter_instruction(0)->users()) {
       const bool is_GTE_from_param_0 =
@@ -280,7 +280,7 @@ Status ConvertToRepeat(HloInstruction* while_inst,
       continue;
     }
     HloInstruction* increment = matching_increments[0].first;
-    const int64 delta = matching_increments[0].second;
+    const int64_t delta = matching_increments[0].second;
 
     switch (operand->shape().element_type()) {
 #define GET_FINAL_VALUE(XLA_T, NATIVE_T)                               \
@@ -316,7 +316,7 @@ Status ConvertToRepeat(HloInstruction* while_inst,
 
   // Replace all the known values with constants.
   for (auto pair : gte_to_final_value) {
-    int64 tuple_index = pair.first;
+    int64_t tuple_index = pair.first;
     HloInstruction* final_value = pair.second;
 
     // Replace all the GTEs for `tuple_index` from the output tuple use with a
@@ -340,7 +340,7 @@ Status ConvertToRepeat(HloInstruction* while_inst,
   if (dead_gtes.size()) {
     // For each dead GTE, we replace the input tuple with a constant and also
     // remove the increment in the while body.
-    for (int64 tuple_index : dead_gtes) {
+    for (int64_t tuple_index : dead_gtes) {
       // Replace the root tuple operand.
       for (auto* user : repeat_body->parameter_instruction(0)->users()) {
         if (user->opcode() == HloOpcode::kGetTupleElement &&
@@ -375,7 +375,7 @@ Status ConvertToRepeat(HloInstruction* while_inst,
     absl::flat_hash_map<HloInstruction*, HloInstruction*> clone_map;
 
     std::vector<HloInstruction*> new_parameters(new_operands.size());
-    for (int64 param_idx = 0; param_idx != new_operands.size(); ++param_idx) {
+    for (int64_t param_idx = 0; param_idx != new_operands.size(); ++param_idx) {
       new_parameters[param_idx] =
           builder.AddInstruction(HloInstruction::CreateParameter(
               param_idx, new_operands[param_idx]->shape(),
@@ -474,7 +474,7 @@ StatusOr<bool> WhileLoopToRepeatSimplify::Run(HloModule* module) {
         // For each while loop, try and simplify the logic to convert the loop
         // into a repeat.
         auto statusor = ConvertWhileToRepeat(while_inst);
-        int64 count = 0;
+        int64_t count = 0;
         bool simplified = false;
         if (statusor.ok()) {
           simplified = true;

@@ -55,7 +55,7 @@ struct TensorCopyInfo {
 StatusOr<bool> SrcAndDstGraphsCompatible(CompilerResources& res,
                                          const HloInstruction* inst,
                                          const HloInstruction* src,
-                                         const int64 dst_shard) {
+                                         const int64_t dst_shard) {
   TF_ASSIGN_OR_RETURN(const Tileset src_tileset, GetTileset(src));
   TF_ASSIGN_OR_RETURN(const Tileset dst_tileset, GetTileset(inst));
 
@@ -63,7 +63,7 @@ StatusOr<bool> SrcAndDstGraphsCompatible(CompilerResources& res,
     return false;
   }
 
-  const int64 src_shard = GetShardForOutputIndex(src, 0);
+  const int64_t src_shard = GetShardForOutputIndex(src, 0);
 
   // multi-device sharding source is not compatible with any other sharding.
   if (src_shard == Devices::All && dst_shard != Devices::All) {
@@ -110,8 +110,8 @@ StatusOr<bool> SrcAndDstGraphsCompatible(CompilerResources& res,
 
 StatusOr<TensorCopyInfo> GetTensorCopyInfo(
     CompilerResources& res, DriverTensor input, const HloInstruction* inst,
-    const HloInstruction* src, int64 output_flat_tuple_index, int64 dst_shard,
-    const Shape& output_shape, TensorMap& tensor_map,
+    const HloInstruction* src, int64_t output_flat_tuple_index,
+    int64_t dst_shard, const Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   TensorLocation output_location{inst, output_flat_tuple_index};
 
@@ -131,8 +131,8 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
     return TensorCopyInfo{input, input.flatten(), output, output.flatten()};
   }
 
-  CHECK_GE(dst_shard, static_cast<int64>(Devices::All));
-  CHECK_LT(dst_shard, static_cast<int64>(res.shard_to_ipu_id.size()));
+  CHECK_GE(dst_shard, static_cast<int64_t>(Devices::All));
+  CHECK_LT(dst_shard, static_cast<int64_t>(res.shard_to_ipu_id.size()));
 
   // No tensor target and src and dst graphs have equivalent tiles available so
   // reuse the src tensor preserving aliasing.
@@ -185,18 +185,18 @@ StatusOr<DriverProgramSequence> InterIpuCopyOp::Creator(
 
   // For each destination IPU, store the information about the copies.
   using DestinationShardCopyInfos =
-      std::map<int64, std::vector<TensorCopyInfo>>;
+      std::map<int64_t, std::vector<TensorCopyInfo>>;
   // For each source Shard, store information about copies it is about to
   // perform.
-  using ShardCopyInfos = std::map<int64, DestinationShardCopyInfos>;
+  using ShardCopyInfos = std::map<int64_t, DestinationShardCopyInfos>;
   // For each source element type, store information about shard copies it is
   // about to perform.
   using TypeShardCopyInfos = std::map<poplar::Type, ShardCopyInfos>;
   TypeShardCopyInfos copy_informations;
-  std::vector<int64> operand_shardings;
+  std::vector<int64_t> operand_shardings;
 
   // Construct the information about the source and destination copies.
-  for (int64 i = 0, flat_tuple_index = 0; i < inst->operand_count(); ++i) {
+  for (int64_t i = 0, flat_tuple_index = 0; i < inst->operand_count(); ++i) {
     const auto src = inst->operand(i);
     if (!src->has_sharding()) {
       return FailedPrecondition("Missing shard information on %s", src->name());
@@ -209,10 +209,10 @@ StatusOr<DriverProgramSequence> InterIpuCopyOp::Creator(
                                                  {debug_info}, false);
     const auto shapes = FlattenedXlaShape(src->shape());
     CHECK_EQ(src_sharding.size(), shapes.size());
-    for (int64 index = 0; index < src_sharding.size();
+    for (int64_t index = 0; index < src_sharding.size();
          ++index, ++flat_tuple_index) {
-      const int64 src_shard = src_sharding[index];
-      const int64 dst_shard = dst_sharding[flat_tuple_index];
+      const int64_t src_shard = src_sharding[index];
+      const int64_t dst_shard = dst_sharding[flat_tuple_index];
       if (operand_tensors[index].IsTensor()) {
         TF_ASSIGN_OR_RETURN(
             TensorCopyInfo copy_info,
@@ -246,10 +246,10 @@ StatusOr<DriverProgramSequence> InterIpuCopyOp::Creator(
   poplar::program::Sequence intra_ipu_copies({}, debug_info);
   for (auto& type_to_src_to_dst : copy_informations) {
     for (auto& src_to_dst : type_to_src_to_dst.second) {
-      const int64 src_shard = src_to_dst.first;
+      const int64_t src_shard = src_to_dst.first;
 
       for (auto& dst_to_copy_infos : src_to_dst.second) {
-        const int64 dst_shard = dst_to_copy_infos.first;
+        const int64_t dst_shard = dst_to_copy_infos.first;
         auto& infos = dst_to_copy_infos.second;
 
         VLOG(2) << "Adding copies from shard " << src_shard << " to "
@@ -259,7 +259,7 @@ StatusOr<DriverProgramSequence> InterIpuCopyOp::Creator(
 
         std::vector<poplar::Tensor> inputs(infos.size());
         std::vector<poplar::Tensor> outputs(infos.size());
-        for (int64 i = 0; i != infos.size(); ++i) {
+        for (int64_t i = 0; i != infos.size(); ++i) {
           inputs[i] = infos[i].input_for_copy;
           outputs[i] = infos[i].output_for_copy;
         }

@@ -71,8 +71,8 @@ bool Is1DSliceInFirstDimension(const HloInstruction* slice);
 //   indices: The index tensor beign flattened.
 //   dim: The dimension of indices to reduce.
 //   sizes: The sizes of the dimensions being indexed into.
-StatusOr<HloInstruction*> ReduceIndices(HloInstruction* indices, int64 dim,
-                                        absl::Span<const int64> sizes);
+StatusOr<HloInstruction*> ReduceIndices(HloInstruction* indices, int64_t dim,
+                                        absl::Span<const int64_t> sizes);
 
 }  // namespace poplarplugin
 }  // namespace xla

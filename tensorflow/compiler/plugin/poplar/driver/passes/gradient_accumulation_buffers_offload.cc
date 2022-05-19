@@ -50,7 +50,7 @@ bool IsGradientAccumulatorSink(const HloInstruction* inst) {
 }  // namespace
 
 GradientAccumulationBuffersOffload::GradientAccumulationBuffersOffload(
-    bool remote_memory_supported, int64 minimum_remote_tensor_size)
+    bool remote_memory_supported, int64_t minimum_remote_tensor_size)
     : remote_memory_supported_(remote_memory_supported),
       minimum_remote_tensor_size_(minimum_remote_tensor_size) {}
 
@@ -77,7 +77,7 @@ StatusOr<bool> GradientAccumulationBuffersOffload::ShouldOffloadInPipeline(
         return false;
       }
       // Only offload if batch serialization and Sequential schedules are used.
-      const int64 batch_serialization_iterations =
+      const int64_t batch_serialization_iterations =
           GetPipelineBatchSerializationIterations(pipeline_op);
       TF_ASSIGN_OR_RETURN(const auto schedule,
                           GetPipelineSchedule(pipeline_op));
@@ -115,7 +115,7 @@ StatusOr<bool> GradientAccumulationBuffersOffload::OffloadInPipeline(
     HloComputation* stage_comp = stage->to_apply();
     HloInstruction* root = stage_comp->root_instruction();
 
-    for (int64 i = 0; i != stage->operand_count(); ++i) {
+    for (int64_t i = 0; i != stage->operand_count(); ++i) {
       HloInstruction* operand = stage->mutable_operand(i);
       if (!(IsGradientAccumulatorCreate(operand) &&
             should_offload_buffer(operand))) {
@@ -147,7 +147,7 @@ StatusOr<bool> GradientAccumulationBuffersOffload::OffloadInPipeline(
           CreateHloRemoteParameterStore({parameter, user}));
 
       // Output the updated remote buffer.
-      int64 output_idx = root->operand_index(user);
+      int64_t output_idx = root->operand_index(user);
       TF_RETURN_IF_ERROR(
           root->ReplaceOperandWith(output_idx, stored_parameter));
 
@@ -179,7 +179,7 @@ StatusOr<bool> GradientAccumulationBuffersOffload::OffloadInPipeline(
   HloInstruction* resource_update = *stages.resource_update;
   HloComputation* resource_update_comp = resource_update->to_apply();
 
-  for (int64 i = 0; i != resource_update->operand_count(); ++i) {
+  for (int64_t i = 0; i != resource_update->operand_count(); ++i) {
     HloInstruction* operand = resource_update->mutable_operand(i);
     // The operand is not an offloaded sink, therefore doesn't require a load.
     if (!offloaded_sinks.contains(operand)) {

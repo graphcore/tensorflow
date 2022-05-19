@@ -29,7 +29,7 @@ namespace poplarplugin {
 // Extract elementwise ops into a called sub-graph.
 class ExpressionOutliner : public HloModulePass {
  public:
-  explicit ExpressionOutliner(int64 maximum_num_elements = -1);
+  explicit ExpressionOutliner(int64_t maximum_num_elements = -1);
   absl::string_view name() const override { return "expression-outliner"; }
 
   StatusOr<bool> Run(HloModule* module);
@@ -37,7 +37,7 @@ class ExpressionOutliner : public HloModulePass {
  private:
   StatusOr<bool> ModuleExpressionOutliner(HloComputation* comp);
 
-  const int64 maximum_num_elements_;
+  const int64_t maximum_num_elements_;
 };
 
 }  // namespace poplarplugin

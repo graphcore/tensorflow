@@ -62,7 +62,7 @@ Status VerifySlices(const Literal& result) {
   auto indices = GetTestIndices();
 
   ShapeUtil::ForEachIndex(
-      result.shape(), [&](absl::Span<const int64> output_index) {
+      result.shape(), [&](absl::Span<const int64_t> output_index) {
         auto value = result.Get<float>(output_index);
         auto idx = indices.Get<int32>({output_index[0], 0});
         auto input_value = inputs.Get<float>({idx, output_index[1]});
@@ -81,7 +81,7 @@ Status VerifyUpdates(const Literal& result) {
   auto indices_data = indices.data<int>();
 
   ShapeUtil::ForEachIndex(
-      result.shape(), [&](absl::Span<const int64> output_index) {
+      result.shape(), [&](absl::Span<const int64_t> output_index) {
         auto value = result.Get<float>(output_index);
         for (size_t i = 0; i < indices_data.size(); i++) {
           auto idx = indices_data.at(i);

@@ -40,9 +40,9 @@ HloInstructionMap<HloPoplarBufferIdSet> GenerateProgramLiveness(
 
 // Estimate the minimum amount of IPU memory required to run a program with
 // the given liveness.
-int64 EstimateMinimumLiveMemory(
+int64_t EstimateMinimumLiveMemory(
     const HloInstructionMap<HloPoplarBufferIdSet>& program_liveness,
-    const absl::flat_hash_map<HloPoplarBuffer::Id, int64>&
+    const absl::flat_hash_map<HloPoplarBuffer::Id, int64_t>&
         buffer_sizes_in_bytes);
 
 }  // namespace poplarplugin

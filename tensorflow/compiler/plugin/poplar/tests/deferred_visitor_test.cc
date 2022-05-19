@@ -539,7 +539,7 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
   EXPECT_EQ(entry_loop_input_tensors[6], loop_tuple_tensors[6]);
 
   EXPECT_EQ(entry_loop_tensors.size(), loop_tuple_tensors.size());
-  for (int64 i = 0; i != entry_loop_tensors.size(); i++) {
+  for (int64_t i = 0; i != entry_loop_tensors.size(); i++) {
     if (i == 2) {
       // 2nd input is reallocated inside of the loop.
       EXPECT_NE(entry_loop_tensors[i], loop_tuple_tensors[i]);

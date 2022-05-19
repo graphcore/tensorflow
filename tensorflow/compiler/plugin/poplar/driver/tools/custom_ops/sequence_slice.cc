@@ -47,12 +47,12 @@ HloSequenceSliceInstruction::HloSequenceSliceInstruction(
                            op),
       zero_unused(zero_unused) {}
 
-absl::flat_hash_set<int64> HloSequenceSliceInstruction::AllocatingIndices()
+absl::flat_hash_set<int64_t> HloSequenceSliceInstruction::AllocatingIndices()
     const {
   return {};
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloSequenceSliceInstruction::LayoutDependencies() const {
   return {};
 }
@@ -135,7 +135,7 @@ static HloPoplarInstructionFactory sequence_slice_factory(
 HloSequenceSliceUnpackInstruction::HloSequenceSliceUnpackInstruction(
     const Shape& shape, HloInstruction* const src,
     HloInstruction* const num_elems, HloInstruction* const src_offsets,
-    HloInstruction* const dst_offsets, bool zero_unused, int64 total_elements)
+    HloInstruction* const dst_offsets, bool zero_unused, int64_t total_elements)
     : HloSequenceSliceInstruction(shape, src, num_elems, src_offsets,
                                   dst_offsets, zero_unused,
                                   PoplarOp::SequenceSliceUnpack),
@@ -155,7 +155,7 @@ bool HloSequenceSliceUnpackInstruction::AllocatingOutput() const {
   return true;
 }
 
-int64 HloSequenceSliceUnpackInstruction::TotalElements() const {
+int64_t HloSequenceSliceUnpackInstruction::TotalElements() const {
   return total_elements;
 }
 
@@ -171,7 +171,7 @@ HloSequenceSliceUnpackInstruction::CloneWithNewOperandsImpl(
 namespace {
 StatusOr<std::unique_ptr<HloSequenceSliceUnpackInstruction>>
 MakeSequenceSliceUnpackInstruction(HloCustomCallInstruction* call,
-                                   bool zero_unused, int64 total_elements) {
+                                   bool zero_unused, int64_t total_elements) {
   return absl::make_unique<HloSequenceSliceUnpackInstruction>(
       call->shape(), call->mutable_operand(0), call->mutable_operand(1),
       call->mutable_operand(2), call->mutable_operand(3), zero_unused,
@@ -185,7 +185,7 @@ HloSequenceSliceUnpackInstructionFactoryFunc(HloCustomCallInstruction* call) {
   TF_ASSIGN_OR_RETURN(bool zero_unused,
                       attribute_map.GetAttributeAsBool("zero_unused"));
 
-  TF_ASSIGN_OR_RETURN(int64 total_elements,
+  TF_ASSIGN_OR_RETURN(int64_t total_elements,
                       attribute_map.GetAttributeAsBool("total_elements"));
 
   return MakeSequenceSliceUnpackInstruction(call, zero_unused, total_elements);

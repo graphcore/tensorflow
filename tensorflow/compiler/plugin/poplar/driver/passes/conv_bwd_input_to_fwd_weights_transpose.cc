@@ -65,7 +65,7 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
 
   TF_ASSIGN_OR_RETURN(Window window,
                       GetConvolutionWindow(inst_conv_with_reverse));
-  TF_ASSIGN_OR_RETURN(int64 feature_group_count,
+  TF_ASSIGN_OR_RETURN(int64_t feature_group_count,
                       GetFeatureGroupCount(inst_conv_with_reverse));
 
   HloInstruction* weights_transpose_flip =
@@ -83,7 +83,7 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
         predecessor->AddControlDependencyTo(weights_transpose_flip));
   }
 
-  TF_ASSIGN_OR_RETURN(int64 batch_group_count,
+  TF_ASSIGN_OR_RETURN(int64_t batch_group_count,
                       GetBatchGroupCount(inst_conv_with_reverse));
 
   TF_ASSIGN_OR_RETURN(auto precision_config,
@@ -142,7 +142,7 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
 
 StatusOr<bool> ForwardBackwardConvolutionMatch(HloInstruction* fwd,
                                                HloInstruction* bwd) {
-  const int64 operand_count = fwd->operand_count();
+  const int64_t operand_count = fwd->operand_count();
   if (operand_count != bwd->operand_count() || operand_count == 0) {
     return false;
   }
@@ -152,7 +152,7 @@ StatusOr<bool> ForwardBackwardConvolutionMatch(HloInstruction* fwd,
     return false;
   }
 
-  for (int64 i = 0; i < operand_count; ++i) {
+  for (int64_t i = 0; i < operand_count; ++i) {
     if (!ShapeUtil::Compatible(
             fwd->operand(i)->shape(),
             i == 0 ? bwd->shape() : bwd->operand(i)->shape())) {

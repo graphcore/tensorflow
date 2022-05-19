@@ -117,7 +117,7 @@ std::vector<std::string> HloRNNInstruction::ExtraPoplarAttributesToStringImpl(
   return attributes;
 }
 
-absl::flat_hash_map<int64, int64> HloRNNFwdInstruction::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloRNNFwdInstruction::LayoutDependencies()
     const {
   return {};
 }
@@ -140,13 +140,13 @@ bool HloRNNFwdInstruction::AllowNonInplaceLowering() const { return false; }
 
 bool HloRNNFwdInstruction::IsPopOpsElementwise() const { return false; }
 
-absl::flat_hash_set<int64> HloRNNBwdInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloRNNBwdInstruction::AllocatingIndices() const {
   return {};
 }
 
 bool HloRNNBwdInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloRNNBwdInstruction::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloRNNBwdInstruction::LayoutDependencies()
     const {
   return {};
 }

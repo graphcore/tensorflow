@@ -30,7 +30,7 @@ namespace {
 
 StatusOr<poplar::Tensor> GetOutputTensor(
     DriverGraph& graph, TensorMap& tensor_map, CompilerResources& res,
-    const HloInstruction* inst, int64 output_index,
+    const HloInstruction* inst, int64_t output_index,
     const poplar::DebugNameAndId& debug_name_and_id) {
   // If output is scalar, map it linearly with res.linear_mapping_state.
   const Shape& output_shape = inst->shape().tuple_shapes(output_index);
@@ -53,7 +53,7 @@ class ReduceManyOp : public PoplarOpDef {
     DriverProgramSequence seq(graph, debug_info);
 
     const auto* reduce_many_inst = Cast<HloReduceManyInstruction>(inst);
-    const int64 num_reductions = reduce_many_inst->ReductionsInfo().size();
+    const int64_t num_reductions = reduce_many_inst->ReductionsInfo().size();
 
     std::vector<popops::SingleReduceOp> popops_reductions;
     std::vector<poplar::Tensor> output_tensors;

@@ -88,9 +88,9 @@ StatusOr<HloInstruction*> AddParametersToCall(
   auto builder = HloComputation::Builder(comp->name());
 
   // Force add new parameters.
-  const int64 num_parameters = comp->num_parameters();
+  const int64_t num_parameters = comp->num_parameters();
   std::vector<HloInstruction*> added_parameters(new_parameters.size());
-  for (int64 i = 0; i != new_parameters.size(); ++i) {
+  for (int64_t i = 0; i != new_parameters.size(); ++i) {
     HloInstruction* inst = new_parameters[i];
     added_parameters[i] =
         builder.AddInstruction(HloInstruction::CreateParameter(
@@ -109,7 +109,7 @@ StatusOr<HloInstruction*> AddParametersToCall(
     if (add_parameters_as_outputs && comp->root_instruction() == old_inst) {
       // Add the parameters as inputs to the root tuple.
       CHECK_EQ(old_inst->opcode(), HloOpcode::kTuple);
-      for (int64 i = 0; i != new_parameters.size(); ++i) {
+      for (int64_t i = 0; i != new_parameters.size(); ++i) {
         HloInstruction* inst = added_parameters[i];
         new_operands.push_back(inst);
         ShapeUtil::AppendShapeToTuple(inst->shape(), &new_shape);
@@ -219,7 +219,7 @@ Status HoistFromPipelineStage(HloInstruction* seed,
 
   // Hash the seed with the pipeline execution counter inside of the stage.
   HloComputation* stage_comp = pipeline_stage->to_apply();
-  const int64 num_parameters = stage_comp->num_parameters();
+  const int64_t num_parameters = stage_comp->num_parameters();
   lowered_seed = stage_comp->parameter_instruction(num_parameters - 2);
   pipeline_execution_counter =
       stage_comp->parameter_instruction(num_parameters - 1);
@@ -348,7 +348,7 @@ StatusOr<bool> SeedHoisting::Run(HloModule* module) {
   XLA_VLOG_LINES(2, module->ToString(HloPrintOptions::ShortParsable()));
 
   bool hoisted = false;
-  int64 num_passes = 0;
+  int64_t num_passes = 0;
   do {
     TF_ASSIGN_OR_RETURN(hoisted, ProcessModule(module));
     if (hoisted) {

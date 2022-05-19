@@ -176,7 +176,7 @@ ReplicatedResourceUpdateElementwiseClustering::CreateValidator(
 
 StatusOr<HloInstruction*>
 ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
-    int64 param_idx, const ElementwiseCluster& cluster,
+    int64_t param_idx, const ElementwiseCluster& cluster,
     HloInstruction* cluster_input, HloComputation::Builder* builder,
     HloCloneContext* context) const {
   CHECK(cluster.IsReplicaPartitioned());

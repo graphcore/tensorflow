@@ -32,9 +32,9 @@ class HloStatefulGradientAccumulate : public HloPoplarInstruction {
       absl::Span<HloInstruction* const> operands, int32 num_mini_batches,
       PoplarOp op = PoplarOp::StatefulGradientAccumulate);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
@@ -85,7 +85,7 @@ class HloStatefulGradientAccumulateWithMomentum
       absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -103,7 +103,7 @@ class HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm
       absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -137,9 +137,9 @@ class HloGradientAccumulatorCreate : public HloPoplarInstruction {
       bool is_remote = false,
       absl::optional<HloRemoteBufferInfo> remote_buffer_info = absl::nullopt);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
@@ -176,9 +176,9 @@ class HloGradientAccumulatorAddWithScale : public HloPoplarInstruction {
       HloInstruction* const accumulator, HloInstruction* const gradient,
       HloInstruction* const accumulator_scale);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
@@ -205,9 +205,9 @@ class HloGradientAccumulatorSink : public HloPoplarInstruction {
   explicit HloGradientAccumulatorSink(
       absl::Span<HloInstruction* const> operands);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
@@ -233,9 +233,9 @@ class HloGradientAccumulationCount : public HloPoplarInstruction {
   explicit HloGradientAccumulationCount(
       absl::Span<HloInstruction* const> operands);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(

@@ -52,14 +52,15 @@ const HloInstruction* HloGroupNormInstruction::variance_or_inv_std_dev() const {
   return HloInstruction::operand(4);
 }
 
-absl::flat_hash_set<int64> HloGroupNormInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloGroupNormInstruction::AllocatingIndices()
+    const {
   return {};
 }
 
 bool HloGroupNormInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloGroupNormInstruction::LayoutDependencies()
-    const {
+absl::flat_hash_map<int64_t, int64_t>
+HloGroupNormInstruction::LayoutDependencies() const {
   return {{1, 0}, {2, 0}};
 }
 

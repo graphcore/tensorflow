@@ -25,8 +25,8 @@ namespace {
 using ConversionsTest = HloTestBase;
 
 TEST_F(ConversionsTest, Int64ToInt32Input) {
-  int64 src[] = {0, 1,  2,  3,  4,  5,  6,  7,  8,  9,
-                 0, -1, -2, -3, -4, -5, -6, -7, -8, -9};
+  int64_t src[] = {0, 1,  2,  3,  4,  5,  6,  7,  8,  9,
+                   0, -1, -2, -3, -4, -5, -6, -7, -8, -9};
   std::vector<char> res = ConvInt64ToInt32((void*)src, sizeof(src), 0);
 
   EXPECT_EQ(20 * sizeof(int32), res.size());
@@ -45,9 +45,9 @@ TEST_F(ConversionsTest, Int32ToInt64Input) {
                  0, -1, -2, -3, -4, -5, -6, -7, -8, -9};
   std::vector<char> res = ConvInt32ToInt64((void*)src, sizeof(src), 0);
 
-  EXPECT_EQ(20 * sizeof(int64), res.size());
+  EXPECT_EQ(20 * sizeof(int64_t), res.size());
 
-  int64* d = reinterpret_cast<int64*>(res.data());
+  int64_t* d = reinterpret_cast<int64_t*>(res.data());
   EXPECT_EQ(0, d[0]);
   EXPECT_EQ(1, d[1]);
   EXPECT_EQ(2, d[2]);
@@ -57,8 +57,8 @@ TEST_F(ConversionsTest, Int32ToInt64Input) {
 }
 
 TEST_F(ConversionsTest, Int64ToInt32Output) {
-  int64 src[] = {0, 1,  2,  3,  4,  5,  6,  7,  8,  9,
-                 0, -1, -2, -3, -4, -5, -6, -7, -8, -9};
+  int64_t src[] = {0, 1,  2,  3,  4,  5,  6,  7,  8,  9,
+                   0, -1, -2, -3, -4, -5, -6, -7, -8, -9};
   std::vector<char> res = ConvInt64ToInt32((void*)src, 0, sizeof(src) / 2);
 
   EXPECT_EQ(20 * sizeof(int32), res.size());
@@ -77,9 +77,9 @@ TEST_F(ConversionsTest, Int32ToInt64Output) {
                  0, -1, -2, -3, -4, -5, -6, -7, -8, -9};
   std::vector<char> res = ConvInt32ToInt64((void*)src, 0, sizeof(src) * 2);
 
-  EXPECT_EQ(20 * sizeof(int64), res.size());
+  EXPECT_EQ(20 * sizeof(int64_t), res.size());
 
-  int64* d = reinterpret_cast<int64*>(res.data());
+  int64_t* d = reinterpret_cast<int64_t*>(res.data());
   EXPECT_EQ(0, d[0]);
   EXPECT_EQ(1, d[1]);
   EXPECT_EQ(2, d[2]);

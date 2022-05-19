@@ -41,7 +41,7 @@ StatusOr<bool> PipelineTupleRemover::FlattenPipeline(
   OrderedPipelineStages ordered_stages(stages,
                                        /*include_resource_update*/ true);
 
-  for (int64 i = 0; i != ordered_stages.GetNumberOfStages(); ++i) {
+  for (int64_t i = 0; i != ordered_stages.GetNumberOfStages(); ++i) {
     HloInstruction* stage = ordered_stages.GetStage(i);
 
     // Note - the stage and its users will change - keep track of original GTEs.
@@ -96,7 +96,7 @@ StatusOr<bool> PipelineTupleRemover::FlattenPipeline(
               *node = gte;
             } else {
               ShapeIndex parent_index = index;
-              const int64 tuple_index = parent_index.back();
+              const int64_t tuple_index = parent_index.back();
               parent_index.pop_back();
               HloInstruction* parent = gte_tree.element(parent_index);
               TF_ASSIGN_OR_RETURN(*node,
@@ -107,7 +107,7 @@ StatusOr<bool> PipelineTupleRemover::FlattenPipeline(
           }));
 
       for (HloInstruction* user : users) {
-        const int64 user_idx = ordered_stages.GetIndex(user);
+        const int64_t user_idx = ordered_stages.GetIndex(user);
         // Keep track of all the instructions which need to be lowered into the
         // `stage`.
         std::vector<HloInstruction*> new_user_instructions;
@@ -125,7 +125,7 @@ StatusOr<bool> PipelineTupleRemover::FlattenPipeline(
                 ShapeUtil::GetSubshape(gte->shape(), index);
             std::vector<HloInstruction*> operands(
                 ShapeUtil::TupleElementCount(tuple_shape));
-            for (int64 i = 0; i != operands.size(); ++i) {
+            for (int64_t i = 0; i != operands.size(); ++i) {
               ShapeIndex child_index = index;
               child_index.push_back(i);
               operands[i] = tuple_tree.element(child_index);
@@ -139,8 +139,8 @@ StatusOr<bool> PipelineTupleRemover::FlattenPipeline(
         }
 
         // Replace the GTE with the root tuple.
-        std::map<int64, HloInstruction*> replacements;
-        absl::c_for_each(user->OperandIndices(gte), [&](int64 operand_idx) {
+        std::map<int64_t, HloInstruction*> replacements;
+        absl::c_for_each(user->OperandIndices(gte), [&](int64_t operand_idx) {
           replacements[operand_idx] = tuple_tree.element(ShapeIndex{});
         });
 
@@ -158,7 +158,7 @@ StatusOr<bool> PipelineTupleRemover::FlattenPipeline(
     }
   }
 
-  for (int64 i = 0; i != ordered_stages.GetNumberOfStages(); ++i) {
+  for (int64_t i = 0; i != ordered_stages.GetNumberOfStages(); ++i) {
     HloInstruction* stage = ordered_stages.GetStage(i);
     TF_ASSIGN_OR_RETURN(bool changed_ts,
                         TupleSimplifier::RunOnComputation(stage->to_apply()));

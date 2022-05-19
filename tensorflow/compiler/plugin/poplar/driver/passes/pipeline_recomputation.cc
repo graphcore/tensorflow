@@ -45,8 +45,8 @@ bool IsRecomputationCheckpoint(const HloInstruction* inst) {
 // Helper struct for storing information about which forward stage outputs are
 // used as backward stage inputs and the corresponding output instructions.
 struct OutputToInputInfo {
-  std::vector<int64> bwd_input_idices;
-  std::vector<int64> fwd_output_idices;
+  std::vector<int64_t> bwd_input_idices;
+  std::vector<int64_t> fwd_output_idices;
   std::vector<HloInstruction*> fwd_outputs;
 };
 
@@ -60,13 +60,13 @@ StatusOr<OutputToInputInfo> GetForwardOutputsUsed(
   HloInstruction* fwd_root = fwd_comp->root_instruction();
   CHECK_EQ(fwd_root->opcode(), HloOpcode::kTuple);
 
-  for (int64 op_idx = 0; op_idx != bwd_stage->operand_count(); ++op_idx) {
+  for (int64_t op_idx = 0; op_idx != bwd_stage->operand_count(); ++op_idx) {
     const HloInstruction* operand = bwd_stage->operand(op_idx);
     switch (operand->opcode()) {
       case HloOpcode::kGetTupleElement: {
         const HloInstruction* source = operand->operand(0);
         if (source == fwd_stage) {
-          const int64 output_idx = operand->tuple_index();
+          const int64_t output_idx = operand->tuple_index();
           info.bwd_input_idices.push_back(op_idx);
           info.fwd_output_idices.push_back(output_idx);
           info.fwd_outputs.push_back(fwd_root->mutable_operand(output_idx));
@@ -311,8 +311,8 @@ Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
                                  HloInstruction* bwd_stage,
                                  const ClusterInfo& cluster_info,
                                  const OutputToInputInfo& oi_info) {
-  const int64 num_inputs = cluster_info.inputs.size();
-  const int64 num_recomputed_inputs =
+  const int64_t num_inputs = cluster_info.inputs.size();
+  const int64_t num_recomputed_inputs =
       cluster_info.recomputation_checkpoints.size();
 
   HloCloneContext context(fwd_stage->GetModule());
@@ -327,9 +327,10 @@ Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
   // Get the cluster inputs which were previously added as outputs of the
   // forward stage.
   {
-    const int64 start_index = ShapeUtil::TupleElementCount(fwd_stage->shape()) -
-                              num_inputs - num_recomputed_inputs;
-    for (int64 i = 0; i != num_inputs; ++i) {
+    const int64_t start_index =
+        ShapeUtil::TupleElementCount(fwd_stage->shape()) - num_inputs -
+        num_recomputed_inputs;
+    for (int64_t i = 0; i != num_inputs; ++i) {
       HloInstruction* input = cluster_info.inputs[i];
       TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                           MakeGetTupleElementHlo(fwd_stage, start_index + i));
@@ -341,9 +342,10 @@ Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
   // Get the checkpointed inputs.
   absl::flat_hash_map<HloInstruction*, HloInstruction*> recomputed_inputs;
   {
-    const int64 start_index = ShapeUtil::TupleElementCount(fwd_stage->shape()) -
-                              num_recomputed_inputs;
-    for (int64 i = 0; i != num_recomputed_inputs; ++i) {
+    const int64_t start_index =
+        ShapeUtil::TupleElementCount(fwd_stage->shape()) -
+        num_recomputed_inputs;
+    for (int64_t i = 0; i != num_recomputed_inputs; ++i) {
       HloInstruction* input = cluster_info.recomputation_checkpoints[i];
       TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                           MakeGetTupleElementHlo(fwd_stage, start_index + i));
@@ -384,8 +386,8 @@ Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
 
   // Lower the instructions into the backward pipeline stage, replacing all the
   // uses of the fwd stage with the outputs of the recomputation cluster.
-  std::map<int64, HloInstruction*> replacements;
-  for (int64 i = 0; i != oi_info.fwd_outputs.size(); ++i) {
+  std::map<int64_t, HloInstruction*> replacements;
+  for (int64_t i = 0; i != oi_info.fwd_outputs.size(); ++i) {
     HloInstruction* output = oi_info.fwd_outputs.at(i);
     // Do not replace cluster inputs.
     if (cluster_inputs.contains(output)) {
@@ -413,7 +415,7 @@ Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
 struct PipelineStageRecomputationInfo {
   HloInstruction* fwd_stage;
   HloInstruction* bwd_stage;
-  int64 stage_id;
+  int64_t stage_id;
   bool is_last_stage;
   OutputToInputInfo oi_info;
   ClusterInfo cluster_info;
@@ -433,8 +435,8 @@ StatusOr<std::vector<PipelineStageRecomputationInfo>> GetRecomputationInfos(
   }
 
   // Go through all the forward stages.
-  const int64 num_stages = static_cast<int64>(stages.forward.size());
-  for (int64 stage_id = 0; stage_id != num_stages; ++stage_id) {
+  const int64_t num_stages = static_cast<int64_t>(stages.forward.size());
+  for (int64_t stage_id = 0; stage_id != num_stages; ++stage_id) {
     HloInstruction* fwd_stage = stages.forward[stage_id];
     HloInstruction* bwd_stage = stages.backward[stage_id];
     const bool is_last_stage = stage_id == num_stages - 1;
@@ -476,7 +478,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
        stage_recomputation_infos) {
     HloInstruction* fwd_stage = stage_recomputation_info.fwd_stage;
     HloInstruction* bwd_stage = stage_recomputation_info.bwd_stage;
-    const int64 stage_id = stage_recomputation_info.stage_id;
+    const int64_t stage_id = stage_recomputation_info.stage_id;
     const bool is_last_stage = stage_recomputation_info.is_last_stage;
     const OutputToInputInfo& oi_info = stage_recomputation_info.oi_info;
     const ClusterInfo& cluster_info = stage_recomputation_info.cluster_info;

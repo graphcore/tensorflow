@@ -25,7 +25,7 @@ namespace xla {
 namespace poplarplugin {
 
 StatusOr<bool> SingleHloMatcher::HandleMatch(
-    HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
+    HloMatcherMatched& match, const absl::optional<int64_t> sharding_device) {
   const auto& pattern = match.pattern;
   std::string name = op_prefix_ + pattern.GetType();
   TF_ASSIGN_OR_RETURN(HloInstruction * inst, OutlineExpressionFromComputation(

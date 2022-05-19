@@ -84,7 +84,7 @@ struct PrngSeedTest : HloPoplarTestBase {
     skip = false;
   }
 
-  int64 replication_factor_ = 2;
+  int64_t replication_factor_ = 2;
   int32 tile_count_ = 4;
   int32 device_count_ = 2;
   poplar::Device device_;

@@ -29,20 +29,20 @@ namespace poplarplugin {
 namespace {
 using InstructionToOperandIndices = absl::flat_hash_map<
     HloInstruction*,
-    absl::flat_hash_map<HloInstruction*, absl::InlinedVector<int64, 1>>>;
+    absl::flat_hash_map<HloInstruction*, absl::InlinedVector<int64_t, 1>>>;
 
 struct AllocationLoopState {
   AllocationLoopState() = default;
   AllocationLoopState(const AllocationLoopState&) = delete;
   // holds index into state.result
-  std::vector<int64> to_visit;
+  std::vector<int64_t> to_visit;
   AllocationGroups result;
   std::unique_ptr<CallGraph> call_graph;
-  absl::flat_hash_map<IndexedLocation, int64> producer_to_index;
-  absl::flat_hash_set<int64> visited_groups;
+  absl::flat_hash_map<IndexedLocation, int64_t> producer_to_index;
+  absl::flat_hash_set<int64_t> visited_groups;
   absl::flat_hash_set<IndexedLocation> visited;
   InstructionToOperandIndices instruction_to_operand_indices;
-  AllocationGroup& group(int64 i) { return result.groups[i]; }
+  AllocationGroup& group(int64_t i) { return result.groups[i]; }
 };
 
 const TensorLocation null_location = {nullptr, 0};
@@ -64,7 +64,7 @@ bool ContinueSearching(const DoFindConsumers do_find_consumers,
 }
 
 bool ContinueSearching(HloInstruction* user, HloInstruction* operand,
-                       int64 index) {
+                       int64_t index) {
   auto result = CallHloInstructionExtension<FindConsumersExtension,
                                             FindConsumersExtensionParams>(
       user, FindConsumersExtensionParams{null_location, operand,
@@ -74,11 +74,11 @@ bool ContinueSearching(HloInstruction* user, HloInstruction* operand,
   return ContinueSearching(result.do_find_consumers, user, operand);
 }
 
-absl::InlinedVector<int64, 2> OperandsAffectingMapping(HloInstruction* inst) {
+absl::InlinedVector<int64_t, 2> OperandsAffectingMapping(HloInstruction* inst) {
   // I'd expect this to be the same per opcode so would be nice if
   // didn't need to take whole instruction
-  absl::InlinedVector<int64, 2> result;
-  for (int64 i = 0; i < inst->operand_count(); ++i) {
+  absl::InlinedVector<int64_t, 2> result;
+  for (int64_t i = 0; i < inst->operand_count(); ++i) {
     if (ContinueSearching(inst, inst->mutable_operand(i), i)) {
       result.emplace_back(i);
     }
@@ -86,7 +86,7 @@ absl::InlinedVector<int64, 2> OperandsAffectingMapping(HloInstruction* inst) {
   return result;
 }
 
-int64 AddGroup(AllocationGroup&& group, AllocationLoopState& state) {
+int64_t AddGroup(AllocationGroup&& group, AllocationLoopState& state) {
   auto insert_result = state.producer_to_index.emplace(
       group.producer, state.result.groups.size());
   if (insert_result.second) {
@@ -239,7 +239,7 @@ Status AddIfMappingDependsOnOperand(std::vector<IndexedLocation>& to_visit,
       break;
     }
     default: {
-      for (int64 i = 0; i < user->operand_count(); ++i) {
+      for (int64_t i = 0; i < user->operand_count(); ++i) {
         if (user->operand(i) != operand.instruction) {
           continue;
         }
@@ -253,7 +253,7 @@ Status AddIfMappingDependsOnOperand(std::vector<IndexedLocation>& to_visit,
   return Status::OK();
 }
 
-Status IterateThroughUsers(int64 index, AllocationLoopState& state) {
+Status IterateThroughUsers(int64_t index, AllocationLoopState& state) {
   std::vector<IndexedLocation> to_visit = {state.group(index).producer};
   while (to_visit.size()) {
     IndexedLocation next = to_visit.back();
@@ -285,7 +285,7 @@ Status IterateThroughUsers(int64 index, AllocationLoopState& state) {
 
 Status AddUsersInSameComputationsToGroups(AllocationLoopState& state) {
   while (state.to_visit.size()) {
-    int64 index = state.to_visit.back();
+    int64_t index = state.to_visit.back();
     state.to_visit.pop_back();
     auto insert_res = state.visited_groups.insert(index);
     if (insert_res.second) {
@@ -295,21 +295,21 @@ Status AddUsersInSameComputationsToGroups(AllocationLoopState& state) {
   return Status::OK();
 }
 
-absl::flat_hash_map<IndexedLocation, int64> CreateLocationToGroupMap(
+absl::flat_hash_map<IndexedLocation, int64_t> CreateLocationToGroupMap(
     const AllocationLoopState& state) {
   return state.result.CreateLocationToGroupMap();
 }
 
 void MergeInstructionGroups(
     HloInstruction* merge_into, HloInstruction* merge_from,
-    absl::flat_hash_map<IndexedLocation, int64>& loc_to_group,
+    absl::flat_hash_map<IndexedLocation, int64_t>& loc_to_group,
     AllocationLoopState& state) {
   const auto locations = GenerateAllLocations(merge_into);
   for (const auto& loc : locations) {
     IndexedLocation location_from = {merge_from, loc.index};
-    int64 merge_to_index = loc_to_group.at(loc);
+    int64_t merge_to_index = loc_to_group.at(loc);
     auto& group_to_merge_to = state.result.groups[merge_to_index];
-    int64 merge_from_index = loc_to_group.at(location_from);
+    int64_t merge_from_index = loc_to_group.at(location_from);
     if (merge_to_index == merge_from_index) {
       // already same group so nothing to do
       continue;
@@ -330,9 +330,10 @@ void MergeInstructionGroups(
   }
 }
 
-void MergeWhileGroups(HloInstruction* while_op,
-                      absl::flat_hash_map<IndexedLocation, int64>& loc_to_group,
-                      AllocationLoopState& state) {
+void MergeWhileGroups(
+    HloInstruction* while_op,
+    absl::flat_hash_map<IndexedLocation, int64_t>& loc_to_group,
+    AllocationLoopState& state) {
   // by convention we are going to add everything to the groups containing the
   // while body parameter instruction
   auto* called_inst = while_op->while_body()->parameter_instruction(0);
@@ -341,10 +342,11 @@ void MergeWhileGroups(HloInstruction* while_op,
   MergeInstructionGroups(while_op, cond_inst, loc_to_group, state);
 }
 
-void MergeCallGroups(HloInstruction* call_op,
-                     absl::flat_hash_map<IndexedLocation, int64>& loc_to_group,
-                     AllocationLoopState& state) {
-  for (int64 i = 0; i < call_op->operand_count(); ++i) {
+void MergeCallGroups(
+    HloInstruction* call_op,
+    absl::flat_hash_map<IndexedLocation, int64_t>& loc_to_group,
+    AllocationLoopState& state) {
+  for (int64_t i = 0; i < call_op->operand_count(); ++i) {
     auto* parameter = call_op->to_apply()->parameter_instruction(i);
     MergeInstructionGroups(call_op->mutable_operand(i), parameter, loc_to_group,
                            state);
@@ -410,7 +412,7 @@ bool IsHandlableMergePoint(HloInstruction* inst) {
   if (!inst->shape().IsArray()) {
     return false;
   }
-  return !absl::c_all_of(indices, [&](const int64 i) {
+  return !absl::c_all_of(indices, [&](const int64_t i) {
     return inst->operand(0) == inst->operand(i);
   });
 }
@@ -427,13 +429,13 @@ std::vector<IndexedLocation> FindMergePoints(const AllocationLoopState& state) {
   return merge_points;
 }
 
-void TryMergeGroups(AllocationLoopState& state,
-                    std::vector<IndexedLocation> merge_points,
-                    absl::flat_hash_map<IndexedLocation, int64> loc_to_group) {
+void TryMergeGroups(
+    AllocationLoopState& state, std::vector<IndexedLocation> merge_points,
+    absl::flat_hash_map<IndexedLocation, int64_t> loc_to_group) {
   for (const auto& merge_point : merge_points) {
     const auto indices = OperandsAffectingMapping(merge_point.instruction);
     // we already asserted no tuple shapes so just assume all indexes are {}
-    for (int64 index : indices) {
+    for (int64_t index : indices) {
       MergeInstructionGroups(merge_point.instruction,
                              merge_point.instruction->mutable_operand(index),
                              loc_to_group, state);
@@ -466,7 +468,7 @@ InstructionToOperandIndices CreateInstructionOperandsMap(HloModule* module) {
     for (auto* inst : comp->instructions()) {
       if (WorthBuilding(inst)) {
         auto& inst_map = result[inst];
-        for (int64 i = 0; i < inst->operand_count(); ++i) {
+        for (int64_t i = 0; i < inst->operand_count(); ++i) {
           inst_map[inst->mutable_operand(i)].emplace_back(i);
         }
       }
@@ -484,7 +486,7 @@ Status AddGroupInputInstructions(AllocationLoopState& state) {
     if (!remaps) {
       continue;
     }
-    for (int64 i = 0; i < producer.instruction->operand_count(); ++i) {
+    for (int64_t i = 0; i < producer.instruction->operand_count(); ++i) {
       HloInstruction* operand = producer.instruction->mutable_operand(i);
       if (!operand->shape().IsArray()) {
         continue;
@@ -585,10 +587,10 @@ void AllocationGroups::Verify(HloModule* module) const {
   }
 }
 
-absl::flat_hash_map<IndexedLocation, int64>
+absl::flat_hash_map<IndexedLocation, int64_t>
 AllocationGroups::CreateLocationToGroupMap() const {
-  absl::flat_hash_map<IndexedLocation, int64> result;
-  for (int64 i = 0; i < groups.size(); ++i) {
+  absl::flat_hash_map<IndexedLocation, int64_t> result;
+  for (int64_t i = 0; i < groups.size(); ++i) {
     for (const auto& loc : groups[i].group) {
       result.emplace(loc, i);
     }

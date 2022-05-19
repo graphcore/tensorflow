@@ -48,7 +48,7 @@ bool ShouldAddCopiesForDuplicateOperands(const HloInstruction* inst) {
 StatusOr<bool> AddCopiesForDuplicateOperands(HloInstruction* inst) {
   absl::flat_hash_set<HloInstruction*> seen_operands;
   bool changed = false;
-  for (int64 i = 0; i != inst->operand_count(); ++i) {
+  for (int64_t i = 0; i != inst->operand_count(); ++i) {
     HloInstruction* operand = inst->mutable_operand(i);
     if (seen_operands.contains(operand)) {
       // Add a copy if the operand was seen before.
@@ -75,7 +75,7 @@ StatusOr<bool> AddCopiesForResourceUpdate(HloInstruction* resource_update) {
   }
 
   bool changed = false;
-  for (int64 i = 0; i != resource_update->operand_count(); ++i) {
+  for (int64_t i = 0; i != resource_update->operand_count(); ++i) {
     HloInstruction* operand = resource_update->mutable_operand(i);
     if (root->OperandIndices(operand).empty()) {
       continue;

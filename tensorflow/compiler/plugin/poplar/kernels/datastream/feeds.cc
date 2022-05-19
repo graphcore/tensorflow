@@ -77,7 +77,7 @@ void XlaShapesFromAttr(OpKernelConstruction* ctx,
 void GetFeedConfig(OpKernelConstruction* ctx,
                    xla::poplarplugin::PoplarFeedConfig& config) {
   std::string feed_id;
-  int64 prefetch_depth;
+  int64_t prefetch_depth;
   std::vector<tensorflow::DataType> types;
   bool optimise_latency;
   OP_REQUIRES_OK(ctx, ctx->GetAttr("output_types", &types));

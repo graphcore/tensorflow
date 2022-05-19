@@ -91,7 +91,7 @@ REGISTER_HLO_INST_EXTENSIONS(kFusion, RegisterFuseExtensions);
 
 void RegisterDotExtensions(HloOpcode opcode) {
   auto allocating_indices = [](const HloInstruction* inst) {
-    absl::flat_hash_set<int64> indices;
+    absl::flat_hash_set<int64_t> indices;
     for (auto i = 0u; i < inst->operand_count(); ++i) {
       indices.insert(i);
     }
@@ -114,7 +114,7 @@ REGISTER_HLO_INST_EXTENSIONS(kDot, RegisterDotExtensions);
 
 void RegisterCholeskyExtensions(HloOpcode opcode) {
   auto allocating_indices = [](const HloInstruction*) {
-    return absl::flat_hash_set<int64>{0};
+    return absl::flat_hash_set<int64_t>{0};
   };
   RegisterHloInstructionExtension<AllocatingIndicesExtension>(
       opcode, allocating_indices);
@@ -135,7 +135,7 @@ REGISTER_HLO_INST_EXTENSIONS(kCholesky, RegisterCholeskyExtensions);
 
 void RegisterScatterExtensions(HloOpcode opcode) {
   auto allocating_indices = [](const HloInstruction*) {
-    return absl::flat_hash_set<int64>{0, 1, 2};
+    return absl::flat_hash_set<int64_t>{0, 1, 2};
   };
   RegisterHloInstructionExtension<AllocatingIndicesExtension>(
       opcode, allocating_indices);
@@ -152,7 +152,7 @@ REGISTER_HLO_INST_EXTENSIONS(kScatter, RegisterScatterExtensions);
 
 void RegisterGatherExtensions(HloOpcode opcode) {
   auto allocating_indices = [](const HloInstruction*) {
-    return absl::flat_hash_set<int64>{0, 1};
+    return absl::flat_hash_set<int64_t>{0, 1};
   };
   RegisterHloInstructionExtension<AllocatingIndicesExtension>(
       opcode, allocating_indices);
@@ -169,7 +169,7 @@ REGISTER_HLO_INST_EXTENSIONS(kGather, RegisterGatherExtensions);
 
 void RegisterTriangularSolveExtensions(HloOpcode opcode) {
   auto allocating_indices = [](const HloInstruction*) {
-    return absl::flat_hash_set<int64>{0, 1};
+    return absl::flat_hash_set<int64_t>{0, 1};
   };
   RegisterHloInstructionExtension<AllocatingIndicesExtension>(
       opcode, allocating_indices);
@@ -191,7 +191,7 @@ REGISTER_HLO_INST_EXTENSIONS(kTriangularSolve,
 
 void RegisterConvolutionExtensions(HloOpcode opcode) {
   auto allocating_indices = [](const HloInstruction* inst) {
-    absl::flat_hash_set<int64> indices;
+    absl::flat_hash_set<int64_t> indices;
     for (auto i = 0u; i < inst->operand_count(); ++i) {
       indices.insert(i);
     }
@@ -263,7 +263,7 @@ void RegisterTupleExtensions(HloOpcode opcode) {
   auto do_find_consumers =
       [](const HloInstruction* user,
          FindConsumersExtensionParams params) -> FindConsumersExtensionResults {
-    int64 new_index =
+    int64_t new_index =
         InsertIntoTuple(user->shape(), params.op_index, params.index);
     FindConsumersExtensionResults result{/*do_find_consumers=*/true, user,
                                          new_index, params.permutation};
@@ -278,8 +278,8 @@ void RegisterGetTupleElementExtensions(HloOpcode opcode) {
   auto do_find_consumers =
       [](const HloInstruction* user,
          FindConsumersExtensionParams params) -> FindConsumersExtensionResults {
-    int64 tuple_index = user->tuple_index();
-    int64 new_index =
+    int64_t tuple_index = user->tuple_index();
+    int64_t new_index =
         ExtractFromTuple(params.tgt->shape(), tuple_index, params.index);
     if (new_index != -1) {
       FindConsumersExtensionResults result{/*do_find_consumers=*/true, user,
@@ -309,13 +309,13 @@ REGISTER_HLO_INST_EXTENSIONS(kReshape, RegisterReshapeExtensions);
 void RegisterTransposeExtensions(HloOpcode opcode) {
   auto do_find_consumers = [](const HloInstruction* user,
                               FindConsumersExtensionParams params) {
-    absl::optional<std::vector<int64>> new_permutation;
+    absl::optional<std::vector<int64_t>> new_permutation;
     auto& permutation = params.permutation;
     if (permutation) {
       // Permute the dimensions according to the transpose.
-      new_permutation = std::vector<int64>(permutation->size());
-      const std::vector<int64> transpose_permutation = user->dimensions();
-      for (int64 d = 0; d != permutation->size(); ++d) {
+      new_permutation = std::vector<int64_t>(permutation->size());
+      const std::vector<int64_t> transpose_permutation = user->dimensions();
+      for (int64_t d = 0; d != permutation->size(); ++d) {
         (*new_permutation)[d] = (*permutation)[transpose_permutation[d]];
       }
     }
@@ -557,7 +557,7 @@ REGISTER_HLO_INST_EXTENSIONS(kCall, [](HloOpcode opcode) {
       opcode, [](const HloInstruction* inst) {
         if (IsRepeatLoop(inst)) {
           HloPoplarInplaceDescription::OperandIndices indices;
-          const int64 num_operands = inst->operand_count();
+          const int64_t num_operands = inst->operand_count();
           const HloComputation* comp = inst->to_apply();
           const HloInstruction* root = comp->root_instruction();
 
@@ -583,7 +583,7 @@ REGISTER_HLO_INST_EXTENSIONS(kCall, [](HloOpcode opcode) {
               has_gte[user->tuple_index()] = true;
             }
 
-            for (int64 idx = 0; idx != num_operands; ++idx) {
+            for (int64_t idx = 0; idx != num_operands; ++idx) {
               // An operand is not inplace if there is no gte for it and it's
               // used directly in the root instruction at the same index.
               if (has_gte[idx] ||
@@ -619,7 +619,7 @@ REGISTER_HLO_INST_EXTENSIONS(kCall, [](HloOpcode opcode) {
           const bool is_bwd = IsPipelineStageBackward(inst);
 
           HloComputation* comp = inst->to_apply();
-          for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
+          for (int64_t op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
             const HloInstruction* operand = inst->operand(op_idx);
             if (!IsPipelineStageReadOnlyInput(operand) &&
                 !(is_bwd &&
@@ -643,9 +643,9 @@ REGISTER_HLO_INST_EXTENSIONS(kCall, [](HloOpcode opcode) {
           // "num_modified_remote_buffers" outputs.
           // Assume that the next "num_unmodified_remote_buffers" inputs are
           // remote buffers which are only loaded.
-          const int64 num_modified_remote_buffers =
+          const int64_t num_modified_remote_buffers =
               GetFunctionNumberModifiedRemoteBufferInputs(inst);
-          const int64 num_unmodified_remote_buffers =
+          const int64_t num_unmodified_remote_buffers =
               GetFunctionNumberUnmodifiedRemoteBufferInputs(inst);
           // TODO(T10387): consider unmodified remote buffers as read only.
           if (num_modified_remote_buffers + num_unmodified_remote_buffers) {

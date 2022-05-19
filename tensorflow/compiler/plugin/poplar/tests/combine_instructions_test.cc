@@ -565,7 +565,7 @@ TEST_F(CombineInstructionsTest, TestCombineSendToHost) {
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
 
-  const int64 max_send_recv_cluster_size = 8;
+  const int64_t max_send_recv_cluster_size = 8;
 
   auto scheduler = CreateLookAheadScheduler(
       CompilerInformation().set_max_send_recv_cluster_size(
@@ -604,7 +604,7 @@ TEST_F(CombineInstructionsTest, TestSendToHostNotCombinedWhenBufferTooSmall) {
 
   EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
 
-  const int64 max_send_recv_cluster_size = 4;
+  const int64_t max_send_recv_cluster_size = 4;
 
   auto scheduler = CreateLookAheadScheduler(
       CompilerInformation().set_max_send_recv_cluster_size(
@@ -636,7 +636,7 @@ TEST_F(CombineInstructionsTest, TestCombineRecvFromHost) {
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
 
-  const int64 max_send_recv_cluster_size = 8;
+  const int64_t max_send_recv_cluster_size = 8;
 
   auto scheduler = CreateLookAheadScheduler(
       CompilerInformation().set_max_send_recv_cluster_size(
@@ -662,9 +662,9 @@ TEST_F(CombineInstructionsTest, TestCombineRecvFromHost) {
   EXPECT_EQ(root->operand(0)->opcode(), HloOpcode::kGetTupleElement);
   EXPECT_EQ(root->operand(1)->opcode(), HloOpcode::kGetTupleElement);
 
-  const int64 ret0_index =
+  const int64_t ret0_index =
       Cast<HloGetTupleElementInstruction>(root->operand(0))->tuple_index();
-  const int64 ret1_index =
+  const int64_t ret1_index =
       Cast<HloGetTupleElementInstruction>(root->operand(1))->tuple_index();
 
   EXPECT_EQ(recv_inst->RendezvousKeys()[ret0_index], "recv1_key");
@@ -694,7 +694,7 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   EXPECT_TRUE(InplaceFinder(annotations).Run(module).ValueOrDie());
   EXPECT_TRUE(HostComputeBarrierInserter().Run(module).ValueOrDie());
 
-  const int64 max_send_recv_cluster_size = 12;
+  const int64_t max_send_recv_cluster_size = 12;
 
   auto scheduler = CreateLookAheadScheduler(
       CompilerInformation().set_max_send_recv_cluster_size(
@@ -1475,7 +1475,7 @@ TEST_F(CombineInstructionsAllGatherTest, TestCombineAllGatherOutputsIdentical) {
 
     // Get the values back.
     std::vector<std::vector<float>> outputs;
-    for (int64 i = 0; i < _num_output_tuple_elements; ++i) {
+    for (int64_t i = 0; i < _num_output_tuple_elements; ++i) {
       outputs.emplace_back(_output_size);
       std::stringstream label;
       label << "out_" << i << ".0";
@@ -1555,7 +1555,7 @@ ENTRY %cluster_1 () -> s32[] {
 
  protected:
   std::unique_ptr<VerifiedHloModule> _original_module;
-  int64 _max_inter_ipu_copies_buffer_size = 64 * 1024;
+  int64_t _max_inter_ipu_copies_buffer_size = 64 * 1024;
   const unsigned _num_ipus = 4;
   const unsigned _num_tiles_per_ipu = 32;
 };
@@ -1602,7 +1602,7 @@ TEST_F(CombineInstructionsInterIpuCopyTest,
     ASSERT_EQ(sharding_tuple.size(), 3);
 
     // Ensure we have three device assignment shardings from [1, 4).
-    for (int64 i = 1; i < 4; i++) {
+    for (int64_t i = 1; i < 4; i++) {
       ASSERT_NE(absl::c_find(sharding_tuple, HloSharding::AssignDevice(i)),
                 sharding_tuple.end())
           << "device " << i << " not in sharding";

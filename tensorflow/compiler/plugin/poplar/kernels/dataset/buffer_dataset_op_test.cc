@@ -32,7 +32,7 @@ class BufferDatasetOpTest : public DatasetOpsTestBase {};
 class BufferDatasetParams : public DatasetParams {
  public:
   template <typename T>
-  BufferDatasetParams(T input_dataset_params, int64 buffer_size,
+  BufferDatasetParams(T input_dataset_params, int64_t buffer_size,
                       DataTypeVector output_dtypes,
                       std::vector<PartialTensorShape> output_shapes,
                       string node_name)
@@ -46,7 +46,7 @@ class BufferDatasetParams : public DatasetParams {
   }
 
   std::vector<Tensor> GetInputTensors() const override {
-    return {CreateTensor<int64>(TensorShape({}), {buffer_size_})};
+    return {CreateTensor<int64_t>(TensorShape({}), {buffer_size_})};
   }
 
   Status GetInputNames(std::vector<string>* input_names) const override {
@@ -66,14 +66,14 @@ class BufferDatasetParams : public DatasetParams {
   string dataset_type() const override { return BufferDatasetOp::kDatasetType; }
 
  private:
-  const int64 buffer_size_;
+  const int64_t buffer_size_;
 };
 
 // Test case 1: buffer size divides the input size.
 BufferDatasetParams BufferSizeDividesSizeParams() {
   auto tensor_slice_dataset_params = TensorSliceDatasetParams(
-      /*components=*/{CreateTensor<int64>(TensorShape{10, 1},
-                                          {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
+      /*components=*/{CreateTensor<int64_t>(TensorShape{10, 1},
+                                            {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
       /*node_name=*/"tensor_slice");
   return BufferDatasetParams(
       /*input_dataset_params=*/tensor_slice_dataset_params,
@@ -86,8 +86,8 @@ BufferDatasetParams BufferSizeDividesSizeParams() {
 // Test case 2: buffer size doesn't divide the input size.
 BufferDatasetParams BufferSizeDoesntDividesSizeParams() {
   auto tensor_slice_dataset_params = TensorSliceDatasetParams(
-      /*components=*/{CreateTensor<int64>(TensorShape{10, 1},
-                                          {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
+      /*components=*/{CreateTensor<int64_t>(TensorShape{10, 1},
+                                            {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
       /*node_name=*/"tensor_slice");
   return BufferDatasetParams(
       /*input_dataset_params=*/tensor_slice_dataset_params,
@@ -101,12 +101,12 @@ std::vector<GetNextTestCase<BufferDatasetParams>> GetNextTestCases() {
   return {
       {/*dataset_params=*/BufferSizeDividesSizeParams(),
        /*expected_outputs=*/
-       CreateTensors<int64>(
+       CreateTensors<int64_t>(
            TensorShape{1}, {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}})},
       {/*dataset_params=*/BufferSizeDoesntDividesSizeParams(),
        /*expected_outputs=*/
-       CreateTensors<int64>(TensorShape{1},
-                            {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}})}};
+       CreateTensors<int64_t>(TensorShape{1},
+                              {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}})}};
 }
 
 ITERATOR_GET_NEXT_TEST_P(BufferDatasetOpTest, BufferDatasetParams,
@@ -172,13 +172,13 @@ IteratorSaveAndRestoreTestCases() {
       {/*dataset_params=*/BufferSizeDividesSizeParams(),
        /*breakpoints=*/{0, 4, 11},
        /*expected_outputs=*/
-       CreateTensors<int64>(
+       CreateTensors<int64_t>(
            TensorShape{1}, {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}})},
       {/*dataset_params=*/BufferSizeDoesntDividesSizeParams(),
        /*breakpoints=*/{0, 4, 11},
        /*expected_outputs=*/
-       CreateTensors<int64>(TensorShape{1},
-                            {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}})}};
+       CreateTensors<int64_t>(TensorShape{1},
+                              {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}})}};
 }
 
 ITERATOR_SAVE_AND_RESTORE_TEST_P(BufferDatasetOpTest, BufferDatasetParams,
@@ -187,8 +187,8 @@ ITERATOR_SAVE_AND_RESTORE_TEST_P(BufferDatasetOpTest, BufferDatasetParams,
 // Test case: buffer size is invalid.
 BufferDatasetParams InvalidBufferSizeParams() {
   auto tensor_slice_dataset_params = TensorSliceDatasetParams(
-      /*components=*/{CreateTensor<int64>(TensorShape{10, 1},
-                                          {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
+      /*components=*/{CreateTensor<int64_t>(TensorShape{10, 1},
+                                            {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
       /*node_name=*/"tensor_slice");
   return BufferDatasetParams(
       /*input_dataset_params=*/tensor_slice_dataset_params,

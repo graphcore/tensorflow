@@ -27,7 +27,8 @@ class HloMultiConvInstruction;
 class HloWeightsTransposeChansFlipXYInstruction;
 
 StatusOr<poplin::ConvParams> GetConvolutionParameters(
-    const HloInstruction* operand_op, int64 input_index, int64 kernel_index);
+    const HloInstruction* operand_op, int64_t input_index,
+    int64_t kernel_index);
 
 StatusOr<poplin::ConvParams> GetConvolutionParametersForWeightsTranspose(
     const HloWeightsTransposeChansFlipXYInstruction* inst);
@@ -39,7 +40,7 @@ StatusOr<poplar::Tensor> ShuffleConvolutionInputToPoplar(
     const HloInstruction* inst, const poplar::Tensor& tensor);
 
 poplar::Tensor ShuffleConvolutionInputToPoplar(
-    int64 group_count, const ConvolutionDimensionNumbers& dims,
+    int64_t group_count, const ConvolutionDimensionNumbers& dims,
     const poplar::Tensor& tensor);
 
 StatusOr<poplar::Tensor> ShuffleConvolutionOutputToPoplar(
@@ -60,7 +61,7 @@ StatusOr<poplar::Tensor> ShuffleConvolutionInputToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor);
 
 poplar::Tensor ShuffleConvolutionInputToTensorflow(
-    int64 group_count, const ConvolutionDimensionNumbers& dims,
+    int64_t group_count, const ConvolutionDimensionNumbers& dims,
     const poplar::Tensor& tensor);
 
 StatusOr<poplar::Tensor> ShuffleConvolutionWeightsToTensorflow(

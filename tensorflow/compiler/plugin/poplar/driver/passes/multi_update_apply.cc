@@ -221,7 +221,7 @@ MultiUpdateApply::MultiUpdateApply(CompilerAnnotations& annotations)
 StatusOr<HloInstruction*> CreateNewMultiUpdate(
     HloInstruction* old_inst, HloInstruction* operand, HloInstruction* indices,
     HloInstruction* updates, absl::optional<HloInstruction*> opt_scale,
-    bool negate_scale, const absl::optional<int64> shard) {
+    bool negate_scale, const absl::optional<int64_t> shard) {
   HloComputation* comp = old_inst->parent();
   HloMultiUpdateInstruction* multi_update =
       Cast<HloMultiUpdateInstruction>(old_inst);
@@ -252,7 +252,7 @@ StatusOr<HloInstruction*> CreateNewMultiUpdate(
 }
 
 StatusOr<bool> HandleNoReshape(HloMatcherMatched& match,
-                               const absl::optional<int64> shard) {
+                               const absl::optional<int64_t> shard) {
   // Get the inputs.
   HloComputation* comp = match.computation;
   HloInstruction* root = match.instruction_mapping.at(0);
@@ -277,7 +277,7 @@ StatusOr<bool> HandleNoReshape(HloMatcherMatched& match,
 }
 
 StatusOr<bool> HandleReshape(HloMatcherMatched& match,
-                             const absl::optional<int64> shard) {
+                             const absl::optional<int64_t> shard) {
   // Get the inputs.
   HloComputation* comp = match.computation;
   HloInstruction* root = match.instruction_mapping.at(0);
@@ -312,7 +312,7 @@ StatusOr<bool> HandleReshape(HloMatcherMatched& match,
 }
 
 StatusOr<bool> HandleBinary(HloMatcherMatched& match,
-                            const absl::optional<int64> shard) {
+                            const absl::optional<int64_t> shard) {
   // Converts:
   // indices = ...
   // updates = ...
@@ -354,7 +354,7 @@ StatusOr<bool> HandleBinary(HloMatcherMatched& match,
 }
 
 StatusOr<bool> MultiUpdateApply::HandleMatch(
-    HloMatcherMatched& match, const absl::optional<int64> shard) {
+    HloMatcherMatched& match, const absl::optional<int64_t> shard) {
   bool handled;
   switch (match.pattern_idx) {
     case 0:

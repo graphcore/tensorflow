@@ -36,7 +36,7 @@ namespace poplarplugin {
 namespace {
 constexpr char kFusionName[] = "_pop_op_serialized_gradient_accumulation";
 
-HloInstruction* ConvertOperand(HloInstruction* inst, int64 operand_index,
+HloInstruction* ConvertOperand(HloInstruction* inst, int64_t operand_index,
                                PrimitiveType type) {
   CHECK_LT(operand_index, inst->operand_count()) << inst->ToString();
   HloInstruction* convert =
@@ -188,7 +188,7 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
 
       // Convert the `updates` and `scale` inputs to MultiUpdateAdd.
       if (multi_update_add->shape().element_type() != accumulator_type) {
-        for (int64 i : {2, 3}) {
+        for (int64_t i : {2, 3}) {
           convert_instructions.push_back(
               ConvertOperand(multi_update_add, i, accumulator_type));
         }
@@ -208,7 +208,7 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
 
       // Convert all the inputs to Concat.
       if (concat->shape().element_type() != accumulator_type) {
-        for (int64 i = 0; i < concat->operand_count(); ++i) {
+        for (int64_t i = 0; i < concat->operand_count(); ++i) {
           convert_instructions.push_back(
               ConvertOperand(concat, i, accumulator_type));
         }
@@ -239,7 +239,7 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
 
       // Convert all the inputs to Concat.
       if (concat->shape().element_type() != accumulator_type) {
-        for (int64 i = 0; i < concat->operand_count(); ++i) {
+        for (int64_t i = 0; i < concat->operand_count(); ++i) {
           convert_instructions.push_back(
               ConvertOperand(concat, i, accumulator_type));
         }
@@ -390,9 +390,9 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
 
       // We can push a transpose through a concatenate if only a single
       // dimension is being transposed.
-      const std::vector<int64> permutation = transpose->dimensions();
-      int64 num_differences = 0;
-      for (int64 i = 0; i != permutation.size(); ++i) {
+      const std::vector<int64_t> permutation = transpose->dimensions();
+      int64_t num_differences = 0;
+      for (int64_t i = 0; i != permutation.size(); ++i) {
         num_differences += permutation[i] == i ? 0 : 1;
       }
       if (num_differences != 2) {
@@ -404,15 +404,15 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       // Transpose the individual operands of the concat operation.
       auto operands = concat->operands();
       std::vector<HloInstruction*> new_operands(concat->operand_count());
-      for (int64 i = 0; i != operands.size(); ++i) {
+      for (int64_t i = 0; i != operands.size(); ++i) {
         TF_ASSIGN_OR_RETURN(new_operands[i],
                             MakeTransposeHlo(operands[i], permutation));
       }
 
       // Create a concat on the transposed operands, on the permuted
       // concat dimension.
-      const int64 concat_dimension = concat->concatenate_dimension();
-      const int64 new_concat_dimension = permutation[concat_dimension];
+      const int64_t concat_dimension = concat->concatenate_dimension();
+      const int64_t new_concat_dimension = permutation[concat_dimension];
       TF_ASSIGN_OR_RETURN(HloInstruction * new_output,
                           MakeConcatHlo(new_operands, new_concat_dimension));
 

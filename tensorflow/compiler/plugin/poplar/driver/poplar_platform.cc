@@ -164,7 +164,7 @@ Status PoplarPlatform::GetIpuOptions(std::vector<IpuOptions>& out) {
   return Status::OK();
 }
 
-StatusOr<int64> PoplarPlatform::GetNumIpusForDevice(int ordinal) {
+StatusOr<int64_t> PoplarPlatform::GetNumIpusForDevice(int ordinal) {
   TF_ASSIGN_OR_RETURN(se::StreamExecutor * executor,
                       ExecutorForDevice(ordinal));
 

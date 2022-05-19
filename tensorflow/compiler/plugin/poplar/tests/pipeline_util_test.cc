@@ -333,7 +333,7 @@ TEST_F(PipelineUtilTest, GetPipelineStagesFwdBwdTest) {
   {
     OrderedPipelineStages ordered_stages(stages, true);
     EXPECT_EQ(ordered_stages.GetNumberOfStages(), 5);
-    for (int64 i = 0; i != 5; ++i) {
+    for (int64_t i = 0; i != 5; ++i) {
       EXPECT_EQ(i, ordered_stages.GetIndex(ordered_stages.GetStage(i)));
       if (i < 2) {
         EXPECT_EQ(ordered_stages.GetStage(i), stages.forward[i]);
@@ -592,8 +592,8 @@ TEST_F(PipelineUtilTest, DuplicateGTEEdgesTestDuplication) {
       FindInstruction(module0, "pipeline_stage_1_bwd");
 
   auto num_gtes_at_tuple_index = [&](HloInstruction* inst,
-                                     const int64 tuple_index) {
-    int64 count = 0;
+                                     const int64_t tuple_index) {
+    int64_t count = 0;
     for (HloInstruction* user : inst->users()) {
       if (user->opcode() == HloOpcode::kGetTupleElement &&
           user->tuple_index() == tuple_index) {

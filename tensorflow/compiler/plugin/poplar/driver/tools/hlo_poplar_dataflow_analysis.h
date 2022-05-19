@@ -141,7 +141,7 @@ class HloPoplarDataflowAnalysis {
   HloPoplarBuffer& GetBuffer(HloPoplarBuffer::Id buffer_id);
 
   // Return the total number of HloPoplarBuffers.
-  int64 buffer_count() const { return buffers_.size(); }
+  int64_t buffer_count() const { return buffers_.size(); }
 
   std::string ToString() const;
 

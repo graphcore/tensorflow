@@ -124,9 +124,9 @@ class PoputilUserOpBase : public XlaOpKernel, public IpuOpKernel {
 
   std::vector<xla::Shape> output_shape;
 
-  int64 gradient_size;
+  int64_t gradient_size;
 
-  int64 pd_index;
+  int64_t pd_index;
 
   std::string attributes;
 
@@ -160,8 +160,8 @@ class PoputilUserReadWriteOp : public PoputilUserOpBase {
       : PoputilUserOpBase(context) {}
 
   void Compile(XlaOpKernelContext* context) final {
-    attribute_map_.AddAttribute("metadata_function", static_cast<int64>(0));
-    attribute_map_.AddAttribute("allocator_function", static_cast<int64>(0));
+    attribute_map_.AddAttribute("metadata_function", static_cast<int64_t>(0));
+    attribute_map_.AddAttribute("allocator_function", static_cast<int64_t>(0));
     attribute_map_.AddAttribute("gp_path", std::string());
     attribute_map_.AddAttribute("is_user_read_write", true);
 

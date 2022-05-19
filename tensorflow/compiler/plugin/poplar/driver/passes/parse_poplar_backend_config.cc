@@ -79,7 +79,7 @@ static Status InitialisePipelineConfig(
   TF_ASSIGN_OR_RETURN(
       std::string batch_serialization_iterations_str,
       GetAttribute(attributes, PIPELINE_BATCH_SERIALIZATION_ITERATIONS));
-  int64 batch_serialization_iterations =
+  int64_t batch_serialization_iterations =
       std::stoll(batch_serialization_iterations_str);
   pipeline_config->set_batch_serialization_iterations(
       batch_serialization_iterations);
@@ -87,7 +87,7 @@ static Status InitialisePipelineConfig(
   // Get the repeat count.
   TF_ASSIGN_OR_RETURN(std::string repeat_count_str,
                       GetAttribute(attributes, PIPELINE_REPEAT_COUNT));
-  int64 repeat_count = std::stoll(repeat_count_str);
+  int64_t repeat_count = std::stoll(repeat_count_str);
   pipeline_config->set_repeat_count(repeat_count);
 
   // Get the schedule.
@@ -151,7 +151,7 @@ static Status InitialisePipelineStageConfig(
   // Get the stage id.
   TF_ASSIGN_OR_RETURN(std::string stage_id_str,
                       GetAttribute(attributes, PIPELINE_STAGE_ID));
-  int64 stage_id = std::stoll(stage_id_str);
+  int64_t stage_id = std::stoll(stage_id_str);
   pipeline_stage_config->set_stage_id(stage_id);
   return Status::OK();
 }

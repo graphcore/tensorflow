@@ -24,7 +24,7 @@ namespace xla {
 namespace poplarplugin {
 
 HloUninitialisedInstruction::HloUninitialisedInstruction(const Shape& shape,
-                                                         int64& identifier)
+                                                         int64_t& identifier)
     : HloPoplarInstruction(shape, {}, PoplarOp::Uninitialised, identifier),
       identifier_(identifier++) {}
 
@@ -44,7 +44,7 @@ const FindConsumersExtensionResults HloUninitialisedInstruction::FindConsumers(
 }
 
 std::unique_ptr<HloInstruction> CreateUninitialisedInstruction(
-    const Shape& shape, int64& identifier) {
+    const Shape& shape, int64_t& identifier) {
   return absl::make_unique<HloUninitialisedInstruction>(shape, identifier);
 }
 
@@ -53,7 +53,7 @@ namespace {
 StatusOr<std::unique_ptr<HloInstruction>> HloUnitialisedInstructionFactoryFunc(
     HloCustomCallInstruction* call) {
   auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
-  TF_ASSIGN_OR_RETURN(int64 identifier,
+  TF_ASSIGN_OR_RETURN(int64_t identifier,
                       attribute_map.GetAttributeAsInt("identifier"));
   return CreateUninitialisedInstruction(call->shape(), identifier);
 }

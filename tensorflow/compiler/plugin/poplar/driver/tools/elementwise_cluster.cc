@@ -431,9 +431,9 @@ ElementwiseClusterClass ElementwiseCluster::Classify(
     }
   }
 
-  const int64 num_replicated_parameter_load =
+  const int64_t num_replicated_parameter_load =
       absl::c_count_if(inputs_, IsReplicatedParameterLoad);
-  const int64 num_non_replicated_parameter_load =
+  const int64_t num_non_replicated_parameter_load =
       absl::c_count_if(inputs_, [&validator](const HloInstruction* input) {
         return IsNonReplicatedParameterLoad(input, validator);
       });
@@ -573,11 +573,11 @@ bool ElementwiseCluster::Finalize(const HloReachabilityMap& reachability_map,
                     IsReplicatedParameterLoad);
 
     // Get dimensions for each load and make sure there is only one unique set.
-    absl::flat_hash_set<std::vector<int64>> all_shard_dimensions;
+    absl::flat_hash_set<std::vector<int64_t>> all_shard_dimensions;
     absl::c_transform(
         parameter_loads,
         std::inserter(all_shard_dimensions, all_shard_dimensions.begin()),
-        [](const HloInstruction* inst) -> std::vector<int64> {
+        [](const HloInstruction* inst) -> std::vector<int64_t> {
           auto dimensions = inst->operand(0)->shape().dimensions();
           return {dimensions.begin(), dimensions.end()};
         });
@@ -591,7 +591,7 @@ bool ElementwiseCluster::Finalize(const HloReachabilityMap& reachability_map,
     shard_size_ = shard_dimensions_[0];
 
     // Get sizes for the all gathers inside of the parameter load fusions.
-    absl::flat_hash_set<int64> all_gather_sizes;
+    absl::flat_hash_set<int64_t> all_gather_sizes;
     absl::c_transform(
         parameter_loads,
         std::inserter(all_gather_sizes, all_gather_sizes.begin()),
@@ -645,27 +645,27 @@ const std::vector<UserPositions>& ElementwiseCluster::GetUsersForOutput(
   return outputs_to_users_.at(inst);
 }
 
-const std::vector<int64>& ElementwiseCluster::GetClusterDimensions() const {
+const std::vector<int64_t>& ElementwiseCluster::GetClusterDimensions() const {
   CHECK(finalized_);
   return cluster_dimensions_;
 }
 
-const std::vector<int64>& ElementwiseCluster::GetShardDimensions() const {
+const std::vector<int64_t>& ElementwiseCluster::GetShardDimensions() const {
   CHECK(finalized_);
   return shard_dimensions_;
 }
 
-int64 ElementwiseCluster::GetClusterSize() const {
+int64_t ElementwiseCluster::GetClusterSize() const {
   CHECK(finalized_);
   return cluster_size_;
 }
 
-int64 ElementwiseCluster::GetAlignedClusterSize() const {
+int64_t ElementwiseCluster::GetAlignedClusterSize() const {
   CHECK(finalized_);
   return aligned_cluster_size_;
 }
 
-int64 ElementwiseCluster::GetShardSize() const {
+int64_t ElementwiseCluster::GetShardSize() const {
   CHECK(finalized_);
   return shard_size_;
 }

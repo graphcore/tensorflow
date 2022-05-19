@@ -147,7 +147,7 @@ bool AllocationFinder::IsInferredTargetCompatible(
 }
 
 TensorTarget AllocationFinder::InferTarget(
-    int64 index, const absl::optional<std::vector<int64>>& permutation,
+    int64_t index, const absl::optional<std::vector<int64_t>>& permutation,
     const TensorTarget& tgt_tensor_target,
     std::vector<const HloInstruction*>& path) const {
   // Create backward path.
@@ -160,11 +160,11 @@ TensorTarget AllocationFinder::InferTarget(
                        tgt_tensor_target.backward_path.end());
 
   // Merge permutations by applying tgt permutation to src permutation.
-  absl::optional<std::vector<int64>> combined_permutation;
+  absl::optional<std::vector<int64_t>> combined_permutation;
   if (permutation.has_value() && tgt_tensor_target.permutation.has_value()) {
-    int64 size = tgt_tensor_target.permutation.value().size();
-    combined_permutation = std::vector<int64>(size);
-    for (int64 i = 0; i < size; ++i) {
+    int64_t size = tgt_tensor_target.permutation.value().size();
+    combined_permutation = std::vector<int64_t>(size);
+    for (int64_t i = 0; i < size; ++i) {
       combined_permutation.value()[i] =
           permutation.value()[tgt_tensor_target.permutation.value()[i]];
     }
@@ -185,7 +185,7 @@ TensorTarget AllocationFinder::InferTarget(
   return tensor_target;
 }
 
-int64 AllocationFinder::GetAllocationPriority(
+int64_t AllocationFinder::GetAllocationPriority(
     const TensorTarget& target) const {
   // Allocation priority (highest to lowest):
   // * Used by Send/Recv,
@@ -242,8 +242,9 @@ bool IsPreferablePath(absl::Span<const HloInstruction* const> a,
 
 bool AllocationFinder::ReplaceTarget(
     const TensorTarget& new_target, const TensorTarget& existing_target) const {
-  const int64 new_target_priority = GetAllocationPriority(new_target);
-  const int64 existing_target_priority = GetAllocationPriority(existing_target);
+  const int64_t new_target_priority = GetAllocationPriority(new_target);
+  const int64_t existing_target_priority =
+      GetAllocationPriority(existing_target);
   if (new_target_priority > existing_target_priority) {
     // New target has higher priority.
     return true;
@@ -284,7 +285,7 @@ void AllocationFinder::AddTensorTarget(const TensorLocation& source,
     TensorTarget& target = itr->second;
 
     // Combine the sliceable dimension.
-    absl::optional<int64> sliceable_dimension = target.sliceable_dimension;
+    absl::optional<int64_t> sliceable_dimension = target.sliceable_dimension;
     if (new_target.sliceable_dimension) {
       sliceable_dimension = new_target.sliceable_dimension;
     }
@@ -307,8 +308,8 @@ void AllocationFinder::AddTensorTarget(const TensorLocation& source,
 }
 
 void AllocationFinder::FindConsumers(
-    const TensorLocation& src, const HloInstruction* tgt, int64 index,
-    absl::optional<std::vector<int64>> permutation,
+    const TensorLocation& src, const HloInstruction* tgt, int64_t index,
+    absl::optional<std::vector<int64_t>> permutation,
     std::vector<const HloInstruction*>& path,
     absl::flat_hash_set<TensorLocation>& explored) {
   path.emplace_back(tgt);
@@ -388,7 +389,7 @@ void AllocationFinder::FindConsumers(
       // Find the next position where tgt is an operand of user.
       auto op_itr = std::find(operands.begin() + repeated_operand_offset,
                               operands.end(), tgt);
-      int64 op_index = std::distance(operands.begin(), op_itr);
+      int64_t op_index = std::distance(operands.begin(), op_itr);
       repeated_operand_offset = op_index + 1;
 
       // The backward path does not contain the source.
@@ -521,7 +522,7 @@ void AllocationFinder::FindAllocation(const TensorLocation& location,
 
   // Starting dimensions permutation is just all the dimensions mapping to
   // themselves.
-  std::vector<int64> permutation(shape.rank());
+  std::vector<int64_t> permutation(shape.rank());
   absl::c_iota(permutation, 0);
   std::vector<const HloInstruction*> path;
   absl::flat_hash_set<TensorLocation> explored;

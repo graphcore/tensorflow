@@ -97,7 +97,7 @@ GradientAccumulationFuser::GradientAccumulationFuser(
 
 namespace {
 bool HandleGradAccumNoMomentum(HloMatcherMatched& match,
-                               const absl::optional<int64> sharding_device) {
+                               const absl::optional<int64_t> sharding_device) {
   auto& pattern = match.pattern;
   auto comp = match.computation;
   // Get the input output id.
@@ -152,8 +152,8 @@ bool HandleGradAccumNoMomentum(HloMatcherMatched& match,
   return true;
 }
 
-bool HandleGradAccumWithMomentum(HloMatcherMatched& match,
-                                 const absl::optional<int64> sharding_device) {
+bool HandleGradAccumWithMomentum(
+    HloMatcherMatched& match, const absl::optional<int64_t> sharding_device) {
   auto& pattern = match.pattern;
   auto comp = match.computation;
   // Get the input output id.
@@ -198,7 +198,7 @@ bool HandleGradAccumWithMomentum(HloMatcherMatched& match,
 }  // namespace
 
 StatusOr<bool> GradientAccumulationFuser::HandleMatch(
-    HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
+    HloMatcherMatched& match, const absl::optional<int64_t> sharding_device) {
   const auto& pattern = match.pattern;
   CHECK_EQ(pattern.GetOutputs().size(), 1);
   NodeId output_id = pattern.GetOutputs()[0];

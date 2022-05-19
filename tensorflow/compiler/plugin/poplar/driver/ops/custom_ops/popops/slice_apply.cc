@@ -32,9 +32,9 @@ namespace {
 
 DriverTensor SliceInputForBinaryApply(const HloSliceApplyBase* inst,
                                       const DriverTensor& input) {
-  const int64 slice_dimension = inst->GetApplyDimension();
-  const int64 slice_start = inst->GetStartIndex();
-  const int64 slice_end =
+  const int64_t slice_dimension = inst->GetApplyDimension();
+  const int64_t slice_start = inst->GetStartIndex();
+  const int64_t slice_end =
       slice_start + inst->operand(1)->shape().dimensions(slice_dimension);
   return input.slice(slice_start, slice_end, slice_dimension);
 }
@@ -53,10 +53,10 @@ DriverTensor CreateInputFromSlice(
     const DriverTensor& update, CompilerResources& res,
     const poplar::DebugNameAndId& debug_name_and_id) {
   // Allocate the input tensor from the update.
-  const int64 slice_dimension = inst->GetApplyDimension();
-  const int64 inputs_size =
+  const int64_t slice_dimension = inst->GetApplyDimension();
+  const int64_t inputs_size =
       inst->operand(0)->shape().dimensions(slice_dimension);
-  const int64 slice_size =
+  const int64_t slice_size =
       inst->operand(1)->shape().dimensions(slice_dimension);
   return CreateTensorFromSlice(graph, update, slice_dimension, inputs_size, res,
                                {debug_name_and_id});
@@ -70,14 +70,14 @@ class SliceApplyAllocatorOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyAllocatorOp");
     const HloInstruction* inst = tensor_target.tgt;
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
     if (input_index != 0 && input_index != 1) {
       return InternalErrorStrCat("SliceApply op ", inst->name().c_str(),
                                  " should not be allocating on index ",
                                  input_index, ".");
     }
     const HloInstruction* layout = *tensor_target.layout;
-    int64 layout_output_idx = *tensor_target.layout_output_idx;
+    int64_t layout_output_idx = *tensor_target.layout_output_idx;
     TensorOrRemoteBufferVector outputs =
         FindInstructionOutputs(tensor_map, res, layout);
     if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {

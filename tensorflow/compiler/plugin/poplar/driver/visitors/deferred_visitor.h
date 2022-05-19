@@ -90,8 +90,8 @@ class DeferredAllocations {
   // them.
   static void AllocateIfExists(
       CompilerResources& res, const HloInstruction* inst,
-      absl::optional<int64> opt_tensors_start = absl::nullopt,
-      absl::optional<int64> opt_tensors_end = absl::nullopt);
+      absl::optional<int64_t> opt_tensors_start = absl::nullopt,
+      absl::optional<int64_t> opt_tensors_end = absl::nullopt);
 
   // Get all the input allocations which have not been allocated yet.
   const std::vector<TensorLocation> GetNotAllocatedLocations() const;
@@ -100,8 +100,8 @@ class DeferredAllocations {
   // This is called by the tensor map when a tensor value for a location has
   // been requested. If any locations in the range are deferred, then allocate
   // them.
-  Status AllocateIfExists(const HloInstruction* inst, int64 tensors_start,
-                          int64 tensors_end);
+  Status AllocateIfExists(const HloInstruction* inst, int64_t tensors_start,
+                          int64_t tensors_end);
 
   // Invokes the allocation function and propagates the allocation to any
   // locations which were deferred.
@@ -259,10 +259,10 @@ class DeferredVisitor : public FullVisitor {
 
   // Returns whether an input to the computation was allocated for this
   // computation.
-  bool InputIsAllocated(int64 param, unsigned int index) const;
+  bool InputIsAllocated(int64_t param, unsigned int index) const;
 
   // Returns whether an input to this computation is used.
-  bool InputIsUsed(int64 param, unsigned int index) const;
+  bool InputIsUsed(int64_t param, unsigned int index) const;
 
   Status HandleCopy(HloInstruction* inst) override;
 
@@ -290,8 +290,8 @@ class DeferredVisitor : public FullVisitor {
       const poplar::DebugNameAndId& debug_name_and_id);
 
   virtual Status PropagateDeferredAllocationsOperand(
-      const HloInstruction* callsite_inst, int64 operand_idx,
-      int64 parameter_idx,
+      const HloInstruction* callsite_inst, int64_t operand_idx,
+      int64_t parameter_idx,
       const std::vector<absl::optional<TensorOrRemoteBuffer>>& callsite_input,
       const poplar::DebugNameAndId& debug_name_and_id);
 
@@ -366,7 +366,7 @@ class DeferredVisitor : public FullVisitor {
       const poplar::DebugNameAndId& debug_name_and_id);
   // Default deferred post-processing function.
   virtual DeferredPostProcessFunction MakeParameterPostProcessFunction(
-      TensorLocation input_location, int64 param_num, const Shape& shape,
+      TensorLocation input_location, int64_t param_num, const Shape& shape,
       const poplar::DebugNameAndId& debug_name_and_id);
 
   // Allocates the input by trying to find an allocation target, otherwise tries
@@ -419,15 +419,15 @@ class DeferredVisitor : public FullVisitor {
       const poplar::DebugNameAndId& debug_name_and_id);
 
   Status PropagateDeferredAllocationsOperand(
-      const HloInstruction* callsite_inst, int64 operand_idx,
-      int64 parameter_idx,
+      const HloInstruction* callsite_inst, int64_t operand_idx,
+      int64_t parameter_idx,
       const std::vector<absl::optional<TensorOrRemoteBuffer>>& callsite_input,
       bool add_clone, const poplar::DebugNameAndId& debug_name_and_id);
 
   // Returns true if the input is used in this computation and therefore it
   // needs to be allocated.
   bool InputIsUsedInThisComputation(const HloInstruction* inst,
-                                    int64 tuple_index);
+                                    int64_t tuple_index);
 
   // Returns true if the input is used in any dependent computation and
   // therefore it needs to be allocated.
@@ -498,8 +498,8 @@ class InplaceDeferredVisitor : public DeferredVisitor {
       const poplar::DebugNameAndId& debug_name_and_id) override;
 
   Status PropagateDeferredAllocationsOperand(
-      const HloInstruction* callsite_inst, int64 operand_idx,
-      int64 parameter_idx,
+      const HloInstruction* callsite_inst, int64_t operand_idx,
+      int64_t parameter_idx,
       const std::vector<absl::optional<TensorOrRemoteBuffer>>& callsite_input,
       const poplar::DebugNameAndId& debug_name_and_id) override;
 
@@ -516,8 +516,8 @@ class InplaceDeferredVisitor : public DeferredVisitor {
 
   // Given an output flat index get the corresponding parameter number and flat
   // index.
-  std::pair<int64, int64> GetParameterNumberAndFlatIndex(
-      int64 output_flat_index);
+  std::pair<int64_t, int64_t> GetParameterNumberAndFlatIndex(
+      int64_t output_flat_index);
 
   const HloPoplarInplaceDescription& GetCallsiteDescription() const {
     return description_;

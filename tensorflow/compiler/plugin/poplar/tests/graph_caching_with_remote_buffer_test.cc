@@ -154,7 +154,7 @@ ENTRY main {
   auto resources =
       GetMockResources(device, module.get(), param.replication_factor);
 
-  for (int64 i = 0; i != 4; ++i) {
+  for (int64_t i = 0; i != 4; ++i) {
     resources->annotations.remote_parameter_infos.insert(RemoteParameterInfo{
         i, param.replication_factor > 1, absl::StrCat(i, ".0"),
         /*buffer_offset=*/0, /*num_merged=*/1});
@@ -187,7 +187,7 @@ ENTRY main {
   // Set up the values.
   std::size_t buffer_size = param.shard_size > 0 ? param.shard_size : 1;
   std::vector<float> inputs = {10.f, 2.f, -1.f, 20.f};
-  for (int64 i = 0; i != 4; ++i) {
+  for (int64_t i = 0; i != 4; ++i) {
     for (unsigned replica = 0; replica < param.replication_factor; ++replica) {
       // Adding replica index to buffer content just to make sure it's different
       // across replicas.
@@ -201,7 +201,7 @@ ENTRY main {
 
   // Get the values back.
   std::vector<float> outputs = {12.f, 8.f, 19.f, -21.f};
-  for (int64 i = 0; i != 4; ++i) {
+  for (int64_t i = 0; i != 4; ++i) {
     auto value = outputs[i];
     std::vector<float> buffer(buffer_size);
     for (unsigned replica = 0; replica < param.replication_factor; ++replica) {

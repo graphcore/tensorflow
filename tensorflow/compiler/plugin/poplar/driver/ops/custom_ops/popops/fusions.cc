@@ -137,7 +137,7 @@ class ConvBiasAddOp : public PoplarOpDef {
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ConvBiasAddOp");
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
     const HloInstruction* layout = *tensor_target.layout;
 
     const auto layout_output_idx = *tensor_target.layout_output_idx;
@@ -440,7 +440,7 @@ class ArithemticExpressionOp : public PoplarOpDef {
 
     // Get all the inputs.
     TensorVectors args;
-    for (int64 i = 0; i < inst->operand_count(); i++) {
+    for (int64_t i = 0; i < inst->operand_count(); i++) {
       TF_ASSIGN_OR_RETURN(
           TensorVector t,
           FindInstructionInputTensors(tensor_map, res, inst, i, seq, debug_info,

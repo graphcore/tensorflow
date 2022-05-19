@@ -155,8 +155,8 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
   };
 
   auto check_stages = [](std::vector<HloInstruction*>& stages) {
-    for (int64 i = 0; i != static_cast<int64>(stages.size()); ++i) {
-      const int64 stage_id = GetPipelineStageID(stages[i]);
+    for (int64_t i = 0; i != static_cast<int64_t>(stages.size()); ++i) {
+      const int64_t stage_id = GetPipelineStageID(stages[i]);
       if (stage_id != i) {
         if (i - 1 == stage_id) {
           // Because we know that checks up to i-1 have passed and the stages
@@ -327,9 +327,9 @@ StatusOr<HloInstruction*> ConvertAllUsersToGTEs(HloInstruction* const inst) {
   }
 
   // Create a GTE from each subshape.
-  const int64 num_elements = ShapeUtil::TupleElementCount(inst->shape());
+  const int64_t num_elements = ShapeUtil::TupleElementCount(inst->shape());
   std::vector<HloInstruction*> gtes(num_elements);
-  for (int64 tuple_index = 0; tuple_index != num_elements; ++tuple_index) {
+  for (int64_t tuple_index = 0; tuple_index != num_elements; ++tuple_index) {
     TF_ASSIGN_OR_RETURN(gtes[tuple_index],
                         MakeGetTupleElementHlo(inst, tuple_index));
     if (inst->has_sharding()) {
@@ -420,9 +420,9 @@ StatusOr<bool> InsertGTEEdges(PipelineStages& pipeline_stages) {
           continue;
         }
         // User is not a GTE, insert a GTE for each tuple element.
-        int64 num_elements = ShapeUtil::TupleElementCount(stage->shape());
+        int64_t num_elements = ShapeUtil::TupleElementCount(stage->shape());
         std::vector<HloInstruction*> gtes(num_elements);
-        for (int64 tuple_index = 0; tuple_index != num_elements;
+        for (int64_t tuple_index = 0; tuple_index != num_elements;
              ++tuple_index) {
           TF_ASSIGN_OR_RETURN(gtes[tuple_index],
                               MakeGetTupleElementHlo(stage, tuple_index));
@@ -497,7 +497,7 @@ StatusOr<bool> UniquifyPipelineStageCallsites(PipelineStages& pipeline_stages) {
 StatusOr<HloInstruction*> CreatePipelineStage(
     HloComputation* pipeline, const std::vector<HloInstruction*> operands,
     HloComputation* stage_comp, PoplarBackendConfig_CallConfig_Type stage_type,
-    int64 stage_id, const std::string& name) {
+    int64_t stage_id, const std::string& name) {
   FrontendAttributes attributes;
   (*attributes.mutable_map())[FrontendAttributeId_Name(CALL_CONFIG_TYPE)] =
       PoplarBackendConfig_CallConfig_Type_Name(stage_type);
@@ -522,7 +522,8 @@ StatusOr<HloInstruction*> CreatePipelineStage(
 
 StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     HloInstruction* stage, const std::vector<HloInstruction*>& ordered_lowering,
-    std::map<int64, HloInstruction*> replace_parameter_with_lowered_instruction,
+    std::map<int64_t, HloInstruction*>
+        replace_parameter_with_lowered_instruction,
     HloInstructionSet forced_parameters, bool replace_resource_update_uses,
     HloCloneContext* context,
     const std::function<void(const HloCloneContext*)>&
@@ -546,7 +547,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   // Mapping of operands to parameters inside the new computation.
   absl::flat_hash_map<HloInstruction*, HloInstruction*> operand_to_parameter;
   // Mapping from parameter number to instruction.
-  absl::flat_hash_map<int64, HloInstruction*> parameter_instructions;
+  absl::flat_hash_map<int64_t, HloInstruction*> parameter_instructions;
 
   // Note that current Hlo API does not allow us to modify the instruction or
   // computation so the algorithm builds new ones.
@@ -597,7 +598,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     // Get all the new operands - check if we need to lower any into the
     // pipeline stage.
     std::vector<HloInstruction*> new_operands(inst->operand_count());
-    for (int64 operand_idx = 0; operand_idx != inst->operand_count();
+    for (int64_t operand_idx = 0; operand_idx != inst->operand_count();
          ++operand_idx) {
       HloInstruction* operand = inst->mutable_operand(operand_idx);
       // Check if the operand for the instruction being lowered is also being
@@ -706,7 +707,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   // Replace uses of parameters with lowered instruction. Note that this does
   // not remove parameters.
   for (auto& pair : replace_parameter_with_lowered_instruction) {
-    int64 param_number = pair.first;
+    int64_t param_number = pair.first;
     HloInstruction* parameter = parameter_instructions.at(param_number);
     HloInstruction* inst_to_lower = pair.second;
     HloInstruction* lowered = lowered_insts.at(inst_to_lower);
@@ -740,7 +741,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     root->SetupDerivedInstruction(builder_root);
   }
 
-  const int64 old_num_outputs = ShapeUtil::TupleElementCount(stage->shape());
+  const int64_t old_num_outputs = ShapeUtil::TupleElementCount(stage->shape());
   // Build the new computation and the new pipeline stage with new operands.
   std::unique_ptr<HloComputation> new_computation = builder.Build(builder_root);
   TF_ASSIGN_OR_RETURN(
@@ -752,14 +753,14 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   {
     auto itr = external_uses.begin();
     for (size_t idx = 0; idx != external_uses.size(); ++idx, ++itr) {
-      int64 tuple_index = old_num_outputs + idx;
+      int64_t tuple_index = old_num_outputs + idx;
       HloInstruction* inst = itr->first;
       for (HloInstruction* user : itr->second) {
         // Create a separate GTE for each user to preserve the duplicate GTE
         // condition.
         auto op_indices = user->OperandIndices(inst);
         CHECK(op_indices.size());
-        for (int64 op_idx : op_indices) {
+        for (int64_t op_idx : op_indices) {
           TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                               MakeGetTupleElementHlo(new_stage, tuple_index));
           TF_RETURN_IF_ERROR(user->ReplaceOperandWith(op_idx, gte));
@@ -782,7 +783,7 @@ namespace {
 /**
  * When using IO tiles we count the final users after the inter-tileset-copies.
  */
-int64 InfeedUserCount(const HloInstruction* infeed, bool use_io_tiles) {
+int64_t InfeedUserCount(const HloInstruction* infeed, bool use_io_tiles) {
   CHECK_EQ(infeed->opcode(), HloOpcode::kInfeed);
   CHECK_EQ(infeed->user_count(), 1);
 
@@ -1038,7 +1039,7 @@ StatusOr<StageID> PipelineDataflowAnalysis::GetPreviousStageID(
     }
     case StageType::kBackward: {
       if (stage_id.id ==
-          static_cast<int64>(pipeline_stages_.forward.size()) - 1) {
+          static_cast<int64_t>(pipeline_stages_.forward.size()) - 1) {
         return StageID(StageType::kForward, stage_id.id);
       } else {
         return StageID(StageType::kBackward, stage_id.id + 1);
@@ -1048,7 +1049,7 @@ StatusOr<StageID> PipelineDataflowAnalysis::GetPreviousStageID(
   }
 }
 
-StatusOr<int64> PipelineDataflowAnalysis::GetShardForStage(
+StatusOr<int64_t> PipelineDataflowAnalysis::GetShardForStage(
     const StageID& stage_id) const {
   switch (stage_id.stage_type) {
     case StageType::kForward:
@@ -1170,7 +1171,7 @@ Status PipelineDataflowAnalysis::VerifyParameterUsage(
   CHECK_EQ(parameter->opcode(), HloOpcode::kParameter);
   TF_ASSIGN_OR_RETURN(StageID stage_id, GetStageID(pipeline_stage_user));
   // Get the shard for the pipeline stage.
-  TF_ASSIGN_OR_RETURN(const int64 shard, GetShardForStage(stage_id));
+  TF_ASSIGN_OR_RETURN(const int64_t shard, GetShardForStage(stage_id));
   // Get the parameter value and check where it is used.
 
   const HloValue& parameter_value = GetValueSet(parameter).GetUniqueValue();
@@ -1184,7 +1185,7 @@ Status PipelineDataflowAnalysis::VerifyParameterUsage(
        used_by_stages_.at(&parameter_value)) {
     TF_ASSIGN_OR_RETURN(StageID user_stage_id, GetStageID(user_stage));
     // Get the shard for the other user stage.
-    TF_ASSIGN_OR_RETURN(const int64 user_shard,
+    TF_ASSIGN_OR_RETURN(const int64_t user_shard,
                         GetShardForStage(user_stage_id));
     if (stage_id.id != user_stage_id.id && shard != user_shard) {
       return UnimplementedStrCat(
@@ -1208,7 +1209,7 @@ Status PipelineDataflowAnalysis::VerifyGradientAccumulatorCreateUsage(
   CHECK(IsGradientAccumulatorCreate(gradient_accumulator_create));
   TF_ASSIGN_OR_RETURN(StageID stage_id, GetStageID(pipeline_stage_user));
   // Get the shard for the pipeline stage.
-  TF_ASSIGN_OR_RETURN(const int64 shard, GetShardForStage(stage_id));
+  TF_ASSIGN_OR_RETURN(const int64_t shard, GetShardForStage(stage_id));
   // Get the gradient_accumulator_create value and check where it is used.
   const HloValue& gradient_accumulator_create_value =
       GetValueSet(gradient_accumulator_create).GetUniqueValue();
@@ -1222,7 +1223,7 @@ Status PipelineDataflowAnalysis::VerifyGradientAccumulatorCreateUsage(
        used_by_stages_.at(&gradient_accumulator_create_value)) {
     TF_ASSIGN_OR_RETURN(StageID user_stage_id, GetStageID(user_stage));
     // Get the shard for the other user stage.
-    TF_ASSIGN_OR_RETURN(const int64 user_shard,
+    TF_ASSIGN_OR_RETURN(const int64_t user_shard,
                         GetShardForStage(user_stage_id));
     if (stage_id.id != user_stage_id.id && shard != user_shard) {
       return UnimplementedStrCat(
@@ -1248,7 +1249,7 @@ Status PipelineDataflowAnalysis::VerifyExecutionCounterUsage(
   CHECK(IsExecutionCounter(execution_counter));
   TF_ASSIGN_OR_RETURN(StageID stage_id, GetStageID(pipeline_stage_user));
   // Get the shard for the pipeline stage.
-  TF_ASSIGN_OR_RETURN(const int64 shard, GetShardForStage(stage_id));
+  TF_ASSIGN_OR_RETURN(const int64_t shard, GetShardForStage(stage_id));
   // Get the execution_counter value and check where it is used.
   const HloValue& execution_counter_value =
       GetValueSet(execution_counter).GetUniqueValue();
@@ -1263,7 +1264,7 @@ Status PipelineDataflowAnalysis::VerifyExecutionCounterUsage(
        used_by_stages_.at(&execution_counter_value)) {
     TF_ASSIGN_OR_RETURN(StageID user_stage_id, GetStageID(user_stage));
     // Get the shard for the other user stage.
-    TF_ASSIGN_OR_RETURN(const int64 user_shard,
+    TF_ASSIGN_OR_RETURN(const int64_t user_shard,
                         GetShardForStage(user_stage_id));
     if (stage_id.id != user_stage_id.id && shard != user_shard) {
       return UnimplementedStrCat("The ", stage_id.ToString(),
@@ -1871,7 +1872,7 @@ std::vector<uint64>& PipelinePath::GetInputsPath() { return inputs_path_; }
 
 std::vector<uint64>& PipelinePath::GetOutputsPath() { return outputs_path_; }
 
-StatusOr<int64> PipelinePath::GetFifoDepth() {
+StatusOr<int64_t> PipelinePath::GetFifoDepth() {
   if (finished_) {
     // We need to take schedule into account.
     uint64 multiplier = 1;
@@ -1918,11 +1919,11 @@ StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
             std::next(stages_last_to_first.begin(), stages.backward.size()));
 
   // Set up the sharding in last to first order.
-  std::vector<int64> sharding_last_to_first(stages_last_to_first.size());
+  std::vector<int64_t> sharding_last_to_first(stages_last_to_first.size());
   {
     // Get the sharding from the forward stages - they are always expected to
     // have it.
-    std::vector<int64> forward_sharding_devices(stages.forward.size());
+    std::vector<int64_t> forward_sharding_devices(stages.forward.size());
     for (uint64 i = 0; i != stages.forward.size(); ++i) {
       HloInstruction* forward_stage = stages.forward[i];
       auto optional_device = forward_stage->sharding_unique_device();
@@ -2029,7 +2030,7 @@ StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
   // there can only be at most one path.
   for (uint64 stage_idx = 0; stage_idx != num_stages; ++stage_idx) {
     HloInstruction* stage = stages_last_to_first[stage_idx];
-    const int64 shard = sharding_last_to_first[stage_idx];
+    const int64_t shard = sharding_last_to_first[stage_idx];
     for (uint64 input_idx = 0; input_idx != stage->operand_count();
          ++input_idx) {
       if (!inter_stage_input_to_previous_output_map[stage_idx].contains(
@@ -2046,7 +2047,7 @@ StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
       for (uint64 next_stage_idx = stage_idx + 1; next_stage_idx != num_stages;
            ++next_stage_idx) {
         HloInstruction* next_stage = stages_last_to_first[next_stage_idx];
-        const int64 next_shard = sharding_last_to_first[next_stage_idx];
+        const int64_t next_shard = sharding_last_to_first[next_stage_idx];
         const bool shard_matches = next_shard == shard;
         path.GetVisitedStages().push_back(next_stage_idx);
 
@@ -2098,36 +2099,36 @@ StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
 
 OrderedPipelineStages::OrderedPipelineStages(const PipelineStages& stages,
                                              bool include_resource_update) {
-  for (int64 i = 0; i != stages.forward.size(); ++i) {
+  for (int64_t i = 0; i != stages.forward.size(); ++i) {
     id_to_stage[i] = stages.forward[i];
     stage_to_id[stages.forward[i]] = i;
   }
-  for (int64 i = 0; i != stages.backward.size(); ++i) {
-    const int64 id = stages.forward.size() + stages.backward.size() - i - 1;
+  for (int64_t i = 0; i != stages.backward.size(); ++i) {
+    const int64_t id = stages.forward.size() + stages.backward.size() - i - 1;
     id_to_stage[id] = stages.backward[i];
     stage_to_id[stages.backward[i]] = id;
   }
   CHECK_EQ(id_to_stage.size(), stages.forward.size() + stages.backward.size());
   if (include_resource_update && stages.resource_update) {
-    const int64 id = id_to_stage.size();
+    const int64_t id = id_to_stage.size();
     id_to_stage[id] = *stages.resource_update;
     stage_to_id[*stages.resource_update] = id;
   }
 }
 
-int64 OrderedPipelineStages::GetNumberOfStages() const {
+int64_t OrderedPipelineStages::GetNumberOfStages() const {
   return id_to_stage.size();
 }
 
-HloInstruction* OrderedPipelineStages::GetStage(int64 index) const {
+HloInstruction* OrderedPipelineStages::GetStage(int64_t index) const {
   return id_to_stage.at(index);
 }
 
-int64 OrderedPipelineStages::GetIndex(HloInstruction* stage) const {
+int64_t OrderedPipelineStages::GetIndex(HloInstruction* stage) const {
   return stage_to_id.at(stage);
 }
 
-void OrderedPipelineStages::UpdateStage(int64 index, HloInstruction* stage) {
+void OrderedPipelineStages::UpdateStage(int64_t index, HloInstruction* stage) {
   stage_to_id.erase(id_to_stage.at(index));
   id_to_stage[index] = stage;
   stage_to_id[stage] = index;

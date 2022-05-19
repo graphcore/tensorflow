@@ -82,7 +82,7 @@ class InterTilesetCopyOp : public PoplarOpDef {
       CHECK_EQ(graph.getTarget().getNumTiles(), res.num_io_tiles);
     }
 
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
     const Shape& input_shape = tensor_target.tgt->operand(input_index)->shape();
     return AddHostCopyTensor(graph, {debug_info}, input_shape);
   }

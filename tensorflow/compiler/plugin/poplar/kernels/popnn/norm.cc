@@ -101,7 +101,7 @@ class PopnnGroupNorm : public XlaOpKernel, IpuOpKernel {
 
     // Validate scale and offset shapes are per channel.
     TensorShape expected_scale_offset_shape;
-    TensorShapeUtils::MakeShape(std::vector<int64>({num_channels}),
+    TensorShapeUtils::MakeShape(std::vector<int64_t>({num_channels}),
                                 &expected_scale_offset_shape);
     OP_REQUIRES(
         ctx, ctx->InputShape(1) == expected_scale_offset_shape,
@@ -117,7 +117,7 @@ class PopnnGroupNorm : public XlaOpKernel, IpuOpKernel {
       // Validate mean/inv_std_dev shape is per group
       TensorShape expected_mean_inv_std_dev_shape;
       TensorShapeUtils::MakeShape(
-          std::vector<int64>({num_groups_ * num_batches}),
+          std::vector<int64_t>({num_groups_ * num_batches}),
           &expected_mean_inv_std_dev_shape);
       OP_REQUIRES(ctx, ctx->InputShape(3) == expected_mean_inv_std_dev_shape,
                   errors::InvalidArgument(absl::StrFormat(

@@ -27,7 +27,7 @@ HloInterTilesetCopy::HloInterTilesetCopy(HloInstruction* operand)
     : HloPoplarInstruction(operand->shape(), {operand},
                            PoplarOp::InterTilesetCopy) {}
 
-absl::flat_hash_set<int64> HloInterTilesetCopy::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloInterTilesetCopy::AllocatingIndices() const {
   if (IsCopyToIoTiles()) {
     // A copy *to* the IO tiles has an input tensor placed on the compute tiles,
     // and we do not have a tensor layout preference there.
@@ -41,7 +41,7 @@ absl::flat_hash_set<int64> HloInterTilesetCopy::AllocatingIndices() const {
 
 bool HloInterTilesetCopy::AllocatingOutput() const { return true; }
 
-absl::flat_hash_map<int64, int64> HloInterTilesetCopy::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloInterTilesetCopy::LayoutDependencies()
     const {
   return {};
 }

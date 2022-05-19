@@ -54,7 +54,7 @@ class RepeatLoopVisitor : public InplaceDeferredVisitor {
 
   // Information used for the resource update (if there is one).
   bool has_resource_update_ = false;
-  int64 num_mini_batches_to_accumulate_ = -1;
+  int64_t num_mini_batches_to_accumulate_ = -1;
   DriverProgramSequence tensors_zeroing_sequence_;
   DriverProgramSequence resource_update_sequence_;
 

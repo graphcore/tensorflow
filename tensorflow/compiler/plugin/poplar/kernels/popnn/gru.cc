@@ -103,8 +103,9 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
 
     // Validate shapes.
     TensorShape expected_input_state_shape;
-    TensorShapeUtils::MakeShape(std::vector<int64>({batch_size, num_channels_}),
-                                &expected_input_state_shape);
+    TensorShapeUtils::MakeShape(
+        std::vector<int64_t>({batch_size, num_channels_}),
+        &expected_input_state_shape);
     OP_REQUIRES(
         ctx, ctx->InputShape(1) == expected_input_state_shape,
         errors::InvalidArgument(absl::StrFormat(
@@ -113,7 +114,7 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
 
     TensorShape expected_kernel_shape;
     TensorShapeUtils::MakeShape(
-        std::vector<int64>({input_size + num_channels_, 3 * num_channels_}),
+        std::vector<int64_t>({input_size + num_channels_, 3 * num_channels_}),
         &expected_kernel_shape);
     OP_REQUIRES(ctx, ctx->InputShape(2) == expected_kernel_shape,
                 errors::InvalidArgument(absl::StrFormat(
@@ -122,14 +123,14 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
 
     TensorShape expected_biases_shape;
     if (reset_after_) {
-      TensorShapeUtils::MakeShape(std::vector<int64>({3, 2, num_channels_}),
+      TensorShapeUtils::MakeShape(std::vector<int64_t>({3, 2, num_channels_}),
                                   &expected_biases_shape);
       OP_REQUIRES(ctx, ctx->InputShape(3) == expected_biases_shape,
                   errors::InvalidArgument(absl::StrFormat(
                       "The biases tensor needs to be of shape [3, 2, %u].",
                       num_channels_)));
     } else {
-      TensorShapeUtils::MakeShape(std::vector<int64>({3, num_channels_}),
+      TensorShapeUtils::MakeShape(std::vector<int64_t>({3, num_channels_}),
                                   &expected_biases_shape);
       OP_REQUIRES(ctx, ctx->InputShape(3) == expected_biases_shape,
                   errors::InvalidArgument(absl::StrFormat(
@@ -140,7 +141,7 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
     // Kernel includes a dynamic input, AUGRU includes a att_score parameter
     if (gru_type != GruType::GRU) {
       TensorShape expected_seq_len_shape;
-      TensorShapeUtils::MakeShape(std::vector<int64>({batch_size}),
+      TensorShapeUtils::MakeShape(std::vector<int64_t>({batch_size}),
                                   &expected_seq_len_shape);
       OP_REQUIRES(
           ctx, ctx->InputShape(4) == expected_seq_len_shape,
@@ -149,7 +150,7 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
       if (gru_type == GruType::AUGRU) {
         TensorShape expected_att_score_shape;
         TensorShapeUtils::MakeShape(
-            std::vector<int64>({time_steps, batch_size}),
+            std::vector<int64_t>({time_steps, batch_size}),
             &expected_att_score_shape);
         OP_REQUIRES(
             ctx, ctx->InputShape(5) == expected_att_score_shape,

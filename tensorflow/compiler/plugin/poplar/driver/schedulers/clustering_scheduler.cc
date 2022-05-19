@@ -81,7 +81,7 @@ class ClusteringScheduler {
   static StatusOr<HloInstructionSequence> Run(
       HloComputation* computation,
       const HloPoplarDataflowAnalysis& dataflow_analysis,
-      const absl::flat_hash_map<const HloComputation*, int64>&
+      const absl::flat_hash_map<const HloComputation*, int64_t>&
           memory_by_computation,
       const CompilerInformation& information) {
     ClusteringScheduler scheduler(computation, dataflow_analysis,
@@ -118,7 +118,7 @@ class ClusteringScheduler {
 
     // Estimate of the net memory saved/accumulated from all scheduling all the
     // instructions in nodes.
-    int64 net_memory_usage;
+    int64_t net_memory_usage;
 
     absl::optional<const InstructionColocatorHelper*> colocator;
   };
@@ -195,7 +195,7 @@ class ClusteringScheduler {
 
   ClusteringScheduler(HloComputation* computation,
                       const HloPoplarDataflowAnalysis& dataflow_analysis,
-                      const absl::flat_hash_map<const HloComputation*, int64>&
+                      const absl::flat_hash_map<const HloComputation*, int64_t>&
                           memory_by_computation,
                       const CompilerInformation& info)
       : computation_(computation),
@@ -209,10 +209,10 @@ class ClusteringScheduler {
     return IgnoreInstruction(*buffer.instruction());
   }
 
-  int64 GetBufferMemoryFreed(const HloInstruction* parent,
-                             const HloInstruction* operand);
+  int64_t GetBufferMemoryFreed(const HloInstruction* parent,
+                               const HloInstruction* operand);
 
-  int64 BytesFreedIfScheduled(const HloInstruction* instruction);
+  int64_t BytesFreedIfScheduled(const HloInstruction* instruction);
 
   // Add a cluster node to the wait queue or if it has no dependencies, straight
   // to the ready queue.
@@ -248,7 +248,7 @@ class ClusteringScheduler {
   // Computations are analyzed in post-order. When scheduling an instruction
   // that includes subcomputations, such as a while loop, we use this map to
   // look up the memory needed by subcomputations.
-  const absl::flat_hash_map<const HloComputation*, int64>&
+  const absl::flat_hash_map<const HloComputation*, int64_t>&
       memory_by_computation_;
 
   // The underlaying structure used to manage the storage of all the clusters.
@@ -295,9 +295,9 @@ class ClusteringScheduler {
   const CompilerInformation& information;
 };
 
-int64 ClusteringScheduler::GetBufferMemoryFreed(const HloInstruction* parent,
-                                                const HloInstruction* operand) {
-  int64 size = 0;
+int64_t ClusteringScheduler::GetBufferMemoryFreed(
+    const HloInstruction* parent, const HloInstruction* operand) {
+  int64_t size = 0;
   // Calculate the total memory used by this operands output.
   dataflow_analysis_.GetInstructionBufferSet(operand).ForEachElement(
       [&](const ShapeIndex& /*index*/, const HloPoplarBufferSet& buffer_set) {
@@ -309,29 +309,29 @@ int64 ClusteringScheduler::GetBufferMemoryFreed(const HloInstruction* parent,
   return size;
 }
 
-int64 ClusteringScheduler::BytesFreedIfScheduled(
+int64_t ClusteringScheduler::BytesFreedIfScheduled(
     const HloInstruction* instruction) {
   auto opcode = instruction->opcode();
 
-  int64 freed_bytes = 0;
+  int64_t freed_bytes = 0;
   for (const HloInstruction* operand : instruction->operands()) {
     freed_bytes += GetBufferMemoryFreed(instruction, operand);
   }
 
   // We only count the memory usage of the largest subcomputation, instead of
   // adding them all, because subcomputations won't execute in parallel.
-  int64 max_subcomputation_bytes = 0;
+  int64_t max_subcomputation_bytes = 0;
   for (const auto* c : instruction->called_computations()) {
     auto it = memory_by_computation_.find(c);
     if (it != memory_by_computation_.end()) {
-      int64 subcomputation_bytes = it->second;
+      int64_t subcomputation_bytes = it->second;
       if (subcomputation_bytes > max_subcomputation_bytes) {
         max_subcomputation_bytes = subcomputation_bytes;
       }
     }
   }
 
-  int64 bytes_defined = 0;
+  int64_t bytes_defined = 0;
   if (max_subcomputation_bytes > 0 &&
       (opcode == HloOpcode::kWhile || opcode == HloOpcode::kCall ||
        opcode == HloOpcode::kConditional)) {
@@ -489,7 +489,7 @@ void ClusteringScheduler::ClusterHelper::ClusterNodes() {
 
 void ClusteringScheduler::AddToReady(Cluster::Ref node_to_add) {
   if (node_to_add->colocator) {
-    const int64 size =
+    const int64_t size =
         (*node_to_add->colocator)->ByteSizeOf(node_to_add->nodes.front());
 
     QueueIterator colocator_cluster = FindColocatorInQueue(node_to_add);
@@ -682,7 +682,7 @@ HloInstructionSequence ClusteringScheduler::CreateSchedule() {
 StatusOr<HloInstructionSequence> ClusteringScheduler(
     HloComputation* computation,
     const HloPoplarDataflowAnalysis& dataflow_analysis,
-    const absl::flat_hash_map<const HloComputation*, int64>&
+    const absl::flat_hash_map<const HloComputation*, int64_t>&
         memory_by_computation,
     const CompilerInformation& information) {
   VLOG(3) << "ClusteringScheduler";
@@ -696,7 +696,7 @@ IpuSchedulerAlgorithm CreateClusteringMemoryScheduler(
     const CompilerInformation& information) {
   return [=](HloComputation* computation,
              const HloPoplarDataflowAnalysis& dataflow_analysis,
-             const absl::flat_hash_map<const HloComputation*, int64>&
+             const absl::flat_hash_map<const HloComputation*, int64_t>&
                  memory_by_computation) {
     return ClusteringScheduler(computation, dataflow_analysis,
                                memory_by_computation, information);

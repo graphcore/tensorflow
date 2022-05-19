@@ -87,7 +87,7 @@ TEST_P(HloPoplarDataflowAnalysisLoopTest, DoTest) {
                           ParseAndReturnVerifiedModule(param.hlo, config));
 
   CompilerAnnotations annotations(module.get());
-  const int64 replication_factor = 2;
+  const int64_t replication_factor = 2;
   bool changed;
   TF_ASSERT_OK_AND_ASSIGN(changed, CustomOpReplacer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(

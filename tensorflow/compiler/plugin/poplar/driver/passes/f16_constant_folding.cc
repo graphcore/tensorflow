@@ -107,7 +107,7 @@ StatusOr<bool> F16ConstantFolding::Run(HloModule* module) {
             HloInstruction* operand_inst_conv =
                 comp->AddInstruction(HloInstruction::CreateConvert(
                     f16_shape_operand_inst, operand_inst));
-            int64 operand_index = inst->operand_index(operand_inst);
+            int64_t operand_index = inst->operand_index(operand_inst);
             TF_RETURN_IF_ERROR(
                 inst->ReplaceOperandWith(operand_index, operand_inst_conv));
             graph_modified = true;

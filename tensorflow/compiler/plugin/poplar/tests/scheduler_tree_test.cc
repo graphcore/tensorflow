@@ -12,9 +12,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <set>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/schedule_tree.h"
-
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
@@ -71,9 +72,10 @@ std::map<char, std::set<char>> createPredecessorsFromSucessors(
 }
 
 struct CharGrossCost {
-  CharGrossCost(std::map<char, int64> gross_cost) : gross_cost_(gross_cost) {}
+  explicit CharGrossCost(std::map<char, int64_t> gross_cost)
+      : gross_cost_(gross_cost) {}
 
-  int64 operator()(char node) const {
+  int64_t operator()(char node) const {
     if (gross_cost_.count(node) > 0) {
       return gross_cost_.at(node);
     }
@@ -82,14 +84,15 @@ struct CharGrossCost {
   }
 
  private:
-  std::map<char, int64> gross_cost_;
+  std::map<char, int64_t> gross_cost_;
 };
 
 struct CharTempCost {
-  CharTempCost(std::map<char, int64> temp_cost) : temp_cost_(temp_cost) {}
+  explicit CharTempCost(std::map<char, int64_t> temp_cost)
+      : temp_cost_(temp_cost) {}
 
   template <typename Set>
-  int64 operator()(const Set&, char node) const {
+  int64_t operator()(const Set&, char node) const {
     if (temp_cost_.count(node) > 0) {
       return temp_cost_.at(node);
     }
@@ -98,7 +101,7 @@ struct CharTempCost {
   }
 
  private:
-  std::map<char, int64> temp_cost_;
+  std::map<char, int64_t> temp_cost_;
 };
 
 TEST(SchedulerTreeTest, SimpleSchedule) {
@@ -116,7 +119,7 @@ TEST(SchedulerTreeTest, SimpleSchedule) {
     {'D', {'F'}},
     {'E', {'F'}},
   };
-  std::map<char, int64> gross_cost = {
+  std::map<char, int64_t> gross_cost = {
       {'A', 2},
       {'B', 1},
       {'C', 4},
@@ -126,7 +129,7 @@ TEST(SchedulerTreeTest, SimpleSchedule) {
   };
   // clang-format on
 
-  std::map<char, int64> temp_cost = {};
+  std::map<char, int64_t> temp_cost = {};
   std::map<char, std::set<char>> predecessors =
       createPredecessorsFromSucessors(successors);
 
@@ -170,7 +173,7 @@ TEST(SchedulerTreeTest, MultiBranchMergeSchedule) {
     {'H', {'I'}},
     {'I', {'J'}},
   };
-  std::map<char, int64> gross_cost = {
+  std::map<char, int64_t> gross_cost = {
       {'A', 2},
       {'B', 1},
       {'C', 4},
@@ -184,7 +187,7 @@ TEST(SchedulerTreeTest, MultiBranchMergeSchedule) {
   };
   // clang-format on
 
-  std::map<char, int64> temp_cost = {};
+  std::map<char, int64_t> temp_cost = {};
   std::map<char, std::set<char>> predecessors =
       createPredecessorsFromSucessors(successors);
 
@@ -231,7 +234,7 @@ TEST(SchedulerTreeTest, MultiBranchSchedule) {
     {'G', {'J'}},
     {'H', {'I'}},
   };
-  std::map<char, int64> gross_cost = {
+  std::map<char, int64_t> gross_cost = {
       {'A', 2},
       {'B', 1},
       {'C', 4},
@@ -245,7 +248,7 @@ TEST(SchedulerTreeTest, MultiBranchSchedule) {
   };
   // clang-format on
 
-  std::map<char, int64> temp_cost = {};
+  std::map<char, int64_t> temp_cost = {};
   std::map<char, std::set<char>> predecessors =
       createPredecessorsFromSucessors(successors);
 

@@ -25,8 +25,8 @@ namespace poplarplugin {
 
 HloConvWithReverse::HloConvWithReverse(
     const Shape& shape, HloInstruction* lhs, HloInstruction* rhs,
-    int64 feature_group_count, int64 batch_group_count, const Window& window,
-    const ConvolutionDimensionNumbers& dimension_numbers,
+    int64_t feature_group_count, int64_t batch_group_count,
+    const Window& window, const ConvolutionDimensionNumbers& dimension_numbers,
     const PrecisionConfig& precision_config)
     : HloPoplarInstruction(shape, {lhs, rhs}, PoplarOp::ConvWithReverse, window,
                            precision_config, dimension_numbers,
@@ -44,13 +44,13 @@ const PrecisionConfig& HloConvWithReverse::GetPrecisionConfig() const {
   return precision_config_;
 }
 
-absl::flat_hash_set<int64> HloConvWithReverse::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloConvWithReverse::AllocatingIndices() const {
   return {};
 }
 
 bool HloConvWithReverse::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloConvWithReverse::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloConvWithReverse::LayoutDependencies()
     const {
   return {};
 }
@@ -97,8 +97,8 @@ std::unique_ptr<HloInstruction> HloConvWithReverse::CloneWithNewOperandsImpl(
 
 std::unique_ptr<HloConvWithReverse> CreateConvWithReverse(
     const Shape& shape, HloInstruction* lhs, HloInstruction* rhs,
-    int64 feature_group_count, int64 batch_group_count, const Window& window,
-    const ConvolutionDimensionNumbers& dimension_numbers,
+    int64_t feature_group_count, int64_t batch_group_count,
+    const Window& window, const ConvolutionDimensionNumbers& dimension_numbers,
     const PrecisionConfig& precision_config) {
   return absl::make_unique<HloConvWithReverse>(
       shape, lhs, rhs, feature_group_count, batch_group_count, window,

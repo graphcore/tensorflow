@@ -32,9 +32,9 @@ class HloMultiSliceInstruction : public HloPoplarInstruction {
                                     HloInstruction* const indices,
                                     bool indices_are_sorted = false);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
@@ -64,23 +64,23 @@ class HloStaticMultiSliceInstruction : public HloPoplarInstruction {
  public:
   explicit HloStaticMultiSliceInstruction(const Shape& shape,
                                           HloInstruction* const input,
-                                          absl::Span<const int64> indices);
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+                                          absl::Span<const int64_t> indices);
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
   bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
-  const std::vector<int64>& GetIndices() const { return indices_; }
+  const std::vector<int64_t>& GetIndices() const { return indices_; }
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
 
-  const std::vector<int64> indices_;
+  const std::vector<int64_t> indices_;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -95,9 +95,9 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
                                      bool is_update_add = false,
                                      bool indices_are_sorted = false);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
@@ -137,23 +137,23 @@ class HloStaticMultiUpdateAddInstruction : public HloPoplarInstruction {
  public:
   explicit HloStaticMultiUpdateAddInstruction(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
-      absl::Span<const int64> indices);
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+      absl::Span<const int64_t> indices);
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;
   bool AllowNonInplaceLowering() const override;
   bool IsPopOpsElementwise() const override;
-  const absl::Span<const int64> GetIndices() const { return indices_; }
+  const absl::Span<const int64_t> GetIndices() const { return indices_; }
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
 
-  const std::vector<int64> indices_;
+  const std::vector<int64_t> indices_;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -167,7 +167,7 @@ std::unique_ptr<HloInstruction> CreateMultiSlice(
 
 std::unique_ptr<HloInstruction> CreateStaticMultiSlice(
     const Shape& shape, HloInstruction* const input,
-    absl::Span<const int64> indices);
+    absl::Span<const int64_t> indices);
 
 std::unique_ptr<HloInstruction> CreateMultiUpdate(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
@@ -179,7 +179,7 @@ std::unique_ptr<HloInstruction> CreateMultiUpdateAdd(
 
 std::unique_ptr<HloInstruction> CreateStaticMultiUpdateAdd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    absl::Span<const int64> indices);
+    absl::Span<const int64_t> indices);
 
 }  // namespace poplarplugin
 }  // namespace xla

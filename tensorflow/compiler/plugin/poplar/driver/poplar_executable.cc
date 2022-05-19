@@ -71,7 +71,7 @@ void PoplarExecutableCore::PopulateCollectiveBalanceReorderHostRerrangements() {
   cbr_host_rearrangements_.clear();
   for (auto& param_host_rearrangement_entry :
        GetRemoteParameterHostRearrangements()) {
-    int64 id = param_host_rearrangement_entry.first;
+    int64_t id = param_host_rearrangement_entry.first;
     auto& param_host_rearrangement = param_host_rearrangement_entry.second;
     gcl::CollectiveBalancedHostRearrangement host_rearrangement;
     host_rearrangement.replicationFactor =
@@ -148,7 +148,7 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
   }
 
   for (const auto& remote_parameter : proto.remote_parameters()) {
-    std::vector<int64> merged_params;
+    std::vector<int64_t> merged_params;
     merged_params.reserve(remote_parameter.merged_params_size());
 
     for (const auto& merged_param : remote_parameter.merged_params()) {
@@ -165,7 +165,7 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
 
   for (const auto& remote_parameter_host_rearrangement :
        proto.collective_balanced_host_rearrangements()) {
-    int64 id = remote_parameter_host_rearrangement.id();
+    int64_t id = remote_parameter_host_rearrangement.id();
     RemoteParameterHostRearrangement host_rearrangement;
     host_rearrangement.replication_factor =
         remote_parameter_host_rearrangement.replication_factor();
@@ -310,7 +310,7 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
 
   for (const auto& remote_parameter_host_rearrangement_entry :
        info.remote_parameter_host_rearrangements) {
-    int64 id = remote_parameter_host_rearrangement_entry.first;
+    int64_t id = remote_parameter_host_rearrangement_entry.first;
     auto& src_host_rearrangement =
         remote_parameter_host_rearrangement_entry.second;
     auto* host_rearrangement =
@@ -605,7 +605,7 @@ Status PoplarExecutable::ExecuteComputeFunction(
   // if the execution didn't complete successfully).
   TF_RETURN_IF_ERROR(PoplarExecutor::DecrementBufferReferenceCount(
       *result_buffer, result_shape()));
-  for (int64 i = 0; i != argument_buffers.size(); ++i) {
+  for (int64_t i = 0; i != argument_buffers.size(); ++i) {
     TF_RETURN_IF_ERROR(PoplarExecutor::DecrementBufferReferenceCount(
         argument_buffers[i], argument_shapes[i]));
   }
@@ -741,7 +741,7 @@ StatusOr<ExecutionOutput> PoplarExecutable::ExecuteAsyncOnStream(
   return ExecutionOutput(std::move(result_buffer));
 }
 
-/*static*/ int64 PoplarExecutable::ShapeSizeBytes(const Shape& shape) {
+/*static*/ int64_t PoplarExecutable::ShapeSizeBytes(const Shape& shape) {
   if (shape.IsOpaque()) {
     return sizeof(void*);
   }

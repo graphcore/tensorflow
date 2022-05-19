@@ -97,7 +97,7 @@ StatusOr<bool> ConvertToReallocatingCopies(HloInstruction* inst) {
                              inst->operand(0)->opcode() == HloOpcode::kTuple)) {
     HloInstruction* inputs =
         IsRepeatLoop(inst) ? inst : inst->mutable_operand(0);
-    for (int64 op_idx = 0; op_idx < inputs->operand_count(); ++op_idx) {
+    for (int64_t op_idx = 0; op_idx < inputs->operand_count(); ++op_idx) {
       HloInstruction* copy = inputs->mutable_operand(op_idx);
       if (copy->opcode() == HloOpcode::kCopy) {
         TF_ASSIGN_OR_RETURN(bool copy_changed, ConvertToReallocatingCopy(copy));
@@ -183,18 +183,18 @@ InplacePriority GetPriority(const HloInstruction* inst) {
   }
 }
 
-int64 GetBufferOperandsSize(
+int64_t GetBufferOperandsSize(
     const HloInstruction* inst,
     const HloPoplarInplaceDescription& inst_description) {
-  int64 result = 0;
-  for (const int64 index : inst_description.GetInplaceOperandIndices()) {
+  int64_t result = 0;
+  for (const int64_t index : inst_description.GetInplaceOperandIndices()) {
     const auto* inplace_operand = (inst->operand(index));
     result += GetByteSizeOfTotalShapeSafe(inplace_operand->shape());
   }
   return result;
 }
 
-using SortKeyType = std::tuple<HloInstructionType, InplacePriority, int64>;
+using SortKeyType = std::tuple<HloInstructionType, InplacePriority, int64_t>;
 SortKeyType CreateSortKey(const HloInstruction* inst) {
   auto inst_description = GetInplaceDescription(inst);
   // Prioritise instructions by how they'll be inplaced, how important they
@@ -257,7 +257,7 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
 
     struct OperandToCopy {
       HloInstruction* inst;
-      std::vector<int64> operands;
+      std::vector<int64_t> operands;
       explicit OperandToCopy(HloInstruction* inst) : inst(inst) {}
     };
     std::vector<OperandToCopy> operands_to_copy;
@@ -334,7 +334,7 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
     for (auto& operand_to_copy : operands_to_copy) {
       HloInstruction* inst = operand_to_copy.inst;
       auto inplace_description = GetInplaceDescription(inst);
-      for (int64 op_index : operand_to_copy.operands) {
+      for (int64_t op_index : operand_to_copy.operands) {
         HloInstruction* op = inst->mutable_operand(op_index);
         HloInstruction* copy;
         if (op->opcode() == HloOpcode::kCopy && op->user_count() == 1) {

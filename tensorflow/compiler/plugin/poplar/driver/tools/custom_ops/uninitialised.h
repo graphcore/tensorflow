@@ -26,15 +26,15 @@ namespace xla {
 namespace poplarplugin {
 
 std::unique_ptr<HloInstruction> CreateUninitialisedInstruction(
-    const Shape& shape, int64& identifier);
+    const Shape& shape, int64_t& identifier);
 
 // Instruction used to create an uninitialised buffer
 class HloUninitialisedInstruction : public HloPoplarInstruction {
  public:
-  explicit HloUninitialisedInstruction(const Shape& shape, int64& identifier);
-  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
+  explicit HloUninitialisedInstruction(const Shape& shape, int64_t& identifier);
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override { return {}; }
   bool AllocatingOutput() const override { return true; }
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override {
     return {};
   }
   HloPoplarUseDescriptions GetUseDescriptions() const override;
@@ -56,10 +56,10 @@ class HloUninitialisedInstruction : public HloPoplarInstruction {
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override {
-    int64 copy_val = identifier_ - 1;
+    int64_t copy_val = identifier_ - 1;
     return CreateUninitialisedInstruction(shape, copy_val);
   }
-  int64 identifier_;
+  int64_t identifier_;
 };
 
 }  // namespace poplarplugin

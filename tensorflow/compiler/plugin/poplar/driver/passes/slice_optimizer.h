@@ -66,7 +66,7 @@ class SliceOptimizer : public HloMatcher {
 
  private:
   StatusOr<bool> HandleMatch(HloMatcherMatched& match,
-                             const absl::optional<int64>) override;
+                             const absl::optional<int64_t>) override;
 };
 
 }  // namespace poplarplugin

@@ -61,7 +61,7 @@ std::ostream& operator<<(std::ostream& out, const HloPoplarPosition& position) {
 }
 
 HloPoplarUseDescription::HloPoplarUseDescription(
-    int64 operand_number, const ShapeIndex& operand_index,
+    int64_t operand_number, const ShapeIndex& operand_index,
     const ShapeIndex& output_index, BufferUseKind kind)
     : operand_number_(operand_number),
       operand_index_(operand_index),
@@ -108,7 +108,7 @@ bool HloPoplarUseDescription::operator!=(
   return !(*this == other);
 }
 
-HloPoplarUse::HloPoplarUse(HloInstruction* instruction, int64 operand_number,
+HloPoplarUse::HloPoplarUse(HloInstruction* instruction, int64_t operand_number,
                            const ShapeIndex& operand_index, BufferUseKind kind)
     : instruction_(instruction),
       operand_number_(operand_number),
@@ -121,7 +121,7 @@ std::ostream& operator<<(std::ostream& out, const HloPoplarUse& use) {
 }
 
 HloPoplarNoAliasUse::HloPoplarNoAliasUse(HloInstruction* instruction,
-                                         int64 operand_number,
+                                         int64_t operand_number,
                                          const ShapeIndex& operand_index)
     : HloPoplarUse(instruction, operand_number, operand_index,
                    BufferUseKind::USE_NO_ALIAS) {}
@@ -137,7 +137,7 @@ std::string HloPoplarNoAliasUse::ToString() const {
 }
 
 HloPoplarAliasUseBase::HloPoplarAliasUseBase(
-    HloInstruction* instruction, int64 operand_number,
+    HloInstruction* instruction, int64_t operand_number,
     const ShapeIndex& operand_index,
     const std::vector<ShapeIndex> output_indices, BufferUseKind kind)
     : HloPoplarUse(instruction, operand_number, operand_index, kind),
@@ -163,7 +163,7 @@ std::string HloPoplarAliasUseBase::ToString() const {
 }
 
 HloPoplarAliasReadOnlyUse::HloPoplarAliasReadOnlyUse(
-    HloInstruction* instruction, int64 operand_number,
+    HloInstruction* instruction, int64_t operand_number,
     const ShapeIndex& operand_index,
     const std::vector<ShapeIndex> output_indices)
     : HloPoplarAliasUseBase(instruction, operand_number, operand_index,
@@ -171,7 +171,7 @@ HloPoplarAliasReadOnlyUse::HloPoplarAliasReadOnlyUse(
                             BufferUseKind::USE_ALIAS_READ_ONLY) {}
 
 HloPoplarAliasReadWriteUse::HloPoplarAliasReadWriteUse(
-    HloInstruction* instruction, int64 operand_number,
+    HloInstruction* instruction, int64_t operand_number,
     const ShapeIndex& operand_index,
     const std::vector<ShapeIndex> output_indices)
     : HloPoplarAliasUseBase(instruction, operand_number, operand_index,
@@ -239,7 +239,7 @@ bool HloPoplarBuffer::operator!=(const HloPoplarBuffer& other) const {
   return !(*this == other);
 }
 
-int64 HloPoplarBuffer::SizeInBytes() const {
+int64_t HloPoplarBuffer::SizeInBytes() const {
   const auto& shape = defining_position_.shape();
   if (shape.IsOpaque()) {
     return 0;
@@ -416,9 +416,9 @@ std::ostream& operator<<(
   return out;
 }
 
-absl::flat_hash_map<HloPoplarBuffer::Id, int64> DeviceMemoryBufferSizesInBytes(
-    const HloPoplarBufferSet& buffers) {
-  absl::flat_hash_map<HloPoplarBuffer::Id, int64> buffer_sizes;
+absl::flat_hash_map<HloPoplarBuffer::Id, int64_t>
+DeviceMemoryBufferSizesInBytes(const HloPoplarBufferSet& buffers) {
+  absl::flat_hash_map<HloPoplarBuffer::Id, int64_t> buffer_sizes;
 
   for (auto* buffer : buffers.buffers()) {
     if (buffer->locality() == BufferLocality::kDeviceMemory) {
@@ -431,9 +431,9 @@ absl::flat_hash_map<HloPoplarBuffer::Id, int64> DeviceMemoryBufferSizesInBytes(
   return buffer_sizes;
 }
 
-absl::flat_hash_map<HloPoplarBuffer::Id, int64> DeviceMemoryBufferSizesInBytes(
-    const InstructionPoplarBufferSet& buffers) {
-  absl::flat_hash_map<HloPoplarBuffer::Id, int64> buffer_sizes;
+absl::flat_hash_map<HloPoplarBuffer::Id, int64_t>
+DeviceMemoryBufferSizesInBytes(const InstructionPoplarBufferSet& buffers) {
+  absl::flat_hash_map<HloPoplarBuffer::Id, int64_t> buffer_sizes;
 
   for (auto& item : buffers.GetBufferSets()) {
     auto& buffer_set = item.second;

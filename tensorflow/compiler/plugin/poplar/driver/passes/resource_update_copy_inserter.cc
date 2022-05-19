@@ -73,7 +73,7 @@ StatusOr<bool> ResourceUpdateCopyInserter::InsertCopiesInCall(
   }
 
   VLOG(2) << "Looking for copies to add inside of " << resource_update->name();
-  for (int64 operand_idx = 0; operand_idx != resource_update->operand_count();
+  for (int64_t operand_idx = 0; operand_idx != resource_update->operand_count();
        ++operand_idx) {
     // Only consider adding copies for parameters of the call as those have to
     // alias the output.
@@ -86,7 +86,7 @@ StatusOr<bool> ResourceUpdateCopyInserter::InsertCopiesInCall(
     if (gte->opcode() != HloOpcode::kGetTupleElement) {
       continue;
     }
-    const int64 output_idx = gte->tuple_index();
+    const int64_t output_idx = gte->tuple_index();
 
     if (gte->operand(0) != resource_update) {
       continue;

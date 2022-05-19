@@ -30,7 +30,7 @@ namespace {
 using PipelineFixerTest = HloTestBase;
 
 bool IsPipelineOk(const PipelineStages& stages) {
-  for (int64 fwd_stage_id = 0; fwd_stage_id != stages.forward.size();
+  for (int64_t fwd_stage_id = 0; fwd_stage_id != stages.forward.size();
        ++fwd_stage_id) {
     HloInstruction* stage = stages.forward[fwd_stage_id];
     for (HloInstruction* operand : stage->operands()) {
@@ -50,7 +50,7 @@ bool IsPipelineOk(const PipelineStages& stages) {
     }
   }
 
-  for (int64 bwd_stage_id = 0; bwd_stage_id != stages.backward.size();
+  for (int64_t bwd_stage_id = 0; bwd_stage_id != stages.backward.size();
        ++bwd_stage_id) {
     HloInstruction* stage = stages.backward[bwd_stage_id];
     for (HloInstruction* operand : stage->operands()) {

@@ -33,7 +33,7 @@ namespace poplarplugin {
 namespace {
 
 // Return the number of elements in the given tensor.
-int64 ElementCount(const poplar::Tensor& tensor) {
+int64_t ElementCount(const poplar::Tensor& tensor) {
   return tensor.numElements();
 }
 
@@ -44,9 +44,9 @@ poplar::Tensor Reshape(const poplar::Tensor& tensor,
 }
 
 // Return a functor that slices the elements from the given tensor.
-std::function<poplar::Tensor(int64, int64)> OffsetSlice(
+std::function<poplar::Tensor(int64_t, int64_t)> OffsetSlice(
     const poplar::Tensor& tensor, unsigned axis) {
-  return [&tensor, axis](int64 offset, int64 count) -> poplar::Tensor {
+  return [&tensor, axis](int64_t offset, int64_t count) -> poplar::Tensor {
     return tensor.slice(offset, offset + count, axis);
   };
 }
@@ -58,11 +58,11 @@ class AllGatherOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "AllGatherOp");
     DriverProgramSequence seq(graph, debug_info);
-    const int64 num_inputs = inst->operand_count();
+    const int64_t num_inputs = inst->operand_count();
 
     // If there is no replication, then we can just duplicate the inputs.
     if (res.replication_factor < 2) {
-      for (int64 i = 0; i < num_inputs; ++i) {
+      for (int64_t i = 0; i < num_inputs; ++i) {
         TF_ASSIGN_OR_RETURN(
             poplar::Tensor input,
             FindInstructionInput(tensor_map, res, inst, i, seq, {debug_info}));
@@ -87,7 +87,7 @@ class AllGatherOp : public PoplarOpDef {
     std::vector<poplar::Tensor> inputs;
 
     // Collect up all the inputs
-    for (int64 i = 0; i < num_inputs; ++i) {
+    for (int64_t i = 0; i < num_inputs; ++i) {
       TF_ASSIGN_OR_RETURN(
           poplar::Tensor input,
           FindInstructionInput(tensor_map, res, inst, i, seq, {debug_info}));
@@ -101,7 +101,7 @@ class AllGatherOp : public PoplarOpDef {
         GetReplicatedCollectiveOptions(res));
 
     // Add output tensors.
-    for (int64 i = 0; i != outputs.size(); ++i) {
+    for (int64_t i = 0; i != outputs.size(); ++i) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
                                   DriverTensor(outputs[i], graph)));
     }

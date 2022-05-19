@@ -93,7 +93,7 @@ struct InstructionExtensionTest : HloTestBase {
 };
 
 TEST_F(InstructionExtensionTest, CanRegisterAllocatingIndicesExtension) {
-  const auto expected = absl::flat_hash_set<int64>{1, 2};
+  const auto expected = absl::flat_hash_set<int64_t>{1, 2};
 
   HloInstructionExtensions extensions;
   extensions.Register<AllocatingIndicesExtension>(
@@ -117,7 +117,7 @@ TEST_F(InstructionExtensionTest, CanRegisterAllocatingOutputExtension) {
 }
 
 TEST_F(InstructionExtensionTest, CanRegisterLayoutDependenciesExtension) {
-  const auto expected = absl::flat_hash_map<int64, int64>{{1, 1}, {3, 3}};
+  const auto expected = absl::flat_hash_map<int64_t, int64_t>{{1, 1}, {3, 3}};
 
   HloInstructionExtensions extensions;
   extensions.Register<LayoutDependenciesExtension>(
@@ -129,7 +129,7 @@ TEST_F(InstructionExtensionTest, CanRegisterLayoutDependenciesExtension) {
 }
 
 TEST_F(InstructionExtensionTest, CanRegisterFindConsumersExtension) {
-  absl::optional<std::vector<int64>> perm = std::vector<int64>{1, 0};
+  absl::optional<std::vector<int64_t>> perm = std::vector<int64_t>{1, 0};
   const auto* inst = hlo_instruction_.get();
   FindConsumersExtensionParams params{{inst, 0}, inst, 1, 2, perm};
 
@@ -154,7 +154,7 @@ struct PoplarInstructionExtensionTest : HloTestBase {
 TEST_F(PoplarInstructionExtensionTest, AllocatingIndicesExtCallsPoplarImpl) {
   class TestPoplarInstruction : public BaseInstruction {
    public:
-    absl::flat_hash_set<int64> AllocatingIndices() const override {
+    absl::flat_hash_set<int64_t> AllocatingIndices() const override {
       return {1, 2, 3};
     }
   };
@@ -180,7 +180,7 @@ TEST_F(PoplarInstructionExtensionTest, AllocatingOutputExtCallsPoplarImpl) {
 TEST_F(PoplarInstructionExtensionTest, LayoutDependenciesExtCallPoplarImpl) {
   class TestPoplarInstruction : public BaseInstruction {
    public:
-    absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
+    absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override {
       return {{1, 1}, {3, 3}};
     }
   };
@@ -201,7 +201,7 @@ TEST_F(PoplarInstructionExtensionTest, FindConsumersExtCallPoplarImpl) {
     }
   };
   TestPoplarInstruction poplar_instruction;
-  absl::optional<std::vector<int64>> perm = std::vector<int64>{1, 0};
+  absl::optional<std::vector<int64_t>> perm = std::vector<int64_t>{1, 0};
   const auto* inst = &poplar_instruction;
   FindConsumersExtensionParams params{{inst, 0}, inst, 1, 2, perm};
 

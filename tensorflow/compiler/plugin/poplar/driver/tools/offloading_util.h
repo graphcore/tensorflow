@@ -38,15 +38,16 @@ bool IsReplicatedParameterStore(const HloInstruction*);
 Status GetRemoteLoadStoreUsers(HloInstruction* inst, HloInstruction** load,
                                HloInstruction** store);
 
-int64 PartitionedElementCountPerReplica(int64 element_count,
-                                        int64 partition_replication_factor);
+int64_t PartitionedElementCountPerReplica(int64_t element_count,
+                                          int64_t partition_replication_factor);
 
-std::size_t PartitionedByteCountPerReplica(std::size_t byte_count,
-                                           PrimitiveType element_type,
-                                           int64 partition_replication_factor);
+std::size_t PartitionedByteCountPerReplica(
+    std::size_t byte_count, PrimitiveType element_type,
+    int64_t partition_replication_factor);
 
-StatusOr<int64> GetRemoteBufferEntryParameterNumber(const HloInstruction* inst);
-StatusOr<int64> GetRemoteBufferEntryParameterNumber(
+StatusOr<int64_t> GetRemoteBufferEntryParameterNumber(
+    const HloInstruction* inst);
+StatusOr<int64_t> GetRemoteBufferEntryParameterNumber(
     const HloDataflowAnalysis& dfa, const HloInstruction* inst);
 
 }  // namespace poplarplugin

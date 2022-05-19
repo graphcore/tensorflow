@@ -42,8 +42,8 @@ TEST_F(UserOperator, UserOpDefaults) {
   xla::Shape shape;
 
   // Call into the instruction directly.
-  const int64 gradient_size = 0;
-  const int64 partial_derivative_index = 0;
+  const int64_t gradient_size = 0;
+  const int64_t partial_derivative_index = 0;
   const bool is_user_read_write = false;
   const std::string attributes;
   HloUserOpInstruction inst{{},
@@ -64,10 +64,10 @@ TEST_F(UserOperator, UserOpDefaults) {
   EXPECT_EQ(inst.GetAllocatorFunc(), nullptr);
   EXPECT_EQ(inst.GetPath(), "my_gc_file.gc");
 
-  absl::flat_hash_set<int64> alloc_indices = inst.AllocatingIndices();
-  absl::flat_hash_set<int64> replica_identical_outputs =
+  absl::flat_hash_set<int64_t> alloc_indices = inst.AllocatingIndices();
+  absl::flat_hash_set<int64_t> replica_identical_outputs =
       inst.ReplicaIdenticalOutputIndices();
-  absl::flat_hash_map<int64, int64> layout_deps = inst.LayoutDependencies();
+  absl::flat_hash_map<int64_t, int64_t> layout_deps = inst.LayoutDependencies();
 
   EXPECT_TRUE(alloc_indices.empty());
   EXPECT_TRUE(replica_identical_outputs.empty());
@@ -105,8 +105,8 @@ TEST_F(UserOperator, UserOpReadMetadata) {
   ASSERT_TRUE(allocator_ptr);
 
   // Call into the instruction directly.
-  const int64 gradient_size = 0;
-  const int64 partial_derivative_index = 0;
+  const int64_t gradient_size = 0;
+  const int64_t partial_derivative_index = 0;
   const bool is_user_read_write = false;
   const std::string attributes;
   HloUserOpInstruction inst{{},
@@ -127,7 +127,7 @@ TEST_F(UserOperator, UserOpReadMetadata) {
   EXPECT_NE(inst.GetAllocatorFunc(), nullptr);
   EXPECT_EQ(inst.GetPath(), "my_gc_file.gc");
 
-  absl::flat_hash_set<int64> alloc_indices = inst.AllocatingIndices();
+  absl::flat_hash_set<int64_t> alloc_indices = inst.AllocatingIndices();
 
   EXPECT_EQ(alloc_indices.size(), 4);
   EXPECT_TRUE(alloc_indices.contains(0));
@@ -135,7 +135,7 @@ TEST_F(UserOperator, UserOpReadMetadata) {
   EXPECT_TRUE(alloc_indices.contains(2));
   EXPECT_TRUE(alloc_indices.contains(3));
 
-  absl::flat_hash_set<int64> replica_identical_outputs =
+  absl::flat_hash_set<int64_t> replica_identical_outputs =
       inst.ReplicaIdenticalOutputIndices();
   EXPECT_EQ(replica_identical_outputs.size(), 3);
   EXPECT_TRUE(replica_identical_outputs.contains(0));

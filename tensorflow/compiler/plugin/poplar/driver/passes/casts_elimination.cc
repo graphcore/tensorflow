@@ -157,7 +157,7 @@ CastsElimination::CastsElimination(struct CompilerAnnotations& annotations)
 // For casts elimination we ignore the sharding device because we replace
 // instructions with the sharding they had before.
 StatusOr<bool> CastsElimination::HandleMatch(HloMatcherMatched& match,
-                                             const absl::optional<int64>) {
+                                             const absl::optional<int64_t>) {
   // A map from original instructions to their new counterparts
   absl::flat_hash_map<NodeId, HloInstruction*> outlined;
   // A set of nodes which we have already outlined.
@@ -215,7 +215,7 @@ StatusOr<bool> CastsElimination::HandleMatch(HloMatcherMatched& match,
     outlined[node_id] = new_inst;
     outlined_node_ids.insert(node_id);
     // Replace all the operands.
-    for (int64 operand = 0; operand < new_inst->operand_count(); ++operand) {
+    for (int64_t operand = 0; operand < new_inst->operand_count(); ++operand) {
       NodeId operand_id =
           pattern.GetPatternNodes()[node_id].GetOperands()[operand];
       TF_CHECK_OK(new_inst->ReplaceOperandWith(operand, outlined[operand_id]));

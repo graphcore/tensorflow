@@ -69,7 +69,7 @@ bool PoplarShapeMatchesXLAShape(TensorOrRemoteBuffer torb,
 
 // Concatenate all tensors into a single tensor.
 DriverTensor ConcatenateTensors(const std::vector<DriverTensor>& tensors,
-                                int64 dimension = 0);
+                                int64_t dimension = 0);
 
 // Concatenate all tensors into a single tensor.
 DriverTensor FlattenAndConcatenateTensors(
@@ -78,8 +78,8 @@ DriverTensor FlattenAndConcatenateTensors(
 // Given a tensor of shape [..., N, ...] where N is the `slice_dimension`,
 // create an output tensor of size [..., output_size, ...]
 DriverTensor CreateTensorFromSlice(
-    DriverGraph& graph, const DriverTensor& slice, int64 slice_dimension,
-    int64 output_size, CompilerResources& resources,
+    DriverGraph& graph, const DriverTensor& slice, int64_t slice_dimension,
+    int64_t output_size, CompilerResources& resources,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 // Clone the tensor and rebalance any aliasing across the tiles.
@@ -88,7 +88,7 @@ DriverTensor TensorCloneAndRebalanceAliasing(
     const poplar::DebugNameAndId& debug_name_and_id);
 StatusOr<DriverTensor> SliceTensor(
     DriverTensor tensor_to_slice,
-    const HloInstruction::InstructionVector& slices, int64 slice_index);
+    const HloInstruction::InstructionVector& slices, int64_t slice_index);
 
 // Slice tensor into tensors with shapes like the tensors.
 std::vector<DriverTensor> SliceTensorIntoTensorsLike(
@@ -176,25 +176,25 @@ StatusOr<DriverTensor> PadTensor(const PaddingConfig& cfg,
                                  const DriverTensor& pad);
 
 StatusOr<DriverTensor> ReverseTensor(const DriverTensor& in,
-                                     const std::vector<int64>& dimensions);
+                                     const std::vector<int64_t>& dimensions);
 
 StatusOr<DriverTensor> BroadcastTensor(
     const DriverTensor& in, const xla::Shape& out,
-    const std::vector<int64>& dimensions = {});
+    const std::vector<int64_t>& dimensions = {});
 
-Status AddOutput(TensorMap& map, const HloInstruction* inst, int64 n,
+Status AddOutput(TensorMap& map, const HloInstruction* inst, int64_t n,
                  const TensorOrRemoteBuffer& torb);
 
-Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
+Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64_t n,
                        const DriverTensor& tensor);
 
-Status AddOutputOpaque(TensorMap& map, const HloInstruction* inst, int64 n,
+Status AddOutputOpaque(TensorMap& map, const HloInstruction* inst, int64_t n,
                        absl::any token);
 
 /* This returns a [range) which correspond to the flat tuple indices of output
  * tensors.
  */
-std::pair<int64, int64> FindGetTupleElementTupleIndices(
+std::pair<int64_t, int64_t> FindGetTupleElementTupleIndices(
     const HloInstruction* inst);
 
 /**
@@ -221,7 +221,8 @@ std::pair<int64, int64> FindGetTupleElementTupleIndices(
  */
 StatusOr<TensorVector> FindInstructionInputTensorsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, std::pair<int64, int64> range, poplar::program::Sequence& seq,
+    int64_t input, std::pair<int64_t, int64_t> range,
+    poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id,
     bool expand_aliasing = true);
 
@@ -250,7 +251,8 @@ StatusOr<TensorVector> FindInstructionInputTensorsInRange(
  */
 TensorOrRemoteBufferVector FindInstructionInputsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, std::pair<int64, int64> range, poplar::program::Sequence& seq,
+    int64_t input, std::pair<int64_t, int64_t> range,
+    poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id,
     bool expand_aliasing = true);
 
@@ -259,7 +261,7 @@ TensorOrRemoteBufferVector FindInstructionInputsInRange(
  */
 StatusOr<DriverTensor> FindInstructionInput(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq,
+    int64_t input, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id,
     bool expand_aliasing = true);
 
@@ -286,7 +288,7 @@ StatusOr<DriverTensor> FindInstructionInput(
  */
 TensorOrRemoteBufferVector FindInstructionInputs(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq,
+    int64_t input, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id,
     bool expand_aliasing = true);
 
@@ -310,7 +312,7 @@ TensorOrRemoteBufferVector FindInstructionInputs(
  */
 StatusOr<TensorVector> FindInstructionInputTensors(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq,
+    int64_t input, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id,
     bool expand_aliasing = true);
 
@@ -357,11 +359,11 @@ StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
  */
 StatusOr<TensorVector> FindInstructionOutputTensorsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    std::pair<int64, int64> range);
+    std::pair<int64_t, int64_t> range);
 
 StatusOr<TensorOrRemoteBufferVector> FindInstructionOutputsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    std::pair<int64, int64> range);
+    std::pair<int64_t, int64_t> range);
 
 /* This returns a vector of all poplar tensors which are outputs of the inst
  * in range [range.first, range.second) - any aliasing is expanded - TODO
@@ -369,7 +371,7 @@ StatusOr<TensorOrRemoteBufferVector> FindInstructionOutputsInRange(
  */
 StatusOr<TensorVector> FindExpandedInstructionOutputsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    std::pair<int64, int64> range, poplar::program::Sequence& seq,
+    std::pair<int64_t, int64_t> range, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id);
 }  // namespace poplarplugin
 }  // namespace xla

@@ -75,12 +75,12 @@ class ZerosLikeOp : public XlaOpKernel, public IpuOpKernel {
     const xla::Shape& list_shape = list_shape_or.ValueOrDie();
     std::vector<std::vector<xla::XlaOp>> list_dynamic_dims;
     list_dynamic_dims.reserve(list_shape.tuple_shapes_size() - 1);
-    for (int64 i = 0; i < list_shape.tuple_shapes_size() - 1; ++i) {
+    for (int64_t i = 0; i < list_shape.tuple_shapes_size() - 1; ++i) {
       // Set dynamic dimension size to 0 for initialization value.
       std::vector<xla::XlaOp> dynamic_dims;
       const xla::Shape& shape = list_shape.tuple_shapes(i);
       auto sub_element = xla::GetTupleElement(list, i);
-      for (int64 dim = 0; dim < shape.dimensions_size(); ++dim) {
+      for (int64_t dim = 0; dim < shape.dimensions_size(); ++dim) {
         dynamic_dims.push_back(xla::GetDimensionSize(sub_element, dim));
       }
       list_dynamic_dims.push_back(dynamic_dims);
@@ -107,7 +107,7 @@ class ZerosLikeOp : public XlaOpKernel, public IpuOpKernel {
     auto result = xla::Broadcast(zero, input_shape.dimensions());
 
     // Setting up dynamic dimensions of the broadcast.
-    for (int64 i = 0; i < input_shape.dimensions_size(); ++i) {
+    for (int64_t i = 0; i < input_shape.dimensions_size(); ++i) {
       if (input_shape.is_dynamic_dimension(i)) {
         xla::XlaOp input_dynamic_dim = xla::GetDimensionSize(input, i);
         result = xla::SetDimensionSize(result, input_dynamic_dim, i);

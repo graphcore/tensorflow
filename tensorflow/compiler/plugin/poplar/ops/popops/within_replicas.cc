@@ -56,8 +56,8 @@ REGISTER_OP("IpuReduceScatterWithinReplica")
       const auto input_length = c->Value(d);
 
       const auto shard_count = c->num_inputs();
-      const int64 output_length =
-          MathUtil::CeilOfRatio<int64>(input_length, shard_count);
+      const int64_t output_length =
+          MathUtil::CeilOfRatio<int64_t>(input_length, shard_count);
 
       for (size_t i = 0; i < shard_count; ++i) {
         ::tensorflow::shape_inference::ShapeHandle input_shape;

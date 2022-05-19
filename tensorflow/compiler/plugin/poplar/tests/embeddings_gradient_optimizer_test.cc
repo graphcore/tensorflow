@@ -38,7 +38,7 @@ struct EmbeddingsGradientOptimizerTestSpec {
   int num_batches;
 
   bool changed;
-  int64 batch_serialization_iterations;
+  int64_t batch_serialization_iterations;
 
   PrimitiveType data_type;
   PrimitiveType gradient_accumulator_type;

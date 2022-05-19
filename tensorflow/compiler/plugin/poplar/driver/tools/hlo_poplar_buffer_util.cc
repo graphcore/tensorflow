@@ -27,14 +27,14 @@ namespace poplarplugin {
 HloPoplarUseDescriptions UseDescriptionsNoInputOutputAlias() { return {}; }
 
 HloPoplarUseDescriptions UseDescriptionsSimpleNoTupleAliasing(
-    const HloInstruction* inst, int64 num_operands, BufferUseKind kind) {
+    const HloInstruction* inst, int64_t num_operands, BufferUseKind kind) {
   auto is_tuple = [](const HloInstruction* inst) {
     return inst->shape().IsTuple();
   };
   CHECK(!is_tuple(inst));
   CHECK(!absl::c_any_of(inst->operands(), is_tuple));
   HloPoplarUseDescriptions outputs;
-  for (int64 i = 0; i != num_operands; ++i) {
+  for (int64_t i = 0; i != num_operands; ++i) {
     outputs.push_back(HloPoplarUseDescription{i, /*operand_index=*/ShapeIndex{},
                                               /*output_index=*/ShapeIndex{},
                                               kind});
@@ -48,7 +48,7 @@ HloPoplarUseDescriptions UseDescriptionsSimpleNoTuple0thOperandAliasing(
 }
 
 HloPoplarUseDescriptions UseDescriptionsForwardsBuffers(
-    const HloInstruction* inst, int64 num_operands, BufferUseKind kind) {
+    const HloInstruction* inst, int64_t num_operands, BufferUseKind kind) {
   if (!inst->shape().IsTuple()) {
     CHECK_EQ(num_operands, 1);
     return UseDescriptionsSimpleNoTuple0thOperandAliasing(inst, kind);
@@ -56,7 +56,7 @@ HloPoplarUseDescriptions UseDescriptionsForwardsBuffers(
 
   HloPoplarUseDescriptions outputs;
   CHECK_EQ(num_operands, ShapeUtil::TupleElementCount(inst->shape()));
-  for (int64 i = 0; i != num_operands; ++i) {
+  for (int64_t i = 0; i != num_operands; ++i) {
     const HloInstruction* operand = inst->operand(i);
     CHECK_EQ(ShapeUtil::GetSubshape(inst->shape(), ShapeIndex{i}),
              operand->shape());

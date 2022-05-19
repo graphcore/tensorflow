@@ -27,14 +27,14 @@ HloReplicationFactorInstruction::HloReplicationFactorInstruction()
                                {}),
           {}, PoplarOp::ReplicationFactor) {}
 
-absl::flat_hash_set<int64> HloReplicationFactorInstruction::AllocatingIndices()
-    const {
+absl::flat_hash_set<int64_t>
+HloReplicationFactorInstruction::AllocatingIndices() const {
   return {};
 }
 
 bool HloReplicationFactorInstruction::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloReplicationFactorInstruction::LayoutDependencies() const {
   return {};
 }
@@ -89,7 +89,7 @@ const HloInstruction* HloReplicationNormaliseInstruction::input() const {
   return operand(0);
 }
 
-absl::flat_hash_set<int64>
+absl::flat_hash_set<int64_t>
 HloReplicationNormaliseInstruction::AllocatingIndices() const {
   return {};
 }
@@ -98,7 +98,7 @@ bool HloReplicationNormaliseInstruction::AllocatingOutput() const {
   return false;
 }
 
-absl::flat_hash_map<int64, int64>
+absl::flat_hash_map<int64_t, int64_t>
 HloReplicationNormaliseInstruction::LayoutDependencies() const {
   return {};
 }

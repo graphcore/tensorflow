@@ -48,7 +48,7 @@ void PutValueIntoBuffer(char*& buffer, const PrimitiveType type, TValue value) {
     CONVERT_TO_TYPE(U16, uint16)
     CONVERT_TO_TYPE(S32, int32)
     CONVERT_TO_TYPE(U32, uint32)
-    CONVERT_TO_TYPE(S64, int64)
+    CONVERT_TO_TYPE(S64, int64_t)
     CONVERT_TO_TYPE(U64, uint64)
     CONVERT_TO_TYPE(F32, float)
     CONVERT_TO_TYPE(F16, Eigen::half)
@@ -81,7 +81,7 @@ void PutRandomUniformValueIntoBuffer(char*& buffer, const PrimitiveType type,
       GET_RANDOM_INT(U16, uint16)
       GET_RANDOM_INT(S32, int32)
       GET_RANDOM_INT(U32, uint32)
-      GET_RANDOM_INT(S64, int64)
+      GET_RANDOM_INT(S64, int64_t)
       GET_RANDOM_INT(U64, uint64)
 #undef GET_RANDOM_INT
     case F16:
@@ -162,11 +162,11 @@ StatusOr<Literal> DataInitializer::GetData(const Shape& shape) {
   auto flat_shape = ShapeUtil::MakeShape(type, {ShapeUtil::ElementsIn(shape)});
   auto flat_literal = Literal(flat_shape);
   char* dest_data = static_cast<char*>(flat_literal.untyped_data());
-  const int64 primitive_size = ShapeUtil::ByteSizeOfPrimitiveType(type);
+  const int64_t primitive_size = ShapeUtil::ByteSizeOfPrimitiveType(type);
 
   char* raw_ptr = new char[primitive_size];
   ShapeUtil::ForEachIndex(flat_shape,
-                          [&](absl::Span<const int64> output_index) {
+                          [&](absl::Span<const int64_t> output_index) {
                             CHECK_EQ(output_index.size(), 1);
                             GetValue(raw_ptr, type);
                             memcpy(dest_data + primitive_size * output_index[0],

@@ -22,8 +22,9 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-std::string GetInputCopyHandle(int64 parameter, int64 index);
-std::string GetOutputCopyHandle(int64 output_index, int64 flat_tensor_index);
+std::string GetInputCopyHandle(int64_t parameter, int64_t index);
+std::string GetOutputCopyHandle(int64_t output_index,
+                                int64_t flat_tensor_index);
 
 /*
  * The goal of this class is to categorize the inputs and outputs of the
@@ -54,7 +55,7 @@ class InputOutputAliasingMap {
 
     InputInfo() = delete;
     InputInfo(const Type type, const std::string& name, const Shape& shape,
-              int64 parameter_idx);
+              int64_t parameter_idx);
 
     void ChangeToResourceModified(uint64 output_index) {
       output_index_ = output_index;
@@ -68,12 +69,12 @@ class InputOutputAliasingMap {
     const bool IsResourceNotModified() const;
     const uint64 GetOutputIndex() const;
     const std::vector<std::string>& Handles() const;
-    const int64 GetParameterIndex() const;
+    const int64_t GetParameterIndex() const;
 
    private:
     Type type_;
     uint64 output_index_;
-    int64 parameter_index_;
+    int64_t parameter_index_;
     std::string name_;
     xla::Shape shape_;
     std::vector<std::string> handles_;
@@ -100,11 +101,11 @@ class InputOutputAliasingMap {
 
     OutputInfo() = delete;
     OutputInfo(const Type& type, const std::string& name, const Shape& shape,
-               int64 parameter_idx)
+               int64_t parameter_idx)
         : OutputInfo(type, name, shape, 0, parameter_idx) {}
 
     OutputInfo(const Type& type, const std::string& name, const Shape& shape,
-               const uint64 input_index, int64 parameter_idx);
+               const uint64 input_index, int64_t parameter_idx);
 
     const std::string& Name() const;
     const xla::Shape& Shape() const;

@@ -27,8 +27,8 @@ namespace poplarplugin {
 
 // Return a permutation vector to convert the input shape into
 // [Batch..., M..., Contracting...]
-std::vector<int64> LeftMatMulPermutations(const Shape& shape,
-                                          const DotDimensionNumbers& dot_dims);
+std::vector<int64_t> LeftMatMulPermutations(
+    const Shape& shape, const DotDimensionNumbers& dot_dims);
 // Return a permutation vector to convert the input shape into
 // [Batch..., M..., Contracting...]
 std::vector<unsigned> LeftMatMulPermutations(
@@ -36,8 +36,8 @@ std::vector<unsigned> LeftMatMulPermutations(
 
 // Return a permutation vector to convert the input shape into
 // [Batch..., Contracting..., N...]
-std::vector<int64> RightMatMulPermutations(const Shape& shape,
-                                           const DotDimensionNumbers& dot_dims);
+std::vector<int64_t> RightMatMulPermutations(
+    const Shape& shape, const DotDimensionNumbers& dot_dims);
 
 // Return a permutation vector to convert the input shape into
 // [Batch..., Contracting..., N...]
@@ -67,12 +67,12 @@ std::vector<size_t> RightMatMulPackShape(const absl::Span<const size_t>& shape,
 // The LHS XLA shapes need to be shuffled and collapsed to [Batch, M,
 // Contracting] This function returns the final shape, shuffled shape and
 // permutations.
-std::tuple<Shape, Shape, std::vector<int64>> LeftMatMulPrepare(
+std::tuple<Shape, Shape, std::vector<int64_t>> LeftMatMulPrepare(
     const Shape& shape, const DotDimensionNumbers& dot_dims);
 
 // The RHS XLA shapes need to be shuffled and collapsed to [Batch, Contracting,
 // N] This function returns the final shape, shuffled shape and permutations.
-std::tuple<Shape, Shape, std::vector<int64>> RightMatMulPrepare(
+std::tuple<Shape, Shape, std::vector<int64_t>> RightMatMulPrepare(
     const Shape& shape, const DotDimensionNumbers& dot_dims);
 
 }  // namespace poplarplugin

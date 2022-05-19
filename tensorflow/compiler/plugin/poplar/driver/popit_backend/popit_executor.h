@@ -32,7 +32,7 @@ namespace poplarplugin {
 class PopItExecutor : public se::internal::StreamExecutorInterface {
  public:
   Status Init(int device_ordinal, se::DeviceOptions device_options) override;
-  se::DeviceMemoryBase Allocate(uint64 size, int64 memory_space) override;
+  se::DeviceMemoryBase Allocate(uint64 size, int64_t memory_space) override;
   void* GetSubBuffer(se::DeviceMemoryBase* parent, uint64 offset,
                      uint64 size) override;
   void Deallocate(se::DeviceMemoryBase* mem) override;

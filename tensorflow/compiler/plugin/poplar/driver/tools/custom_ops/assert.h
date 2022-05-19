@@ -28,9 +28,9 @@ class HloAssert : public HloPoplarInstruction {
  public:
   explicit HloAssert(HloInstruction* predicate);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
 
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
 
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override;

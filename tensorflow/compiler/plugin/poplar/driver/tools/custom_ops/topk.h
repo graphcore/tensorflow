@@ -24,18 +24,18 @@ namespace poplarplugin {
 
 class HloTopK : public HloPoplarInstruction {
  public:
-  explicit HloTopK(HloInstruction* input, const Shape outputShape, int64 num_k,
-                   bool sorted);
+  explicit HloTopK(HloInstruction* input, const Shape outputShape,
+                   int64_t num_k, bool sorted);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_set<int64_t> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
 
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  absl::flat_hash_map<int64_t, int64_t> LayoutDependencies() const override;
 
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
-  int64 NumK() const { return num_k; }
+  int64_t NumK() const { return num_k; }
   bool ShouldBeSorted() const { return sorted; }
 
   const FindConsumersExtensionResults FindConsumers(
@@ -54,14 +54,15 @@ class HloTopK : public HloPoplarInstruction {
       HloCloneContext*) const override;
 
   // The "K" number of elements to return.
-  int64 num_k;
+  int64_t num_k;
 
   // If true the output should be sorted.
   bool sorted;
 };
 
 std::unique_ptr<HloInstruction> CreateHloTopK(HloInstruction* input,
-                                              const Shape& shape, int64 num_k);
+                                              const Shape& shape,
+                                              int64_t num_k);
 
 }  // namespace poplarplugin
 }  // namespace xla

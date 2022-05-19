@@ -105,7 +105,7 @@ static const std::vector<HloMatcherPattern> patterns = {
 
 // Function which is callled when creating a slice.
 using SliceApplyFn = std::function<StatusOr<HloInstruction*>(
-    HloOpcode, HloInstruction* const, HloInstruction* const, int64, int64)>;
+    HloOpcode, HloInstruction* const, HloInstruction* const, int64_t, int64_t)>;
 
 StatusOr<HloInstruction*> ConvertToSliceApplyBase(HloOpcode opcode,
                                                   HloInstruction* const input,
@@ -116,8 +116,8 @@ StatusOr<HloInstruction*> ConvertToSliceApplyBase(HloOpcode opcode,
         "Expected the update to be a concatenate instruction");
   }
   HloInstruction* output = input;
-  int64 start_index = 0;
-  const int64 apply_dimension = update->concatenate_dimension();
+  int64_t start_index = 0;
+  const int64_t apply_dimension = update->concatenate_dimension();
   for (HloInstruction* update_slice : update->operands()) {
     TF_ASSIGN_OR_RETURN(
         output, fn(opcode, output, update_slice, apply_dimension, start_index));
@@ -184,8 +184,8 @@ StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApply(
   return ConvertToSliceApplyBase(
       opcode, input, update,
       [](HloOpcode opcode, HloInstruction* const input,
-         HloInstruction* const update_slice, int64 apply_dimension,
-         int64 start_index) -> StatusOr<HloInstruction*> {
+         HloInstruction* const update_slice, int64_t apply_dimension,
+         int64_t start_index) -> StatusOr<HloInstruction*> {
         HloInstruction* output = input;
         // We can skip this update if the slice is just zeros.
         if (!IsWideConstantZero(update_slice)) {
@@ -202,8 +202,9 @@ StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApplyabY(
   return ConvertToSliceApplyBase(
       opcode, input, update,
       [scale_update](HloOpcode opcode, HloInstruction* const input,
-                     HloInstruction* const update_slice, int64 apply_dimension,
-                     int64 start_index) -> StatusOr<HloInstruction*> {
+                     HloInstruction* const update_slice,
+                     int64_t apply_dimension,
+                     int64_t start_index) -> StatusOr<HloInstruction*> {
         HloInstruction* output = input;
         // We can skip this update if the slice is just zeros.
         if (!IsWideConstantZero(update_slice)) {
@@ -221,8 +222,8 @@ StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApplyaXb(
   return ConvertToSliceApplyBase(
       opcode, input, update,
       [scale_input](HloOpcode opcode, HloInstruction* const input,
-                    HloInstruction* const update_slice, int64 apply_dimension,
-                    int64 start_index) -> StatusOr<HloInstruction*> {
+                    HloInstruction* const update_slice, int64_t apply_dimension,
+                    int64_t start_index) -> StatusOr<HloInstruction*> {
         // TODO(T19611) when the update slice is all zeros, just create a scalar
         // multiply on the part of the input.
         return input->parent()->AddInstruction(
@@ -238,8 +239,8 @@ StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApplyaXbY(
       opcode, input, update,
       [scale_input, scale_update](
           HloOpcode opcode, HloInstruction* const input,
-          HloInstruction* const update_slice, int64 apply_dimension,
-          int64 start_index) -> StatusOr<HloInstruction*> {
+          HloInstruction* const update_slice, int64_t apply_dimension,
+          int64_t start_index) -> StatusOr<HloInstruction*> {
         // TODO(T19611) when the update slice is all zeros, just create a scalar
         // multiply on the part of the input.
         return input->parent()->AddInstruction(
@@ -252,7 +253,7 @@ SliceOptimizer::SliceOptimizer(CompilerAnnotations& annotations)
     : HloMatcher(patterns, annotations, false, false) {}
 
 StatusOr<bool> SliceOptimizer::HandleMatch(HloMatcherMatched& match,
-                                           const absl::optional<int64>) {
+                                           const absl::optional<int64_t>) {
   TF_RETURN_IF_ERROR(ReplaceMatch(match));
   return true;
 }

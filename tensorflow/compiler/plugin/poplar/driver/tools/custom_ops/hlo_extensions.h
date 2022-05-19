@@ -32,9 +32,9 @@ struct FindConsumersExtensionParams {
   FindConsumersExtensionParams() = delete;
   const TensorLocation& src;
   const HloInstruction* tgt;
-  int64 index;
-  int64 op_index;
-  absl::optional<std::vector<int64>> permutation;
+  int64_t index;
+  int64_t op_index;
+  absl::optional<std::vector<int64_t>> permutation;
 };
 
 enum class DoFindConsumers {
@@ -46,8 +46,8 @@ enum class DoFindConsumers {
 struct FindConsumersExtensionResults {
   DoFindConsumers do_find_consumers;
   const HloInstruction* tgt;
-  int64 index;
-  absl::optional<std::vector<int64>> permutation;
+  int64_t index;
+  absl::optional<std::vector<int64_t>> permutation;
 
   FindConsumersExtensionResults()
       : do_find_consumers(DoFindConsumers::UNSPECIFIED),
@@ -55,9 +55,9 @@ struct FindConsumersExtensionResults {
         index(-1),
         permutation(absl::nullopt) {}
 
-  FindConsumersExtensionResults(bool do_find_consumers,
-                                const HloInstruction* tgt, int64 index,
-                                absl::optional<std::vector<int64>> permutation)
+  FindConsumersExtensionResults(
+      bool do_find_consumers, const HloInstruction* tgt, int64_t index,
+      absl::optional<std::vector<int64_t>> permutation)
       : do_find_consumers(do_find_consumers ? DoFindConsumers::TRUE
                                             : DoFindConsumers::FALSE),
         tgt(tgt),

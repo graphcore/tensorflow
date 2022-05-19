@@ -27,13 +27,14 @@ HloStatefulNoop::HloStatefulNoop()
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64> HloStatefulNoop::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloStatefulNoop::AllocatingIndices() const {
   return {};
 }
 
 bool HloStatefulNoop::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloStatefulNoop::LayoutDependencies() const {
+absl::flat_hash_map<int64_t, int64_t> HloStatefulNoop::LayoutDependencies()
+    const {
   return {};
 }
 

@@ -36,7 +36,7 @@ StatusOr<std::unique_ptr<HloInstruction>> FoldConvInputPad(
     const auto& padding = lhs->padding_config();
 
     // Can't pad batch or feature dims.
-    for (int64 dim :
+    for (int64_t dim :
          {dnums.input_batch_dimension(), dnums.input_feature_dimension()}) {
       const auto& p = padding.dimensions(dim);
       if (p.edge_padding_low() != 0 || p.edge_padding_high() != 0 ||
@@ -48,7 +48,7 @@ StatusOr<std::unique_ptr<HloInstruction>> FoldConvInputPad(
     // Compute the window which is the result of merging the kPad and the
     // convolution's existing window.
     Window new_window = window;
-    for (int64 dim = 0; dim < dnums.input_spatial_dimensions_size(); ++dim) {
+    for (int64_t dim = 0; dim < dnums.input_spatial_dimensions_size(); ++dim) {
       auto& w = *new_window.mutable_dimensions(dim);
       const auto& p = padding.dimensions(dnums.input_spatial_dimensions(dim));
       // Edge padding composes with itself in the straightforward way, but
@@ -102,8 +102,8 @@ StatusOr<std::unique_ptr<HloInstruction>> FoldConvFilterPad(
   const auto& padding = rhs->padding_config();
 
   // Can't pad or dilate feature dims.
-  for (int64 dim : {dnums.kernel_input_feature_dimension(),
-                    dnums.kernel_output_feature_dimension()}) {
+  for (int64_t dim : {dnums.kernel_input_feature_dimension(),
+                      dnums.kernel_output_feature_dimension()}) {
     const auto& p = padding.dimensions(dim);
     if (p.edge_padding_low() != 0 || p.edge_padding_high() != 0 ||
         p.interior_padding() != 0) {
@@ -114,7 +114,7 @@ StatusOr<std::unique_ptr<HloInstruction>> FoldConvFilterPad(
   // Compute the window which is the result of merging the kPad and the
   // convolution's existing window.
   Window new_window = convolution->window();
-  for (int64 dim = 0; dim < dnums.kernel_spatial_dimensions_size(); ++dim) {
+  for (int64_t dim = 0; dim < dnums.kernel_spatial_dimensions_size(); ++dim) {
     auto& w = *new_window.mutable_dimensions(dim);
     const auto& p = padding.dimensions(dnums.kernel_spatial_dimensions(dim));
 

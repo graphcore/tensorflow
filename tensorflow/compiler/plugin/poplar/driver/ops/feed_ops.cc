@@ -51,7 +51,7 @@ poplar::Tensor CreateTemporary(
 }
 
 Status CreatePoplarH2DFIFO(
-    CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
+    CompilerResources& res, const HloInstruction* inst, int64_t tuple_index,
     const Shape& shape,
     const xla::poplarplugin::PoplarFeedConfig& infeed_config,
     const std::string& handle, poplar::Graph& graph,
@@ -87,7 +87,7 @@ Status CreatePoplarH2DFIFO(
 }
 
 Status CreateReusablePoplarH2DFIFO(
-    CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
+    CompilerResources& res, const HloInstruction* inst, int64_t tuple_index,
     const Shape& shape,
     const xla::poplarplugin::PoplarFeedConfig& infeed_config,
     const std::string& handle, poplar::Graph& graph,
@@ -124,7 +124,7 @@ Status CreateReusablePoplarH2DFIFO(
 }
 
 Status CreatePoplarD2HFIFO(
-    CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
+    CompilerResources& res, const HloInstruction* inst, int64_t tuple_index,
     const xla::poplarplugin::PoplarFeedConfig& outfeed_config,
     const std::string& handle, poplar::Graph& graph, poplar::Tensor& in,
     ExternalAndLocalTransferSequence& seqs,
@@ -160,7 +160,7 @@ Status CreatePoplarD2HFIFO(
 }
 
 Status CreateReusablePoplarD2HFIFO(
-    CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
+    CompilerResources& res, const HloInstruction* inst, int64_t tuple_index,
     const xla::poplarplugin::PoplarFeedConfig& outfeed_config,
     const std::string& handle, DriverGraph& graph, poplar::Tensor& in,
     ExternalAndLocalTransferSequence& seqs,
@@ -202,7 +202,7 @@ Status CreateReusablePoplarD2HFIFO(
 }  // namespace
 
 StatusOr<ExternalAndLocalTransferSequence> CreateInfeed(
-    CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
+    CompilerResources& res, const HloInstruction* inst, int64_t tuple_index,
     const xla::Shape& shape, poplar::Tensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);

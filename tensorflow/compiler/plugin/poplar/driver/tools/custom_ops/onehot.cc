@@ -23,8 +23,9 @@ namespace xla {
 namespace poplarplugin {
 
 // Constructor.
-HloOneHotInstruction::HloOneHotInstruction(HloInstruction* indices, int64 depth,
-                                           int32 axis, HloInstruction* on,
+HloOneHotInstruction::HloOneHotInstruction(HloInstruction* indices,
+                                           int64_t depth, int32 axis,
+                                           HloInstruction* on,
                                            HloInstruction* off,
                                            const Shape shape)
     : HloPoplarInstruction(shape, {indices, on, off}, PoplarOp::OneHot, depth,
@@ -32,13 +33,13 @@ HloOneHotInstruction::HloOneHotInstruction(HloInstruction* indices, int64 depth,
       depth_(depth),
       axis_(axis) {}
 
-absl::flat_hash_set<int64> HloOneHotInstruction::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloOneHotInstruction::AllocatingIndices() const {
   return {};
 }
 
 bool HloOneHotInstruction::AllocatingOutput() const { return true; }
 
-absl::flat_hash_map<int64, int64> HloOneHotInstruction::LayoutDependencies()
+absl::flat_hash_map<int64_t, int64_t> HloOneHotInstruction::LayoutDependencies()
     const {
   return {};
 }
@@ -63,7 +64,7 @@ bool HloOneHotInstruction::IsPopOpsElementwise() const { return false; }
 
 // Creates an instance of a HloOneHotInstruction
 std::unique_ptr<HloInstruction> CreateOneHot(HloInstruction* indices,
-                                             int64 depth, int32 axis,
+                                             int64_t depth, int32 axis,
                                              HloInstruction* on,
                                              HloInstruction* off,
                                              const Shape& shape) {
@@ -96,10 +97,11 @@ static HloPoplarInstructionFactory onehot_factory(
         -> StatusOr<std::unique_ptr<HloInstruction>> {
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
 
-      TF_ASSIGN_OR_RETURN(int64 depth,
+      TF_ASSIGN_OR_RETURN(int64_t depth,
                           attribute_map.GetAttributeAsInt("depth"));
 
-      TF_ASSIGN_OR_RETURN(int64 axis, attribute_map.GetAttributeAsInt("axis"));
+      TF_ASSIGN_OR_RETURN(int64_t axis,
+                          attribute_map.GetAttributeAsInt("axis"));
 
       return CreateOneHot(call->mutable_operand(0), depth, axis,
                           call->mutable_operand(1), call->mutable_operand(2),

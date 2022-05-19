@@ -40,7 +40,7 @@ struct TensorTarget {
   const HloInstruction* tgt;
 
   // The input on the target node which consumes the tensor
-  int64 input_index;
+  int64_t input_index;
 
   // A node in the graph which produces a tensor that influences the
   // construction of the tensor.  Example: bias tensors should match the layout
@@ -49,7 +49,7 @@ struct TensorTarget {
 
   // Layout can have multiple output tensors - this index identifies which
   // output tensor to use.
-  absl::optional<int64> layout_output_idx;
+  absl::optional<int64_t> layout_output_idx;
 
   // A vector of operations between the source and target operations.  Sometimes
   // it is possible to allocate a tensor for consumption by a target, and then
@@ -65,21 +65,21 @@ struct TensorTarget {
   // Optional permutation of the dimensions at the input to the dimensions at
   // the allocation location created by traversing the path from the input to
   // the allocation.
-  absl::optional<std::vector<int64>> permutation;
+  absl::optional<std::vector<int64_t>> permutation;
 
   // Optional indicator for requesting a particular input dimension to be
   // sliceable.
-  absl::optional<int64> sliceable_dimension = absl::nullopt;
+  absl::optional<int64_t> sliceable_dimension = absl::nullopt;
 
   // Set of instructions which use compatible plans/allocated tensors.
   absl::flat_hash_set<const HloInstruction*> compatible_slice_plans;
 
-  TensorTarget(const HloInstruction* tgt, int64 input_index,
+  TensorTarget(const HloInstruction* tgt, int64_t input_index,
                absl::optional<const HloInstruction*> layout,
-               absl::optional<int64> layout_output_idx,
+               absl::optional<int64_t> layout_output_idx,
                const std::vector<const HloInstruction*>& forward_path = {},
                const std::vector<const HloInstruction*>& backward_path = {},
-               absl::optional<std::vector<int64>> permutation = absl::nullopt)
+               absl::optional<std::vector<int64_t>> permutation = absl::nullopt)
       : tgt(tgt),
         input_index(input_index),
         layout(layout),
@@ -88,9 +88,9 @@ struct TensorTarget {
         backward_path(backward_path),
         permutation(permutation) {}
 
-  TensorTarget(const HloInstruction* tgt, int64 input_index,
+  TensorTarget(const HloInstruction* tgt, int64_t input_index,
                const std::vector<const HloInstruction*>& backward_path = {},
-               absl::optional<std::vector<int64>> permutation = absl::nullopt)
+               absl::optional<std::vector<int64_t>> permutation = absl::nullopt)
       : TensorTarget(tgt, input_index, absl::nullopt, absl::nullopt, {},
                      backward_path, permutation) {}
 
@@ -126,18 +126,18 @@ class AllocationFinder : public HloModulePass {
                                   const TensorTarget& inferred_target) const;
 
   TensorTarget InferTarget(
-      int64 index, const absl::optional<std::vector<int64>>& permutation,
+      int64_t index, const absl::optional<std::vector<int64_t>>& permutation,
       const TensorTarget& tgt_tensor_target,
       std::vector<const HloInstruction*>& path) const;
 
   void FindAllocation(const TensorLocation& location, const Shape& shape);
 
-  void FindConsumers(const TensorLocation&, const HloInstruction* tgt, int64,
-                     absl::optional<std::vector<int64>>,
+  void FindConsumers(const TensorLocation&, const HloInstruction* tgt, int64_t,
+                     absl::optional<std::vector<int64_t>>,
                      std::vector<const HloInstruction*>&,
                      absl::flat_hash_set<TensorLocation>&);
 
-  int64 GetAllocationPriority(const TensorTarget& target) const;
+  int64_t GetAllocationPriority(const TensorTarget& target) const;
 
   // Should return true when target 'a' should be used over 'b'
   bool ReplaceTarget(const TensorTarget& a, const TensorTarget& b) const;

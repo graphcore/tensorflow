@@ -49,10 +49,10 @@ Literal CreateScalarLiteral(PrimitiveType type, int32 value) {
 }
 
 struct DynamicSliceTestSpec {
-  DynamicSliceTestSpec(const std::vector<int64>& to_slice_shape,
-                       const std::vector<int64>& slice_shape,
-                       const std::vector<int64>& slice_start_indices,
-                       const std::vector<int64>& constant_slice_dims,
+  DynamicSliceTestSpec(const std::vector<int64_t>& to_slice_shape,
+                       const std::vector<int64_t>& slice_shape,
+                       const std::vector<int64_t>& slice_start_indices,
+                       const std::vector<int64_t>& constant_slice_dims,
                        bool use_half, bool use_signed)
       : to_slice_shape(to_slice_shape),
         slice_shape(slice_shape),
@@ -61,10 +61,10 @@ struct DynamicSliceTestSpec {
         use_half(use_half),
         use_signed(use_signed) {}
 
-  const std::vector<int64> to_slice_shape;
-  const std::vector<int64> slice_shape;
-  const std::vector<int64> slice_start_indices;
-  const std::vector<int64> constant_slice_dims;
+  const std::vector<int64_t> to_slice_shape;
+  const std::vector<int64_t> slice_shape;
+  const std::vector<int64_t> slice_start_indices;
+  const std::vector<int64_t> constant_slice_dims;
   bool use_half;
   bool use_signed;
 
@@ -219,9 +219,9 @@ POPLAR_TEST_P(DynamicUpdateSliceTest, DoIt) {
   Literal result = Execute(std::move(module), inputs).ValueOrDie();
   Literal expected = std::move(test_case.input);
   size_t num_dims = spec.slice_shape.size();
-  std::vector<int64> zeros(num_dims, 0);
-  std::vector<int64> slice_starts(num_dims, 0);
-  std::vector<int64> slice_sizes = spec.slice_shape;
+  std::vector<int64_t> zeros(num_dims, 0);
+  std::vector<int64_t> slice_starts(num_dims, 0);
+  std::vector<int64_t> slice_sizes = spec.slice_shape;
   size_t num_sliced_dims = 0;
   for (size_t dim = 0; dim != num_dims; ++dim) {
     if (spec.to_slice_shape[dim] != spec.slice_shape[dim]) {
@@ -255,8 +255,8 @@ POPLAR_TEST_P(DynamicSliceTest, DoIt) {
       [](const Literal& literal) { return const_cast<Literal*>(&literal); });
   Literal result = Execute(std::move(module), inputs).ValueOrDie();
   size_t num_dims = spec.slice_shape.size();
-  std::vector<int64> slice_starts(num_dims, 0);
-  std::vector<int64> slice_ends = spec.to_slice_shape;
+  std::vector<int64_t> slice_starts(num_dims, 0);
+  std::vector<int64_t> slice_ends = spec.to_slice_shape;
   size_t num_sliced_dims = 0;
   for (size_t dim = 0; dim != num_dims; ++dim) {
     if (spec.to_slice_shape[dim] != spec.slice_shape[dim]) {

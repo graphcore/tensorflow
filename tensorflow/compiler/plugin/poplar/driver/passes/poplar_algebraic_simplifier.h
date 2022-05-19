@@ -68,8 +68,8 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   friend StatusOr<HloInstruction*>
   xla::poplarplugin::algebraic_simplifier::dot::OptimizeDotOfConcatHelper(
       AlgebraicSimplifierVisitor* visitor, const HloInstruction& dot,
-      HloInstruction* lhs, int64 lhs_contracting_dim, HloInstruction* rhs,
-      int64 rhs_contracting_dim, bool swapped);
+      HloInstruction* lhs, int64_t lhs_contracting_dim, HloInstruction* rhs,
+      int64_t rhs_contracting_dim, bool swapped);
 
   friend StatusOr<HloInstruction*>
   xla::poplarplugin::algebraic_simplifier::dot::OptimizeDotOfGather(
@@ -174,7 +174,7 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   bool Run(HloComputation* computation, PoplarAlgebraicSimplifier* simplifier);
 
  private:
-  HloInstruction* AddReduce(HloInstruction* hlo, absl::Span<const int64> dims,
+  HloInstruction* AddReduce(HloInstruction* hlo, absl::Span<const int64_t> dims,
                             PrimitiveType type);
 
   // Converts to primitive type if the input hlo is not that type, otherwise
@@ -204,8 +204,9 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   // Dot product helper functions.
   StatusOr<HloInstruction*> OptimizeDotOfConcat(HloInstruction* dot);
   StatusOr<HloInstruction*> OptimizeDotOfConcatHelper(
-      const HloInstruction& dot, HloInstruction* lhs, int64 lhs_contracting_dim,
-      HloInstruction* rhs, int64 rhs_contracting_dim, bool swapped);
+      const HloInstruction& dot, HloInstruction* lhs,
+      int64_t lhs_contracting_dim, HloInstruction* rhs,
+      int64_t rhs_contracting_dim, bool swapped);
   StatusOr<HloInstruction*> OptimizeDotOfGather(HloInstruction* dot);
   StatusOr<HloInstruction*> OptimizeDotOfReorderContractingDims(
       HloInstruction* dot);

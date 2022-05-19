@@ -50,8 +50,9 @@ class IpuSendToHostOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("recv_device", &recv_device));
     uint64 send_device_incarnation;
     OP_REQUIRES_OK(
-        ctx, ctx->GetAttr("send_device_incarnation",
-                          reinterpret_cast<int64*>(&send_device_incarnation)));
+        ctx,
+        ctx->GetAttr("send_device_incarnation",
+                     reinterpret_cast<int64_t*>(&send_device_incarnation)));
     string tensor_name;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("tensor_name", &tensor_name));
 
@@ -101,8 +102,9 @@ class IpuRecvAtHostOp : public AsyncOpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("recv_device", &recv_device));
     uint64 send_device_incarnation;
     OP_REQUIRES_OK(
-        ctx, ctx->GetAttr("send_device_incarnation",
-                          reinterpret_cast<int64*>(&send_device_incarnation)));
+        ctx,
+        ctx->GetAttr("send_device_incarnation",
+                     reinterpret_cast<int64_t*>(&send_device_incarnation)));
     string tensor_name;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("tensor_name", &tensor_name));
 

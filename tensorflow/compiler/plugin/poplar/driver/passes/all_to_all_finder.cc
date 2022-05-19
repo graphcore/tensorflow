@@ -147,8 +147,8 @@ static HloInstruction* AddAllGatherAndReshape(HloInstruction* original,
   HloComputation* comp = original->parent();
   // Extend the old shape to include the replication factor.
   auto original_dims = original->shape().dimensions();
-  std::vector<int64> new_update_dims(original_dims.begin(),
-                                     original_dims.end());
+  std::vector<int64_t> new_update_dims(original_dims.begin(),
+                                       original_dims.end());
   new_update_dims.insert(new_update_dims.begin(), replication_factor);
 
   // Create the new update output shape.
@@ -177,20 +177,20 @@ static bool IsSwapCostEffective(HloInstruction* multi_update,
                                 uint32 replication_factor) {
   // Get the shape and size of the updates which are sent by the multi_update.
   const Shape& updates_shape = multi_update->operand(2)->shape();
-  const int64 updates_size = ShapeUtil::ByteSizeOf(updates_shape);
+  const int64_t updates_size = ShapeUtil::ByteSizeOf(updates_shape);
 
   // Get the shape of the indices.
   const Shape& indices_shape = multi_update->operand(1)->shape();
-  const int64 indices_size = ShapeUtil::ByteSizeOf(indices_shape);
+  const int64_t indices_size = ShapeUtil::ByteSizeOf(indices_shape);
 
   // This is how much data each replica would send if we do the optimization.
-  const int64 size_sent_by_opt =
+  const int64_t size_sent_by_opt =
       replication_factor * (updates_size + indices_size);
 
   // Get the size of the data which would be send if we don't do the
   // optimization.
   const Shape& all_reduce_shape = all_reduce->shape();
-  const int64 all_reduce_size = ShapeUtil::ByteSizeOf(all_reduce_shape);
+  const int64_t all_reduce_size = ShapeUtil::ByteSizeOf(all_reduce_shape);
 
   VLOG(3) << "Seeing if cost of performing all reduce of "
           << all_reduce->ToString()
@@ -260,7 +260,7 @@ AllToAllFinder::AllToAllFinder(CompilerAnnotations& annotations,
       HloMatcher(patterns, annotations, false, false) {}
 
 StatusOr<bool> AllToAllFinder::HandleMatch(HloMatcherMatched& match,
-                                           const absl::optional<int64>) {
+                                           const absl::optional<int64_t>) {
   const auto& instr_indices = match.pattern.GetType().find("reduce_mean_") == 0
                                   ? reduce_mean_indices
                                   : reduce_add_indices;

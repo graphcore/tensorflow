@@ -14,26 +14,27 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/while_loop_util.h"
+
+#include <map>
+#include <set>
+#include <utility>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
-#include <map>
-#include <set>
-
 namespace xla {
 namespace poplarplugin {
 namespace {
 
-StatusOr<int64> GetLoopDelta(const HloInstruction* delta) {
+StatusOr<int64_t> GetLoopDelta(const HloInstruction* delta) {
   if (delta->opcode() == HloOpcode::kConstant) {
     if (WhileLoopUtil::CanRepresentInstructionAsInt64Constant(delta)) {
-      TF_ASSIGN_OR_RETURN(int64 delta_value,
-                          LiteralScalarToNativeType<int64>(delta->literal()));
+      TF_ASSIGN_OR_RETURN(int64_t delta_value,
+                          LiteralScalarToNativeType<int64_t>(delta->literal()));
       if (std::llabs(delta_value) == 1) {
         return delta_value;
       }
@@ -43,8 +44,9 @@ StatusOr<int64> GetLoopDelta(const HloInstruction* delta) {
              delta->operand(0)->opcode() == HloOpcode::kConstant) {
     const HloInstruction* constant = delta->operand(0);
     if (WhileLoopUtil::CanRepresentInstructionAsInt64Constant(constant)) {
-      TF_ASSIGN_OR_RETURN(int64 delta_value, LiteralScalarToNativeType<int64>(
-                                                 constant->literal()));
+      TF_ASSIGN_OR_RETURN(
+          int64_t delta_value,
+          LiteralScalarToNativeType<int64_t>(constant->literal()));
       if (std::llabs(delta_value) == 1) {
         return -delta_value;
       }
@@ -56,7 +58,7 @@ StatusOr<int64> GetLoopDelta(const HloInstruction* delta) {
 // Returns a the delta counter if this instruction is incremented/decremented
 // by (-)1 - simplify it so that it's always an add - for example subtracting 1
 // is the same as adding -1.
-absl::optional<int64> GetLoopCounter(const HloInstruction* loop_counter) {
+absl::optional<int64_t> GetLoopCounter(const HloInstruction* loop_counter) {
   // Loop delta cases
   if (loop_counter->opcode() == HloOpcode::kAdd) {
     // For addition, a loop delta can be either LHS or RHS
@@ -80,7 +82,7 @@ absl::optional<int64> GetLoopCounter(const HloInstruction* loop_counter) {
 }  // namespace
 
 bool WhileLoopUtil::IsGTEFromParamIndex(const HloInstruction* inst,
-                                        int64 param_index) {
+                                        int64_t param_index) {
   return inst->opcode() == HloOpcode::kGetTupleElement &&
          inst->operand(0)->opcode() == HloOpcode::kParameter &&
          inst->operand(0)->parameter_number() == param_index;
@@ -94,11 +96,11 @@ bool WhileLoopUtil::CanRepresentInstructionAsInt64Constant(
           inst->shape().element_type() == S64);
 }
 
-std::vector<std::pair<HloInstruction*, int64>>
+std::vector<std::pair<HloInstruction*, int64_t>>
 WhileLoopUtil::FindMatchingLoopDeltasInsideBody(
     const HloInstruction* inst, const HloComputation* while_body) {
   CHECK_EQ(inst->opcode(), HloOpcode::kGetTupleElement);
-  std::vector<std::pair<HloInstruction*, int64>> ret;
+  std::vector<std::pair<HloInstruction*, int64_t>> ret;
 
   // Check that the GTE is on a tuple that is only used by GTEs.
   const HloInstruction* tuple = inst->operand(0);
@@ -108,7 +110,7 @@ WhileLoopUtil::FindMatchingLoopDeltasInsideBody(
     return ret;
   }
 
-  const int64 tuple_index_cond = inst->tuple_index();
+  const int64_t tuple_index_cond = inst->tuple_index();
   for (HloInstruction* user : inst->users()) {
     // Check whether this is a loop counter.
     auto optional_loop_counter = GetLoopCounter(user);

@@ -63,6 +63,16 @@
           "script-and-regex.script": "sh -c '{ ./.linters/buildifier -lint warn -mode check $0 2>&1 ; ./.linters/buildifier -mode fix -lint fix $0;} || true'",
           "script-and-regex.regex": "/^(?P<file>[^ :]*)(( # )|(:(?P<line>[^:]+): ))(?P<name>[^:]+)(: (?P<message>.*))?$/m"
         },
+        "int64": {
+          "type": "script-and-regex",
+          "include": [
+            "(^tensorflow/compiler/plugin/poplar/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)",
+            "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)",
+            "(^third_party/ipus/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)"
+          ],
+          "script-and-regex.script": "python3 ../scripts/lint_int64.py",
+          "script-and-regex.regex": "/^(?P<message>.*)\n(?P<severity>AUTOFIX)\n(?P<file>.*)\n(?P<line>[0-9]+)\n(?P<char>[0-9]+)\n(?P<original>int64)\n(?P<replacement>int64_t)/m"
+        },
         "gc-copyright": {
             "type": "gc-copyright",
             "gc-copyright.script_path": "../../../../scripts/check_copyright.py",

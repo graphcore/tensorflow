@@ -64,7 +64,7 @@ class ReplicatedResourceUpdateElementwiseClustering final
                                             HloComputation::Builder* builder);
 
   StatusOr<HloInstruction*> AddClusterInput(
-      int64 param_idx, const ElementwiseCluster& cluster,
+      int64_t param_idx, const ElementwiseCluster& cluster,
       HloInstruction* cluster_input, HloComputation::Builder* builder,
       HloCloneContext* context) const override;
 

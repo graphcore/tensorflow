@@ -29,11 +29,11 @@ HloSeed::HloSeed(const Shape& shape)
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64> HloSeed::AllocatingIndices() const { return {}; }
+absl::flat_hash_set<int64_t> HloSeed::AllocatingIndices() const { return {}; }
 
 bool HloSeed::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloSeed::LayoutDependencies() const {
+absl::flat_hash_map<int64_t, int64_t> HloSeed::LayoutDependencies() const {
   return {};
 }
 

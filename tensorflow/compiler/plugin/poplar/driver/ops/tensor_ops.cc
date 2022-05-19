@@ -214,7 +214,7 @@ StatusOr<DriverProgramSequence> CreateIota(
   const auto iota_dimension = iota_inst->iota_dimension();
 
   // Get iota length.
-  const int64 iota_length = output_shape.dimensions(iota_dimension);
+  const int64_t iota_length = output_shape.dimensions(iota_dimension);
   switch (output_shape.element_type()) {
     case S64: {
       if (!convert_scalar<int32>(iota_length)) {
@@ -308,7 +308,7 @@ StatusOr<DriverProgramSequence> CreateSlice(
   }
   std::vector<size_t> end = *optional_end;
 
-  std::vector<int64> strides(inst->slice_strides());
+  std::vector<int64_t> strides(inst->slice_strides());
   bool simple(true);
   for (std::size_t s : strides) {
     simple &= (s == 1);
@@ -317,7 +317,7 @@ StatusOr<DriverProgramSequence> CreateSlice(
     input = input.slice(begin, end);
   } else {
     for (size_t d = 0; d < strides.size(); d++) {
-      int64 s = strides[d];
+      int64_t s = strides[d];
       if (s > 0) {
         input = input.slice(begin[d], end[d], d);
         input = input.subSample(strides[d], d);

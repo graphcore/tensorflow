@@ -32,19 +32,19 @@ class SeedGenerator {
   virtual ~SeedGenerator() = default;
 
   // Prepare `replication_factor` seeds to draw from.
-  virtual void PrepareSeedsForReplicas(int64 replication_factor) = 0;
+  virtual void PrepareSeedsForReplicas(int64_t replication_factor) = 0;
 
   // Get the seed value for the `replica_idx` IPU replica device.
-  virtual uint64 Get(int64 replica_idx) const = 0;
+  virtual uint64 Get(int64_t replica_idx) const = 0;
 };
 
 class DistinctReplicaSeedGenerator : public SeedGenerator {
  public:
   explicit DistinctReplicaSeedGenerator(unsigned seed);
 
-  void PrepareSeedsForReplicas(int64 replication_factor) override;
+  void PrepareSeedsForReplicas(int64_t replication_factor) override;
 
-  uint64 Get(int64 replica_idx) const override;
+  uint64 Get(int64_t replica_idx) const override;
 
  private:
   // The next value for each replica.
@@ -58,9 +58,9 @@ class IdenticalReplicaSeedGenerator : public SeedGenerator {
  public:
   explicit IdenticalReplicaSeedGenerator(unsigned seed);
 
-  void PrepareSeedsForReplicas(int64 replication_factor) override;
+  void PrepareSeedsForReplicas(int64_t replication_factor) override;
 
-  uint64 Get(int64 replica_idx) const override;
+  uint64 Get(int64_t replica_idx) const override;
 
  private:
   // The next value for all replicas.

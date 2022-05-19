@@ -33,13 +33,14 @@ HloPrintTensor::HloPrintTensor(HloInstruction* input,
   set_custom_call_has_side_effect(true);
 }
 
-absl::flat_hash_set<int64> HloPrintTensor::AllocatingIndices() const {
+absl::flat_hash_set<int64_t> HloPrintTensor::AllocatingIndices() const {
   return {};
 }
 
 bool HloPrintTensor::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloPrintTensor::LayoutDependencies() const {
+absl::flat_hash_map<int64_t, int64_t> HloPrintTensor::LayoutDependencies()
+    const {
   return {};
 }
 

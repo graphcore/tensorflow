@@ -105,7 +105,7 @@ ENTRY main (input: f32[6,2]) -> f32[2,2] {
 
 class StaticMultiSliceInvalidIndicesTestSpec {
  public:
-  explicit StaticMultiSliceInvalidIndicesTestSpec(const int64 index_value)
+  explicit StaticMultiSliceInvalidIndicesTestSpec(const int64_t index_value)
       : index_value_(index_value) {}
 
   std::string GetHlo() const {
@@ -122,7 +122,7 @@ ENTRY main (input: f32[6,2]) -> f32[3,2] {
   }
 
  private:
-  const int64 index_value_;
+  const int64_t index_value_;
 };
 
 class StaticMultiSliceInvalidIndicesTest
@@ -135,7 +135,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(
         StaticMultiSliceInvalidIndicesTestSpec{-1},
         StaticMultiSliceInvalidIndicesTestSpec{
-            static_cast<int64>(std::numeric_limits<unsigned>::max()) + 1}));
+            static_cast<int64_t>(std::numeric_limits<unsigned>::max()) + 1}));
 
 TEST_P(StaticMultiSliceInvalidIndicesTest, StatusNotOkTest) {
   const std::string hlo = GetParam().GetHlo();
@@ -155,17 +155,16 @@ TEST_P(StaticMultiSliceInvalidIndicesTest, StatusNotOkTest) {
 }
 
 // StaticMultiUpdateAdd.
-static Literal StaticMultiUpdateAddReference(const Literal& inputs,
-                                             const Literal& updates,
-                                             const Literal& scale,
-                                             absl::Span<const int64> offsets) {
+static Literal StaticMultiUpdateAddReference(
+    const Literal& inputs, const Literal& updates, const Literal& scale,
+    absl::Span<const int64_t> offsets) {
   Literal outputs = inputs.Clone();
   float scale_value = scale.Get<float>({0});
 
-  updates.EachCell<int32>([&](absl::Span<const int64> indices,
+  updates.EachCell<int32>([&](absl::Span<const int64_t> indices,
                               int32 update_value) {
-    int64 row = offsets[indices[0]];
-    int64 col = indices[1];
+    int64_t row = offsets[indices[0]];
+    int64_t col = indices[1];
     int32 input_value = outputs.Get<int32>({row, col});
     outputs.Set<int32>({row, col}, input_value + scale_value * update_value);
   });

@@ -24,7 +24,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/platform/default/integral_types.h"
 
-using tensorflow::int64;
+using ::int64_t;
 
 namespace xla {
 namespace poplarplugin {
@@ -71,11 +71,11 @@ class MapIterator {
 // output index.
 struct TensorLocation {
   TensorLocation() = default;
-  TensorLocation(const HloInstruction* instr, int64 output_index)
+  TensorLocation(const HloInstruction* instr, int64_t output_index)
       : instruction(instr), flattened_output_tuple_index(output_index) {}
 
   const HloInstruction* instruction;
-  int64 flattened_output_tuple_index;
+  int64_t flattened_output_tuple_index;
   bool operator<(const TensorLocation& other) const {
     // Standard pair comparison:
     return HloPtrComparator()(instruction, other.instruction) ||
@@ -92,12 +92,12 @@ H AbslHashValue(H h, const TensorLocation& location) {
 }
 
 // Return index's value if set or 0 otherwise.
-static inline int64 DefaultToFirst(absl::optional<int64> index) {
+static inline int64_t DefaultToFirst(absl::optional<int64_t> index) {
   return index.value_or(0);
 }
-// Return index's value if set or int64 max otherwise.
-static inline int64 DefaultToLast(absl::optional<int64> index) {
-  return index.value_or(std::numeric_limits<int64>::max());
+// Return index's value if set or int64_t max otherwise.
+static inline int64_t DefaultToLast(absl::optional<int64_t> index) {
+  return index.value_or(std::numeric_limits<int64_t>::max());
 }
 
 static inline bool operator==(const TensorLocation& lhs,

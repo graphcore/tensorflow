@@ -37,11 +37,11 @@ class SendToHostOp : public PoplarOpDef {
 
     const auto* send = Cast<HloSendToHostInstruction>(inst);
 
-    const int64 num_inputs = send->operand_count();
+    const int64_t num_inputs = send->operand_count();
 
     // As long as the stream copies are scheduled right after each other,
     // Poplar will attempt to merge them according to `opt.maxCopyMergeSize`.
-    for (int64 i = 0; i < num_inputs; ++i) {
+    for (int64_t i = 0; i < num_inputs; ++i) {
       TF_ASSIGN_OR_RETURN(
           const poplar::Tensor tensor,
           FindInstructionInput(tensor_map, res, inst, i, seq, debug_info));
@@ -68,7 +68,7 @@ class SendToHostOp : public PoplarOpDef {
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SendToHostOp");
-    const int64 input_index = tensor_target.input_index;
+    const int64_t input_index = tensor_target.input_index;
     const Shape& input_shape = tensor_target.tgt->operand(input_index)->shape();
     return AddHostCopyTensor(graph, {debug_info}, input_shape);
   }

@@ -71,16 +71,16 @@ struct HostEmbeddingInfo {
 };
 
 struct RemoteParameterHostRearrangement {
-  using GatheredToRefSlice = std::vector<std::pair<int64, int64>>;
+  using GatheredToRefSlice = std::vector<std::pair<int64_t, int64_t>>;
 
   int32 replication_factor = 0;
-  int64 total_elements_per_replica = 0;
+  int64_t total_elements_per_replica = 0;
   GatheredToRefSlice gathered_to_ref_slice;
   std::vector<uint32> element_map;
 
   RemoteParameterHostRearrangement() = default;
   RemoteParameterHostRearrangement(
-      int32 replication_factor, int64 total_elements_per_replica,
+      int32 replication_factor, int64_t total_elements_per_replica,
       const GatheredToRefSlice& gathered_to_ref_slice,
       const std::vector<uint32>& element_map)
       : replication_factor(replication_factor),
@@ -91,15 +91,15 @@ struct RemoteParameterHostRearrangement {
 
 struct RemoteParameterInfo {
   // Constructor used for lookups.
-  explicit RemoteParameterInfo(int64 parameter_number)
+  explicit RemoteParameterInfo(int64_t parameter_number)
       : RemoteParameterInfo(parameter_number, false, "", 0, 0) {}
 
-  explicit RemoteParameterInfo(int64 parameter_number,
+  explicit RemoteParameterInfo(int64_t parameter_number,
                                bool is_replica_partitioned,
                                const std::string& buffer_name,
-                               int64 buffer_offset, int64 num_merged,
-                               std::vector<int64>&& merged_params = {},
-                               int64 host_rearrangement_id = 0)
+                               int64_t buffer_offset, int64_t num_merged,
+                               std::vector<int64_t>&& merged_params = {},
+                               int64_t host_rearrangement_id = 0)
       : parameter_number(parameter_number),
         is_replica_partitioned(is_replica_partitioned),
         buffer_name(buffer_name),
@@ -110,13 +110,13 @@ struct RemoteParameterInfo {
 
   RemoteParameterInfo() = delete;
 
-  const int64 parameter_number;
+  const int64_t parameter_number;
   const bool is_replica_partitioned;
   const std::string buffer_name;
-  const int64 buffer_offset;
-  const int64 num_merged;
-  const std::vector<int64> merged_params;
-  const int64 host_rearrangement_id;
+  const int64_t buffer_offset;
+  const int64_t num_merged;
+  const std::vector<int64_t> merged_params;
+  const int64_t host_rearrangement_id;
 
   bool operator<(const RemoteParameterInfo& other) const {
     return parameter_number < other.parameter_number;
@@ -126,8 +126,8 @@ struct RemoteParameterInfo {
 struct InputInfo {
   std::string name;
   std::string handle;
-  int64 argument;
-  int64 tuple_index;
+  int64_t argument;
+  int64_t tuple_index;
   Shape shape;
 
   bool operator<(const InputInfo& rhs) const {
@@ -139,7 +139,7 @@ struct InputInfo {
 struct OutputInfo {
   std::string name;
   std::string handle;
-  int64 tuple_index;
+  int64_t tuple_index;
   Shape shape;
 
   bool operator<(const OutputInfo& rhs) const {
@@ -152,7 +152,7 @@ using SendRecvInfos = std::vector<SendRecvInfo>;
 using HostEmbeddingInfos = std::vector<HostEmbeddingInfo>;
 using RemoteParameterInfos = std::set<RemoteParameterInfo>;
 using RemoteParameterHostRearrangements =
-    std::map<int64, RemoteParameterHostRearrangement>;
+    std::map<int64_t, RemoteParameterHostRearrangement>;
 using InputInfos = std::set<InputInfo>;
 using OutputInfos = std::set<OutputInfo>;
 

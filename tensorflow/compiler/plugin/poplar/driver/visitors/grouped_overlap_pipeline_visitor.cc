@@ -66,8 +66,8 @@ namespace poplarplugin {
 
 namespace util = ::xla::poplarplugin::pipelinevisitorutils;
 
-static Status VerifyPipelineArgumentsFixed(int64 iterations,
-                                           int64 overlap_length) {
+static Status VerifyPipelineArgumentsFixed(int64_t iterations,
+                                           int64_t overlap_length) {
   if (iterations < (overlap_length + 2)) {
     return FailedPrecondition(
         "The number of iterations of the pipeline must be at least %d, "
@@ -82,7 +82,7 @@ static Status VerifyPipelineArgumentsFixed(int64 iterations,
 }
 
 static StatusOr<DriverProgramSequence> VerifyPipelineArgumentsRuntime(
-    const HloInstruction* accumulation_count, int64 overlap_length,
+    const HloInstruction* accumulation_count, int64_t overlap_length,
     DriverTensor accumulation_count_tensor, DriverGraph& graph,
     const poplar::DebugContext& debug_context) {
   DriverProgramSequence prog(graph, debug_context);
@@ -106,7 +106,7 @@ GroupedOverlapPipelineVisitor::VerifyPipelineArguments(
     const HloInstruction* accumulation_count,
     DriverTensor accumulation_count_tensor, DriverGraph& graph) const {
   const auto iterations = GetAccumulationConstantsValue(accumulation_count);
-  const int64 overlap_length =
+  const int64_t overlap_length =
       pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_).size();
   if (iterations) {
     TF_RETURN_IF_ERROR(
@@ -124,7 +124,7 @@ GroupedOverlapPipelineVisitor::RampDownAdditionalIterations(
     DriverProgramSequence& program) const {
   return absl::visit(
       make_visitor<PipelineVisitor::IterationsType>(
-          [&](int64& i) {
+          [&](int64_t& i) {
             return PipelineVisitor::IterationsType(i % overlap_length);
           },
           [&](PipelineVisitor::CountAndGraph& i) {
@@ -338,8 +338,8 @@ GroupedOverlapPipelineVisitor::GetPipelineRepeatBlockSequence(
 
   return absl::visit(
       make_visitor<DriverProgramSequence>(
-          [&](const int64 i) {
-            const int64 num_repeats = ((i / offsets.size()) - 1);
+          [&](const int64_t i) {
+            const int64_t num_repeats = ((i / offsets.size()) - 1);
             if (num_repeats < 1) {
               return DriverProgramSequence(graph, debug_name_and_id);
             }

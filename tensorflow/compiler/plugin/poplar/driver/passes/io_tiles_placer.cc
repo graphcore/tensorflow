@@ -61,36 +61,36 @@ bool IsInSerialPipeline(const HloInstruction* inst,
          IsBatchSerializedPipelineOp(callers[0].instruction());
 }
 
-static int64 GetMaxAvailableIoBytes(
-    const int64 num_io_tiles, const int64 bytes_per_io_tile,
+static int64_t GetMaxAvailableIoBytes(
+    const int64_t num_io_tiles, const int64_t bytes_per_io_tile,
     const double available_io_tile_memory_proportion) {
-  return static_cast<int64>(num_io_tiles * bytes_per_io_tile *
-                            available_io_tile_memory_proportion);
+  return static_cast<int64_t>(num_io_tiles * bytes_per_io_tile *
+                              available_io_tile_memory_proportion);
 }
 
-static int64 GetInstructionBufferSize(const HloInstruction* inst) {
+static int64_t GetInstructionBufferSize(const HloInstruction* inst) {
   const auto& shape = inst->shape();
   // The host exchange instructions are either 1 to 1 or 1 to token so
   // only need to look at either result of operand
   if (shape.IsToken()) {
     // if token sum up size of all operands
-    return absl::c_accumulate(inst->operands(), static_cast<int64>(0),
-                              [](int64 sum, const HloInstruction* i) {
+    return absl::c_accumulate(inst->operands(), static_cast<int64_t>(0),
+                              [](int64_t sum, const HloInstruction* i) {
                                 return sum + GetInstructionBufferSize(i);
                               });
   }
   return GetByteSizeOfTotalShape(shape);
 }
 
-int64 GetMaxLiveBytes(const HloInstructionSequence& potential_io_tile_insts) {
+int64_t GetMaxLiveBytes(const HloInstructionSequence& potential_io_tile_insts) {
   // Looks like the Heap simulator doesn't really work for this purpose
   // as none of these instructions allocate. Use just accumulation of size
   // until poplar specific liveness simulator is implemented
-  int64 ans = absl::c_accumulate(potential_io_tile_insts.instructions(),
-                                 static_cast<int64>(0),
-                                 [](int64 sum, const HloInstruction* inst) {
-                                   return sum + GetInstructionBufferSize(inst);
-                                 });
+  int64_t ans = absl::c_accumulate(
+      potential_io_tile_insts.instructions(), static_cast<int64_t>(0),
+      [](int64_t sum, const HloInstruction* inst) {
+        return sum + GetInstructionBufferSize(inst);
+      });
 
   return ans;
 }
@@ -124,8 +124,8 @@ StatusOr<bool> IoTilesPlacer::RunOnComputation(HloComputation* comp,
     }
   }
 
-  const int64 max_live_bytes = GetMaxLiveBytes(potential_io_tile_insts);
-  const int64 target_io_bytes = GetMaxAvailableIoBytes(
+  const int64_t max_live_bytes = GetMaxLiveBytes(potential_io_tile_insts);
+  const int64_t target_io_bytes = GetMaxAvailableIoBytes(
       num_io_tiles, bytes_per_io_tile, AvailableMemoryProportion());
 
   const bool insts_fit_on_io_tiles = max_live_bytes < target_io_bytes;
@@ -176,7 +176,7 @@ static bool UsesIOTiles(const std::vector<HloComputation*>& computations,
   });
 }
 
-static bool UpdateNumIoTiles(int64& resources_num_io_tiles_,
+static bool UpdateNumIoTiles(int64_t& resources_num_io_tiles_,
                              const std::vector<HloComputation*>& computations,
                              const CallGraph& call_graph) {
   const bool any_instruction_on_io_tiles =

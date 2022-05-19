@@ -46,7 +46,7 @@ class PopopsAllToAll : public XlaOpKernel {
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsAllToAll);
 
-  tensorflow::int64 split_dimension, concat_dimension, number_of_replicas;
+  std::int64_t split_dimension, concat_dimension, number_of_replicas;
 };
 
 REGISTER_XLA_OP(Name("IpuAllToAll").Device(DEVICE_IPU_XLA_JIT), PopopsAllToAll);

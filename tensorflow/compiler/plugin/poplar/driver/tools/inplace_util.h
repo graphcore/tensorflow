@@ -50,8 +50,8 @@ enum class HloInstructionType {
 // Internal representations of the Types of instructions.
 class HloPoplarInplaceDescription {
  public:
-  using OperandIndices = std::vector<int64>;
-  using OperandSet = absl::flat_hash_set<int64>;
+  using OperandIndices = std::vector<int64_t>;
+  using OperandSet = absl::flat_hash_set<int64_t>;
 
   HloPoplarInplaceDescription();
   HloPoplarInplaceDescription(HloInstructionType type,

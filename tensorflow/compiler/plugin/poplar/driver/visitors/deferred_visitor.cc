@@ -148,8 +148,8 @@ bool DeferredAllocations::IsDeferredAllocationLocation(
 
 void DeferredAllocations::AllocateIfExists(
     CompilerResources& res, const HloInstruction* inst,
-    absl::optional<int64> opt_tensors_start,
-    absl::optional<int64> opt_tensors_end) {
+    absl::optional<int64_t> opt_tensors_start,
+    absl::optional<int64_t> opt_tensors_end) {
   if (!res.deferred_allocation_scopes.empty()) {
     auto s = res.deferred_allocation_scopes.top().AllocateIfExists(
         inst, DefaultToFirst(opt_tensors_start),
@@ -161,8 +161,8 @@ void DeferredAllocations::AllocateIfExists(
 }
 
 Status DeferredAllocations::AllocateIfExists(const HloInstruction* inst,
-                                             int64 tensors_start,
-                                             int64 tensors_end) {
+                                             int64_t tensors_start,
+                                             int64_t tensors_end) {
   TensorLocation start_location(inst, tensors_start);
   TensorLocation end_location(inst, tensors_end - 1);
   // Find any deferred allocations in the range, and allocate them.
@@ -292,11 +292,12 @@ const TensorOrRemoteBufferVector& DeferredVisitor::outputs() const {
   return outputs_;
 }
 
-bool DeferredVisitor::InputIsAllocated(int64 param, unsigned int index) const {
+bool DeferredVisitor::InputIsAllocated(int64_t param,
+                                       unsigned int index) const {
   return allocated_tensors_[param][index];
 }
 
-bool DeferredVisitor::InputIsUsed(int64 param, unsigned int index) const {
+bool DeferredVisitor::InputIsUsed(int64_t param, unsigned int index) const {
   return used_tensors_[param][index];
 }
 
@@ -362,7 +363,7 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
 
     auto& graph = GetGraphWithOutputIndex(resources_, inst, 0);
     TF_ASSIGN_OR_RETURN(poplar::Type element_type, PoplarDataType(shapes[0]));
-    const int64 element_count = ShapeUtil::ElementsIn(shapes[0]);
+    const int64_t element_count = ShapeUtil::ElementsIn(shapes[0]);
 
     const auto info =
         FindRemoteParameterInfo(inst->parameter_number(),
@@ -386,7 +387,7 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
   for (auto index_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
     const Shape shape = index_shape.shape;
     TensorLocation input_location(inst, flat_tuple_index);
-    const int64 tuple_index =
+    const int64_t tuple_index =
         index_shape.index.empty() ? 0 : index_shape.index[0];
     // For some computations, like entry computation, every input is forced to
     // be marked as used.
@@ -417,7 +418,7 @@ DeferredAllocateFunction DeferredVisitor::MakeParameterAllocationFunction(
 }
 
 DeferredPostProcessFunction DeferredVisitor::MakeParameterPostProcessFunction(
-    TensorLocation input_location, int64 param_num, const Shape& shape,
+    TensorLocation input_location, int64_t param_num, const Shape& shape,
     const poplar::DebugNameAndId& debug_name_and_id) {
   return [this, input_location, shape, param_num,
           debug_name_and_id](DriverTensor tensor) -> StatusOr<DriverTensor> {
@@ -652,7 +653,7 @@ std::vector<std::vector<bool>> GetAllowedDeferLocationsFromInputs(
   // t = tuple(x, y, x, x, z)
   // Here x is used thrice, at indices 0, 2 and 3, so x cannot be deferred.
   std::vector<std::vector<bool>> deferred_locations(inst->operand_count());
-  for (int64 operand_idx = 0; operand_idx != inst->operand_count();
+  for (int64_t operand_idx = 0; operand_idx != inst->operand_count();
        ++operand_idx) {
     const HloInstruction* operand = inst->operand(operand_idx);
     const bool allowed_to_defer = inst->OperandIndices(operand).size() == 1;
@@ -678,7 +679,7 @@ DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst) {
   // Go through all the operands and get the input tensors for any input that
   // cannot be deferred.
   DeferredArgRBVectors inputs(inst->operand_count());
-  for (int64 operand_idx = 0; operand_idx != inst->operand_count();
+  for (int64_t operand_idx = 0; operand_idx != inst->operand_count();
        ++operand_idx) {
     const HloInstruction* input_inst = inst->operand(operand_idx);
     auto shapes = FlattenedXlaShape(input_inst->shape());
@@ -717,7 +718,7 @@ Status DeferredVisitor::HandleDeferredAllocationTuple(HloInstruction* inst) {
   CHECK_EQ(inputs.size(), inst->operand_count());
 
   uint64 output_tuple_index = 0;
-  for (int64 operand_idx = 0; operand_idx != inst->operand_count();
+  for (int64_t operand_idx = 0; operand_idx != inst->operand_count();
        ++operand_idx) {
     const HloInstruction* input_inst = inst->operand(operand_idx);
 
@@ -764,7 +765,7 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
   TF_ASSIGN_OR_RETURN(auto clone_method_tree, GetCopyCloneMethod(inst));
   TF_ASSIGN_OR_RETURN(auto* deferred_allocation, GetDeferredAllocations());
 
-  int64 tuple_idx = 0;
+  int64_t tuple_idx = 0;
   for (auto& leaf : clone_method_tree.leaves()) {
     const auto& shape_index = leaf.first;
     const auto clone_method = leaf.second;
@@ -1151,7 +1152,7 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
     auto& graph = GetGraphWithOutputIndex(resources_, inst, 0);
     DriverProgramSequence zeroing_seq(graph, {debug_name_and_id, "zeroing"});
 
-    const int64 element_count = ShapeUtil::ElementsIn(inst->shape());
+    const int64_t element_count = ShapeUtil::ElementsIn(inst->shape());
 
     auto info = create->RemoteBufferInfo();
     const bool has_info = info.has_value();
@@ -1352,7 +1353,7 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
 
   const auto* load_inst = Cast<HloRemoteParameterLoad>(inst);
-  const int64 num_inputs = inst->operand_count();
+  const int64_t num_inputs = inst->operand_count();
 
   const auto shapes = FlattenedXlaShape(inst->shape());
   CHECK_EQ(shapes.size(), num_inputs);
@@ -1444,7 +1445,7 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
 
   const auto* load_inst = Cast<HloBufferLoadSlice>(inst);
-  const int64 num_outputs = load_inst->RemoteBuffers().size();
+  const int64_t num_outputs = load_inst->RemoteBuffers().size();
 
   const auto shapes = FlattenedXlaShape(inst->shape());
   CHECK_EQ(shapes.size(), num_outputs);
@@ -1577,7 +1578,8 @@ Status DeferredVisitor::PropagateDeferredAllocations(
 }
 
 Status DeferredVisitor::PropagateDeferredAllocationsOperand(
-    const HloInstruction* callsite_inst, int64 operand_idx, int64 parameter_idx,
+    const HloInstruction* callsite_inst, int64_t operand_idx,
+    int64_t parameter_idx,
     const std::vector<absl::optional<TensorOrRemoteBuffer>>& callsite_input,
     const poplar::DebugNameAndId& debug_name_and_id) {
   return PropagateDeferredAllocationsOperand(
@@ -1586,7 +1588,8 @@ Status DeferredVisitor::PropagateDeferredAllocationsOperand(
 }
 
 Status DeferredVisitor::PropagateDeferredAllocationsOperand(
-    const HloInstruction* callsite_inst, int64 operand_idx, int64 parameter_idx,
+    const HloInstruction* callsite_inst, int64_t operand_idx,
+    int64_t parameter_idx,
     const std::vector<absl::optional<TensorOrRemoteBuffer>>& callsite_input,
     bool add_clone, const poplar::DebugNameAndId& debug_name_and_id) {
   // Note that this is called after finish visit, so tensors are being added to
@@ -1622,7 +1625,7 @@ Status DeferredVisitor::PropagateDeferredAllocations(
     const HloInstruction* callsite_inst,
     const DeferredArgRBVectors& callsite_inputs, std::vector<bool> add_clone,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  for (int64 operand_idx = 0; operand_idx != callsite_inst->operand_count();
+  for (int64_t operand_idx = 0; operand_idx != callsite_inst->operand_count();
        ++operand_idx) {
     TF_RETURN_IF_ERROR(PropagateDeferredAllocationsOperand(
         callsite_inst, operand_idx, operand_idx, callsite_inputs[operand_idx],
@@ -1758,7 +1761,7 @@ StatusOr<DeferredAllocations*> DeferredVisitor::GetDeferredAllocations() {
 }
 
 bool DeferredVisitor::InputIsUsedInThisComputation(const HloInstruction* inst,
-                                                   int64 tuple_index) {
+                                                   int64_t tuple_index) {
   if (inst->parent()->root_instruction() == inst) {
     return true;
   }
@@ -1854,7 +1857,8 @@ Status InplaceDeferredVisitor::PropagateDeferredAllocations(
 }
 
 Status InplaceDeferredVisitor::PropagateDeferredAllocationsOperand(
-    const HloInstruction* callsite_inst, int64 operand_idx, int64 parameter_idx,
+    const HloInstruction* callsite_inst, int64_t operand_idx,
+    int64_t parameter_idx,
     const std::vector<absl::optional<TensorOrRemoteBuffer>>& callsite_input,
     const poplar::DebugNameAndId& debug_name_and_id) {
   return DeferredVisitor::PropagateDeferredAllocationsOperand(
@@ -1973,13 +1977,13 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
   // computation (PARTIAL_ALIAS).
   // 5. be the exact same tensor as input `o` (IDENTICAL_ALIAS).
 
-  const int64 num_tensors = outputs_.size();
+  const int64_t num_tensors = outputs_.size();
   std::vector<AliasType> alias_type(num_tensors, AliasType::NO_ALIAS_USED);
 
   // Create a flat version of the loop inputs.
   TensorOrRemoteBufferVector loop_inputs;
-  for (int64 i = 0; i < computation_inputs_.size(); ++i) {
-    for (int64 k = 0; k < computation_inputs_[i].size(); ++k) {
+  for (int64_t i = 0; i < computation_inputs_.size(); ++i) {
+    for (int64_t k = 0; k < computation_inputs_[i].size(); ++k) {
       loop_inputs.push_back(computation_inputs_[i][k]);
     }
   }
@@ -1988,8 +1992,8 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
   TensorOrRemoteBufferVector loop_outputs = outputs_;
 
   // Find all the alias information index by output tensor.
-  for (int64 o = 0; o < num_tensors; o++) {
-    int64 param_number, param_index;
+  for (int64_t o = 0; o < num_tensors; o++) {
+    int64_t param_number, param_index;
     std::tie(param_number, param_index) = GetParameterNumberAndFlatIndex(o);
 
     const bool input_used = InputIsAllocated(param_number, param_index);
@@ -1998,8 +2002,8 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
         alias_type[o] = AliasType::IDENTICAL_ALIAS;
       }
       // Check whether a temporary copy is required.
-      for (int64 i = 0; i < num_tensors; i++) {
-        int64 input_param_number, input_param_index;
+      for (int64_t i = 0; i < num_tensors; i++) {
+        int64_t input_param_number, input_param_index;
         std::tie(input_param_number, input_param_index) =
             GetParameterNumberAndFlatIndex(i);
 
@@ -2017,8 +2021,8 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
       // alias any of the inputs which might have changed during
       // computation.
       alias_type[o] = AliasType::NO_ALIAS_NOT_USED;
-      for (int64 i = 0; i < num_tensors; i++) {
-        int64 input_param_number, input_param_index;
+      for (int64_t i = 0; i < num_tensors; i++) {
+        int64_t input_param_number, input_param_index;
         std::tie(input_param_number, input_param_index) =
             GetParameterNumberAndFlatIndex(i);
         if (InputIsAllocated(input_param_number, input_param_index)) {
@@ -2050,7 +2054,7 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
   // For partial aliasing types, create temporary tensors from outputs in order
   // to remove any aliasing.
   TensorOrRemoteBufferVector unaliased_loop_outputs(loop_outputs);
-  for (int64 i = 0; i < num_tensors; i++) {
+  for (int64_t i = 0; i < num_tensors; i++) {
     switch (alias_type[i]) {
       case AliasType::PARTIAL_ALIAS_OUTPUT_ONLY:
       case AliasType::PARTIAL_ALIAS: {
@@ -2081,7 +2085,7 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
   }
 
   TensorOrRemoteBufferVector loop_state(loop_inputs);
-  for (int64 i = 0; i < num_tensors; i++) {
+  for (int64_t i = 0; i < num_tensors; i++) {
     switch (alias_type[i]) {
       case AliasType::PARTIAL_ALIAS:
       case AliasType::NO_ALIAS_USED: {
@@ -2131,12 +2135,13 @@ void InplaceDeferredVisitor::AddSequenceForAliasingCopy(
   TF_CHECK_OK(FullVisitor::AddSequenceForInstruction(inst, seq));
 }
 
-std::pair<int64, int64> InplaceDeferredVisitor::GetParameterNumberAndFlatIndex(
-    int64 output_flat_index) {
-  int64 parameter_number = 0;
-  int64 flat_index = output_flat_index;
+std::pair<int64_t, int64_t>
+InplaceDeferredVisitor::GetParameterNumberAndFlatIndex(
+    int64_t output_flat_index) {
+  int64_t parameter_number = 0;
+  int64_t flat_index = output_flat_index;
   while (flat_index >=
-         static_cast<int64>(computation_inputs_[parameter_number].size())) {
+         static_cast<int64_t>(computation_inputs_[parameter_number].size())) {
     flat_index -= computation_inputs_[parameter_number].size();
     parameter_number++;
   }

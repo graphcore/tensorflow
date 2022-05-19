@@ -121,8 +121,8 @@ Status GetGruOptsForMatMulPreplanning(const HloInstruction* inst,
 }  // namespace
 
 Status PoplinPreplanning::StorePreplanConv(const HloInstruction* inst,
-                                           int64 input_index,
-                                           int64 kernel_index) {
+                                           int64_t input_index,
+                                           int64_t kernel_index) {
   const poplar::Target& target = GetGraph(resources_, inst).getTarget();
   TF_ASSIGN_OR_RETURN(
       const poplin::ConvParams conv_params,
