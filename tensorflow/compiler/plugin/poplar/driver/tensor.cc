@@ -425,10 +425,18 @@ DriverTensor CreateTensorFromSlice(
   // Make a clone of the slice.
   output_slices[0] = TensorCloneAndRebalanceAliasing(
       graph, resources, adjusted_slice, {debug_name_and_id});
+  auto mapping = graph.getTileMapping(output_slices[0]);
+  auto width = MappingHelper::GetMappingWidth(mapping);
+  VLOG(2) << "Slice mapping size " << width << " replicated "
+          << number_of_clones << " times.";
 
   // The remaining slices will just clone the layout of the first slice.
   for (int64_t i = 1; i != number_of_clones; ++i) {
     output_slices[i] = graph.clone(output_slices[0], {debug_name_and_id});
+    auto mapping = graph.getTileMapping(output_slices[i]);
+    MappingHelper::RotateMapping(graph, mapping, width * i);
+    graph.getPoplarGraph().setTileMapping(output_slices[i].getPoplarTensor(),
+                                          mapping);
   }
 
   // Concatentate all the slices into a single tensor.
