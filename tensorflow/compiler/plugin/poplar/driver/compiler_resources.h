@@ -209,11 +209,11 @@ struct CompilerResources : public HloResources {
   absl::flat_hash_set<std::string> custom_codelets_in_graph;
 
   absl::flat_hash_map<std::string,
-                      std::pair<poplar::program::Sequence, poplar::Tensor>>
+                      std::pair<DriverProgramSequence, DriverTensor>>
       infeed_cache;
 
   absl::flat_hash_map<std::string,
-                      std::pair<poplar::program::Sequence, poplar::Tensor>>
+                      std::pair<DriverProgramSequence, DriverTensor>>
       outfeed_cache;
 
   // TODO(T28772): remove this mapping and the extra copy.
