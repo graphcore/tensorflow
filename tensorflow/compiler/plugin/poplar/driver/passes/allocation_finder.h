@@ -137,6 +137,7 @@ class AllocationFinder : public HloModulePass {
                      std::vector<const HloInstruction*>&,
                      absl::flat_hash_set<TensorLocation>&);
 
+  double GetFixedAllocationPriority(const TensorTarget& target) const;
   int64_t GetAllocationPriority(const TensorTarget& target) const;
 
   // Should return true when target 'a' should be used over 'b'

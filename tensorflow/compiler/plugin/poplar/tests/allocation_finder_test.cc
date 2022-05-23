@@ -4247,8 +4247,7 @@ ENTRY c1 {
   p0 = f16[1,16,16,2] parameter(0)
   p1 = f16[3,3,2,4] parameter(1)
 
-  merged = (f16[1,16,16,2], f16[3,3,2,4]) tuple(p0, p1)
-  send = () custom-call((f16[1,16,16,2], f16[3,3,2,4]) merged), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"\"}"
+  send = () custom-call(p0, p1), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"key\"}"
   ROOT conv = f16[1,16,16,4] convolution(p0, p1), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
 }
 
@@ -4286,7 +4285,7 @@ ENTRY c1 {
       EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SendToHost)(t0.tgt));
       EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SendToHost)(t1.tgt));
       EXPECT_EQ(t0.input_index, 0ll);
-      EXPECT_EQ(t1.input_index, 0ll);
+      EXPECT_EQ(t1.input_index, 1ll);
     }
   }
 }

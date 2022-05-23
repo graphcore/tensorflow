@@ -123,8 +123,9 @@ static HloPoplarInstructionFactory send_to_host_factory(
       TF_ASSIGN_OR_RETURN(const std::string rendezvous_key,
                           attributes.GetAttributeAsString("rendezvous_key"));
 
-      return CreateSendToHost(call->operands(), call->shape(),
-                              {rendezvous_key});
+      std::vector<std::string> rendezvous_keys(call->operand_count(),
+                                               rendezvous_key);
+      return CreateSendToHost(call->operands(), call->shape(), rendezvous_keys);
     });
 
 }  // namespace

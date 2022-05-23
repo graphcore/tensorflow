@@ -185,7 +185,7 @@ TensorTarget AllocationFinder::InferTarget(
   return tensor_target;
 }
 
-int64_t AllocationFinder::GetAllocationPriority(
+double AllocationFinder::GetFixedAllocationPriority(
     const TensorTarget& target) const {
   // Allocation priority (highest to lowest):
   // * Used by Send/Recv,
@@ -200,29 +200,37 @@ int64_t AllocationFinder::GetAllocationPriority(
     // The memory cost of doing on-device stream copy rearrangment is large
     // enough that it is usually beneficial to prioritise the allocation layout
     // desired by the host exchange to avoid this rearrangement.
-    return 3;
+    return 4;
   }
   const bool is_multi_update =
       IsPoplarInstruction(PoplarOp::MultiUpdate)(target.tgt) ||
       IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(target.tgt);
   if (is_multi_update) {
-    return target.input_index == 2 ? 2 : 0;
+    return target.input_index == 2 ? 3 : 1;
   }
 
   switch (target.tgt->opcode()) {
     case HloOpcode::kDynamicUpdateSlice: {
-      return target.input_index == 1 ? 2 : 0;
+      return target.input_index == 1 ? 3 : 1;
     }
     case HloOpcode::kConvolution:
     case HloOpcode::kDot: {
-      return 1;
+      return 2;
     }
     case HloOpcode::kCustomCall:
     case HloOpcode::kFusion: {
-      return IsPopOpsConvolution(target.tgt) ? 1 : 0;
+      return IsPopOpsConvolution(target.tgt) ? 2 : 1;
     }
-    default: { return 0; }
+    default: { return 1; }
   }
+}
+
+int64_t AllocationFinder::GetAllocationPriority(
+    const TensorTarget& target) const {
+  double k = GetFixedAllocationPriority(target);
+  const Shape& input_shape = target.tgt->operand(target.input_index)->shape();
+  int64_t weight = GetByteSizeOfTotalShapeSafe(input_shape);
+  return round(weight * k);
 }
 
 bool IsPreferablePath(absl::Span<const HloInstruction* const> a,
