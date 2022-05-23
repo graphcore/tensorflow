@@ -47,7 +47,7 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-  def _load_and_run(self, path, inputs):
+  def _load_and_run(self, path, inputs, output_names=None):
     imported = load.load(path)
     loaded = imported.signatures[
         signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
@@ -56,13 +56,17 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
         i.name for i in signature.input_arg
         if i.type is not types_pb2.DT_RESOURCE
     ]
-    output_name = next(iter(loaded.structured_outputs.values())).name
+    if output_names is None or not output_names:
+      output_names = list(loaded.structured_outputs.keys())
+
+    # Get tensors' names for given output names.
+    tensors_names = [loaded.structured_outputs[n].name for n in output_names]
 
     g = ops.Graph()
     with g.as_default():
       with session_lib.Session(graph=g) as sess:
         loader.load(sess, [tag_constants.SERVING], path)
-        output = g.get_tensor_by_name(output_name)
+        output_tensors = [g.get_tensor_by_name(n) for n in tensors_names]
 
         feed_dict = {}
         if not isinstance(inputs, dict):
@@ -73,8 +77,9 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
             input_tensor = g.get_tensor_by_name(name + ':0')
             feed_dict[input_tensor] = inputs[name]
 
-        result = sess.run(output, feed_dict=feed_dict)
-    return result
+        results = sess.run(output_tensors, feed_dict=feed_dict)
+
+    return results[0] if len(results) == 1 else results
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
@@ -91,13 +96,16 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with tempfile.TemporaryDirectory() as tmp_folder:
       iterations = 16
-      serving.export_single_step(my_net, tmp_folder, iterations,
-                                 input_signature)
+      serving.export_single_step(my_net,
+                                 tmp_folder,
+                                 iterations,
+                                 input_signature,
+                                 output_names="result")
 
       input_data = np.arange(element_count, dtype=np.float32)
 
       # load and run
-      result = self._load_and_run(tmp_folder, input_data)
+      result = self._load_and_run(tmp_folder, input_data, ["result"])
       self.assertEqual(list(result), list(np.square(input_data)))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
@@ -124,10 +132,11 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
                                  tmp_folder,
                                  iterations,
                                  input_dataset=dataset,
-                                 variable_initializer=init_variables)
+                                 variable_initializer=init_variables,
+                                 output_names="output_0")
 
       input_data = np.arange(element_count, dtype=np.float16)
-      result = self._load_and_run(tmp_folder, input_data)
+      result = self._load_and_run(tmp_folder, input_data, ["output_0"])
       self.assertEqual(list(result), list(input_data * var_value))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
@@ -142,17 +151,24 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     @def_function.function(input_signature=input_signature)
     def my_net(x1, x2):
-      return x1 * x2
+      return x1 * x2, x1 + x2
 
     with tempfile.TemporaryDirectory() as tmp_folder:
       iterations = 16
-      serving.export_single_step(my_net, tmp_folder, iterations)
+      serving.export_single_step(my_net,
+                                 tmp_folder,
+                                 iterations,
+                                 output_names=["result0", "result1"])
 
       x1_data = np.arange(element_count, dtype=np.float32)
       x2_data = np.float32(3.0)
-      result = self._load_and_run(tmp_folder, {'x1': x1_data, 'x2': x2_data})
+      result0, result1 = self._load_and_run(tmp_folder, {
+          'x1': x1_data,
+          'x2': x2_data
+      }, ["result0", "result1"])
 
-      self.assertEqual(list(result), list(x1_data * x2_data))
+      self.assertEqual(list(result0), list(x1_data * x2_data))
+      self.assertEqual(list(result1), list(x1_data + x2_data))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
@@ -229,7 +245,7 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       return x1 * x2 + w
 
     def stage2(x):
-      return x + 2
+      return x + 2, x * 3
 
     def init_variables(sess):
       init = variables.global_variables_initializer()
@@ -241,14 +257,20 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
                               iterations=16,
                               device_mapping=[0, 0],
                               input_signature=input_signature,
-                              variable_initializer=init_variables)
+                              variable_initializer=init_variables,
+                              output_names=["out0", "out1"])
 
       x1_data = np.arange(element_count, dtype=np.float32)
       x2_data = x1_data * 2
 
-      result = self._load_and_run(tmp_folder, {'x1': x1_data, 'x2': x2_data})
-      ref_result = x1_data * x2_data + var_value + 2
-      self.assertEqual(list(result), list(ref_result))
+      out0, out1 = self._load_and_run(tmp_folder, {
+          'x1': x1_data,
+          'x2': x2_data
+      }, ["out0", "out1"])
+      ref_result0 = x1_data * x2_data + var_value + 2
+      ref_result1 = (x1_data * x2_data + var_value) * 3
+      self.assertEqual(list(out0), list(ref_result0))
+      self.assertEqual(list(out1), list(ref_result1))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only

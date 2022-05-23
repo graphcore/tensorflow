@@ -132,7 +132,7 @@ def _create_feeds(input_signature, input_dataset=None):
 
 
 def _export_saved_model(defunc, export_dir, variable_initializer,
-                        input_signature):
+                        input_signature, output_names):
   """Compile Poplar executable and export saved model.
 
   Args:
@@ -143,11 +143,19 @@ def _export_saved_model(defunc, export_dir, variable_initializer,
       Takes a `tf.Session` as the only argument.
     input_signature (list): List of signatures of inputs that will be provided
       to the graph using infeed queue.
+    output_names (str or list): Output name or list of output names for the
+      outputs in the SavedModel's SignatureDef. If ``output_names`` is ``None``,
+      outputs will be named: ``output_0``, ``output_1`` and so on.
 
   Returns:
     function: A reference to the same predict function that was exported
     using the SavedModel format. This function uses the embedded runtime op to
     run the executable that was included in the SavedModel's `assets` subfolder.
+
+  Raises:
+    TypeError: If ``output_names`` is neither a string nor a list.
+    ValueError: If length of ``output_names`` does not match the number of
+      results returned by ``defunc``.
   """
   with tempfile.TemporaryDirectory() as tmp_folder:
     unique_name = str(uuid.uuid4())
@@ -191,11 +199,28 @@ def _export_saved_model(defunc, export_dir, variable_initializer,
                                                   shape=s.shape,
                                                   name=s.name)
 
-      output = predict_func(*tuple(input_phs.values()))
+      outputs = predict_func(*tuple(input_phs.values()))
+
+      if output_names:
+        if isinstance(output_names, str):
+          output_names = [output_names]
+
+        if not isinstance(output_names, list):
+          raise TypeError('output_names must be either a string or a '
+                          'list, received ' + str(type(output_names)))
+
+        if len(outputs) != len(output_names):
+          raise ValueError(
+              'Length of output_names does not match the number of results '
+              'returned by the predict function.')
+      else:
+        output_names = [f"output_{i}" for i, _ in enumerate(outputs)]
+
+      outputs = dict(zip(output_names, outputs))
 
       saved_model_builder = builder.SavedModelBuilder(export_dir)
-      sig_def = signature_def_utils.predict_signature_def(
-          inputs=input_phs, outputs={'output': output[0]})
+      sig_def = signature_def_utils.predict_signature_def(inputs=input_phs,
+                                                          outputs=outputs)
       init_op = variables.global_variables_initializer()
       sess.run(init_op)
       saved_model_builder.add_meta_graph_and_variables(
@@ -222,7 +247,8 @@ def export_single_step(predict_step,
                        iterations,
                        input_signature=None,
                        input_dataset=None,
-                       variable_initializer=None):
+                       variable_initializer=None,
+                       output_names=None):
   """Create a SavedModel in `export_dir` for TensorFlow Serving.
 
   Wrap `predict_step` inside a while loop, add an infeed for the inputs and
@@ -257,6 +283,10 @@ def export_single_step(predict_step,
           init = tf.global_variables_initializer()
           session.run(init)
           saver.restore(session, 'path/to/checkpoint')
+
+    output_names (str or list, optional): Output name or list of output names
+      for the outputs in the SavedModel's SignatureDef. If not provided, outputs
+      will be named: ``output_0``, ``output_1`` and so on.
 
   Returns:
     function: A reference to the same predict function that was exported using
@@ -298,7 +328,7 @@ def export_single_step(predict_step,
     return r
 
   return _export_saved_model(predict_loop, export_dir, variable_initializer,
-                             input_signature)
+                             input_signature, output_names)
 
 
 def export_pipeline(computational_stages,
@@ -311,7 +341,8 @@ def export_pipeline(computational_stages,
                     name=None,
                     input_signature=None,
                     input_dataset=None,
-                    variable_initializer=None):
+                    variable_initializer=None,
+                    output_names=None):
   """Create a pipelined SavedModel in `export_dir` for TensorFlow Serving.
 
   Create a pipeline op using `computational_stages`, add an infeed for
@@ -365,6 +396,10 @@ def export_pipeline(computational_stages,
           session.run(init)
           saver.restore(session, 'path/to/checkpoint')
 
+    output_names (str or list, optional): Output name or list of output names
+      for the outputs in the SavedModel's SignatureDef. If not provided, outputs
+      will be named: ``output_0``, ``output_1`` and so on.
+
   Returns:
     function: A reference to the same predict function that was exported using
     the SavedModel format. This function uses the embedded runtime op to run
@@ -408,4 +443,4 @@ def export_pipeline(computational_stages,
         name=name)
 
   return _export_saved_model(defunc, export_dir, variable_initializer,
-                             input_signature)
+                             input_signature, output_names)
