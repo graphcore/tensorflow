@@ -54,6 +54,7 @@ cc_library(
             "lib*/poplibs/libpopsparse.so",
             "lib*/poplibs/libpopsys.so",
             "lib*/poplibs/libpoputil.so",
+            "popdist/lib*/libpopdist.so",
         ], [
             "lib*/**/libgcl_ct*",
             "lib*/**/libpopef.so",
@@ -71,6 +72,7 @@ cc_library(
             "lib*/**/libpopsparse.so",
             "lib*/**/libpopsys.so",
             "lib*/**/libpoputil.so",
+            "lib*/**/libpopdist.so",
         ]),
     ),
     deps = [":poplar_headers"],
