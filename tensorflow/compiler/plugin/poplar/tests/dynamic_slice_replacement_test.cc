@@ -460,6 +460,59 @@ TEST_P(DynamicUpdateAddSuportedHloTest, CompareReplacedUpdateAdd) {
   ASSERT_EQ(expected_output, replaced_output);
 }
 
+// This test isn't part of the DynamicSliceReplacementPassHloTest because the
+// pass will replace the individual slice/update if it cant do
+// dynamic-update-add which makes it hard to test in the general case.
+TEST_P(DynamicUpdateAddSuportedHloTest, ReplacedByPass) {
+  CompilerAnnotations annotations(hlo_module_);
+  TF_ASSERT_OK_AND_ASSIGN(bool replaced,
+                          DynamicSliceReplacer(annotations).Run(hlo_module_));
+  ASSERT_TRUE(replaced);
+
+  std::vector<const HloInstruction*> instructions;
+  for (auto* comp : hlo_module_->computations()) {
+    for (auto* inst : comp->instructions()) {
+      instructions.push_back(inst);
+    }
+  }
+  ASSERT_FALSE(
+      absl::c_any_of(instructions, IsPoplarInstruction(PoplarOp::MultiUpdate)));
+  ASSERT_FALSE(
+      absl::c_any_of(instructions, IsPoplarInstruction(PoplarOp::MultiSlice)));
+  ASSERT_TRUE(absl::c_any_of(instructions,
+                             IsPoplarInstruction(PoplarOp::MultiUpdateAdd)));
+}
+
+HloAndSliceOffsets UpdateAddRNNTestCase(const std::string& tensor_size,
+                                        const std::string& slice_size,
+                                        const std::vector<int>& offsets = {0,
+                                                                           0}) {
+  // Same as the 3D test case except that the same offset is used twice.
+  const char* template_hlo = R"(
+HloModule test
+
+ENTRY test {
+  input_tensor = s32[$0] parameter(0)
+  offsets = s32[2] parameter(1)
+
+  slice.5 = s32[1] slice(offsets), slice={[0:1]}, metadata={op_type="Slice" op_name="Slice"}
+  xOffset = s32[] reshape(slice.5), metadata={op_type="Slice" op_name="Slice"}
+
+  slice.7 = s32[1] slice(offsets), slice={[1:2]}, metadata={op_type="Slice" op_name="Slice"}
+  yOffset = s32[] reshape(slice.7), metadata={op_type="Slice" op_name="Slice"}
+
+  ones_base = s32[] constant(1)
+  ones = s32[$1] broadcast(ones_base), dimensions={}
+
+  slice = s32[$1] dynamic-slice(input_tensor, xOffset, yOffset, yOffset), dynamic_slice_sizes={$1}, metadata={op_type="Slice" op_name="Slice"}
+  add = s32[$1] add(slice, ones)
+  ROOT update = s32[$0] dynamic-update-slice(input_tensor, add, xOffset, yOffset, yOffset)
+}
+)";
+  return std::make_pair(absl::Substitute(template_hlo, tensor_size, slice_size),
+                        offsets);
+}
+
 HloAndSliceOffsets UpdateAdd3DInputTestCase(
     const std::string& tensor_size, const std::string& slice_size,
     bool lhs_add = true, const std::vector<int>& offsets = {0, 0, 0}) {
@@ -555,6 +608,7 @@ std::vector<HloAndSliceOffsets> SupportedDynamicUpdateAddTestCases() {
 
   for (int i = 0; i < 2; ++i) {
     const bool lhs_add = i;
+    test_cases.push_back(UpdateAddRNNTestCase("10, 5, 2", "1, 5, 2"));
     test_cases.push_back(
         UpdateAdd3DInputTestCase("10, 5, 2", "1, 5, 2", lhs_add));
     test_cases.push_back(
@@ -563,6 +617,7 @@ std::vector<HloAndSliceOffsets> SupportedDynamicUpdateAddTestCases() {
         UpdateAdd3DInputTestCase("10, 5, 2", "10, 5, 1", lhs_add));
     test_cases.push_back(UpdateAdd2DInputTestCase("10, 5", "1, 5", lhs_add));
     test_cases.push_back(UpdateAdd2DInputTestCase("5, 5", "5, 1", lhs_add));
+    test_cases.push_back(UpdateAddRNNTestCase("10, 5, 2", "10, 1, 2", {0, 2}));
     test_cases.push_back(
         UpdateAdd3DInputTestCase("10, 5, 2", "1, 5, 2", lhs_add, {4, 0, 0}));
     test_cases.push_back(
@@ -656,8 +711,9 @@ TEST_P(DynamicSliceReplacementPassHloTest, Replaces) {
   TF_ASSERT_OK_AND_ASSIGN(auto expected_output,
                           RunModule(hlo_module_, offsets_));
 
+  CompilerAnnotations annotations(hlo_module_);
   TF_ASSERT_OK_AND_ASSIGN(bool replaced,
-                          DynamicSliceReplacer().Run(hlo_module_));
+                          DynamicSliceReplacer(annotations).Run(hlo_module_));
   ASSERT_TRUE(replaced);
   TF_ASSERT_OK_AND_ASSIGN(auto replaced_output,
                           RunModule(hlo_module_, offsets_));
@@ -667,23 +723,27 @@ TEST_P(DynamicSliceReplacementPassHloTest, Replaces) {
 
 using DynamicSliceSkippedByPassHloTest = DynamicSliceReplacementHloTest;
 TEST_P(DynamicSliceSkippedByPassHloTest, Skips) {
+  CompilerAnnotations annotations(hlo_module_);
   TF_ASSERT_OK_AND_ASSIGN(bool replaced,
-                          DynamicSliceReplacer().Run(hlo_module_));
+                          DynamicSliceReplacer(annotations).Run(hlo_module_));
   ASSERT_FALSE(replaced);
 }
 
 INSTANTIATE_TEST_SUITE_P(
     DynamicSliceReplacements, DynamicSliceReplacementPassHloTest,
-    ::testing::Values(Slice2DInputTestCase("2000, 5", "1,5"),
-                      Slice3DInputTestCase("2000, 2, 5", "1,2,5"),
-                      UpdateSlice2DInputTestCase("2000, 10", "1,10"),
-                      UpdateSlice3DInputTestCase("2000, 2, 5", "1,2,5"),
-                      Slice2DInputTestCase("100,2", "1,2"),
-                      Slice3DInputTestCase("5,2,16", "1,2,16"),
-                      Slice3DInputTestCase("5,2,512", "1,2,512"),
-                      Slice1DInputTestCase("10"),
-                      UpdateSlice3DInputTestCase("5,2,512", "1,2,512"),
-                      UpdateSlice1DInputTestCase("10")));
+    ::testing::Values(
+        Slice2DInputTestCase("2000, 5", "1,5"),
+        Slice3DInputTestCase("2000, 2, 5", "1,2,5"),
+        UpdateSlice2DInputTestCase("2000, 10", "1,10"),
+        UpdateSlice3DInputTestCase("2000, 2, 5", "1,2,5"),
+        Slice2DInputTestCase("100,2", "1,2"),
+        Slice3DInputTestCase("5,2,16", "1,2,16"),
+        Slice3DInputTestCase("5,2,512", "1,2,512"), Slice1DInputTestCase("10"),
+        UpdateSlice3DInputTestCase("5,2,512", "1,2,512"),
+        UpdateSlice1DInputTestCase("10"),
+        UpdateAddRNNTestCase("6, 5, 2", "1, 5, 2"),
+        UpdateAdd3DInputTestCase("10, 5, 2", "1, 5, 2", /*lhs_add*/ true),
+        UpdateAdd2DInputTestCase("10, 5", "1, 5", /*lhs_add*/ false, {5, 0})));
 
 // We want these to be skipped since they're not a 1d slice.
 INSTANTIATE_TEST_SUITE_P(

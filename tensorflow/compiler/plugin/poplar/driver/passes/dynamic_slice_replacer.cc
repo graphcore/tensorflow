@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dynamic_slice_replacer.h"
 
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/slice_util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -22,39 +24,97 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+namespace {
 
-StatusOr<bool> DynamicSliceReplacer::Run(HloModule* module) {
-  bool changed = false;
+bool IsDynamicUpdateAdd(const HloInstruction* inst) {
+  if (inst->opcode() == HloOpcode::kDynamicUpdateSlice) {
+    return DynamicUpdateAdd::IsDynamicUpdateAdd(
+        Cast<HloDynamicUpdateSliceInstruction>(inst));
+  }
+  return false;
+}
 
-  for (auto* comp : module->MakeComputationPostOrder()) {
-    for (auto* inst : comp->MakeInstructionPostOrder()) {
-      if (auto dynamic_slice = DynCast<HloDynamicIndexInstruction>(inst)) {
-        const auto old_instr_str = dynamic_slice->ToString();
+// These patterns are simple but it's easier to use a HloMatcher than
+// manually iterating over the instructions - due to complications from
+// prescedence and overlap between the dynamic_update_add and other patterns.
+static const std::vector<HloMatcherPattern> patterns = {
+    // dynamic_update_add should be first since it matches to the other patterns
+    // too
+    HloMatcherPattern(PatternType("dynamic_update_add"), PatternMetaTarget(1),
+                      PatternInputs({}), PatternOutputs({0}),
+                      Pattern({
+                          {HloOpcode::kDynamicUpdateSlice, NodeOperands({}),
+                           IsDynamicUpdateAdd},
+                      })),
+    HloMatcherPattern(PatternType("dynamic_slice"), PatternMetaTarget(1),
+                      PatternInputs({}), PatternOutputs({0}),
+                      Pattern({
+                          {HloOpcode::kDynamicSlice, NodeOperands({})},
+                      })),
+    HloMatcherPattern(PatternType("dynamic_update"), PatternMetaTarget(1),
+                      PatternInputs({}), PatternOutputs({0}),
+                      Pattern({
+                          {HloOpcode::kDynamicUpdateSlice, NodeOperands({})},
+                      })),
+};
+}  // namespace
 
-        HloInstruction* replacement = nullptr;
-        if (inst->opcode() == HloOpcode::kDynamicSlice) {
-          TF_ASSIGN_OR_RETURN(
-              replacement,
-              TryReplaceDynamicSliceWithMultiSlice(
-                  Cast<HloDynamicSliceInstruction>(dynamic_slice)));
-        } else {
-          CHECK_EQ(inst->opcode(), HloOpcode::kDynamicUpdateSlice);
-          TF_ASSIGN_OR_RETURN(
-              replacement,
-              TryReplaceDynamicUpdateWithMultiUpdate(
-                  Cast<HloDynamicUpdateSliceInstruction>(dynamic_slice)));
-        }
+DynamicSliceReplacer::DynamicSliceReplacer(CompilerAnnotations& annotations)
+    : HloMatcher(patterns, annotations, false, true) {}
 
-        if (replacement) {
-          changed = true;
-          VLOG(3) << "Replaced " << old_instr_str << " with "
-                  << replacement->ToString();
-        }
-      }
+StatusOr<bool> DynamicSliceReplacer::HandleMatch(
+    HloMatcherMatched& match, const absl::optional<int64_t> shard) {
+  auto* root = match.instruction_mapping.at(0);
+
+  auto matched = false;
+  switch (match.pattern_idx) {
+    case 0: {
+      TF_ASSIGN_OR_RETURN(matched, HandleDynamicUpdateAdd(root));
+      break;
+    }
+    case 1: {
+      TF_ASSIGN_OR_RETURN(matched, HandleDynamicSlice(root));
+      break;
+    }
+    case 2: {
+      TF_ASSIGN_OR_RETURN(matched, HandleDynamicUpdate(root));
+      break;
+    }
+    default: {
+      return InternalError("Invalid pattern index for %s",
+                           match.pattern.GetType());
     }
   }
 
-  return changed;
+  return matched;
+}
+
+StatusOr<bool> DynamicSliceReplacer::HandleDynamicUpdateAdd(
+    HloInstruction* match_root) const {
+  auto* inst = Cast<HloDynamicUpdateSliceInstruction>(match_root);
+  DynamicUpdateAdd dynamic_update_add(inst);
+  TF_ASSIGN_OR_RETURN(
+      auto replacement,
+      TryReplaceDynamicUpdateAddWithMultiUpdateAdd(dynamic_update_add));
+  return replacement != nullptr;
+}
+
+StatusOr<bool> DynamicSliceReplacer::HandleDynamicSlice(
+    HloInstruction* match_root) const {
+  auto* inst = Cast<HloDynamicSliceInstruction>(match_root);
+  TF_ASSIGN_OR_RETURN(auto replacement,
+                      TryReplaceDynamicSliceWithMultiSlice(inst));
+
+  return replacement != nullptr;
+}
+
+StatusOr<bool> DynamicSliceReplacer::HandleDynamicUpdate(
+    HloInstruction* match_root) const {
+  auto* inst = Cast<HloDynamicUpdateSliceInstruction>(match_root);
+  TF_ASSIGN_OR_RETURN(auto replacement,
+                      TryReplaceDynamicUpdateWithMultiUpdate(inst));
+
+  return replacement != nullptr;
 }
 
 }  // namespace poplarplugin

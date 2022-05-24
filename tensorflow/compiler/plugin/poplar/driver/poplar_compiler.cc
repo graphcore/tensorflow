@@ -1226,7 +1226,7 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
                                      resources.replication_factor);
 
     if (poplar_executor->EnableDynamicSliceReplacement()) {
-      pipeline.AddPass<DynamicSliceReplacer>();
+      pipeline.AddPass<DynamicSliceReplacer>(resources.annotations);
     }
 
     {

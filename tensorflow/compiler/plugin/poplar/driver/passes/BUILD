@@ -323,6 +323,7 @@ poplar_cc_library(
         "dynamic_slice_replacer.h",
     ],
     deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_matcher",
         "//tensorflow/compiler/plugin/poplar/driver/tools:slice_util",
     ],
 )

@@ -16,7 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_DYNAMIC_SLICE_REPLACER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_DYNAMIC_SLICE_REPLACER_H_
 
-#include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
 
 namespace xla {
 
@@ -25,11 +25,19 @@ class HloDynamicIndexInstruction;
 namespace poplarplugin {
 
 // Replace dynamicSlice with multiSlice.
-class DynamicSliceReplacer : public HloModulePass {
+class DynamicSliceReplacer : public HloMatcher {
  public:
+  explicit DynamicSliceReplacer(CompilerAnnotations& annotations);
+
   absl::string_view name() const override { return "dynamic-slice-replacer"; }
 
-  StatusOr<bool> Run(HloModule* module) override;
+ private:
+  StatusOr<bool> HandleMatch(HloMatcherMatched& match,
+                             const absl::optional<int64_t> shard) override;
+
+  StatusOr<bool> HandleDynamicUpdateAdd(HloInstruction* inst) const;
+  StatusOr<bool> HandleDynamicSlice(HloInstruction* inst) const;
+  StatusOr<bool> HandleDynamicUpdate(HloInstruction* inst) const;
 };
 
 }  // namespace poplarplugin

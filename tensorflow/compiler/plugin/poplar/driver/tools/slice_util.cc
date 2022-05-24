@@ -149,9 +149,9 @@ Status ReplaceAndCleanup(HloComputation* comp, HloInstruction* replacement,
                          HloInstruction* original,
                          std::vector<HloInstruction*> to_remove) {
   TF_RETURN_IF_ERROR(original->ReplaceAllUsesWith(replacement));
-  original->SetupDerivedInstruction(replacement);
 
   for (auto* inst : to_remove) {
+    inst->SetupDerivedInstruction(replacement);
     TF_RETURN_IF_ERROR(comp->RemoveInstruction(inst));
   }
 
