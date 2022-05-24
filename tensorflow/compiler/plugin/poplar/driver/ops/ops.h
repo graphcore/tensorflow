@@ -341,7 +341,7 @@ StatusOr<ExternalAndLocalTransferSequence> CreateOutfeed(
 
 StatusOr<ExternalAndLocalTransferSequence> CreateInfeed(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
-    const xla::Shape& output_shape, poplar::Tensor tensor,
+    const xla::Shape& output_shape, DriverTensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id);
 
 /* Op Creation Helpers */

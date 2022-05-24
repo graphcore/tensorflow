@@ -38,14 +38,15 @@ namespace poplarplugin {
 
 namespace {
 
-poplar::Tensor CreateTemporary(
-    poplar::Graph& graph, const xla::poplarplugin::PoplarFeedConfig& config,
-    const poplar::Tensor& target, const bool is_read,
-    const poplar::DebugNameAndId& debug_name_and_id) {
+DriverTensor CreateTemporary(DriverGraph& graph,
+                             const xla::poplarplugin::PoplarFeedConfig& config,
+                             const DriverTensor& target, const bool is_read,
+                             const poplar::DebugNameAndId& debug_name_and_id) {
   if (config.optimise_latency()) {
-    return popops::createHostTransferableTensor(graph, target.elementType(),
-                                                target.shape(), is_read,
-                                                {debug_name_and_id});
+    return DriverTensor(popops::createHostTransferableTensor(
+                            graph, target.elementType(), target.shape(),
+                            is_read, {debug_name_and_id}),
+                        graph);
   }
   return graph.clone(target, {debug_name_and_id});
 }
@@ -54,8 +55,8 @@ Status CreatePoplarH2DFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const Shape& shape,
     const xla::poplarplugin::PoplarFeedConfig& infeed_config,
-    const std::string& handle, poplar::Graph& graph,
-    poplar::Tensor& tensor_to_update, ExternalAndLocalTransferSequence& seqs,
+    const std::string& handle, DriverGraph& graph,
+    DriverTensor& tensor_to_update, ExternalAndLocalTransferSequence& seqs,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::OptionFlags fifo_options;
   fifo_options.set("bufferingDepth",
@@ -69,15 +70,15 @@ Status CreatePoplarH2DFIFO(
   if (infeed_config.optimise_latency()) {
     // Create a tensor that is well laid out for the host exchange
     // and then copy from that to desired output
-    poplar::Tensor tmp = CreateTemporary(graph, infeed_config, tensor_to_update,
-                                         /*is_read=*/false, debug_name_and_id);
+    DriverTensor tmp = CreateTemporary(graph, infeed_config, tensor_to_update,
+                                       /*is_read=*/false, debug_name_and_id);
     seqs.external_transfer.add(
         poplar::program::Copy(fifo, tmp, false, {debug_name_and_id}));
-    seqs.local_transfer.add(poplar::program::Copy(tmp, tensor_to_update, false,
-                                                  {debug_name_and_id}));
+    seqs.local_transfer.add(
+        DriverProgramCopy(tmp, tensor_to_update, false, {debug_name_and_id}));
   } else {
-    seqs.external_transfer.add(poplar::program::Copy(fifo, tensor_to_update,
-                                                     false, debug_name_and_id));
+    seqs.external_transfer.add(
+        DriverProgramCopy(fifo, tensor_to_update, false, debug_name_and_id));
   }
 
   InputInfo info = {handle, handle, 0, tuple_index, shape};
@@ -90,8 +91,8 @@ Status CreateReusablePoplarH2DFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const Shape& shape,
     const xla::poplarplugin::PoplarFeedConfig& infeed_config,
-    const std::string& handle, poplar::Graph& graph,
-    poplar::Tensor& tensor_to_update, ExternalAndLocalTransferSequence& seqs,
+    const std::string& handle, DriverGraph& graph,
+    DriverTensor& tensor_to_update, ExternalAndLocalTransferSequence& seqs,
     const poplar::DebugNameAndId& debug_name_and_id) {
   // Is the stream registered in the cache?
   auto itr = res.infeed_cache.find(handle);
@@ -105,8 +106,8 @@ Status CreateReusablePoplarH2DFIFO(
   }
 
   // Wasn't in the cache, so we'll create one.
-  poplar::Tensor tmp = CreateTemporary(graph, infeed_config, tensor_to_update,
-                                       /*is_read=*/false, debug_name_and_id);
+  DriverTensor tmp = CreateTemporary(graph, infeed_config, tensor_to_update,
+                                     /*is_read=*/false, debug_name_and_id);
 
   xla::poplarplugin::PoplarFeedConfig internal_config = infeed_config;
   // already created the temporary so don't need to create it inside
@@ -116,7 +117,8 @@ Status CreateReusablePoplarH2DFIFO(
                                          seqs, debug_name_and_id));
 
   // Add to the cache.
-  res.infeed_cache[handle] = std::make_pair(seqs.external_transfer, tmp);
+  res.infeed_cache.insert_or_assign(
+      handle, std::make_pair(seqs.external_transfer, tmp));
   seqs.local_transfer.add(
       poplar::program::Copy(tmp, tensor_to_update, false, debug_name_and_id));
 
@@ -126,7 +128,7 @@ Status CreateReusablePoplarH2DFIFO(
 Status CreatePoplarD2HFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const xla::poplarplugin::PoplarFeedConfig& outfeed_config,
-    const std::string& handle, poplar::Graph& graph, poplar::Tensor& in,
+    const std::string& handle, DriverGraph& graph, DriverTensor& in,
     ExternalAndLocalTransferSequence& seqs,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::OptionFlags fifo_options;
@@ -138,15 +140,15 @@ Status CreatePoplarD2HFIFO(
 
   CHECK(!(outfeed_config.optimise_latency() && outfeed_config.reusable()));
   if (outfeed_config.optimise_latency()) {
-    poplar::Tensor tmp = CreateTemporary(graph, outfeed_config, in,
-                                         /*is_read=*/true, debug_name_and_id);
+    DriverTensor tmp = CreateTemporary(graph, outfeed_config, in,
+                                       /*is_read=*/true, debug_name_and_id);
     seqs.local_transfer.add(
-        poplar::program::Copy(in, tmp, false, {debug_name_and_id}));
+        DriverProgramCopy(in, tmp, false, {debug_name_and_id}));
     seqs.external_transfer.add(
-        poplar::program::Copy(tmp, fifo, false, {debug_name_and_id}));
+        DriverProgramCopy(tmp, fifo, false, {debug_name_and_id}));
   } else {
     seqs.external_transfer.add(
-        poplar::program::Copy(in, fifo, false, {debug_name_and_id}));
+        DriverProgramCopy(in, fifo, false, {debug_name_and_id}));
   }
   auto* op = inst->operand(0);
   const auto& op_shape = op->shape();
@@ -162,7 +164,7 @@ Status CreatePoplarD2HFIFO(
 Status CreateReusablePoplarD2HFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const xla::poplarplugin::PoplarFeedConfig& outfeed_config,
-    const std::string& handle, DriverGraph& graph, poplar::Tensor& in,
+    const std::string& handle, DriverGraph& graph, DriverTensor& in,
     ExternalAndLocalTransferSequence& seqs,
     const poplar::DebugNameAndId& debug_name_and_id) {
   // Is the stream registered in the cache?
@@ -177,8 +179,8 @@ Status CreateReusablePoplarD2HFIFO(
   }
 
   // Wasn't in the cache, so we'll create one.
-  poplar::Tensor tmp = CreateTemporary(graph, outfeed_config, in,
-                                       /*is_read=*/true, debug_name_and_id);
+  DriverTensor tmp = CreateTemporary(graph, outfeed_config, in,
+                                     /*is_read=*/true, debug_name_and_id);
 
   ExternalAndLocalTransferSequence external_copy(graph);
 
@@ -192,10 +194,10 @@ Status CreateReusablePoplarD2HFIFO(
 
   // Add to the cache.
   seqs.local_transfer.add(
-      poplar::program::Copy(in, tmp, false, {debug_name_and_id}));
+      DriverProgramCopy(in, tmp, false, {debug_name_and_id}));
   seqs.external_transfer.add(external_copy.external_transfer);
-  res.outfeed_cache[handle] =
-      std::make_pair(external_copy.external_transfer, tmp);
+  res.outfeed_cache.insert_or_assign(
+      handle, std::make_pair(external_copy.external_transfer, tmp));
 
   return Status::OK();
 }
@@ -203,7 +205,7 @@ Status CreateReusablePoplarD2HFIFO(
 
 StatusOr<ExternalAndLocalTransferSequence> CreateInfeed(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
-    const xla::Shape& shape, poplar::Tensor tensor,
+    const xla::Shape& shape, DriverTensor tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);
   ExternalAndLocalTransferSequence seqs = {
@@ -273,7 +275,7 @@ StatusOr<ExternalAndLocalTransferSequence> CreateOutfeed(
                                   debug_name_and_id, expand_aliasing));
 
   for (unsigned i = 0; i < input_tensors.size(); ++i) {
-    poplar::Tensor& in = input_tensors[i];
+    DriverTensor& in = input_tensors[i];
     const std::string handle =
         GetOutfeedCopyHandle(outfeed_config.feed_id(), i);
     // Simply copy to the stream
