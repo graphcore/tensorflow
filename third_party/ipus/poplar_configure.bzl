@@ -111,7 +111,7 @@ def _poplar_autoconf_impl(repository_ctx):
             repository_ctx.symlink(poplar_base + "/libpva/lib", "poplar/libpva/lib")
             repository_ctx.symlink(poplar_base + "/libpva/include", "poplar/libpva/include")
             repository_ctx.symlink(poplar_base + "/libpva/python", "poplar/libpva/python")
-            repository_ctx.symlink(poplar_base + "/popdist/lib", "poplar/popdist/lib")
+            repository_ctx.symlink(poplar_base + "/popdist/lib", "poplar/lib/popdist")
             repository_ctx.symlink(poplar_base + "/popdist/python", "poplar/popdist/python")
             repository_ctx.symlink(poplar_base + "/poprun/bin", "poplar/poprun/bin")
             repository_ctx.symlink(poplar_base + "/ipuof_lib/lib", "poplar/ipuof_lib/lib")
@@ -122,7 +122,7 @@ def _poplar_autoconf_impl(repository_ctx):
             if repository_ctx.path(poplar_base + "/openmpi/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/openmpi/lib64", "poplar/openmpi/lib64")
             if repository_ctx.path(poplar_base + "/popdist/lib64").exists:
-                repository_ctx.symlink(poplar_base + "/popdist/lib64", "poplar/popdist/lib64")
+                repository_ctx.symlink(poplar_base + "/popdist/lib64", "poplar/lib64/popdist")
             if repository_ctx.path(poplar_base + "/libpva/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/libpva/lib64", "poplar/libpva/lib64")
             if repository_ctx.path(poplar_base + "/ipuof_lib/lib64").exists:
