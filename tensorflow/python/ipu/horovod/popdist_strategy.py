@@ -49,9 +49,9 @@ def _is_current_device_ipu():
 class PopDistStrategy(distribute_lib.StrategyV1,
                       keras_extensions.KerasExtensions):
   """This is a distribution strategy for multi-replica distribution
-  that uses compiled communications with GCL for reductions over IPU
-  links and gateway links, while using Horovod for broadcasting of
-  the initial values of variables to all processes, or when a
+  that uses compiled communications with GCL for reductions over
+  IPU-Links and GW-Links. It uses Horovod for broadcasting of
+  the initial values of variables to all processes. It also uses Horovod when a
   reduction is requested with a CPU as the current device.
 
   This is the recommended distribution strategy when using PopDist and PopRun.
