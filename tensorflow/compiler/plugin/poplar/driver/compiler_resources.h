@@ -179,10 +179,10 @@ struct CompilerResources : public HloResources {
 
   std::unique_ptr<DriverProgramSequence> preamble_sequence;
 
-  std::stack<std::vector<DriverProgramSequence>>
+  std::stack<std::vector<poplar::program::Sequence>>
       gradient_accumulation_zeroing_remote_buffers;
 
-  std::stack<std::vector<DriverTensor>> gradient_accumulation_zeroing_tensors;
+  std::stack<std::vector<poplar::Tensor>> gradient_accumulation_zeroing_tensors;
 
   std::stack<std::vector<DriverProgramSequence>>
       pipelining_write_undef_sequences;
