@@ -123,7 +123,8 @@ def _create_feeds(input_signature, input_dataset=None):
   return (infeed, outfeed)
 
 
-def _export_saved_model(defunc, export_dir, input_signature):
+def _export_saved_model(defunc, export_dir, input_signature,
+                        output_names=None):
   """Compile Poplar executable and export saved model.
 
   Args:
@@ -132,12 +133,28 @@ def _export_saved_model(defunc, export_dir, input_signature):
       written.
     input_signature (list): List of signatures of inputs that will be provided
       to the graph using infeed queue.
+    output_names (str or list, optional): Output name or list of output names
+      for the outputs in the SavedModel's SignatureDef. If not provided, outputs
+      will be named: ``output_0``, ``output_1`` and so on.
 
   Returns:
     tf.function: A reference to the same predict function that was exported
     using the SavedModel format. This function uses the embedded runtime op to
     run the executable that was included in the SavedModel's `assets` subfolder.
+
+  Raises:
+    TypeError: If ``output_names`` is neither a string nor a list.
+    ValueError: If length of ``output_names`` does not match the number of
+      results returned by ``defunc``.
   """
+  if output_names:
+    if isinstance(output_names, str):
+      output_names = [output_names]
+
+    if not isinstance(output_names, list):
+      raise TypeError('output_names must be either a string or a '
+                      'list, received ' + str(type(output_names)))
+
   with tempfile.TemporaryDirectory() as tmp_folder:
     unique_name = str(uuid.uuid4())
     # Compile the Poplar executable
@@ -160,7 +177,15 @@ def _export_saved_model(defunc, export_dir, input_signature):
           ctx = embedded_runtime.embedded_runtime_start(
               asset_path, [], self.engine_name)
           ret = embedded_runtime.embedded_runtime_call(args, ctx)
-          return ret
+          if output_names:
+            if len(ret) != len(output_names):
+              raise ValueError(
+                  'Length of output_names does not match the number of results '
+                  'returned by the predict function.')
+            else:
+              return dict(zip(output_names, ret))
+          else:
+            return ret
 
         return predict
 
@@ -193,7 +218,8 @@ def export_single_step(predict_step,
                        export_dir,
                        iterations,
                        input_signature=None,
-                       input_dataset=None):
+                       input_dataset=None,
+                       output_names=None):
   """Create a SavedModel in `export_dir` for TensorFlow Serving.
 
   Wrap `predict_step` inside a while loop, add an infeed for the inputs and
@@ -215,6 +241,9 @@ def export_single_step(predict_step,
     input_dataset (tf.Dataset, optional): Dataset from which `input_signature`
       will be inferred. If `input_signature` is provided, this argument should
       be None.
+    output_names (str or list, optional): Output name or list of output names
+      for the outputs in the SavedModel's SignatureDef. If not provided, outputs
+      will be named: ``output_0``, ``output_1`` and so on.
 
   Returns:
     tf.function: A reference to the same predict function that was exported
@@ -245,7 +274,8 @@ def export_single_step(predict_step,
                                         input_dataset)
   predict_loop = _wrap_in_loop(predict_step, input_signature, input_dataset,
                                iterations)
-  return _export_saved_model(predict_loop, export_dir, input_signature)
+  return _export_saved_model(predict_loop, export_dir, input_signature,
+                             output_names)
 
 
 def export_pipeline(computational_stages,
@@ -257,7 +287,8 @@ def export_pipeline(computational_stages,
                     poplar_options=None,
                     name=None,
                     input_signature=None,
-                    input_dataset=None):
+                    input_dataset=None,
+                    output_names=None):
   """Create a pipelined SavedModel in `export_dir` for TensorFlow Serving.
 
   Create a pipeline op using `computational_stages`, add an infeed for
@@ -299,6 +330,9 @@ def export_pipeline(computational_stages,
     input_dataset (tf.Dataset, optional): Dataset from which `input_signature`
       will be inferred. If `input_signature` is provided, this argument should
       be None.
+    output_names (str or list, optional): Output name or list of output names
+      for the outputs in the SavedModel's SignatureDef. If not provided, outputs
+      will be named: ``output_0``, ``output_1`` and so on.
 
   Returns:
     tf.function: A reference to the same predict function that was exported
@@ -343,10 +377,10 @@ def export_pipeline(computational_stages,
         forward_propagation_stages_poplar_options=poplar_options,
         name=name)
 
-  return _export_saved_model(defunc, export_dir, input_signature)
+  return _export_saved_model(defunc, export_dir, input_signature, output_names)
 
 
-def export_keras(model, export_dir, batch_size=None):
+def export_keras(model, export_dir, batch_size=None, output_names=None):
   """Export Keras model using the SavedModel format for TensorFlow serving.
 
   Wrap model's ``call`` function inside a ``while`` loop, add an infeed for the
@@ -363,6 +397,9 @@ def export_keras(model, export_dir, batch_size=None):
       size (different than None), the exported model will use the currently set
       batch size. This argument must be specified if the model's batch size is
       `None`.
+    output_names (str or list, optional): Output name or list of output names
+      for the outputs in the SavedModel's SignatureDef. If not provided, outputs
+      will be named: ``output_0``, ``output_1`` and so on.
 
   Returns:
     tf.function: A reference to the same predict function that was exported
@@ -383,4 +420,10 @@ def export_keras(model, export_dir, batch_size=None):
         "Provided model was not created inside an IPU strategy, so it "
         "does not contain IPU-specific functions. Please wrap its "
         "creation inside an IPU strategy.")
-  return model.export_for_ipu_serving(export_dir, batch_size)
+
+  # TODO(T63215): This is a temporary check - will be removed as soon as change
+  # for output_names support is merged in the Keras repository!
+  if len(inspect.signature(model.export_for_ipu_serving).parameters) == 3:
+    return model.export_for_ipu_serving(export_dir, batch_size, output_names)
+  else:
+    return model.export_for_ipu_serving(export_dir, batch_size)

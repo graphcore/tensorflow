@@ -51,7 +51,7 @@ class TestServingExportBase(test_util.TensorFlowTestCase,
     imported = load.load(path)
     loaded = imported.signatures[
         signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
-    output_name = next(iter(loaded.structured_outputs.values())).name
+
     input_names = [inp.name.split(':')[0] for inp in loaded.inputs]
 
     if isinstance(inputs, list):
@@ -67,7 +67,7 @@ class TestServingExportBase(test_util.TensorFlowTestCase,
     with strategy.scope():
       result = strategy.run(loaded, kwargs=inputs)
 
-    return result[output_name]
+    return result
 
 
 class TestServingExport(TestServingExportBase):
@@ -87,14 +87,17 @@ class TestServingExport(TestServingExportBase):
 
     with tempfile.TemporaryDirectory() as tmp_folder:
       iterations = 16
-      serving.export_single_step(my_net, tmp_folder, iterations,
-                                 input_signature)
+      serving.export_single_step(my_net,
+                                 tmp_folder,
+                                 iterations,
+                                 input_signature,
+                                 output_names="out0")
 
       input_data = np.arange(element_count, dtype=np.float32)
 
       # load and run
       result = self._load_and_run(tmp_folder, input_data)
-      self.assertEqual(list(result), list(np.square(input_data)))
+      self.assertEqual(list(result["out0"]), list(np.square(input_data)))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.run_v2_only
@@ -120,7 +123,7 @@ class TestServingExport(TestServingExportBase):
 
       input_data = np.arange(element_count, dtype=np.float16)
       result = self._load_and_run(tmp_folder, input_data)
-      self.assertEqual(list(result), list(input_data * var_value))
+      self.assertEqual(list(result["output_0"]), list(input_data * var_value))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.run_v2_only
@@ -134,17 +137,21 @@ class TestServingExport(TestServingExportBase):
 
     @def_function.function(input_signature=input_signature)
     def my_net(x1, x2):
-      return x1 * x2
+      return x1 * x2, x1 + x2
 
     with tempfile.TemporaryDirectory() as tmp_folder:
       iterations = 16
-      serving.export_single_step(my_net, tmp_folder, iterations)
+      serving.export_single_step(my_net,
+                                 tmp_folder,
+                                 iterations,
+                                 output_names=["result0", "result1"])
 
       x1_data = np.arange(element_count, dtype=np.float32)
       x2_data = np.float32(3.0)
       result = self._load_and_run(tmp_folder, {'x1': x1_data, 'x2': x2_data})
 
-      self.assertEqual(list(result), list(x1_data * x2_data))
+      self.assertEqual(list(result["result0"]), list(x1_data * x2_data))
+      self.assertEqual(list(result["result1"]), list(x1_data + x2_data))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.run_v2_only
@@ -228,7 +235,7 @@ class TestServingExport(TestServingExportBase):
 
       result = self._load_and_run(tmp_folder, {'x1': x1_data, 'x2': x2_data})
       ref_result = x1_data * x2_data - var_value + 2
-      self.assertEqual(list(result), list(ref_result))
+      self.assertEqual(list(result["output_0"]), list(ref_result))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.run_v2_only
@@ -245,19 +252,22 @@ class TestServingExport(TestServingExportBase):
       return x1 * x2
 
     def stage2(x):
-      return x + 2
+      return x + 2, x * 3
 
     with tempfile.TemporaryDirectory() as tmp_folder:
       serving.export_pipeline([stage1, stage2],
                               tmp_folder,
                               iterations=16,
                               inputs=[np.float16(42.0)],
-                              device_mapping=[0, 0])
+                              device_mapping=[0, 0],
+                              output_names=["out0", "out1"])
 
       x2_data = np.arange(element_count, dtype=np.float16)
       result = self._load_and_run(tmp_folder, x2_data)
-      ref_result = 42.0 * x2_data + 2
-      self.assertEqual(list(result), list(ref_result))
+      ref_out0 = 42.0 * x2_data + 2
+      ref_out1 = 42.0 * x2_data * 3
+      self.assertEqual(list(result["out0"]), list(ref_out0))
+      self.assertEqual(list(result["out1"]), list(ref_out1))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.run_v2_only
@@ -288,7 +298,7 @@ class TestServingExport(TestServingExportBase):
       x3_data = np.float32(5.0)
       result = self._load_and_run(tmp_folder, {'x2': x2_data, 'x3': x3_data})
       ref_result = 42.0 * x2_data + x3_data + 2
-      self.assertEqual(list(result), list(ref_result))
+      self.assertEqual(list(result["output_0"]), list(ref_result))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.run_v2_only
