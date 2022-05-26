@@ -272,7 +272,10 @@ tf_py_test(
     size = "large",
     srcs = ["tests/within_replicas_test.py"],
     shard_count = 2,
-    tags = ["hw_poplar_test_4_ipus"],
+    tags = [
+        "disabled_poplar_test",
+        "hw_poplar_test_4_ipus",
+    ],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python:framework",
