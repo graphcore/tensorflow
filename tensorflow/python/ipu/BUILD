@@ -1609,7 +1609,10 @@ tf_py_test(
     ],
     # Shard count needs to match the number of tests.
     shard_count = 10,
-    tags = ["hw_poplar_test_8_ipus"],
+    tags = [
+        "disabled_poplar_test",
+        "hw_poplar_test_8_ipus",
+    ],
 )
 
 poprun_py_test(
