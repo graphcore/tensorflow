@@ -962,16 +962,15 @@ void ZeroRemoteBuffer(CompilerResources& res, DriverGraph& graph,
   }
 }
 
-void ZeroTensors(CompilerResources& res, poplar::Graph& graph,
-                 const std::vector<poplar::Tensor>& tensors,
-                 poplar::program::Sequence& sequence,
+void ZeroTensors(CompilerResources& res, DriverGraph& graph,
+                 const std::vector<DriverTensor>& tensors,
+                 DriverProgramSequence& sequence,
                  const poplar::DebugNameAndId& debug_name_and_id) {
   // Keeps track of what types we have seen in a deterministic ordering.
   std::vector<poplar::Type> seen_types;
 
   // Keeps track of the input tensors, grouped by type.
-  absl::flat_hash_map<poplar::Type, std::vector<poplar::Tensor>,
-                      PoplarTypeHasher>
+  absl::flat_hash_map<poplar::Type, std::vector<DriverTensor>, PoplarTypeHasher>
       typed_inputs;
 
   // Add the tensors to the grouped input, preserving the type order.
@@ -984,7 +983,7 @@ void ZeroTensors(CompilerResources& res, poplar::Graph& graph,
 
   // Concatenate all the inputs of the same type and zero them.
   for (auto type : seen_types) {
-    poplar::Tensor input = poplar::concat(typed_inputs[type]);
+    auto input = ConcatenateTensors(typed_inputs[type]);
     popops::zero(graph, input, sequence, {debug_name_and_id});
   }
 }

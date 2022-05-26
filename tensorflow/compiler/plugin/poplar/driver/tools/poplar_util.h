@@ -259,9 +259,9 @@ void ZeroRemoteBuffer(CompilerResources& res, DriverGraph& graph,
                       const poplar::DebugNameAndId& debug_name_and_id);
 
 // Zero the given tensors efficiently.
-void ZeroTensors(CompilerResources& res, poplar::Graph& graph,
-                 const std::vector<poplar::Tensor>& tensors,
-                 poplar::program::Sequence& sequence,
+void ZeroTensors(CompilerResources& res, DriverGraph& graph,
+                 const std::vector<DriverTensor>& tensors,
+                 DriverProgramSequence& sequence,
                  const poplar::DebugNameAndId& debug_name_and_id);
 
 // Functor to hash a poplar type.
