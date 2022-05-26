@@ -54,7 +54,7 @@ cc_library(
             "lib*/poplibs/libpopsparse.so",
             "lib*/poplibs/libpopsys.so",
             "lib*/poplibs/libpoputil.so",
-            "lib*/popdist/libpopdist.so",
+            "popdist/lib*/libpopdist.so",
         ], [
             "lib*/**/libgcl_ct*",
             "lib*/**/libpopef.so",
