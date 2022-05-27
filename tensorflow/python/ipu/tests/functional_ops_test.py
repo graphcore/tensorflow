@@ -286,7 +286,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
     self.assert_total_tile_memory(report, 299632, tolerance=0.1)
-    self.assert_max_tile_memory(report, 38837, tolerance=0.1)
+    self.assert_max_tile_memory(report, 34774, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionSerializedLookup(self):
