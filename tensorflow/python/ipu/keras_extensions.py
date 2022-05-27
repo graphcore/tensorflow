@@ -28,6 +28,9 @@ class _ExtensionsManager:
   def _delete_extension(self, class_type, extension_type):
     self._extensions.pop((class_type, extension_type), None)
 
+  def _get_extension(self, class_type, extension_type):
+    return self._extensions.get((class_type, extension_type))
+
   def __iter__(self):
     for key, value in self._extensions.items():
       yield key, value
@@ -46,9 +49,6 @@ class KerasExtensions:
     self._enable_keras_extensions = enable_keras_extensions
     self._keras_extensions = OrderedDict()
 
-    for (class_type, extension_type), extension in _extensions_manager:
-      self._register_keras_extension(class_type, extension_type, extension)
-
   def _enable_dataset_iterators(self):
     return context.executing_eagerly() and self._enable_iterators
 
@@ -60,10 +60,13 @@ class KerasExtensions:
     self._keras_extensions[(class_type, extension_type)] = extension
 
   def _get_keras_extension(self, class_type, extension_type):
-    try:
-      return self._keras_extensions[(class_type, extension_type)]
-    except KeyError:
-      return None
+    extension = self._keras_extensions.get((class_type, extension_type))
+    if extension is None:
+      # If no extension has been registered locally to the strategy, check the
+      # global extension register.
+      extension = _extensions_manager._get_extension(class_type,
+                                                     extension_type)  # pylint: disable=protected-access
+    return extension
 
   def _delete_keras_extension(self, class_type, extension_type):
     self._keras_extensions.pop((class_type, extension_type), None)
@@ -73,7 +76,7 @@ class KerasExtensions:
       return
 
     for (class_type,
-         extension_type), extension_cls in self._keras_extensions.items():
+         extension_type), extension_cls in self._iterate_keras_extensions():
       if isinstance(instance, class_type):
         if isinstance(instance, extension_type):
           if not isinstance(instance, extension_cls):
@@ -104,6 +107,13 @@ class KerasExtensions:
         # instance.
         extension_cls.__init__(instance)
         break
+
+  def _iterate_keras_extensions(self):
+    for key, value in self._keras_extensions.items():
+      yield key, value
+    for key, value in _extensions_manager:
+      if not key in self._keras_extensions:
+        yield key, value
 
   @staticmethod
   def create_patched_init(instance_cls, extension_cls):

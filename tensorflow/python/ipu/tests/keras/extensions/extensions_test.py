@@ -19,6 +19,7 @@ import numpy as np
 from tensorflow.python import ipu
 from tensorflow.python.ipu import config
 from tensorflow.python.ipu import ipu_strategy
+from tensorflow.python.ipu import keras_extensions
 from tensorflow.python.ipu.keras import extensions
 from tensorflow.python.eager import def_function
 from tensorflow.python.keras.datasets import imdb
@@ -49,7 +50,7 @@ def get_imdb_dataset(num_words, maxlen):
 
 class TFKerasExtensionsTest(test.TestCase):
   @test_util.run_v2_only
-  def testExtension(self):
+  def testGlobalRegistration(self):
     cfg = config.IPUConfig()
     cfg.auto_select_ipus = 1
     cfg.configure_ipu_system()
@@ -66,6 +67,89 @@ class TFKerasExtensionsTest(test.TestCase):
       return layer(10.)
 
     def inner_test(expected_value, extension):
+      keras_extensions._extensions_manager._register_extension(
+          TestLayer, base_layer.TFKerasExtension, extension)  # pylint: disable=protected-access
+      with strategy.scope():
+        l = TestLayer()
+        result = strategy.run(fn, args=[l])
+        self.assertAllClose(result, expected_value)
+      keras_extensions._extensions_manager._delete_extension(
+          TestLayer, base_layer.TFKerasExtension)  # pylint: disable=protected-access
+
+    # Test replacement.
+    class TestExtension1(base_layer.TFKerasExtension):
+      def _call_supported(self, *args, **kwargs):  # pylint: disable=unused-argument
+        return True
+
+      def _call_delegate(self, x, training=False):  # pylint: disable=unused-argument
+        return x * x
+
+    inner_test(100., TestExtension1)
+
+    # Test replacement fails - not supported.
+    class TestExtension2(base_layer.TFKerasExtension):
+      def _call_supported(self, *args, **kwargs):  # pylint: disable=unused-argument
+        return False
+
+      def _call_delegate(self, x, training=False):  # pylint: disable=unused-argument
+        return x * x
+
+    inner_test(11., TestExtension2)
+
+    # Test replacement fails - not implemented.
+    class TestExtension3(base_layer.TFKerasExtension):
+      def _call_supported(self, *args, **kwargs):  # pylint: disable=unused-argument
+        return False
+
+    inner_test(11., TestExtension3)
+
+    # Test replacement fails - mismatch in spec.
+    class TestExtension4(base_layer.TFKerasExtension):
+      def _call_supported(self, *args, **kwargs):  # pylint: disable=unused-argument
+        return False
+
+      def _call_delegate(self, x, training=True):  # pylint: disable=unused-argument
+        return x * x
+
+    inner_test(11., TestExtension4)
+
+    # Test replacement and calling through.
+    class TestExtension5(base_layer.TFKerasExtension):
+      def _call_supported(self, *args, **kwargs):  # pylint: disable=unused-argument
+        return True
+
+      def _call_delegate(self, x, training=False):  # pylint: disable=unused-argument
+        return x * self.call(x, __extension_delegate=False)
+
+    inner_test(110., TestExtension5)
+
+  @test_util.run_v2_only
+  def testLocalRegistration(self):
+    cfg = config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
+    class TestLayer(base_layer.Layer):
+      @base_layer.extension_delegate
+      def call(self, x, training=False):  # pylint: disable=unused-argument,arguments-differ
+        return x + 1.
+
+    class TestGlobalExtension(base_layer.TFKerasExtension):
+      def _call_supported(self, *args, **kwargs):  # pylint: disable=unused-argument
+        return True
+
+      def _call_delegate(self, x, training=False):  # pylint: disable=unused-argument
+        return x - 1.
+
+    strategy = ipu_strategy.IPUStrategyV1()
+
+    @def_function.function(jit_compile=True)
+    def fn(layer):
+      return layer(10.)
+
+    def inner_test(expected_value, extension):
+      keras_extensions._extensions_manager._register_extension(
+          TestLayer, base_layer.TFKerasExtension, TestGlobalExtension)  # pylint: disable=protected-access
       strategy._register_keras_extension(TestLayer,
                                          base_layer.TFKerasExtension,
                                          extension)  # pylint: disable=protected-access
@@ -73,6 +157,8 @@ class TFKerasExtensionsTest(test.TestCase):
         l = TestLayer()
         result = strategy.run(fn, args=[l])
         self.assertAllClose(result, expected_value)
+      keras_extensions._extensions_manager._delete_extension(
+          TestLayer, base_layer.TFKerasExtension)  # pylint: disable=protected-access
       strategy._delete_keras_extension(TestLayer, base_layer.TFKerasExtension)  # pylint: disable=protected-access
 
     # Test replacement.
