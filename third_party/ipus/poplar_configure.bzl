@@ -57,6 +57,7 @@ def _poplar_autoconf_impl(repository_ctx):
                 # Don't include any PopLibs headers from the Poplar path.
                 repository_ctx.symlink(poplar_base + "/include/poplar", "poplar/poplar/include/poplar")
                 repository_ctx.symlink(poplar_base + "/include/gcl", "poplar/poplar/include/gcl")
+                repository_ctx.symlink(poplar_base + "/include/gccs", "poplar/poplar/include/gccs")
                 repository_ctx.symlink(poplibs_base + "/include", "poplar/poplibs/include")
                 repository_ctx.symlink(poplibs_base + "/lib", "poplar/lib/poplibs")
 
@@ -86,6 +87,7 @@ def _poplar_autoconf_impl(repository_ctx):
 
             repository_ctx.symlink(poplar_base + "/graphcore_target_access/include", "poplar/graphcore_target_access/include")
             repository_ctx.symlink(poplar_base + "/gccs/include", "poplar/gccs/include")
+            repository_ctx.symlink(poplar_base + "/gccs/lib", "poplar/lib/gccs")
             repository_ctx.symlink(poplar_base + "/popef/include", "poplar/popef/include")
             repository_ctx.symlink(poplar_base + "/popef/lib", "poplar/lib/popef")
             repository_ctx.symlink(poplar_base + "/popef/lib/python", "poplar/lib/python")
@@ -125,6 +127,8 @@ def _poplar_autoconf_impl(repository_ctx):
                 repository_ctx.symlink(poplar_base + "/libpva/lib64", "poplar/libpva/lib64")
             if repository_ctx.path(poplar_base + "/ipuof_lib/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/ipuof_lib/lib64", "poplar/ipuof_lib/lib64")
+            if repository_ctx.path(poplar_base + "/gccs/lib64").exists:
+                repository_ctx.symlink(poplar_base + "/gccs/lib64", "poplar/gccs/lib64")
 
             repository_ctx.symlink(poplar_base + "/gcl/include", "poplar/gcl/include")
             repository_ctx.symlink(poplar_base + "/gcl/lib", "poplar/lib/gcl")
