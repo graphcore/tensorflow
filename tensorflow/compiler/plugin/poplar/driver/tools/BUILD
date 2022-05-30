@@ -1189,6 +1189,26 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "hlo_poplar_pva_test",
+    testonly = True,
+    srcs = [
+        "hlo_poplar_pva_test.cc",
+    ],
+    hdrs = [
+        "hlo_poplar_pva_test.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver:poplar_executor",
+        "//tensorflow/compiler/plugin/poplar/driver/visitors:entry_visitor",
+        "//tensorflow/compiler/xla/service:hlo_memory_scheduler",
+        "//tensorflow/compiler/xla/service:hlo_runner",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:literal_test_util",
+        "//tensorflow/compiler/xla/tests:manifest_checking_test",
+    ],
+)
+
+poplar_cc_library(
     name = "attributes_utils",
     hdrs = [
         "attributes_utils.h",

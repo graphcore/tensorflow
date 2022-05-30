@@ -97,6 +97,7 @@ poplar_cc_library(
     testonly = True,
     visibility = ["//visibility:public"],
     deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_poplar_pva_test",
         "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_poplar_test_base",
         "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_poplar_test_util",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -694,6 +695,8 @@ xla_test(
     srcs = ["tests/ipu_scheduler_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    shard_count = 2,
+    tags = ["hw_poplar_test_4_ipus"],
     deps = [
         ":poplar_test_base",
         ":test_utils",
