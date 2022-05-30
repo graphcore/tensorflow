@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,13 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/ipu_devices.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 
 #include "tensorflow/compiler/jit/kernels/xla_ops.h"
 #include "tensorflow/compiler/jit/xla_device.h"
 #include "tensorflow/compiler/jit/xla_device_ops.h"
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
+#include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_executor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_platform.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
 
 #include "tensorflow/core/framework/kernel_def.pb.h"
@@ -29,31 +29,29 @@ namespace xp = ::xla::poplarplugin;
 
 namespace tensorflow {
 
-class IpuDevice : public XlaDevice {
+class PopItDevice : public XlaDevice {
  public:
-  IpuDevice(const SessionOptions& options, const XlaDevice::Options& devopts)
+  PopItDevice(const SessionOptions& options, const XlaDevice::Options& devopts)
       : XlaDevice(options, devopts) {
+    // Sets extra information in the XlaDevice to help propagate errors
+    // from non cpu streams.
     UseGpuDeviceInfo();
-
-    IPUDevices::GetActiveDevices().Add(this);
   }
-
-  virtual ~IpuDevice() { IPUDevices::GetActiveDevices().Remove(this); }
 };
 
-class XlaIpuDeviceFactory : public XlaGraphcoreDeviceFactory {
+class XlaPopItDeviceFactory : public XlaGraphcoreDeviceFactory {
  public:
-  XlaIpuDeviceFactory()
-      : XlaGraphcoreDeviceFactory(DEVICE_XLA_IPU, DEVICE_IPU_XLA_JIT,
-                                  PLATFORM_NAME) {}
+  XlaPopItDeviceFactory()
+      : XlaGraphcoreDeviceFactory(DEVICE_XLA_POPIT, DEVICE_POPIT_XLA_JIT,
+                                  POPIT_PLATFORM_NAME) {}
 
   std::unique_ptr<Device> CreateFromOptions(
       const SessionOptions& options,
       const XlaDevice::Options& devopts) const override {
-    return absl::make_unique<IpuDevice>(options, devopts);
+    return absl::make_unique<PopItDevice>(options, devopts);
   }
 };
 
-REGISTER_IPU_XLA_DEVICES(DEVICE_XLA_IPU, XlaIpuDeviceFactory)
+REGISTER_IPU_XLA_DEVICES(DEVICE_XLA_POPIT, XlaPopItDeviceFactory)
 
 }  // namespace tensorflow

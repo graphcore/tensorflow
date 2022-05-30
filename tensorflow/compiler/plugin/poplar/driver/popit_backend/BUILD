@@ -106,6 +106,21 @@ popit_cc_library(
 )
 
 popit_cc_library(
+    name = "xla_popit_device",
+    srcs = [
+        "xla_popit_device.cc",
+    ],
+    deps = [
+        ":popit_executor",
+        ":popit_platform",
+        "//tensorflow/compiler/jit/kernels:xla_ops",
+        "//tensorflow/compiler/plugin/poplar/driver:xla_ipu_common",
+        "//tensorflow/core/kernels:no_op",
+    ],
+    alwayslink = True,
+)
+
+popit_cc_library(
     name = "popit_backend",
     deps = [
         ":popit_compiler",
@@ -114,5 +129,6 @@ popit_cc_library(
         ":popit_platform",
         ":popit_transfer_manager",
         ":xla_popit_backend",
+        ":xla_popit_device",
     ],
 )

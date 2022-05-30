@@ -15,9 +15,12 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_XLA_IPU_COMMON_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_XLA_IPU_COMMON_H_
 
+#include <memory>
+#include <string>
 #include <vector>
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/jit/xla_device.h"
+#include "tensorflow/core/framework/device_factory.h"
 #include "tensorflow/core/framework/kernel_def.pb.h"
 #include "tensorflow/core/framework/types.h"
 
@@ -35,6 +38,38 @@ std::vector<DataType> GetIPUSupportedTypes();
 
 bool OpFilter(KernelDef* kdef);
 
+class XlaGraphcoreDeviceFactory : public DeviceFactory {
+  const char* device_xla_;
+  const char* device_xla_jit_;
+  const char* platform_name_;
+
+ public:
+  XlaGraphcoreDeviceFactory(const char* device_xla, const char* device_xla_jit,
+                            const char* platform_name)
+      : device_xla_(device_xla),
+        device_xla_jit_(device_xla_jit),
+        platform_name_(platform_name) {}
+  Status CreateDevices(const SessionOptions& options, const string& name_prefix,
+                       std::vector<std::unique_ptr<Device>>* devices) override;
+
+  Status ListPhysicalDevices(std::vector<string>* devices) override {
+    devices->push_back(absl::StrCat("/physical_device:", device_xla_, ":0"));
+    return Status::OK();
+  }
+
+  virtual std::unique_ptr<Device> CreateFromOptions(
+      const SessionOptions& options,
+      const XlaDevice::Options& devopts) const = 0;
+};
+
 }  // namespace tensorflow
+
+#define REGISTER_IPU_XLA_DEVICES(device, factory)                            \
+  REGISTER_LOCAL_DEVICE_FACTORY(device, factory);                            \
+  REGISTER_XLA_LAUNCH_KERNEL(device, XlaLocalLaunchOp,                       \
+                             GetIPUSupportedTypes());                        \
+  REGISTER_XLA_COMPILE_KERNEL(device, XlaCompileOp, GetIPUSupportedTypes()); \
+  REGISTER_XLA_RUN_KERNEL(device, XlaRunOp, GetIPUSupportedTypes());         \
+  REGISTER_XLA_DEVICE_KERNELS(device, GetIPUSupportedTypes());
 
 #endif

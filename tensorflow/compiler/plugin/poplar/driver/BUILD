@@ -287,6 +287,7 @@ poplar_cc_library(
     deps = [
         ":poplar_executable_proto_cc_impl",
         ":tensor",
+        ":xla_ipu_common",
         "//third_party/eigen3",
         "//third_party/ipus/tools:poplar_executable_data",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -441,11 +442,15 @@ poplar_cc_library(
         "xla_ipu_common.h",
     ],
     deps = [
-        "//tensorflow/compiler/plugin/poplar/driver/tools:flags",
+        "//tensorflow/compiler/jit:xla_device",
+        "//tensorflow/compiler/jit/kernels:xla_ops",
         "//tensorflow/compiler/tf2xla:tf2xla_proto_cc_impl",
         "//tensorflow/compiler/tf2xla:tf2xla_util",
         "//tensorflow/compiler/tf2xla:xla_compiler",
+        "//tensorflow/core/common_runtime:device_factory",
+        "//tensorflow/stream_executor/lib",
     ],
+    alwayslink = True,
 )
 
 poplar_cc_library(

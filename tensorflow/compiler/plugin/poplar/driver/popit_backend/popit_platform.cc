@@ -98,5 +98,16 @@ PopItPlatform::DescriptionForDevice(int ordinal) const {
   return builder.Build();
 }
 
+static void InitializePopItPlatform() {
+  SE_CHECK_OK(se::MultiPlatformManager::RegisterPlatform(
+      absl::make_unique<PopItPlatform>()));
+}
+
 }  // namespace poplarplugin
 }  // namespace xla
+
+REGISTER_MODULE_INITIALIZER(popit_platform,
+                            xla::poplarplugin::InitializePopItPlatform());
+DECLARE_MODULE_INITIALIZER(multi_platform_manager);
+
+REGISTER_MODULE_INITIALIZER_SEQUENCE(popit_platform, multi_platform_manager);

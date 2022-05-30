@@ -15,10 +15,20 @@ limitations under the License.
 
 #include <vector>
 
+#include "tensorflow/compiler/jit/xla_device.h"
+#include "tensorflow/compiler/jit/xla_device_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/compiler/tf2xla/tf2xla_util.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
 #include "tensorflow/core/framework/kernel_def.pb.h"
+
+namespace xla {
+
+namespace poplarplugin {}
+
+}  // namespace xla
+
+namespace xp = ::xla::poplarplugin;
 
 namespace tensorflow {
 
@@ -105,6 +115,52 @@ bool OpFilter(KernelDef* kdef) {
   }
 
   return true;
+}
+
+Status XlaGraphcoreDeviceFactory::CreateDevices(
+    const SessionOptions& options, const string& name_prefix,
+    std::vector<std::unique_ptr<Device>>* devices) {
+  static XlaDeviceOpRegistrations* registrations =
+      RegisterXlaDeviceKernels(device_xla_, device_xla_jit_);
+  (void)registrations;
+
+  XlaOpRegistry::DeviceRegistration registration;
+  registration.compilation_device_name = device_xla_jit_;
+  registration.autoclustering_policy =
+      XlaOpRegistry::AutoclusteringPolicy::kAlways;
+  registration.cluster_resource_variable_ops_unsafely = true;
+  registration.cluster_stack_ops = true;
+  registration.cluster_tensor_array_ops = true;
+  registration.cluster_stateful_rng_ops = true;
+  registration.cluster_control_trigger = true;
+  registration.elide_assert_and_checknumerics = true;
+  registration.cluster_variant_ops = true;
+  registration.cluster_slow_ops = true;
+  registration.cluster_inaccurate_ops = true;
+  XlaOpRegistry::RegisterCompilationDevice(device_xla_, registration);
+
+  auto platform = se::MultiPlatformManager::PlatformWithName(platform_name_);
+  if (!platform.ok()) {
+    return platform.status();
+  }
+
+  auto* p = platform.ValueOrDie();
+
+  XlaDevice::Options devopts;
+  devopts.platform = platform.ValueOrDie();
+  devopts.device_name_prefix = name_prefix;
+  devopts.compilation_device_name = device_xla_jit_;
+  devopts.device_name = device_xla_;
+  devopts.supports_may_alias_resource_update = false;
+
+  int num_devices = p->VisibleDeviceCount();
+
+  for (int ordinal = 0; ordinal < num_devices; ordinal++) {
+    devopts.device_ordinal = ordinal;
+    devices->push_back(CreateFromOptions(options, devopts));
+  }
+
+  return Status::OK();
 }
 
 }  // namespace tensorflow
