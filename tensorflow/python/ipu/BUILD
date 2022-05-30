@@ -273,7 +273,6 @@ tf_py_test(
     srcs = ["tests/within_replicas_test.py"],
     shard_count = 2,
     tags = [
-        "disabled_poplar_test",
         "hw_poplar_test_4_ipus",
     ],
     deps = [
