@@ -82,5 +82,25 @@ HloCostAnalysis::ShapeSizeFunction PopItCompiler::ShapeSizeBytesFunction()
   return cpu::CpuExecutable::ShapeSizeBytes;
 }
 
+static std::unique_ptr<xla::ComputationPlacer> PopItCreateComputationPlacer() {
+  return absl::make_unique<xla::ComputationPlacer>();
+}
+
+static bool PopItRegisterComputationPlacer() {
+  xla::ComputationPlacer::RegisterComputationPlacer(
+      xla::poplarplugin::kPopItPlatformId, &PopItCreateComputationPlacer);
+  return true;
+}
+
+bool popit_placer_registration = PopItRegisterComputationPlacer();
+
+static bool PopItInitModule() {
+  xla::Compiler::RegisterCompilerFactory(
+      xla::poplarplugin::kPopItPlatformId,
+      []() { return absl::make_unique<xla::poplarplugin::PopItCompiler>(); });
+  return true;
+}
+static bool module_initialized = PopItInitModule();
+
 }  // namespace poplarplugin
 }  // namespace xla

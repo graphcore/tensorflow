@@ -108,6 +108,7 @@ static void InitializePopItPlatform() {
 
 REGISTER_MODULE_INITIALIZER(popit_platform,
                             xla::poplarplugin::InitializePopItPlatform());
+
 DECLARE_MODULE_INITIALIZER(multi_platform_manager);
 
 REGISTER_MODULE_INITIALIZER_SEQUENCE(popit_platform, multi_platform_manager);

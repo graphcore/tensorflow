@@ -21,7 +21,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/core/framework/types.pb.h"
-#include "tensorflow/stream_executor/platform.h"
 #include "tensorflow/stream_executor/stream_executor_internal.h"
 
 namespace se = stream_executor;

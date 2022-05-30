@@ -39,8 +39,11 @@ popit_cc_library(
     ],
     hdrs = [
         "popit_executor.h",
+        "popit_platform.h",
     ],
     deps = [
+        "//tensorflow/compiler/plugin/poplar/driver:poplar_executor",
+        "//tensorflow/compiler/plugin/poplar/driver:xla_ipu_common",
         "//tensorflow/compiler/plugin/poplar/driver/tools:tracepoint",
         "//tensorflow/compiler/xla/service:executable",
         "//tensorflow/stream_executor:platform",
@@ -87,6 +90,7 @@ popit_cc_library(
         ":popit_executor",
         ":popit_platform_id",
         "//tensorflow/compiler/plugin/poplar/driver:poplar_executor",
+        "//tensorflow/compiler/plugin/poplar/driver:xla_ipu_common",
     ],
 )
 

@@ -14,13 +14,20 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_executor.h"
 
-#define NOT_IMPLEMENTED LOG(FATAL) << "Popit Not implemented";
+#include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_platform.h"
+#include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
+#include "tensorflow/stream_executor/multi_platform_manager.h"
+
+#define NOT_IMPLEMENTED LOG(FATAL) << "Popit Not implemented " << __LINE__;
+
+namespace se = ::stream_executor;
+
 namespace xla {
 namespace poplarplugin {
 
 Status PopItExecutor::Init(int device_ordinal,
                            se::DeviceOptions device_options) {
-  NOT_IMPLEMENTED;
+  return Status::OK();
 }
 
 se::DeviceMemoryBase PopItExecutor::Allocate(uint64 size,
@@ -131,7 +138,13 @@ bool PopItExecutor::CanEnablePeerAccessTo(
 }
 StatusOr<std::unique_ptr<se::DeviceDescription>>
 PopItExecutor::CreateDeviceDescription() const {
-  NOT_IMPLEMENTED;
+  auto platform = se::MultiPlatformManager::PlatformWithName(
+      tensorflow::POPIT_PLATFORM_NAME);
+  if (platform.ok()) {
+    auto* p = static_cast<PopItPlatform*>(platform.ValueOrDie());
+    return p->DescriptionForDevice(0);
+  }
+  return InternalError("Failed to create device description.");
 }
 std::unique_ptr<se::internal::EventInterface>
 PopItExecutor::CreateEventImplementation() {
