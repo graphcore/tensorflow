@@ -599,5 +599,19 @@ StatusOr<bool> PoplarWhileLoopOptimiser::Run(HloModule* module) {
   return changed;
 }
 
+bool WorthHoistingOnIpu(const HloInstruction& instruction) {
+  switch (instruction.opcode()) {
+    default: { return true; }
+    case HloOpcode::kConstant:
+    case HloOpcode::kAfterAll:
+    case HloOpcode::kBitcast:
+    case HloOpcode::kSlice:
+    case HloOpcode::kTranspose:
+    case HloOpcode::kTuple: {
+      return false;
+    }
+  }
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

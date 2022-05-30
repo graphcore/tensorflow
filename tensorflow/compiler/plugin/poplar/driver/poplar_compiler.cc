@@ -194,7 +194,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/sort_simplifier.h"
 #include "tensorflow/compiler/xla/service/tuple_simplifier.h"
 #include "tensorflow/compiler/xla/service/while_loop_constant_sinking.h"
-#include "tensorflow/compiler/xla/service/while_loop_invariant_code_motion.h"
+#include "tensorflow/compiler/xla/service/while_loop_expensive_invariant_code_motion.h"
 #include "tensorflow/compiler/xla/service/while_loop_simplifier.h"
 #include "tensorflow/compiler/xla/service/zero_sized_hlo_elimination.h"
 #include "tensorflow/compiler/xla/shape_util.h"
@@ -1176,8 +1176,8 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
           poplar_executor->GetIpuOptions().algebraic_simplifier_config());
       pass.AddPass<HloConstantFolding>();
       pass.AddPass<HloPassFix<WhileLoopSimplifier>>();
-      pass.AddPass<HloPassFix<WhileLoopInvariantCodeMotion>>(
-          /*hoist_constants=*/false, /*hoist_size_inflating_ops=*/false);
+      pass.AddPass<HloPassFix<WhileLoopExpensiveInvariantCodeMotion>>(
+          WorthHoistingOnIpu);
       pass.AddPass<TupleSimplifier>(true);
       pass.AddPass<HloCSE>(true);
       pass.AddPass<HloDCE>();
