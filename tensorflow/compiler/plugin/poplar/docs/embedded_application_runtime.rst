@@ -1,3 +1,5 @@
+.. _embedded_application_runtime:
+
 IPU embedded application runtime
 --------------------------------
 
