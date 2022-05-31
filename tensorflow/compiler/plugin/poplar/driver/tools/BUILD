@@ -1197,6 +1197,7 @@ poplar_cc_library(
     hdrs = [
         "hlo_poplar_pva_test.h",
     ],
+    linkopts = ["-lstdc++fs"],
     deps = [
         "//tensorflow/compiler/plugin/poplar/driver:poplar_executor",
         "//tensorflow/compiler/plugin/poplar/driver/visitors:entry_visitor",
