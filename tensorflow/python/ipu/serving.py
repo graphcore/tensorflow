@@ -421,9 +421,4 @@ def export_keras(model, export_dir, batch_size=None, output_names=None):
         "does not contain IPU-specific functions. Please wrap its "
         "creation inside an IPU strategy.")
 
-  # TODO(T63215): This is a temporary check - will be removed as soon as change
-  # for output_names support is merged in the Keras repository!
-  if len(inspect.signature(model.export_for_ipu_serving).parameters) == 3:
-    return model.export_for_ipu_serving(export_dir, batch_size, output_names)
-  else:
-    return model.export_for_ipu_serving(export_dir, batch_size)
+  return model.export_for_ipu_serving(export_dir, batch_size, output_names)
