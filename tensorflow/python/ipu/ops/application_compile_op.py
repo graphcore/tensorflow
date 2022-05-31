@@ -93,13 +93,18 @@ def experimental_application_compile_op(func,
     finally:
       xla_context.Exit()
 
+  def get_op(op):
+    while op.type == "Identity":
+      op = op.inputs[0].op
+    return op
+
   resource_indices = []
   constant_indices = []
   for index, arg in enumerate(captured_args):
     if arg.dtype == dtypes.resource:
       resource_indices.append(index)
-    elif arg.op.type == "Const" or \
-        (arg.op.type == "ReadVariableOp" and freeze_variables):
+    elif get_op(arg.op).type == "Const" or \
+        (get_op(arg.op).type == "ReadVariableOp" and freeze_variables):
       constant_indices.append(index)
 
   with ops.control_dependencies(list(func_graph.control_captures)):

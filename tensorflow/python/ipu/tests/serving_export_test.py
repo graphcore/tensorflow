@@ -24,12 +24,15 @@ from tensorflow.core.framework import types_pb2
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import def_function
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.ipu import serving
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import rnn
+from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
 from tensorflow.python.saved_model import load
@@ -348,6 +351,39 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
                                 iterations=16,
                                 device_mapping=[0, 0],
                                 input_signature=input_signature)
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.deprecated_graph_mode_only
+  def test_export_lstm(self):
+    # Regression test to make sure that all variables are getting frozen in
+    # the case when Identity op follows ReadVariableOp, what is the case in
+    # LSTM Cell.
+    input_shape = (1, 1, 1)
+    input_signature = (tensor_spec.TensorSpec(shape=input_shape,
+                                              dtype=np.float32,
+                                              name='x'),)
+
+    def my_net(x):
+      lstm_cell = rnn_cell.LSTMCell(num_units=1)
+      out = rnn.dynamic_rnn(cell=lstm_cell, inputs=x, dtype=dtypes.float32)
+      return out
+
+    def init_variables(sess):
+      init = variables.global_variables_initializer()
+      sess.run(init)
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      iterations = 16
+      serving.export_single_step(my_net,
+                                 tmp_folder,
+                                 iterations,
+                                 input_signature=input_signature,
+                                 variable_initializer=init_variables)
+
+      input_data = np.ones(shape=input_shape, dtype=np.float32)
+      # Make sure that all variables were frozen and model can be executed
+      # with just a real input data.
+      self._load_and_run(tmp_folder, input_data)
 
 
 if __name__ == "__main__":
