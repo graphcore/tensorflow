@@ -590,7 +590,7 @@ CTC loss ops deprecated
 '''''''''''''''''''''''
 
 The ``ctc_loss`` and ``ctc_loss_with_logits`` ops from ``ipu.ops.nn_ops`` have been deprecated and
-will be removed in release 2.2. They have been superseeded by ``ctc_loss_v2`` and
+will be removed in release 2.2. They have been superseded by ``ctc_loss_v2`` and
 ``ctc_loss_with_log_probs``.
 
 .. _new-configuration-api:
@@ -613,12 +613,12 @@ information about the new API, see :ref:`configuring-section`.
   ``report_every_nth_execution`` etc.
   To profile a TensorFlow program, you should instead use the suite of profiling
   tools that have been added to the SDK. For general advice on how to enable
-  profiling, refer to the :ref:`Capturing IPU Reports <report_capture>` chapter
-  in the PopVision User Guide. To parse profiles, use the
-  :std:doc:`PopVision Analysis Python API chapter <pva-python>` or :std:doc:`PopVision Analysis C++ API chapter <pva>`
+  profiling, refer to the :ref:`graph-analyser-userguide:capturing ipu reports` chapter
+  in the PopVision Graph Analyser User Guide. To parse profiles, use the
+  :doc:`libpva:api-python` or :doc:`libpva:api-cpp`
   in the Poplar and PopLibs API Reference. To enable time-based profiling of
-  events, see the :ref:`Capturing Execution Information <{HelpTopic.CapturingData}>`
-  chapter of the PopVision User Guide.
+  events, see the :ref:`system-analyser-userguide:capturing execution information`
+  chapter of the PopVision System Analyser User Guide.
 
   Note that any Poplar engine options mentioned in the above guides can be
   passed to the :ref:`compilation_poplar_options <compilation_poplar_options>`
@@ -634,11 +634,13 @@ information about the new API, see :ref:`configuring-section`.
 The new ``IPUConfig`` class is in a new namespace
 ``tensorflow.python.ipu.config``. Multiple functions and classes have moved from
 ``tensorflow.python.ipu.utils`` to the ``config`` namespace:
-  - ``configure_ipu_system()``
-  - ``get_ipu_config()``
-  - ``SelectionOrder``
-  - ``ExecutionProfileType``
-  - ``DeviceConnectionType``
+
+- ``configure_ipu_system()``
+- ``get_ipu_config()``
+- ``SelectionOrder``
+- ``ExecutionProfileType``
+- ``DeviceConnectionType``
+
 They can still be accessed from ``tensorflow.python.ipu.utils`` - along with
 ``IPUConfig`` - and there are currently no plans to remove this additional
 access route.
@@ -806,6 +808,7 @@ the old API corresponds to and how:
         - ``True``: ``MergeRemoteBuffersBehaviour.MERGE``
         - ``False``: ``MergeRemoteBuffersBehaviour.NO_MERGING``
         - ``None``: ``MergeRemoteBuffersBehaviour.IF_BENEFICIAL``
+
         The ``IPUConfig`` also sets the default value to ``IF_BENEFICIAL``,
         whereas the old configuration API sets the default value to
         ``NO_MERGING``.

@@ -83,9 +83,9 @@ This example shows how to use the ``IPUEstimator`` with the
 ``IPUMultiWorkerStrategyV1`` to perform distributed training of
 a model on the MNIST dataset.
 
-The example is based on the following official tutorial
-with some modifications for use with the IPU:
-https://www.tensorflow.org/tutorials/distribute/multi_worker_with_estimator
+The example is based on the  official `Multi-worker training with Estimator
+<https://www.tensorflow.org/tutorials/distribute/multi_worker_with_estimator>`__ tutorial
+with some modifications for use with the IPU.
 
 We highlight the changes needed to convert code using ``IPUEstimator``
 to support distributed training below.
@@ -167,6 +167,8 @@ Complete example
   :language: python
   :linenos:
 
+Download :download:`distributed_training_example.py`
+
 Distributed training with Horovod
 #################################
 
@@ -211,3 +213,5 @@ Below is a complete example using Horovod, adapted from the example above.
 .. literalinclude:: distributed_training_horovod_example.py
   :language: python
   :linenos:
+
+Download :download:`distributed_training_horovod_example.py`

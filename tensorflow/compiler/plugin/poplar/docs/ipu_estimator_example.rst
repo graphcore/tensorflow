@@ -9,3 +9,5 @@ manually compiled with ``ipu_compiler``.
 .. literalinclude:: ipu_estimator_example.py
   :language: python
   :linenos:
+
+Download :download:`ipu_estimator_example.py`

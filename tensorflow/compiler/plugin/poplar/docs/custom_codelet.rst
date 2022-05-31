@@ -6,13 +6,13 @@ there are two ways you can add a custom operation to the TensorFlow graph.
 
 1.  You can implement the operation in C++ using the Poplar graph
     programming framework.
-    See :ref:`custom_ipu_operation`.
+    See :numref:`custom_ipu_operation`.
 
     This provides the highest performance because the operation runs on the IPU.
 
 
 2.  The second possibility is to execute the custom operation on the host CPU.
-    See :ref:`custom_host_operations`.
+    See :numref:`custom_host_operations`.
 
     This may be easier to implement because you only need to write host code,
     without needing to get to grips with Poplar. However, the performance will
@@ -211,7 +211,7 @@ The parameters are used to return the following information about the operation:
 
 * ``allocating_indices``: Use this to specify which input tensors will
   be allocated using the tensor-allocation function described in
-  :ref:`tensor_allocation`.
+  :numref:`tensor_allocation`.
 
 * ``replica_identical_output_indices``: Experimental. Use this to specify which
   output tensors are identical across replicas. The compiler uses this to help
@@ -265,7 +265,7 @@ The parameters are used to return the following information about the operation:
   TensorFlow compiler will generate a hash value for the TensorFlow graph. If
   all ops in the graph are hashable then the executable will be saved in the
   cache (if enabled). This allows the graph to be run multiple times without
-  needing to recompile it. See :ref:`caching_executables` for more information.
+  needing to recompile it. See :numref:`caching_executables` for more information.
 
   However, because the TensorFlow compiler does not
   have any information about the implementation of the custom operation or its
@@ -276,7 +276,7 @@ The parameters are used to return the following information about the operation:
   change then you can set this parameter to true.
 
   This attribute must be set to true if you intend to pre-compile your TensorFlow program
-  (see :ref:`precompiling_executables`).
+  (see :numref:`precompiling_executables`).
 
 * ``num_inputs``: This is the number of input tensors that the operation is called with.
 
@@ -299,7 +299,7 @@ You need to specify the API level that your operation code is compatible
 with. The custom op loader checks the API level and will not load it if it does
 not match the current API level. A change in API level normally means that the
 file is not compatible with previous versions. See
-:ref:`api_level_changes` for information about the changes in the API.
+:numref:`api_level_changes` for information about the changes in the API.
 
 You must include the following code in your builder program to specify the API
 level.

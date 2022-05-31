@@ -50,6 +50,7 @@ construct a loop.
   :language: python
   :linenos:
 
+Download :download:`perf_training_example.py`
 
 In this case the DataSet is a trivial one.  The program constructs it from a
 single TensorFlow constant, and then maps its output into a
@@ -146,6 +147,8 @@ predictions for an inference model to achieve minimal latency for each sample.
 .. literalinclude:: outfeed_example.py
   :language: python
   :linenos:
+
+Download :download:`outfeed_example.py`
 
 .. _replicated_graphs:
 
@@ -311,6 +314,7 @@ arguments coming from an infeed. The input to the next stage, or outfeed,
 is the concatenation of concurrent stage outputs.
 
 .. code-block:: python
+  :linenos:
 
   def stage1a(args...):
     # ... do stuff on IPU 1
@@ -470,7 +474,7 @@ is used.
 It can be disabled by setting the ``offload_weight_update_variables`` argument
 of :func:`~tensorflow.python.ipu.pipelining_ops.pipeline` or
 :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2`
-to ``False``. In Keras, this is done as a keyword argument to 
+to ``False``. In Keras, this is done as a keyword argument to
 :func:`~keras.ipu.extensions.FunctionalExtension.set_pipelining_options` and
 :func:`~keras.ipu.extensions.FunctionalExtension.set_gradient_accumulation_options`
 respectively.

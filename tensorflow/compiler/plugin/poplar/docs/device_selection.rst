@@ -37,10 +37,10 @@ Hardware configuration options enable you to select the number of IPU devices.
 By default, TensorFlow will create one virtual device (``/device:IPU:0``) with
 a single IPU. The first available single IPU will be used.
 
-Two API options on the :py:class:`~tensorflow.python.ipu.config.IPUConfig` are
-available for controlling which or how many IPUs this virtual device will use:
+Two API options on the :py:class:`~tensorflow.python.ipu.config.IPUConfig` class are
+available for controlling which, or how many, IPUs this virtual device will use:
 
-* ``auto_select_ipus`` allows you to specify a quantity of
+* ``auto_select_ipus`` allows you to specify a number of
   IPUs to use. The virtual device will be given that many IPUs.
 
 * ``select_ipus`` allows you to choose a specific IPU hardware

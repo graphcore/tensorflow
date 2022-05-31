@@ -77,6 +77,8 @@ a single function for these common building blocks to reduce the code size.
   :language: python
   :linenos:
 
+Download :download:`function_example1.py`
+
 Serializing large operations
 ____________________________
 Some operations in the model might generate large intermediate values which can
@@ -87,4 +89,6 @@ in extra code. To try and avoid the extra code, IPU functions can be used.
 .. literalinclude:: function_example2.py
   :language: python
   :linenos:
+
+Download :download:`function_example2.py`
 

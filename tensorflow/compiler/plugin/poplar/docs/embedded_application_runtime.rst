@@ -143,6 +143,8 @@ This example creates a very simple IPU program that doubles the input tensor.
   :language: python
   :linenos:
 
+Download :download:`embedded_application_runtime_example.py`
+
 .. _ea_runtime_error_handling:
 
 Error Handling
@@ -164,24 +166,35 @@ section of the Poplar API reference manual.
 
 These runtime errors are handled in the following manner:
 
-* ``application_runtime_error`` - a ``tensorflow.errors.InternalError`` error
-  is raised. The error message contains the reason why the error occurred. An
-  IPU reset will be performed before the next execution. All requests which have
-  already been enqueued before the exception occurred will return the error. Any
-  new requests will be processed after the IPU reset is complete.
-* ``recoverable_runtime_error`` with a recovery action ``poplar::RecoveryAction::IPU_RESET`` - a ``tensorflow.errors.InternalError`` error
-  is raised. The error message contains the reason why the error occurred. An
-  IPU reset will be performed before the next execution. All requests which have
-  already been enqueued before the exception occurred will return the error. Any
-  new requests will be processed after the IPU reset is complete.
-* Unknown runtime errors - a ``tensorflow.errors.Unknown``  error
-  is raised. The error message might contain the reason why the error occurred.
-  When these errors occur manual intervention is required before the system is
-  operational again. The IPU will not be reset and all requests will return the
-  error.
-* All other runtime errors - a ``tensorflow.errors.InternalError`` error
-  is raised. The error message might contain the reason why the error occurred.
-  When these errors occur manual intervention might be required before the
-  system is operational again. The error message might contain a required
-  recovery action. The IPU will not be reset and all requests will return the
-  error.
+* ``application_runtime_error``
+
+  - A ``tensorflow.errors.InternalError`` error is raised.
+  - The error message contains the reason why the error occurred.
+  - An IPU reset will be performed before the next execution.
+  - All requests which have already been enqueued before the exception occurred will return the error.
+  - Any new requests will be processed after the IPU reset is complete.
+
+* ``recoverable_runtime_error`` with a recovery action of "``poplar::RecoveryAction::IPU_RESET``"
+
+  - A ``tensorflow.errors.InternalError`` error is raised.
+  - The error message contains the reason why the error occurred.
+  - An IPU reset will be performed before the next execution.
+  - All requests which have already been enqueued before the exception occurred will return the error.
+  - Any new requests will be processed after the IPU reset is complete.
+
+* Unknown runtime errors
+
+  - A ``tensorflow.errors.Unknown``  error is raised.
+  - The error message might contain the reason why the error occurred.
+  - When these errors occur manual intervention is required before the system is
+    operational again.
+  - The IPU will not be reset and all requests will return the error.
+
+* All other runtime errors
+
+  - A ``tensorflow.errors.InternalError`` error is raised.
+  - The error message might contain the reason why the error occurred.
+  - When these errors occur manual intervention might be required before the
+    system is operational again.
+  - The error message might contain a required recovery action.
+  - The IPU will not be reset and all requests will return the error.

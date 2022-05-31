@@ -13,7 +13,7 @@ both inference and training.
 
 During execution the IPU will synchronize with the host and send
 indices (and possibly update values) to the host CPU. The CPU will
-then perform the lookup or update operation in a callback operation
+then perform the lookup or update operation in a callback
 before returning the result to the IPU. The IPU will then carry on
 execution.
 
@@ -53,21 +53,22 @@ Example
   :language: python
   :linenos:
 
+Download :download:`host_embedding_example.py`
+
 Experimental functionality: IPU embeddings in remote buffers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 As an alternative to host embeddings, there is experimental
-functionality to store embedding tables in remote buffer memory
-(i.e. off-chip memory directly accessed by the IPU). In this case the
+functionality to store embedding tables in remote buffers in Streaming Memory
+(that is, off-chip memory directly accessed by the IPU). In this case, the
 IPU performs the lookup/update operations directly on the remote
-buffer memory and the host CPU is not involved.
+buffers, and the host CPU is not involved.
 
 Setting the :ref:`experimental.enable_remote_buffer_embedding
 <experimental.enable_remote_buffer_embedding>` option on an
 :py:class:`~tensorflow.python.ipu.config.IPUConfig` to ``True`` (defaults to
-``False``) and then configuring the IPU system with that config will cause the
-IPU host embedding implementation to globally use remote buffer embeddings
-instead.
+``False``) and then configuring the IPU system with that ``IPUConfig`` will
+use IPU embeddings in remote buffers, globally.
 
 .. note::
 
@@ -83,17 +84,17 @@ each replica. Instead, a single copy of the table is shared between
 replicas to make the most of available memory. However, each replica
 only has access to a distinct memory space so the table is
 partitioned into chunks between the replicas (this holds even on
-hardware platforms like the DSS-8440 server where IPUs share physical
+hardware platforms where IPUs share physical
 external memory).
 
 The way the table is split between the memory attached to each replica
 is determined by the partitioning strategy. Two
 partitioning strategies are available.
-These are the token strategy and the encoding strategy.
+These are the :ref:`token strategy <token strategy>` and the :ref:`encoding strategy <encoding strategy>`.
 Each has trade-offs and the
 choice of strategy will depend on the application. The partition
 strategy is set via the ``partition_strategy`` keyword argument of
-:py:func:`tensorflow.python.ipu.embedding_ops.create_host_embedding`.
+:py:func:`~tensorflow.python.ipu.embedding_ops.create_host_embedding`.
 
 Token strategy
 **************
@@ -103,6 +104,10 @@ token axis. There will be ``ceil(t/r)`` whole tokens on each replica,
 where ``t`` is the token count and ``r`` is the replica count.
 
 .. figure:: figures/host_emb_token_strategy.png
+    :width: 60%
+    :name: fig_token_strategy
+
+    Host embedding token strategy
 
 When this strategy is used, cross-replica operations are required to
 allow each replica to perform a lookup or update across the whole
@@ -155,6 +160,10 @@ for a given token every replica will store ``ceil(e/r)`` elements, where ``e``
 is the element count for a single token.
 
 .. figure:: figures/host_emb_enc_strategy.png
+    :width: 60%
+    :name: fig_encoding_strategy
+
+    Host embedding encoding strategy
 
 When this strategy is used, cross-replica operations are required to
 allow each replica to perform a lookup or update across the whole

@@ -35,14 +35,13 @@ of using the ``tf.device`` context:
     ``IPUStrategy``, because Keras may create some parts of the model at
     construction time, and some other parts at execution time.
 
-See the TensorFlow documentation for more details on distribution strategies:
-https://www.tensorflow.org/guide/distributed_training
+See the `TensorFlow documentation <https://www.tensorflow.org/guide/distributed_training>`__ for more detail on distribution strategies.
 
 Execution modes
 ~~~~~~~~~~~~~~~
 
-TensorFlow operations can be executed in either **graph mode** or
-**eager mode**. Both of these modes are supported on IPUs, however graph mode is
+TensorFlow operations can be executed in either *graph mode* or
+*eager mode*. Both of these modes are supported on IPUs, however graph mode is
 much more efficient. It is therefore important to understand the difference
 between them and understand how to write TensorFlow programs which will fully
 utilize the IPU devices.
@@ -59,8 +58,8 @@ constructs into TensorFlow graph operations.
 It is best practice to ensure that anything which is intended to be executed on
 the IPU is placed into a Python function which is annotated with
 ``@tf.function(jit_compile=True)``. Note that this does not apply to
-constructing a Keras model or using the Keras ``Model.fit()`` API. See the
-:numref:`keras` section for details on Keras.
+constructing a Keras model or using the Keras ``Model.fit()`` API. See
+:numref:`keras` for details on Keras.
 
 When calling a function which is marked with a
 ``@tf.function(jit_compile=True)`` annotation from within a
@@ -77,8 +76,8 @@ but instead use the ``run`` method. For example:
   When using the ``@tf.function`` annotation, it is important to set the
   ``jit_compile=True`` argument to ensure best performance.
 
-For more information about ``tf.function`` and examples, see the TensorFlow
-documentation at https://www.tensorflow.org/guide/function.
+For more information about ``tf.function`` and examples, see the `TensorFlow
+documentation <https://www.tensorflow.org/guide/function>`__.
 
 Eager mode
 __________
@@ -97,7 +96,7 @@ device and returns a ``tf.Tensor`` object containing the result:
 On-device loops
 ~~~~~~~~~~~~~~~
 
-In the :numref:`keras` section, we describe how to use Keras to perform
+In :numref:`keras`, we describe how to use Keras to perform
 training, testing and prediction. However, sometimes a more sophisticated loop
 is required. You can create these to train, test and run inference of your
 models using a loop created inside of a ``tf.function`` - this is commonly known
@@ -116,4 +115,6 @@ creation and defines an iterator over the outfeed, as described in
 .. literalinclude:: targeting_tf2_example3.py
   :language: python
   :linenos:
-  :emphasize-lines: 55, 57, 60, 78, 91-93, 95
+  :emphasize-lines: 54, 56, 59, 77, 90-92, 94
+
+Download :download:`targeting_tf2_example3.py`
