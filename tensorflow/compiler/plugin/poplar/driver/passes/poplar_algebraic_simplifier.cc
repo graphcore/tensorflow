@@ -723,6 +723,12 @@ Status AlgebraicSimplifierVisitor::HandleConstant(HloInstruction* constant) {
         LiteralUtil::GetFirstScalarLiteral(constant->literal()));
     HloInstruction* scalar = computation_->AddInstruction(
         simplifier_->CreateConstantWithLayoutUpdated(std::move(unique_scalar)));
+
+    // Since we're changing shape ReplaceWithNewInstruction wont copy the
+    // original sharding, so we need to do it manually.
+    if (constant->has_sharding()) {
+      scalar->set_sharding(constant->sharding());
+    }
     return ReplaceWithNewInstruction(
         constant,
         HloInstruction::CreateBroadcast(constant->shape(), scalar, {}));

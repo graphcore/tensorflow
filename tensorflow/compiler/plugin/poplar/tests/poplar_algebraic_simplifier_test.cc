@@ -798,6 +798,36 @@ TEST_F(PoplarAlgebraicSimplifierTest, ConstantToBroadcast) {
   EXPECT_EQ(3.14f, root->operand(0)->literal().GetFirstElement<float>());
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, ConstantToBroadcastPreservesSharding) {
+  const std::string hlo = R"(
+HloModule test
+
+ENTRY main {
+  arg0 = s32[] parameter(0)
+  ROOT constant = s32[2] constant({2, 2}), sharding={maximal device=1}
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo));
+
+  auto* original_constant = FindInstruction(module.get(), "constant");
+  ASSERT_TRUE(original_constant);
+  auto expected_sharding = original_constant->sharding();
+
+  PoplarAlgebraicSimplifier simplifier;
+  TF_ASSERT_OK_AND_ASSIGN(auto changed, simplifier.Run(module.get()));
+  ASSERT_TRUE(changed);
+
+  auto* entry = module->entry_computation();
+  auto* broadcast = entry->root_instruction();
+  ASSERT_TRUE(broadcast->has_sharding());
+  ASSERT_EQ(broadcast->sharding(), expected_sharding);
+
+  auto* scalar_constant = broadcast->operand(0);
+  ASSERT_TRUE(scalar_constant->has_sharding());
+  ASSERT_EQ(scalar_constant->sharding(), expected_sharding);
+}
+
 TEST_F(PoplarAlgebraicSimplifierTest, ConstantNotToBroadcast) {
   auto m = CreateNewVerifiedModule();
   HloComputation::Builder builder(TestName());
