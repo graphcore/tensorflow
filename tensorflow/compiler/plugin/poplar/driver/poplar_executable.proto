@@ -87,11 +87,12 @@ message EmbeddedRuntimeConfig {
   string target_arch = 4;
   bool gateway_mode = 5;
   bool supports_remote_buffers = 6;
+  bool remote_memory_entry_params = 7;
 
   // Whether this is model can stall without more data arriving. This can
   // currently happen when using pipelining with Grouped or Interleaved schedule
   // or IO tiles.
-  bool executable_can_stall = 7;
+  bool executable_can_stall = 8;
 }
 
 message PoplarExecutableProto {

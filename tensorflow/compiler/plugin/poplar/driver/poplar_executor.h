@@ -130,10 +130,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   };
 
   struct TensorControl {
+    enum class Location { Host, Remote, Device };
     size_t size = 0;
     PrimitiveType element_type = PRIMITIVE_TYPE_INVALID;
     std::atomic<uint32> ref_count;
-    bool on_device = false;
+    Location location = Location::Host;
     const RemoteParameterInfo* in_memory_remote_parameter_info = nullptr;
     absl::optional<ArgHandle> input_handle;
     absl::optional<ArgHandle> output_handle;
@@ -750,6 +751,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
       OutputPairList&, const xla::Shape&, void*,
       const InputOutputAliasingMap::OutputInfo&);
 
+  static bool CheckOutputLocation(const TensorControl* tc,
+                                  TensorControl::Location location);
+
   void UpdateOutputsHandleMap(const PoplarExecutable& executable,
                               const xla::Shape& shape,
                               se::DeviceMemoryBase retbuf);
@@ -921,7 +925,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // format
   static void* PreProcessBuffer(InputDef& id);
   // Convers the data into the right host format
-  static void PostProcessBuffer(TensorControl* tc);
+  void PostProcessBuffer(TensorControl* tc);
 
   // Connect stream callbacks from Send/Recv operations in the engine
   // to the corresponding host graph operations using the rendezvous mechanism.
@@ -996,6 +1000,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // the compile time replication factor when using the Poplar runtime
   // replica subset feature.
   int64_t current_replication_factor_;
+
+  // Encodes whether the current engine executable was compiled with the
+  // `supports_remote_buffers` option. This allows us to control how variables
+  // are copied to/from the device.
+  bool currently_using_remote_buffers_;
 
   class IPUConfig {
    public:

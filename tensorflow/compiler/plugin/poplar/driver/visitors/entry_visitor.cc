@@ -20,6 +20,7 @@ limitations under the License.
 #include <vector>
 
 #include <poplar/ReplicatedStreamMode.hpp>
+#include <poputil/TileMapping.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -41,11 +42,70 @@ DeferredArgRBVectors MakeArgRBVector(const HloComputation* comp) {
   return output;
 }
 
+bool DoesTensorSpanIPUs(DriverGraph& graph, const DriverTensor& t) {
+  if (graph.getTarget().getNumIPUs() == 1) {
+    return false;
+  }
+
+  std::vector<int> touches_ipu(graph.getTarget().getNumIPUs());
+  const auto tiles_per_ipu = graph.getTarget().getTilesPerIPU();
+
+  const auto tile_mapping = graph.getTileMapping(t);
+  for (int tile = 0; tile < tile_mapping.size(); ++tile) {
+    if (!tile_mapping[tile].empty()) {
+      touches_ipu[tile / tiles_per_ipu]++;
+    }
+  }
+
+  return absl::c_count_if(touches_ipu,
+                          [](int touch_count) { return touch_count > 0; }) > 1;
+}
+
+DriverTensor RestrictTensorToSingleIPU(DriverGraph& graph,
+                                       const DriverTensor& t,
+                                       DriverProgramSequence& seq) {
+  if (!DoesTensorSpanIPUs(graph, t)) {
+    return t;
+  }
+
+  const auto tiles_per_ipu = graph.getTarget().getTilesPerIPU();
+  const auto tile_mapping = graph.getTileMapping(t);
+  std::vector<int> elements_per_ipu(graph.getTarget().getNumIPUs());
+  for (int tile = 0; tile < tile_mapping.size(); ++tile) {
+    const auto ipu = tile / tiles_per_ipu;
+
+    for (auto interval : tile_mapping[tile]) {
+      elements_per_ipu[ipu] += interval.size();
+    }
+  }
+
+  // We choose to copy to the IPU with the most elements.
+  // This minimises the number of elements to copy.
+  const auto destination_ipu = std::distance(
+      elements_per_ipu.begin(), absl::c_max_element(elements_per_ipu));
+
+  std::vector<std::vector<poplar::Interval>> new_tile_mapping;
+  new_tile_mapping.resize(tiles_per_ipu);
+  for (int tile = 0; tile < tile_mapping.size(); ++tile) {
+    const auto new_tile = tile % tiles_per_ipu;
+
+    new_tile_mapping[new_tile].insert(new_tile_mapping[new_tile].end(),
+                                      tile_mapping[tile].begin(),
+                                      tile_mapping[tile].end());
+  }
+
+  auto virtual_graph = graph.createVirtualGraph(
+      destination_ipu * tiles_per_ipu, (destination_ipu + 1) * tiles_per_ipu);
+  auto new_tensor = virtual_graph.addVariable(t.elementType(), t.shape());
+  virtual_graph.setTileMapping(new_tensor, new_tile_mapping);
+
+  seq.add(DriverProgramCopy(t, new_tensor));
+
+  return new_tensor;
+}
+
 Status AddHostToDeviceCopy(const poplar::DataStream& stream, DriverTensor dst,
-                           bool rearrange_on_host, DriverGraph& graph,
-                           CompilerResources& res, DriverProgramSequence& seq,
-                           const InputOutputAliasingMap::InputInfo& info,
-                           const HloInstruction* inst,
+                           bool rearrange_on_host, DriverProgramSequence& seq,
                            const poplar::DebugNameAndId& debug_name_and_id) {
   seq.add(
       poplar::program::Copy(stream, dst, rearrange_on_host, debug_name_and_id));
@@ -53,13 +113,25 @@ Status AddHostToDeviceCopy(const poplar::DataStream& stream, DriverTensor dst,
 }
 
 Status AddDeviceToHostCopy(const DriverTensor src, poplar::DataStream& stream,
-                           bool rearrange_on_host, DriverGraph& graph,
-                           CompilerResources& res, DriverProgramSequence& seq,
-                           const InputOutputAliasingMap::OutputInfo& info,
-                           const HloInstruction* inst,
+                           bool rearrange_on_host, DriverProgramSequence& seq,
                            const poplar::DebugNameAndId& debug_name_and_id) {
   seq.add(
       poplar::program::Copy(src, stream, rearrange_on_host, debug_name_and_id));
+  return Status::OK();
+}
+
+Status AddHostToDeviceCopy(const DriverRemoteBuffer& stream, DriverTensor dst,
+                           DriverProgramSequence& seq,
+                           const poplar::DebugNameAndId& debug_name_and_id) {
+  seq.add(DriverProgramCopy(stream, dst, debug_name_and_id));
+  return Status::OK();
+}
+
+Status AddDeviceToHostCopy(const DriverTensor src,
+                           const DriverRemoteBuffer& stream,
+                           DriverProgramSequence& seq,
+                           const poplar::DebugNameAndId& debug_name_and_id) {
+  seq.add(DriverProgramCopy(src, stream, debug_name_and_id));
   return Status::OK();
 }
 
@@ -143,22 +215,51 @@ StatusOr<DriverTensor> EntryVisitor::PostProcessParameterAllocation(
       tensor_destination =
           ConvertFromDeviceLayout(module_shapes[flat_tuple_index], tensor);
     }
+    if (tensor_destination.numElements() > 0) {
+      const std::string handle = in_info.Handles().at(flat_tuple_index);
 
-    // Create a host stream.
-    const std::string handle = in_info.Handles().at(flat_tuple_index);
-    auto fifo =
-        graph.addHostToDeviceFIFO(handle, tensor_destination.elementType(),
-                                  tensor_destination.numElements(),
-                                  poplar::ReplicatedStreamMode::BROADCAST);
+      if (resources_.remote_memory_supported &&
+          resources_.remote_memory_entry_params) {
+        auto tensor_destination_shard = tensor_destination;
+        const bool tensor_spans_ipus = DoesTensorSpanIPUs(
+            GetMasterGraph(resources_), tensor_destination_shard);
+        // Poplar doesn't support accessing RemoteBuffers from multiple IPUs. So
+        // we must restrict the Tensor to a single IPU.
+        if (tensor_spans_ipus) {
+          tensor_destination_shard = RestrictTensorToSingleIPU(
+              GetMasterGraph(resources_), tensor_destination_shard,
+              stream_copy_seq);
+        }
 
-    TF_RETURN_IF_ERROR(AddHostToDeviceCopy(
-        fifo, tensor_destination,
-        !in_info.IsStreaming() || resources_.always_rearrange_copies_on_host,
-        graph, resources_, stream_copy_seq, in_info, inst, debug_name_and_id));
+        DriverRemoteBuffer remote_buffer = graph.addRemoteBuffer(
+            handle, tensor_destination_shard.elementType(),
+            tensor_destination_shard.numElements(), 1, true, true);
 
-    InputInfo info = {in_info.Name(), handle, inst->parameter_number(),
-                      flat_tuple_index, inst->shape()};
-    TF_RETURN_IF_ERROR(AddEntryInputInfo(resources_.annotations, info));
+        TF_RETURN_IF_ERROR(
+            AddHostToDeviceCopy(remote_buffer, tensor_destination_shard,
+                                stream_copy_seq, debug_name_and_id));
+        if (tensor_spans_ipus) {
+          stream_copy_seq.add(
+              DriverProgramCopy(tensor_destination_shard, tensor_destination));
+        }
+      } else {
+        // Create a host stream.
+        auto fifo =
+            graph.addHostToDeviceFIFO(handle, tensor_destination.elementType(),
+                                      tensor_destination.numElements(),
+                                      poplar::ReplicatedStreamMode::BROADCAST);
+
+        TF_RETURN_IF_ERROR(
+            AddHostToDeviceCopy(fifo, tensor_destination,
+                                !in_info.IsStreaming() ||
+                                    resources_.always_rearrange_copies_on_host,
+                                stream_copy_seq, debug_name_and_id));
+      }
+
+      InputInfo info = {in_info.Name(), handle, inst->parameter_number(),
+                        flat_tuple_index, inst->shape()};
+      TF_RETURN_IF_ERROR(AddEntryInputInfo(resources_.annotations, info));
+    }
   } else if (use_synthetic_data && UseSyntheticDataInitializer()) {
     // Initialize the tensor to a constant value.
     auto& initializer = DataInitializer::GetSyntheticDataInitializer();
@@ -298,19 +399,36 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
           out = out_copy;
         }
 
-        const std::string handle = out_info.Handles().at(tuple_index);
-        auto fifo = graph.addDeviceToHostFIFO(handle, out.elementType(),
-                                              out.numElements());
+        if (out.numElements() > 0) {
+          const std::string handle = out_info.Handles().at(tuple_index);
+          if (resources_.remote_memory_supported &&
+              resources_.remote_memory_entry_params) {
+            // Poplar doesn't support accessing RemoteBuffers from multiple
+            // IPUs. So we must restrict the Tensor to a single IPU.
+            if (DoesTensorSpanIPUs(GetMasterGraph(resources_), out)) {
+              out = RestrictTensorToSingleIPU(GetMasterGraph(resources_), out,
+                                              seq);
+            }
 
-        TF_RETURN_IF_ERROR(AddDeviceToHostCopy(
-            out, fifo,
-            !out_info.IsStreaming() ||
-                resources_.always_rearrange_copies_on_host,
-            graph, resources_, seq, out_info, root, debug_name_and_id));
+            DriverRemoteBuffer remote_buffer = graph.addRemoteBuffer(
+                handle, out.elementType(), out.numElements(), 1, true, true);
 
-        OutputInfo info = {out_info.Name(), handle, tuple_index,
-                           layout_sub_shapes[tuple_index]};
-        TF_RETURN_IF_ERROR(AddEntryOutputInfo(resources_.annotations, info));
+            TF_RETURN_IF_ERROR(AddDeviceToHostCopy(out, remote_buffer, seq,
+                                                   debug_name_and_id));
+          } else {
+            auto fifo = graph.addDeviceToHostFIFO(handle, out.elementType(),
+                                                  out.numElements());
+
+            TF_RETURN_IF_ERROR(AddDeviceToHostCopy(
+                out, fifo,
+                !out_info.IsStreaming() ||
+                    resources_.always_rearrange_copies_on_host,
+                seq, debug_name_and_id));
+          }
+          OutputInfo info = {out_info.Name(), handle, tuple_index,
+                             layout_sub_shapes[tuple_index]};
+          TF_RETURN_IF_ERROR(AddEntryOutputInfo(resources_.annotations, info));
+        }
       }
     }
 

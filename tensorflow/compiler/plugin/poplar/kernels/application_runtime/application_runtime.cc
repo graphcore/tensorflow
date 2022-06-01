@@ -652,7 +652,10 @@ class EngineResource {
         // user data inputs in the application runtime. This means we can't
         // gaurantee to poplar it can lookahead arbitrarily.
         engine_(std::move(executable), {{"streamCallbacks.maxLookahead", "0"}}),
-        communication_manager_(proto, timeout_us) {}
+        communication_manager_(proto, timeout_us),
+        supports_remote_buffers_(
+            proto.embedded_runtime_config().supports_remote_buffers() &&
+            proto.embedded_runtime_config().remote_memory_entry_params()) {}
 
   poplar::Engine& GetEngine() { return engine_; }
 
@@ -779,11 +782,16 @@ class EngineResource {
             io_item.shape.DebugString(), ")");
       }
       auto tensor_buffer = tensorflow::DMAHelper::buffer(&t);
-      input_buffers_[io_item.argument] =
-          std::vector<unsigned char>(tensor_buffer->size());
-      auto& buffer = input_buffers_[io_item.argument];
-      std::memcpy(buffer.data(), tensor_buffer->data(), tensor_buffer->size());
-      engine_.connectStream(input, buffer.data());
+      if (supports_remote_buffers_) {
+        engine_.copyToRemoteBuffer(tensor_buffer->data(), input, 0);
+      } else {
+        input_buffers_[io_item.argument] =
+            std::vector<unsigned char>(tensor_buffer->size());
+        auto& buffer = input_buffers_[io_item.argument];
+        std::memcpy(buffer.data(), tensor_buffer->data(),
+                    tensor_buffer->size());
+        engine_.connectStream(input, buffer.data());
+      }
     }
     return Status::OK();
   }
@@ -852,6 +860,8 @@ class EngineResource {
 
   // Storage of the input tensors used by program 0.
   TensorVector input_tensors_;
+
+  const bool supports_remote_buffers_;
 };
 
 // A singleton class which owns the engines and associated resources for the

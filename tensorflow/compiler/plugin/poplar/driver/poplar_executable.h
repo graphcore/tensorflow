@@ -47,6 +47,7 @@ struct PoplarExecutableInfo {
   std::string target_arch;
   bool gateway_mode;
   bool supports_remote_buffers;
+  bool remote_memory_entry_params;
   bool executable_can_stall;
   uint32 tf_major_version;
   uint32 tf_minor_version;
@@ -154,6 +155,12 @@ class PoplarExecutableCore {
   bool IsScalarElementwiseGraph() const { return is_scalar_elementwise_graph_; }
 
   bool LoggingCycleCount() const { return info_.logging_cycle_count; }
+
+  bool UsesRemoteBuffers() const { return info_.supports_remote_buffers; }
+
+  bool UsesRemoteEntryParams() const {
+    return info_.remote_memory_entry_params;
+  }
 
   Status Serialize(const std::string& filepath) const;
 
@@ -312,6 +319,14 @@ class PoplarExecutable : public Executable {
 
   bool LoggingCycleCount() const {
     return executable_core_->LoggingCycleCount();
+  }
+
+  bool UsesRemoteBuffers() const {
+    return executable_core_->UsesRemoteBuffers();
+  }
+
+  bool UsesRemoteEntryParams() const {
+    return executable_core_->UsesRemoteEntryParams();
   }
 
   Status Serialize(const std::string& filepath) const {

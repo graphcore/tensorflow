@@ -116,6 +116,9 @@ struct HloResources {
 
   bool remote_memory_supported;
 
+  // Controls whether to use remote memory for the entry computation arguments.
+  bool remote_memory_entry_params = false;
+
   bool enable_experimental_prng_stability;
 
   bool enable_fast_math;

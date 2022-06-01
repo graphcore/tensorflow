@@ -295,7 +295,7 @@ bool PoplarExecutor::ArgHandle::operator<(const ArgHandle& rhs) const {
 PoplarExecutor::TensorControl::TensorControl(size_t size_) {
   size = size_;
   ref_count = 1;
-  on_device = false;
+  location = TensorControl::Location::Host;
   input_handle.reset();
   output_handle.reset();
   output_convertor = nullptr;
@@ -1049,6 +1049,11 @@ inline void AllocateTensorsWithDefaults(
 }
 }  // namespace
 
+bool PoplarExecutor::CheckOutputLocation(const TensorControl* tc,
+                                         TensorControl::Location location) {
+  return (tc->location == location) && tc->output_handle;
+}
+
 IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
     const TranslatedFeedInfo& outfeed_info) {
   TENSORFLOW_TRACEPOINT();
@@ -1194,8 +1199,10 @@ void PoplarExecutor::DeferredDeallocation() {
   std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
 
   const auto new_end = std::partition(
-      allocations_.begin(), allocations_.end(),
-      [](TensorControl* tc) { return tc->ref_count > 0 || tc->on_device; });
+      allocations_.begin(), allocations_.end(), [](TensorControl* tc) {
+        return tc->ref_count > 0 ||
+               (tc->location != TensorControl::Location::Host);
+      });
 
   std::for_each(new_end, allocations_.end(), [](TensorControl* tc) {
     VLOG(2) << "Deallocated " << tc;
@@ -1230,7 +1237,7 @@ Status PoplarExecutor::SynchronousMemcpy(se::DeviceMemoryBase* pop_dst,
   std::memcpy(tc->data, host_src, size);
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
-    tc->on_device = false;
+    tc->location = TensorControl::Location::Host;
     tc->input_handle.reset();
   }
   return Status::OK();
@@ -1243,7 +1250,7 @@ Status PoplarExecutor::SynchronousMemcpy(void* host_dst,
       reinterpret_cast<const TensorControl*>(pop_src.opaque());
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
-    if (tc->on_device == true && tc->output_handle) {
+    if (CheckOutputLocation(tc, TensorControl::Location::Device)) {
       TF_RETURN_IF_ERROR(MoveDeviceToHost());
     }
   }
@@ -1258,14 +1265,14 @@ Status PoplarExecutor::SynchronousMemcpyDeviceToDevice(
       reinterpret_cast<const TensorControl*>(src.opaque());
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
-    if (src_tc->on_device == true && src_tc->output_handle) {
+    if (CheckOutputLocation(src_tc, TensorControl::Location::Device)) {
       TF_RETURN_IF_ERROR(MoveDeviceToHost());
     }
   }
   std::memcpy(dst_tc->data, src_tc->data, size);
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
-    dst_tc->on_device = false;
+    dst_tc->location = TensorControl::Location::Host;
     dst_tc->input_handle.reset();
   }
   return Status::OK();
@@ -2351,7 +2358,7 @@ Status PoplarExecutor::ConstantOutputAllocation::PopulateBuffer(
   TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
   tc->size = size;
   tc->element_type = shape.element_type();
-  tc->on_device = false;
+  tc->location = TensorControl::Location::Host;
   tc->output_handle = absl::nullopt;
   tc->output_convertor = nullptr;
 
@@ -2377,7 +2384,7 @@ Status PoplarExecutor::PrecompileOutputAllocation::PopulateBuffer(
   TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
   tc->size = size;
   tc->element_type = shape.element_type();
-  tc->on_device = false;
+  tc->location = TensorControl::Location::Host;
   tc->output_handle = absl::nullopt;
   tc->output_convertor = nullptr;
 
@@ -2443,7 +2450,7 @@ Status PoplarExecutor::RemapOutputAllocation::PopulateBuffer(
 
   if (AddRemapCopy(output_index)) {
     TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
-    CHECK(!original->on_device);
+    CHECK(original->location == TensorControl::Location::Host);
     std::memcpy(tc->data, original->data, original->size);
     // Remove the extra reference as the buffer has been cloned.
     original->ref_count--;
@@ -2483,7 +2490,8 @@ Status PoplarExecutor::BufferOutputAllocation::PopulateBuffer(
   TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
   tc->size = ShapeUtil::ByteSizeOf(shape);
   tc->element_type = shape.element_type();
-  tc->on_device = output_info.IsStreaming() ? false : true;
+  tc->location = output_info.IsStreaming() ? TensorControl::Location::Host
+                                           : TensorControl::Location::Device;
   tc->output_handle = ArgHandle{output_index, flat_tensor_index,
                                 output_info.Handles().at(flat_tensor_index)};
   tc->output_convertor = GetOutputConversionFunction(shape);
@@ -2623,8 +2631,16 @@ void* PoplarExecutor::PreProcessBuffer(InputDef& id) {
 
 // Convers the data into the right host format
 void PoplarExecutor::PostProcessBuffer(TensorControl* tc) {
+  void* buf(static_cast<void*>(tc->data));
+
+  if (currently_using_remote_buffers_ && tc->size > 0 &&
+      !tc->in_memory_remote_parameter_info &&
+      !UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
+    current_engine_->copyFromRemoteBuffer(tc->output_handle->name, buf, 0);
+    tc->location = TensorControl::Location::Host;
+  }
+
   if (tc->output_convertor) {
-    void* buf(static_cast<void*>(tc->data));
     std::vector<char> converted = tc->output_convertor(buf, 0, tc->size);
     std::memcpy(buf, converted.data(), converted.size());
   }
@@ -2638,7 +2654,7 @@ StatusOr<bool> PoplarExecutor::CheckMoveDeviceToHostRequired(
   // c)   output buffer isn't an input to the current engine _or_
   // d)   output buffer isn't currently in the right place for the new input
   for (const auto& tc : allocations_) {
-    if (tc->on_device == true && tc->output_handle) {
+    if (CheckOutputLocation(tc, TensorControl::Location::Device)) {
       if (engine_changed || args_map_.count(*tc->input_handle) == 0 ||
           tc != args_map_.at(*tc->input_handle).tc) {
         return true;
@@ -2654,7 +2670,7 @@ StatusOr<bool> PoplarExecutor::CheckAnyArgOnDevice(const Args& args) {
     const TensorControl* tc =
         reinterpret_cast<const TensorControl*>(device_buffer.opaque());
 
-    if (tc->on_device && tc->output_handle) {
+    if (CheckOutputLocation(tc, TensorControl::Location::Device)) {
       return true;
     }
   }
@@ -2672,7 +2688,7 @@ StatusOr<bool> PoplarExecutor::CheckRemapGraphNeedsOnDeviceBuffers(
     if (remap_allocator->AddRemapCopy(output_index)) {
       TF_ASSIGN_OR_RETURN(auto tc, remap_allocator->GetRemapedTensorControl(
                                        output_index, flat_tuple_index));
-      return tc->on_device;
+      return tc->location == TensorControl::Location::Device;
     }
     return false;
   };
@@ -2717,7 +2733,8 @@ StatusOr<bool> PoplarExecutor::CheckMoveHostToDeviceRequired(
         return tensorflow::errors::InvalidArgument(
             "Argument isn't allocated on device: ", (void*)arg.second.tc);
       }
-      if (engine_changed || arg.second.tc->on_device == false ||
+      if (engine_changed ||
+          (arg.second.tc->location == TensorControl::Location::Host) ||
           *arg.second.tc->input_handle != arg.first) {
         do_host_to_device = true;
       }
@@ -2732,15 +2749,18 @@ void PoplarExecutor::ConnectReplicatedDeviceToHost(
   void* dest = static_cast<void*>(tc->data);
   const std::size_t size = HostSizeToDeviceSize(tc->size, tc->element_type);
 
-  for (int64_t replica_id = 0; replica_id < current_replication_factor_;
-       ++replica_id) {
-    auto callback = [dest, size, replica_id](void* ptr) {
-      if (replica_id == 0) {
-        std::memcpy(dest, ptr, size);
-      }
-    };
+  if (!currently_using_remote_buffers_ && size > 0) {
+    for (int64_t replica_id = 0; replica_id < current_replication_factor_;
+         ++replica_id) {
+      auto callback = [dest, size, replica_id](void* ptr) {
+        if (replica_id == 0) {
+          std::memcpy(dest, ptr, size);
+        }
+      };
 
-    current_engine_->connectStreamToCallback(stream_name, replica_id, callback);
+      current_engine_->connectStreamToCallback(stream_name, replica_id,
+                                               callback);
+    }
   }
 }
 
@@ -2749,7 +2769,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
   if (UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
     // Make sure all the allocations are marked as on host.
     for (auto* tc : allocations_) {
-      tc->on_device = false;
+      tc->location = TensorControl::Location::Host;
     }
 
     return Status::OK();
@@ -2762,7 +2782,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
   try {
     for (const auto& tc : allocations_) {
       // Set up streams
-      if (tc->on_device == true && tc->output_handle) {
+      if (CheckOutputLocation(tc, TensorControl::Location::Device)) {
         auto buffer_size = tc->size;
         if (tc->in_memory_remote_parameter_info) {
           // We currently only get one copy of the buffer.
@@ -2876,7 +2896,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
 
     // Post process upload
     for (auto* tc : allocations_) {
-      if (tc->on_device == true && tc->output_handle) {
+      if (CheckOutputLocation(tc, TensorControl::Location::Device)) {
         PostProcessBuffer(tc);
       }
 
@@ -2890,7 +2910,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
 
 Status PoplarExecutor::ResetTensorControlState(TensorControl* tc) {
   tc->in_memory_remote_parameter_info = nullptr;
-  tc->on_device = false;
+  tc->location = TensorControl::Location::Host;
   tc->output_handle.reset();
   tc->input_handle.reset();
   return Status::OK();
@@ -3003,12 +3023,18 @@ Status PoplarExecutor::MoveHostToDevice() {
                                                   buffer_offset, replica_id);
             }
           }
-        } else {
+        } else if (!currently_using_remote_buffers_) {
           tc->in_memory_remote_parameter_info = nullptr;
           current_engine_->connectStream(arg.first.name, buf);
+        } else {
+          for (int replica_id = 0; replica_id < current_replication_factor_;
+               ++replica_id) {
+            current_engine_->copyToRemoteBuffer(buf, arg.first.name, 0,
+                                                replica_id);
+          }
         }
 
-        tc->on_device = true;
+        tc->location = TensorControl::Location::Device;
         tc->input_handle = arg.first;
 
         Json::Value tensor;
@@ -3071,7 +3097,17 @@ void PoplarExecutor::ConnectStreamedVariablesHostToDevice() {
   for (auto arg : args_map_) {
     if (arg.second.streamed) {
       void* buf = PreProcessBuffer(arg.second);
-      current_engine_->connectStream(arg.first.name, buf);
+      if (arg.second.tc->size > 0) {
+        if (!currently_using_remote_buffers_) {
+          current_engine_->connectStream(arg.first.name, buf);
+        } else {
+          for (int64_t replica_id = 0; replica_id < current_replication_factor_;
+               replica_id++) {
+            current_engine_->copyToRemoteBuffer(buf, arg.first.name, 0,
+                                                replica_id);
+          }
+        }
+      }
     }
   }
 }
@@ -3644,6 +3680,8 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
         engine->load(ipu_.Device());
 
         current_engine_ = engine;
+        currently_using_remote_buffers_ = executable.UsesRemoteBuffers() &&
+                                          executable.UsesRemoteEntryParams();
         SetCurrentReplicationFactor(executable.GetReplicationFactor());
 
         ConnectSeedCallback();
