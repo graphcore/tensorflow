@@ -1079,6 +1079,25 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "while_loop_optimisation_utils",
+    srcs = [
+        "while_loop_optimisation_utils.cc",
+    ],
+    hdrs = [
+        "while_loop_optimisation_utils.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/passes:allocation_analysis",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:print_util",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:slice_util",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:util",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:while_loop_util",
+        "//tensorflow/compiler/xla/service:while_loop_analysis",
+        "//tensorflow/compiler/xla/service:while_loop_invariant_code_motion",
+    ],
+)
+
+poplar_cc_library(
     name = "rnn_util",
     srcs = [
         "rnn_util.cc",
@@ -1285,6 +1304,7 @@ poplar_cc_library(
         ":tensor_map",
         ":tracepoint",
         ":util",
+        ":while_loop_optimisation_utils",
         ":while_loop_util",
         ":xla_util",
     ],
