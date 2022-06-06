@@ -3794,7 +3794,7 @@ tf_docs_py_test(
     size = "large",
     srcs = ["docs/exporting_pipelined_model_example.py"],
     main = "docs/exporting_pipelined_model_example.py",
-    num_ipus = 1,
+    num_ipus = 2,
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",

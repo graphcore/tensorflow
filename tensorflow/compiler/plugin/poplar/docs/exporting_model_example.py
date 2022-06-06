@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import serving
-from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu import config
 
 # Directory where SavedModel will be written.
 saved_model_directory = './my_saved_model_ipu/001'
@@ -24,8 +24,10 @@ def my_net(x):
 
 
 # Configure the IPU for compilation.
-cfg = IPUConfig()
+cfg = config.IPUConfig()
 cfg.auto_select_ipus = 1
+cfg.device_connection.enable_remote_buffers = True
+cfg.device_connection.type = config.DeviceConnectionType.ON_DEMAND
 cfg.configure_ipu_system()
 
 input_shape = (4,)
