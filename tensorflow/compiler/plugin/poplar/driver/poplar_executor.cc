@@ -863,6 +863,10 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
 
 Status PoplarExecutor::SetupInfeedReplication(
     const TranslatedInfeedInfos& infeed_infos) {
+  if (UseSyntheticDataFor(SyntheticDataCategory::Infeed)) {
+    return Status::OK();
+  }
+
   std::unique_lock<std::mutex> l(infeeds_mutex_);
   for (auto& infeed_info : infeed_infos) {
     const int64_t replication_factor = current_replication_factor_;
