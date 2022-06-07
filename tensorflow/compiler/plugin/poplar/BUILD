@@ -3881,23 +3881,6 @@ xla_test(
     ],
 )
 
-xla_test(
-    name = "slice_copy_inserter_test",
-    size = "medium",
-    srcs = ["tests/slice_copy_inserter_test.cc"],
-    backends = ["poplar"],
-    copts = ["-fexceptions"],
-    deps = [
-        ":poplar_test_base",
-        ":test_utils",
-        "//tensorflow/compiler/plugin/poplar/driver/passes:multi_slice_simplifier",
-        "//tensorflow/compiler/xla/service:pattern_matcher",
-        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
-        "//tensorflow/compiler/xla/tests:hlo_test_base",
-        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
-    ],
-)
-
 test_suite(
     name = "all_tests",
 )
