@@ -64,8 +64,8 @@ class MatMulGraphCachingTest(xla_test.XLATestCase):
       sess.run(mm2, {in0: np.zeros(in0.shape), in1: np.zeros(in1.shape)})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 15304648)
-    self.assert_max_tile_memory(report, 1913288)
+    self.assert_total_tile_memory(report, 15894096, tolerance=0.1)
+    self.assert_max_tile_memory(report, 1913288, tolerance=0.1)
 
     ok = ['mm1/dot*']
     self.assert_all_compute_sets_and_list(report, ok)
