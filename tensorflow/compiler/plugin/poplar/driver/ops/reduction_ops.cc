@@ -105,6 +105,26 @@ bool IsSimpleSelection(const HloComputation* computation) {
   }
 }
 
+bool IsPoplibsPoolWindow(const Window& window) {
+  if (window_util::HasDilation(window)) {
+    return false;
+  }
+
+  if (!window.dimensions_size() == 4) {
+    return false;
+  }
+
+  unsigned reduction_count = 0;
+  for (auto& d : window.dimensions()) {
+    if (d.size() != 1 || d.stride() != 1 || d.padding_low() != 0 ||
+        d.padding_high() != 0) {
+      reduction_count++;
+    }
+  }
+
+  return (reduction_count <= 2);
+}
+
 bool IsPoplibsPool(const HloInstruction* inst,
                    const HloComputation* computation) {
   HloInstruction* root(computation->root_instruction());
@@ -124,21 +144,7 @@ bool IsPoplibsPool(const HloInstruction* inst,
     return false;
   }
 
-  const Window& window = inst->window();
-  if (window_util::HasDilation(window)) {
-    return false;
-  }
-
-  unsigned reduction_count = 0;
-  for (int64_t i = 0; i < window.dimensions_size(); i++) {
-    auto& d = window.dimensions(i);
-    if (d.size() != 1 || d.stride() != 1 || d.padding_low() != 0 ||
-        d.padding_high() != 0) {
-      reduction_count++;
-    }
-  }
-
-  return (reduction_count <= 2);
+  return IsPoplibsPoolWindow(inst->window());
 }
 
 static const std::string& ReductionVertexBaseName(const HloInstruction* inst) {

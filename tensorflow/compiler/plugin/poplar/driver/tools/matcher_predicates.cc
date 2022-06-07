@@ -528,5 +528,15 @@ bool IsMultiUpdateAdd(const HloInstruction* inst) {
   return IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst);
 }
 
+bool IsZeroPad(const HloInstruction* inst) {
+  if (IsPopOpsFusion(inst, "zero_pad")) {
+    return true;
+  }
+  if (inst->opcode() == HloOpcode::kPad && IsConstantZero(inst->operand(1))) {
+    return true;
+  }
+  return false;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

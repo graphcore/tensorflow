@@ -141,6 +141,8 @@ StochasticRoundingMethod GetStochasticRoundingMethod(
 
 bool IsPoplibsPool(const HloInstruction*, const HloComputation*);
 
+bool IsPoplibsPoolWindow(const xla::Window&);
+
 bool IsSimpleSelection(const HloComputation*);
 
 bool IsReducibleArithmetic(const HloComputation*);

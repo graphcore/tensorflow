@@ -6543,6 +6543,96 @@ ENTRY f {
               GmockMatch(m::PartitionId()));
 }
 
+// Test basic folding pad into maxpool with no existing padding.
+TEST_F(PoplarAlgebraicSimplifierTest, FoldingPadIntoMaxPool) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  param = f32[8, 64, 64, 16] parameter(0)
+  zero = f32[] constant(0)
+  pad = f32[8, 66, 66, 16] pad(param, zero), padding=0_0x1_1x1_1x0_0
+  maxpool = f32[8, 32, 32, 16] custom-call(pad), custom_call_target="MaxPool", backend_config="{\n\t\"window\" : \"{\\\"dimensions\\\":[{\\\"size\\\":\\\"1\\\",\\\"stride\\\":\\\"1\\\",\\\"padding_low\\\":\\\"0\\\",\\\"padding_high\\\":\\\"0\\\",\\\"window_dilation\\\":\\\"1\\\",\\\"base_dilation\\\":\\\"1\\\",\\\"window_reversal\\\":false},{\\\"size\\\":\\\"4\\\",\\\"stride\\\":\\\"2\\\",\\\"padding_low\\\":\\\"0\\\",\\\"padding_high\\\":\\\"0\\\",\\\"window_dilation\\\":\\\"1\\\",\\\"base_dilation\\\":\\\"1\\\",\\\"window_reversal\\\":false},{\\\"size\\\":\\\"4\\\",\\\"stride\\\":\\\"2\\\",\\\"padding_low\\\":\\\"0\\\",\\\"padding_high\\\":\\\"0\\\",\\\"window_dilation\\\":\\\"1\\\",\\\"base_dilation\\\":\\\"1\\\",\\\"window_reversal\\\":false},{\\\"size\\\":\\\"1\\\",\\\"stride\\\":\\\"1\\\",\\\"padding_low\\\":\\\"0\\\",\\\"padding_high\\\":\\\"0\\\",\\\"window_dilation\\\":\\\"1\\\",\\\"base_dilation\\\":\\\"1\\\",\\\"window_reversal\\\":false}]}\"\n}"
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  ASSERT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(module.get()).ValueOrDie());
+  VLOG(0) << "After rewrite \n" << module->ToString();
+
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::CustomCall(m::Parameter(0))));
+  auto window = root->window();
+  EXPECT_THAT(window.dimensions_size(), 4);
+
+  EXPECT_THAT(window.dimensions(0).size(), 1);
+  EXPECT_THAT(window.dimensions(1).size(), 4);
+  EXPECT_THAT(window.dimensions(2).size(), 4);
+  EXPECT_THAT(window.dimensions(3).size(), 1);
+
+  EXPECT_THAT(window.dimensions(0).stride(), 1);
+  EXPECT_THAT(window.dimensions(1).stride(), 2);
+  EXPECT_THAT(window.dimensions(2).stride(), 2);
+  EXPECT_THAT(window.dimensions(3).stride(), 1);
+
+  EXPECT_THAT(window.dimensions(0).padding_low(), 0);
+  EXPECT_THAT(window.dimensions(1).padding_low(), 1);
+  EXPECT_THAT(window.dimensions(2).padding_low(), 1);
+  EXPECT_THAT(window.dimensions(3).padding_low(), 0);
+
+  EXPECT_THAT(window.dimensions(0).padding_high(), 0);
+  EXPECT_THAT(window.dimensions(1).padding_high(), 1);
+  EXPECT_THAT(window.dimensions(2).padding_high(), 1);
+  EXPECT_THAT(window.dimensions(3).padding_high(), 0);
+}
+
+// Test basic folding pad into maxpool which already has padding.
+TEST_F(PoplarAlgebraicSimplifierTest, FoldingPadIntoMaxPoolWithPadding) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  param = f32[8, 64, 64, 16] parameter(0)
+  zero = f32[] constant(0)
+  pad = f32[8, 68, 68, 16] pad(param, zero), padding=0_0x2_2x2_2x0_0
+  maxpool = f32[8, 28, 28, 16] custom-call(pad), custom_call_target="MaxPool", backend_config="{\n\t\"window\" : \"{\\\"dimensions\\\":[{\\\"size\\\":\\\"1\\\",\\\"stride\\\":\\\"1\\\",\\\"padding_low\\\":\\\"0\\\",\\\"padding_high\\\":\\\"0\\\",\\\"window_dilation\\\":\\\"1\\\",\\\"base_dilation\\\":\\\"1\\\",\\\"window_reversal\\\":false},{\\\"size\\\":\\\"4\\\",\\\"stride\\\":\\\"2\\\",\\\"padding_low\\\":\\\"2\\\",\\\"padding_high\\\":\\\"2\\\",\\\"window_dilation\\\":\\\"1\\\",\\\"base_dilation\\\":\\\"1\\\",\\\"window_reversal\\\":false},{\\\"size\\\":\\\"4\\\",\\\"stride\\\":\\\"2\\\",\\\"padding_low\\\":\\\"2\\\",\\\"padding_high\\\":\\\"2\\\",\\\"window_dilation\\\":\\\"1\\\",\\\"base_dilation\\\":\\\"1\\\",\\\"window_reversal\\\":false},{\\\"size\\\":\\\"1\\\",\\\"stride\\\":\\\"1\\\",\\\"padding_low\\\":\\\"0\\\",\\\"padding_high\\\":\\\"0\\\",\\\"window_dilation\\\":\\\"1\\\",\\\"base_dilation\\\":\\\"1\\\",\\\"window_reversal\\\":false}]}\"\n}"
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  ASSERT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(module.get()).ValueOrDie());
+  VLOG(0) << "After rewrite \n" << module->ToString();
+
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::CustomCall(m::Parameter(0))));
+  auto window = root->window();
+  EXPECT_THAT(window.dimensions_size(), 4);
+
+  EXPECT_THAT(window.dimensions(0).size(), 1);
+  EXPECT_THAT(window.dimensions(1).size(), 4);
+  EXPECT_THAT(window.dimensions(2).size(), 4);
+  EXPECT_THAT(window.dimensions(3).size(), 1);
+
+  EXPECT_THAT(window.dimensions(0).stride(), 1);
+  EXPECT_THAT(window.dimensions(1).stride(), 2);
+  EXPECT_THAT(window.dimensions(2).stride(), 2);
+  EXPECT_THAT(window.dimensions(3).stride(), 1);
+
+  EXPECT_THAT(window.dimensions(0).padding_low(), 0);
+  EXPECT_THAT(window.dimensions(1).padding_low(), 4);
+  EXPECT_THAT(window.dimensions(2).padding_low(), 4);
+  EXPECT_THAT(window.dimensions(3).padding_low(), 0);
+
+  EXPECT_THAT(window.dimensions(0).padding_high(), 0);
+  EXPECT_THAT(window.dimensions(1).padding_high(), 4);
+  EXPECT_THAT(window.dimensions(2).padding_high(), 4);
+  EXPECT_THAT(window.dimensions(3).padding_high(), 0);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

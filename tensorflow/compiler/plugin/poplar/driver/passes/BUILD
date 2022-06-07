@@ -1193,19 +1193,23 @@ poplar_cc_library(
     srcs = [
         "poplar_algebraic_simplifier.cc",
         "poplar_algebraic_simplifier/poplar_algebraic_simplifier_convolution.cc",
+        "poplar_algebraic_simplifier/poplar_algebraic_simplifier_custom_call.cc",
         "poplar_algebraic_simplifier/poplar_algebraic_simplifier_dot.cc",
         "poplar_algebraic_simplifier/poplar_algebraic_simplifier_utils.cc",
     ],
     hdrs = [
         "poplar_algebraic_simplifier.h",
         "poplar_algebraic_simplifier/poplar_algebraic_simplifier_convolution.h",
+        "poplar_algebraic_simplifier/poplar_algebraic_simplifier_custom_call.h",
         "poplar_algebraic_simplifier/poplar_algebraic_simplifier_dot.h",
         "poplar_algebraic_simplifier/poplar_algebraic_simplifier_utils.h",
     ],
     deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:poplar_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:util",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:arg_min_max",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:hlo_remote_buffer_info",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:pooling",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:stateful_gradient_accumulate",
     ],
 )

@@ -90,6 +90,7 @@ bool IsAllReduceMean(const HloInstruction* inst);
 bool IsTriangularShapeInst(const HloInstruction* inst);
 bool IsMultiSlice(const HloInstruction* inst);
 bool IsMultiUpdateAdd(const HloInstruction* inst);
+bool IsZeroPad(const HloInstruction* inst);
 
 /**
  * Construct a unary predicate which checks if a given HloInstruction is a

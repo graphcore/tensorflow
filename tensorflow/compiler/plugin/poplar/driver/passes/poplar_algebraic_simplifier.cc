@@ -29,9 +29,11 @@ limitations under the License.
 #include "absl/types/optional.h"
 #include "absl/types/span.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_convolution.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_custom_call.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_dot.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_utils.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/arg_min_max.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -4139,13 +4141,25 @@ Status AlgebraicSimplifierVisitor::HandleMap(HloInstruction* map) {
 
 Status AlgebraicSimplifierVisitor::HandleCustomCall(
     HloInstruction* custom_call) {
-  // We elide gradient accumulation ops with `num_mini_batches=1`.
   if (pp::IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)(
           custom_call)) {
     auto* inst = Cast<pp::HloStatefulGradientAccumulate>(custom_call);
-    if (inst->MiniBatchesToAccumulate() == 1) {
+    TF_ASSIGN_OR_RETURN(
+        bool changed,
+        pp::algebraic_simplifier::custom_call::ElideStatefulGradientAccumulate(
+            inst));
+    if (changed) {
       changed_ = true;
-      return inst->ReplaceAllUsesWith(inst->mutable_operand(0));
+      return Status::OK();
+    }
+  }
+  if (pp::IsPoplarInstruction(PoplarOp::MaxPool)(custom_call)) {
+    auto* inst = Cast<pp::HloMaxPoolInstruction>(custom_call);
+    TF_ASSIGN_OR_RETURN(
+        std::unique_ptr<HloInstruction> replacement,
+        pp::algebraic_simplifier::custom_call::FoldPaddingIntoMaxPool(inst));
+    if (replacement) {
+      return ReplaceWithNewInstruction(inst, std::move(replacement));
     }
   }
   return Status::OK();
