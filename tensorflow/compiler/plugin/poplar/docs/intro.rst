@@ -49,6 +49,11 @@ out-of-memory (OOM) issues.
 
 These will be described in the appropriate sections of this document.
 
+Please note that using Keras layers to build models is supported for TensorFlow
+1. However, you have to define the training loop manually, because Keras API
+calls such as the fit, evaluate and predict methods on `Model` or `Sequential`
+are not supported.
+
 Document overview
 ~~~~~~~~~~~~~~~~~
 
