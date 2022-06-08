@@ -116,8 +116,8 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         if t.type == pva.Program.Type.DoExchange
     ]
     expected_exchanges = [
-        "infeed/*/inter-tileset-copy",  # copy from IO tiles to compute tiles
-        "matmul/*/inter-tileset-copy",  # copy from compute tiles to IO tiles
+        "Copy_infeed/*/infeed",              # copy from IO tiles to compute tiles
+        "Copy_matmul/*/inter-tileset-copy",  # copy from compute tiles to IO tiles
     ] if buffer_fits_on_io_tiles else []
 
     if buffer_fits_on_io_tiles:

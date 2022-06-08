@@ -87,16 +87,6 @@ Status FullVisitor::HandleConcatenate(HloInstruction* inst) {
   return AddSequenceForInstruction(inst, seq);
 }
 
-Status FullVisitor::HandleDot(HloInstruction* inst) {
-  VLOG(1) << "Processing " << inst->name();
-  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  TF_ASSIGN_OR_RETURN(
-      DriverProgramSequence prog,
-      CreateMatMulForDotOp(resources_, inst, GetOutputShape(inst), tensor_map,
-                           debug_name_and_id));
-  return AddSequenceForInstruction(inst, prog);
-}
-
 Status FullVisitor::HandleReverse(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   auto& graph = GetGraph(resources_, inst);

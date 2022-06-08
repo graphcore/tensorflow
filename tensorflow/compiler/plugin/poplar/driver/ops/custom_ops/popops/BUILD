@@ -41,6 +41,17 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "matmul_ops",
+    srcs = [
+        "matmul_ops.cc",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver:tensor",
+    ],
+    alwayslink = True,
+)
+
+poplar_cc_library(
     name = "elementwise",
     srcs = [
         "elementwise.cc",

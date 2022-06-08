@@ -53,6 +53,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:fusions",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:gather_ops",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:histogram",
+        "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:matmul_ops",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:multi_slice",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:normalise_image",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:random",

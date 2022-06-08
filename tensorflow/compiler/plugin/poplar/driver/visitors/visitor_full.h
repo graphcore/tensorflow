@@ -38,8 +38,6 @@ class FullVisitor : public BaseVisitor {
 
   Status HandleConcatenate(HloInstruction* inst) override;
 
-  Status HandleDot(HloInstruction* inst) override;
-
   Status HandleReverse(HloInstruction* inst) override;
 
   Status HandleReduce(HloInstruction* inst) override;
@@ -82,6 +80,7 @@ class FullVisitor : public BaseVisitor {
   HANDLE_AS_HLO_OP(HandleBatchNormTraining)
   HANDLE_AS_HLO_OP(HandleBatchNormGrad)
   HANDLE_AS_HLO_OP(HandleCholesky)
+  HANDLE_AS_HLO_OP(HandleDot)
   HANDLE_AS_HLO_OP(HandleGather)
   HANDLE_AS_HLO_OP(HandleScatter)
   HANDLE_AS_HLO_OP(HandleSort)

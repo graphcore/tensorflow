@@ -100,11 +100,6 @@ Status ScaledInplaceConstantOrTensor(
     poplar::program::Sequence& prog, const HloOpcode op_type,
     const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<DriverProgramSequence> CreateMatMulForDotOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output, TensorMap& tensor_map,
-    const poplar::DebugNameAndId& debug_name_and_id);
-
 StatusOr<DriverProgramSequence> CreateTupleSelectOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map,
