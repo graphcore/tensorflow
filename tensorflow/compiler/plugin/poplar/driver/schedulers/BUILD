@@ -31,6 +31,7 @@ poplar_cc_library(
     ],
     deps = [
         "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_poplar_dataflow_analysis",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_poplar_liveness",
         "//tensorflow/compiler/xla/service:buffer_value",
         "//tensorflow/compiler/xla/service:heap_simulator",
         "//tensorflow/compiler/xla/service:hlo",

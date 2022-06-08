@@ -15,6 +15,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_SCHEDULERS_IPU_SCHEDULER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_SCHEDULERS_IPU_SCHEDULER_H_
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -26,8 +27,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_ordering.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 #include "tensorflow/compiler/xla/service/hlo_schedule.h"
-#include "tensorflow/compiler/xla/service/logical_buffer.h"
-#include "tensorflow/compiler/xla/service/tuple_points_to_analysis.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
 
@@ -48,28 +47,37 @@ struct NamedIpuSchedulerAlgorithm {
       : name(std::move(name)), function(std::move(function)) {}
 };
 
-using MemoryEstimator = std::function<StatusOr<int64_t>(
-    const HloComputation& computation, const HloInstructionSequence& sequence,
-    const HloAliasAnalysis& alias_analysis,
-    const LogicalBuffer::SizeFunction& size_function,
-    const absl::flat_hash_map<const HloComputation*, int64_t>*)>;
-
+using MemoryEstimator = std::function<int64_t(
+    const std::vector<HloInstruction*>&,
+    const HloInstructionMap<HloPoplarBufferSet>&,
+    const absl::flat_hash_map<HloPoplarBuffer::Id, int64_t>&,
+    const absl::flat_hash_map<const HloComputation*, int64_t>&)>;
 MemoryEstimator HeapMemoryEstimator();
 
 /**
- * Given a set of scheduling algorithms, create a new schedule algorithm which
- * will return the best of the given scheduling algorithms based on the provided
- * MemoryEstimator.
  *
- * @param algorithms The set of algorithms
- * @param memory_estimator The schedule memory estimator.
- *
- * @returns a valid IpuSchedulerAlgorithm
+ * An HLO module pass which applies the best scheduling algorithm from the
+ * provided list, to schedule each computation in the module. Where the best
+ * algorithm is determined by the provided MemoryEstimator.
  */
-StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
-    const LogicalBuffer::SizeFunction& size_function,
-    std::vector<NamedIpuSchedulerAlgorithm> algorithms,
-    MemoryEstimator memory_estimator = HeapMemoryEstimator());
+class ChooseBestIpuScheduler : public HloModulePass {
+ public:
+  ChooseBestIpuScheduler(
+      const std::vector<NamedIpuSchedulerAlgorithm>& algorithms,
+      const CompilerAnnotations* annotations = nullptr,
+      MemoryEstimator memory_estimator = HeapMemoryEstimator());
+
+  absl::string_view name() const override {
+    return "chooose-best-ipu-scheduler";
+  }
+
+  StatusOr<bool> Run(HloModule* module) override;
+
+ private:
+  std::vector<NamedIpuSchedulerAlgorithm> algorithms_;
+  const CompilerAnnotations* annotations_;
+  MemoryEstimator memory_estimator_;
+};
 
 /**
  * An HLO module pass which applies the given scheduling algorithm to each
@@ -79,16 +87,17 @@ class IpuScheduler : public HloModulePass {
  public:
   // size_function is the function returning the number of bytes required for a
   // LogicalBuffer. algorithm is the memory scheduling algorithm to use.
-  IpuScheduler(const LogicalBuffer::SizeFunction& size_function,
-               IpuSchedulerAlgorithm algorithm,
+  IpuScheduler(IpuSchedulerAlgorithm algorithm,
                const CompilerAnnotations* annotations = nullptr);
 
   absl::string_view name() const override { return "ipu-scheduler"; }
 
   StatusOr<bool> Run(HloModule* module) override;
+  StatusOr<bool> Run(
+      HloModule* module,
+      std::unique_ptr<HloPoplarDataflowAnalysis> dataflow_analysis);
 
  private:
-  LogicalBuffer::SizeFunction size_function_;
   IpuSchedulerAlgorithm algorithm_;
   const CompilerAnnotations* annotations_;
 };

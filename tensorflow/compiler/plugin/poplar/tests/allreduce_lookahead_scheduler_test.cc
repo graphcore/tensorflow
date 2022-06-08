@@ -63,11 +63,7 @@ add {
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      CreateClusteringMemoryScheduler({64 * 1024}));
+  IpuScheduler scheduler(CreateClusteringMemoryScheduler({64 * 1024}));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
   auto s = module->schedule().sequence(module->entry_computation());

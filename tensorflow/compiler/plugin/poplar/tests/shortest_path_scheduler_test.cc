@@ -61,9 +61,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -119,9 +116,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -165,9 +159,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -214,9 +205,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -271,9 +259,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -324,9 +309,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -377,9 +359,6 @@ cluster_1  {
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -431,9 +410,6 @@ cluster_1  {
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -495,9 +471,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -590,9 +563,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -678,9 +648,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -773,9 +740,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -818,9 +782,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -852,9 +813,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -898,9 +856,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -952,9 +907,6 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
@@ -994,9 +946,6 @@ HloModule top
                           ParseAndReturnVerifiedModule(hlo_string));
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
@@ -1030,9 +979,6 @@ comp {
                           ParseAndReturnVerifiedModule(hlo_string));
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());

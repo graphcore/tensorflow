@@ -217,14 +217,6 @@ using Tracepoint = TensorflowPoplarPluginTracepoint;
 
 std::once_flag help_flag_printed;
 
-int64_t SizeFunction(const BufferValue& buffer) {
-  if (buffer.shape().IsOpaque()) {
-    return 0;
-  }
-
-  return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-}
-
 // CompilationStats wrapper for generating PVTI tracepoints
 // for HloPasses.
 class PVTICompilerStats : public xla::CompilationStats {
@@ -1398,7 +1390,7 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
         resources.information.max_reduce_many_buffer_size > 0 ||
         resources.information.max_all_gather_buffer_size > 0) {
       pipeline.AddPass<IpuScheduler>(
-          SizeFunction, CreateClusteringMemoryScheduler(resources.information),
+          CreateClusteringMemoryScheduler(resources.information),
           &resources.annotations);
       pipeline.AddPass<CombineInstructions>();
       pipeline.AddPass<HloDescheduler>();
@@ -1412,12 +1404,9 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
 
     TF_ASSIGN_OR_RETURN(auto schedulers, GetSchedulerList(resources));
 
-    TF_ASSIGN_OR_RETURN(auto scheduler,
-                        BestIpuSchedule(SizeFunction, schedulers));
-
     pipeline.AddPass<ResourceUpdateScheduleOptimizer>();
-    pipeline.AddPass<IpuScheduler>(SizeFunction, std::move(scheduler),
-                                   &resources.annotations);
+    pipeline.AddPass<ChooseBestIpuScheduler>(schedulers,
+                                             &resources.annotations);
     pipeline.AddPass<ModuleFlatten>(resources.annotations);
     pipeline.AddPass<LowerFrontendAttributes>();
     pipeline.AddPass<MarkReplicaIdenticalInstructions>();

@@ -191,8 +191,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     ]
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
-    self.assert_total_tile_memory(report, 322656, tolerance=0.1)
-    self.assert_max_tile_memory(report, 40691, tolerance=0.1)
+    self.assert_total_tile_memory(report, 278188, tolerance=0.1)
+    self.assert_max_tile_memory(report, 35069, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testNestedFunctionTraining(self):
@@ -476,6 +476,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     tu.enable_ipu_events(cfg)
+    cfg.scheduling.algorithm = SchedulingAlgorithm.POST_ORDER
     cfg.configure_ipu_system()
 
     with tu.ipu_session() as sess:

@@ -37,7 +37,13 @@ namespace poplarplugin {
 #define POPLAR_TEST_P(X, Y)
 #endif
 
-#define MAKE_HLO_TEST_CASE(hlo_string) HloTestCase(#hlo_string, hlo_string)
+#define MAKE_HLO_TEST_CASE2(hlo_string, count) \
+  HloTestCase(#hlo_string, hlo_string, count)
+#define MAKE_HLO_TEST_CASE1(hlo_string) MAKE_HLO_TEST_CASE2(hlo_string, 1)
+
+#define GET_MACRO(_1, _2, NAME, ...) NAME
+#define MAKE_HLO_TEST_CASE(...) \
+  GET_MACRO(__VA_ARGS__, MAKE_HLO_TEST_CASE2, MAKE_HLO_TEST_CASE1)(__VA_ARGS__)
 
 // Common types/utilities for writing HLO based tests
 struct HloTestFixture : HloTestBase {
@@ -74,13 +80,13 @@ struct HloTestFixture : HloTestBase {
 
 struct HloTestCase {
   HloTestCase(const std::string& name, const std::string& hlo)
-      : name(name), hlo(hlo), replica_count(1) {}
+      : name(name), hlo(hlo), ipu_count(1) {}
   HloTestCase(const std::string& name, const std::string& hlo,
               int64_t replica_count)
-      : name(name), hlo(hlo), replica_count(replica_count) {}
+      : name(name), hlo(hlo), ipu_count(replica_count) {}
   std::string name;
   std::string hlo;
-  int64_t replica_count;
+  int64_t ipu_count;
 };
 
 std::ostream& operator<<(std::ostream& stream, const HloTestCase& test_case) {
@@ -93,7 +99,7 @@ struct ParameterizedHloTestFixture
     : Base,
       ::testing::WithParamInterface<HloTestCase> {
   void SetUp() override {
-    ASSERT_TRUE(Base::SetUpHloModule(GetParam().hlo, GetParam().replica_count));
+    ASSERT_TRUE(Base::SetUpHloModule(GetParam().hlo, GetParam().ipu_count));
   }
 };
 

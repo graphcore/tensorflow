@@ -1012,6 +1012,7 @@ poplar_cc_library(
     ],
     deps = [
         ":hlo_poplar_buffer",
+        ":hlo_poplar_dataflow_analysis",
         ":util",
     ],
 )

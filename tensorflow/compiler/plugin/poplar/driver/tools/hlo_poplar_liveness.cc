@@ -79,6 +79,12 @@ HloPoplarBufferSet FindBuffersUsedBy(
 
 HloInstructionMap<HloPoplarBufferSet> FindUsedBuffers(
     const HloModule* module,
+    const HloPoplarDataflowAnalysis& dataflow_analysis) {
+  return FindUsedBuffers(module, dataflow_analysis.GetInstructionBufferSets());
+}
+
+HloInstructionMap<HloPoplarBufferSet> FindUsedBuffers(
+    const HloModule* module,
     const InstructionBufferSets& instruction_buffer_sets) {
   HloInstructionMap<HloPoplarBufferSet> used_buffers;
 

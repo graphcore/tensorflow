@@ -15,7 +15,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
 
 #include <map>
-#include <memory>
 #include <queue>
 #include <tuple>
 #include <utility>
@@ -24,7 +23,7 @@ limitations under the License.
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
-#include "tensorflow/compiler/xla/service/heap_simulator.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_liveness.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
@@ -41,26 +40,35 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
+absl::flat_hash_map<HloPoplarBuffer::Id, int64_t> GetBufferSizes(
+    const HloInstructionMap<HloPoplarBufferSet>& buffer_uses) {
+  absl::flat_hash_map<HloPoplarBuffer::Id, int64_t> buffer_sizes;
+  for (auto& item : buffer_uses) {
+    buffer_sizes.merge(DeviceMemoryBufferSizesInBytes(item.second));
+  }
+  return buffer_sizes;
+}
+
 StatusOr<HloSchedule> IpuScheduleModule(
-    HloModule* module, const LogicalBuffer::SizeFunction& size_function,
-    const IpuSchedulerAlgorithm& algorithm,
-    const CompilerAnnotations* annotations) {
+    HloModule* module, const IpuSchedulerAlgorithm& algorithm,
+    HloPoplarDataflowAnalysis* dataflow_analysis) {
   HloSchedule schedule(module);
-  TF_ASSIGN_OR_RETURN(auto dataflow_analysis,
-                      HloPoplarDataflowAnalysis::Run(module, annotations));
-  TF_ASSIGN_OR_RETURN(std::unique_ptr<HloAliasAnalysis> alias_analysis,
-                      HloAliasAnalysis::Run(module));
+
+  const auto buffer_uses = FindUsedBuffers(module, *dataflow_analysis);
+  const auto buffer_sizes = GetBufferSizes(buffer_uses);
+
+  auto memory_estimator = HeapMemoryEstimator();
+
   absl::flat_hash_map<const HloComputation*, int64_t> memory_by_computation;
   for (auto* computation : module->MakeComputationPostOrder()) {
     if (!computation->IsFusionComputation()) {
       TF_ASSIGN_OR_RETURN(
           HloInstructionSequence computation_sequence,
           algorithm(computation, *dataflow_analysis, memory_by_computation));
-      TF_ASSIGN_OR_RETURN(
-          auto bytes, HeapSimulator::MinimumMemoryForComputation(
-                          *computation, computation_sequence, *alias_analysis,
-                          size_function, &memory_by_computation));
 
+      auto bytes =
+          memory_estimator(computation_sequence.instructions(), buffer_uses,
+                           buffer_sizes, memory_by_computation);
       memory_by_computation[computation] = bytes;
       schedule.set_sequence(computation, std::move(computation_sequence));
     }
@@ -72,46 +80,8 @@ StatusOr<HloSchedule> IpuScheduleModule(
   return std::move(schedule);
 }
 
-/*
- * The scheduler is run for each computation, while the alias analysis is
- * performed for the whole module. This cache allows re-using the analysis
- * across the computations to save time. It assumes that the module is not
- * modified while in use.
- */
-class AliasAnalysisCache {
- public:
-  using Container =
-      absl::flat_hash_map<const HloModule*, std::unique_ptr<HloAliasAnalysis>>;
-
-  const HloAliasAnalysis& FindOrRun(const HloModule* module) {
-    const auto it = cache_.lazy_emplace(
-        module, [module](const Container::constructor& ctor) {
-          auto result = HloAliasAnalysis::Run(module);
-          TF_CHECK_OK(result.status());
-          ctor(module, std::move(result.ValueOrDie()));
-        });
-    return *it->second;
-  }
-
- private:
-  Container cache_;
-};
-
-}  // namespace
-
-MemoryEstimator HeapMemoryEstimator() {
-  using HeapSimulatorOverload = StatusOr<int64_t> (*)(
-      const HloComputation& computation, const HloInstructionSequence& sequence,
-      const HloAliasAnalysis& alias_analysis,
-      const LogicalBuffer::SizeFunction& size_function,
-      const absl::flat_hash_map<const HloComputation*, int64_t>*);
-
-  return static_cast<HeapSimulatorOverload>(
-      HeapSimulator::MinimumMemoryForComputation);
-}
-
 StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
-    const LogicalBuffer::SizeFunction& size_function,
+    const HloModule* module, const HloPoplarDataflowAnalysis& dataflow_analysis,
     std::vector<NamedIpuSchedulerAlgorithm> algorithms,
     MemoryEstimator memory_estimator) {
   if (algorithms.empty()) {
@@ -119,17 +89,17 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
         "Cannot construct BestIpuSchedule when the input is empty");
   }
 
+  const auto buffer_uses = FindUsedBuffers(module, dataflow_analysis);
+  const auto buffer_sizes = GetBufferSizes(buffer_uses);
+
   return IpuSchedulerAlgorithm{
-      [algorithms = std::move(algorithms),
-       alias_analysis_cache = std::make_shared<AliasAnalysisCache>(),
-       size_function = size_function, memory_estimator = memory_estimator](
+      [algorithms = std::move(algorithms), memory_estimator = memory_estimator,
+       buffer_uses = std::move(buffer_uses),
+       buffer_sizes = std::move(buffer_sizes)](
           HloComputation* computation,
           const HloPoplarDataflowAnalysis& dataflow_analysis,
           const absl::flat_hash_map<const HloComputation*, int64_t>&
               memory_by_computation) -> StatusOr<HloInstructionSequence> {
-        const HloAliasAnalysis& alias_analysis =
-            alias_analysis_cache->FindOrRun(computation->parent());
-
         struct ScheduleResult {
           int64_t schedule_memory;
           std::string algorithm_name;
@@ -149,13 +119,9 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
             continue;
           }
           const auto schedule = schedule_or_status.ValueOrDie();
-
-          // TODO(T9494): Replace the heap simulator.
-          TF_ASSIGN_OR_RETURN(
-              const int64_t schedule_memory,
-              memory_estimator(*computation, schedule, alias_analysis,
-                               size_function, &memory_by_computation));
-
+          const int64_t schedule_memory =
+              memory_estimator(schedule.instructions(), buffer_uses,
+                               buffer_sizes, memory_by_computation);
           VLOG(2) << "Scheduler " << algorithm.name
                   << " produced a schedule for " << computation->name()
                   << " with estimated memory consumption " << schedule_memory;
@@ -180,21 +146,59 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
       }};
 }
 
-IpuScheduler::IpuScheduler(const LogicalBuffer::SizeFunction& size_function,
-                           IpuSchedulerAlgorithm algorithm,
+}  // namespace
+
+MemoryEstimator HeapMemoryEstimator() {
+  return
+      [](const std::vector<HloInstruction*>& schedule,
+         const HloInstructionMap<HloPoplarBufferSet>& buffer_uses,
+         const absl::flat_hash_map<HloPoplarBuffer::Id, int64_t>& buffer_sizes,
+         const absl::flat_hash_map<const HloComputation*, int64_t>&
+             memory_by_computation) {
+        auto program_liveness = GenerateProgramLiveness(schedule, buffer_uses);
+        return EstimateMinimumLiveMemory(program_liveness, buffer_sizes,
+                                         memory_by_computation);
+      };
+}
+
+ChooseBestIpuScheduler::ChooseBestIpuScheduler(
+    const std::vector<NamedIpuSchedulerAlgorithm>& algorithms,
+    const CompilerAnnotations* annotations, MemoryEstimator memory_estimator)
+    : algorithms_(algorithms),
+      annotations_(annotations),
+      memory_estimator_(memory_estimator) {}
+
+StatusOr<bool> ChooseBestIpuScheduler::Run(HloModule* module) {
+  TF_ASSIGN_OR_RETURN(auto analysis,
+                      HloPoplarDataflowAnalysis::Run(module, annotations_));
+  TF_ASSIGN_OR_RETURN(
+      auto algorithm,
+      BestIpuSchedule(module, *analysis, algorithms_, memory_estimator_));
+
+  IpuScheduler scheduler(algorithm, annotations_);
+  return scheduler.Run(module, std::move(analysis));
+}
+
+IpuScheduler::IpuScheduler(IpuSchedulerAlgorithm algorithm,
                            const CompilerAnnotations* annotations)
-    : size_function_(size_function),
-      algorithm_(std::move(algorithm)),
-      annotations_(annotations) {}
+    : algorithm_(std::move(algorithm)), annotations_(annotations) {}
 
 StatusOr<bool> IpuScheduler::Run(HloModule* module) {
+  TF_ASSIGN_OR_RETURN(auto dataflow_analysis,
+                      HloPoplarDataflowAnalysis::Run(module, annotations_));
+  return Run(module, std::move(dataflow_analysis));
+}
+
+StatusOr<bool> IpuScheduler::Run(
+    HloModule* module,
+    std::unique_ptr<HloPoplarDataflowAnalysis> dataflow_analysis) {
   if (!algorithm_) {
     return xla::FailedPrecondition("No IpuSchedulerAlgorithm provided");
   }
 
   TF_ASSIGN_OR_RETURN(
       HloSchedule schedule,
-      IpuScheduleModule(module, size_function_, algorithm_, annotations_));
+      IpuScheduleModule(module, algorithm_, dataflow_analysis.get()));
   TF_RETURN_IF_ERROR(module->set_schedule(std::move(schedule)));
 
   return true;

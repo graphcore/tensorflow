@@ -167,11 +167,7 @@ ENTRY c1 {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
 
-  IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -233,11 +229,7 @@ TEST_F(HloInplaceDependencyTest, MultipleUpdateInPlacePeers) {
                 in_place_ops.count(inst->name()) == 1);
   }
 
-  IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -291,11 +283,7 @@ TEST_F(HloInplaceDependencyTest, MultipleInplaceWithInterdependency) {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
 
-  IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -347,11 +335,7 @@ TEST_F(HloInplaceDependencyTest, MultipleInplaceWithRightOrder) {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
 
-  IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -403,11 +387,7 @@ TEST_F(HloInplaceDependencyTest, InplaceCorrectDependencies) {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
 
-  IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 

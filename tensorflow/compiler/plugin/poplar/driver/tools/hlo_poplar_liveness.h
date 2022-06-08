@@ -20,6 +20,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_dataflow_analysis.h"
 
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
@@ -28,6 +29,9 @@ namespace poplarplugin {
 
 // Find all the HloPoplarBuffer objects read/written to by each instruction in
 // the given module.
+HloInstructionMap<HloPoplarBufferSet> FindUsedBuffers(
+    const HloModule* module,
+    const HloPoplarDataflowAnalysis& dataflow_analysis);
 HloInstructionMap<HloPoplarBufferSet> FindUsedBuffers(
     const HloModule* module,
     const InstructionBufferSets& instruction_buffer_sets);

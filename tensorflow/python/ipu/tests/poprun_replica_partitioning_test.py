@@ -32,6 +32,7 @@ from tensorflow.python.training import momentum
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ipu.optimizers import IpuOptimizer
 
@@ -207,7 +208,8 @@ class PoprunReplicaPartitioningTest(test.TestCase):
           process_count=process_count,
           process_index=process_index,
           cross_replica_optimizer_cls=
-          CrossReplicaOptimizerWithCrossReplicaSumAndNorm)
+          CrossReplicaOptimizerWithCrossReplicaSumAndNorm,
+          scheduler=utils.SchedulingAlgorithm.SHORTEST_PATH)
 
     losses_test, variables_test = \
       pipelining_test_util.PipelineTester.pipeline_on_ipu(
@@ -228,7 +230,8 @@ class PoprunReplicaPartitioningTest(test.TestCase):
           ipu_id=ipu_id,
           process_count=process_count,
           process_index=process_index,
-          cross_replica_optimizer_cls=CrossReplicaOptimizerWithCrossReplicaMean)
+          cross_replica_optimizer_cls=CrossReplicaOptimizerWithCrossReplicaMean,
+          scheduler=utils.SchedulingAlgorithm.SHORTEST_PATH)
 
     self.assertAllClose(losses_ref, losses_test)
     self.assertAllClose(variables_ref, variables_test)

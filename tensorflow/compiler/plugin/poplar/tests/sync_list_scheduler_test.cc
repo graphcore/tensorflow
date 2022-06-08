@@ -61,9 +61,6 @@ add {
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateSyncListMemoryScheduler(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -119,9 +116,6 @@ add {
   auto* module = module_or_status.ValueOrDie().get();
 
   IpuScheduler scheduler(
-      [](const BufferValue& buffer) {
-        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-      },
       CreateSyncListMemoryScheduler(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 

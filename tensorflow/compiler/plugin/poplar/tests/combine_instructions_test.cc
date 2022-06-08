@@ -109,12 +109,7 @@ MATCHER_P(AllSharded, expected_sharding, "") {
 
 struct CombineInstructionsTest : HloPoplarTestBase {
   static IpuScheduler CreateHloScheduler(IpuSchedulerAlgorithm algorithm) {
-    IpuScheduler scheduler(
-        [](const BufferValue& buffer) {
-          return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-        },
-        algorithm);
-
+    IpuScheduler scheduler(algorithm);
     return scheduler;
   }
 

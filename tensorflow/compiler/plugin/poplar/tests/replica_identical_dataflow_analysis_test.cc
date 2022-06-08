@@ -70,8 +70,7 @@ struct ReplicaIdenticalDataflowAnalysisTest : HloTestFixture {
 struct ParameterizedReplicaDataflowAnalysisTest
     : ParameterizedHloTestFixture<ReplicaIdenticalDataflowAnalysisTest> {
   void SetUp() override {
-    ASSERT_TRUE(
-        SetUpHloFlattenedModule(GetParam().hlo, GetParam().replica_count));
+    ASSERT_TRUE(SetUpHloFlattenedModule(GetParam().hlo, GetParam().ipu_count));
   }
 };
 

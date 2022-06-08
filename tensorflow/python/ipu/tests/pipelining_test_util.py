@@ -352,7 +352,8 @@ class PipelineTester(object):
       process_index=None,
       cross_replica_optimizer_cls=None,
       reduction_method=DEFAULT_GRAD_ACCUM_METHOD,
-      gradient_accumulation_dtype=None):
+      gradient_accumulation_dtype=None,
+      scheduler=None):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -413,6 +414,9 @@ class PipelineTester(object):
       cfg = IPUConfig()
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
+      if scheduler is not None:
+        cfg.scheduling.algorithm = scheduler
+
       if number_of_io_tiles > 0:
         cfg.io_tiles.num_io_tiles = number_of_io_tiles
         cfg.io_tiles.place_ops_on_io_tiles = True

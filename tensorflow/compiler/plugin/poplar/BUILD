@@ -179,6 +179,23 @@ poplar_cc_library(
     ],
 )
 
+poplar_cc_library(
+    name = "hlo_test_samples",
+    testonly = True,
+    srcs = [],
+    hdrs = [
+        "tests/hlo_samples/T44634_hlo.h",
+        "tests/hlo_samples/all_samples.h",
+        "tests/hlo_samples/als_simple_training_adam_hlo.h",
+        "tests/hlo_samples/linear_regression_hlo.h",
+        "tests/hlo_samples/pipeline_grouped_recomputation_hlo.h",
+        "tests/hlo_samples/rnn_hlo.h",
+        "tests/hlo_samples/serialized_matmul_hlo.h",
+    ],
+    deps = [
+    ],
+)
+
 xla_test(
     name = "add_stochastic_rounding_options_test",
     srcs = ["tests/add_stochastic_rounding_options_test.cc"],
@@ -691,13 +708,14 @@ xla_test(
 
 xla_test(
     name = "ipu_scheduler_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/ipu_scheduler_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     shard_count = 2,
     tags = ["hw_poplar_test_4_ipus"],
     deps = [
+        ":hlo_test_samples",
         ":poplar_test_base",
         ":test_utils",
         "//tensorflow/compiler/xla/service:hlo_matchers",
