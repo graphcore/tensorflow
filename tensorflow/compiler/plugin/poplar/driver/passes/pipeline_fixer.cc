@@ -24,6 +24,8 @@ limitations under the License.
 
 #include "absl/strings/str_replace.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/elementwise.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/execution_counter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -35,6 +37,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
+#include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/service/tuple_simplifier.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -42,7 +45,11 @@ limitations under the License.
 #include "tensorflow/core/lib/strings/str_util.h"
 
 namespace xla {
+namespace {
+namespace m = match;
+}
 namespace poplarplugin {
+using pipeline_config = PoplarBackendConfig::CallConfig::PipelineConfig;
 
 Status PipelineFixer::InsertStatefulNoopsIntoStages() {
   for (auto& stages : {stages_.forward, stages_.backward}) {
@@ -260,7 +267,136 @@ StatusOr<bool> PipelineFixer::BreakUpElementwiseOperations() {
   return changed;
 }
 
-StatusOr<bool> PipelineFixer::BreakUpGradientAccumulationOperations() {
+namespace pipeline_fixer_util {
+bool IsRunningMeanAccumulatorScale(HloInstruction* scale) {
+  HloInstruction *counter0, *counter1;
+  return Match(scale, m::Multiply(m::Convert(m::Op(&counter0)),
+                                  m::Divide(m::ConstantScalar(1),
+                                            m::Add(m::Convert(m::Op(&counter1)),
+                                                   m::ConstantScalar(1))))) &&
+         counter0 == counter1 &&
+         IsPoplarInstruction(PoplarOp::ExecutionCounter, counter0) &&
+         Cast<HloExecutionCounter>(counter0)->CanLowerIntoPipelineStage();
+}
+
+bool IsRunningMeanGradient(HloInstruction* gradient) {
+  // If this is running mean then it is expected that the gradient is
+  // multiplied by:
+  // 1 / (convert(execution_counter) + 1).
+  HloInstruction* scale;
+  if (!Match(gradient, m::Multiply(m::Op(), m::Broadcast(m::Op(&scale))))) {
+    VLOG(3) << "Gradient " << gradient->ToString()
+            << " is not a valid running mean gradient as it is not scaled by a "
+               "broadcast of a constant.";
+    return false;
+  }
+
+  // Look through the convert on the scale.
+  if (scale->opcode() == HloOpcode::kConvert) {
+    scale = scale->mutable_operand(0);
+  }
+
+  HloInstruction* counter;
+  if (Match(scale,
+            m::Divide(m::ConstantScalar(1), m::Add(m::Convert(m::Op(&counter)),
+                                                   m::ConstantScalar(1)))) &&
+      IsPoplarInstruction(PoplarOp::ExecutionCounter, counter) &&
+      Cast<HloExecutionCounter>(counter)->CanLowerIntoPipelineStage()) {
+    return true;
+  } else {
+    VLOG(3) << "Gradient " << gradient->ToString()
+            << " is not a valid running mean gradient as the scale is not "
+            << "`1 / (execution_counter + 1)`.";
+    return false;
+  }
+}
+
+StatusOr<bool> GradientsNeedRescaling(pipeline_config::Schedule schedule,
+                                      int64 accumulator_scale_stage_id,
+                                      int64 gradient_stage_id) {
+  CHECK_GE(accumulator_scale_stage_id, gradient_stage_id);
+
+  switch (schedule) {
+    case pipeline_config::Sequential: {
+      // Sequential schedule does not need rescaling as only one stage is
+      // executed at a time.
+      return false;
+    }
+    case pipeline_config::Grouped: {
+      // For grouped schedule we need to rescale all the gradients which are not
+      // scaled in the same pipeline stage as the accumulator.
+      return accumulator_scale_stage_id != gradient_stage_id;
+    }
+    case pipeline_config::Interleaved:
+      // Interleaved schedule does not support this - this code should not be
+      // reachable as it's not possible to have an interleaved schedule with
+      // same variable used in multiple pipeline stages.
+      TF_FALLTHROUGH_INTENDED;
+    default:
+      return FailedPrecondition("Unsupported pipeline schedule.");
+  }
+}
+
+StatusOr<HloInstruction*> GetGradientScale(HloInstruction* accumulation_count,
+                                           int64 accumulator_scale_stage_id,
+                                           int64 gradient_stage_id) {
+  CHECK_GE(accumulator_scale_stage_id, gradient_stage_id);
+  const int64 offset = accumulator_scale_stage_id - gradient_stage_id;
+  CHECK(offset);
+
+  // Change the scale of the gradient to:
+  // 1 / ((accumulation_count - offset) <= execution_counter ?
+  //       accumulation_count : (execution_counter + offset))
+  HloComputation* comp = accumulation_count->parent();
+  HloInstruction* execution_counter = comp->AddInstruction(
+      CreateExecutionCounter(/*lower_into_pipeline_stage=*/true));
+
+  // Generate the predicate expression.
+  TF_ASSIGN_OR_RETURN(HloInstruction * ac_minus_offset,
+                      MakeBinaryHlo(HloOpcode::kSubtract, accumulation_count,
+                                    MakeR0ConstantHlo<int32>(comp, offset)));
+  TF_ASSIGN_OR_RETURN(HloInstruction * pred,
+                      MakeCompareHlo(ComparisonDirection::kLe, ac_minus_offset,
+                                     execution_counter));
+
+  // Generate the on_true of the expression.
+  HloInstruction* on_true = MakeConvertToHlo(accumulation_count, F32);
+
+  // Generate the on_false of the expression.
+  TF_ASSIGN_OR_RETURN(
+      HloInstruction * on_false,
+      MakeBinaryHlo(HloOpcode::kAdd, MakeConvertToHlo(execution_counter, F32),
+                    MakeR0ConstantHlo<float>(comp, offset)));
+
+  // Create the conditional statement.
+  TF_ASSIGN_OR_RETURN(HloInstruction * divisor,
+                      MakeSelectHlo(pred, on_true, on_false));
+
+  // Create an inverse.
+  return comp->AddInstruction(CreateInverse(divisor));
+}
+
+StatusOr<HloInstruction*> RescaleGradient(HloInstruction* gradient,
+                                          HloInstruction* scale) {
+  HloInstruction* pre_scale_gradient;
+  CHECK(
+      Match(gradient, m::Multiply(m::Op(&pre_scale_gradient), m::Broadcast())));
+  const Shape& gradient_shape = gradient->shape();
+
+  if (gradient_shape.element_type() != scale->shape().element_type()) {
+    scale = MakeConvertToHlo(scale, gradient_shape.element_type());
+  }
+
+  scale = MakeBroadcastHlo(scale, {}, gradient_shape.dimensions());
+
+  TF_ASSIGN_OR_RETURN(
+      gradient, MakeBinaryHlo(HloOpcode::kMultiply, pre_scale_gradient, scale));
+  return gradient;
+}
+}  // namespace pipeline_fixer_util
+
+StatusOr<bool> PipelineFixer::BreakUpGradientAccumulationOperations(
+    HloInstruction* accumulation_count) {
   HloComputation* comp = stages_.forward[0]->parent();
   TF_ASSIGN_OR_RETURN(auto analysis,
                       PipelineDataflowAnalysis::GetAnalysis(stages_));
@@ -299,13 +435,17 @@ StatusOr<bool> PipelineFixer::BreakUpGradientAccumulationOperations() {
   // gradient0 = gradient-accumulation-add(gradient_buffer, bps0_grad)
   // accumulated_sink = gradient-accumulator-sink(gradient2, gradient0)
 
-  // Stores all the individual gradients which are accumulated to form a single
-  // gradient from different pipeline stages.
-  // Note that they are stored in the descending order because the last backward
-  // stage is executed first and that stage needs to scale the gradient
-  // accumulation buffer.
-  using GradientSourcesInfo =
+  // Stores all the individual gradients which are accumulated to form a
+  // single gradient from different pipeline stages. Note that they are stored
+  // in the descending order because the last backward stage is executed first
+  // and that stage needs to scale the gradient accumulation buffer.
+  using GradientSources =
       std::map<int64, std::vector<HloInstruction*>, std::greater<int64>>;
+
+  struct GradientSourcesInfo {
+    GradientSources gradient_sources;
+    bool is_running_mean;
+  };
 
   // Find all the gradient accumulation add operations which have gradients
   // originating from different pipeline stages.
@@ -320,6 +460,23 @@ StatusOr<bool> PipelineFixer::BreakUpGradientAccumulationOperations() {
 
     // Traverse through all the adds and get all the individual gradients.
     GradientSourcesInfo info;
+
+    // Check whether the accumulator is scaled. If it is, check whether it is
+    // running mean pattern which can be transformed to generate the same
+    // result, otherwise we cannot proceed.
+    HloInstruction* grad_accum_scale = inst->mutable_operand(2);
+    if (Match(grad_accum_scale, m::ConstantScalar(1)) ||
+        Match(grad_accum_scale, m::Convert(m::ConstantScalar(1)))) {
+      // If the scale is 1, then we can always break up.
+      info.is_running_mean = false;
+    } else if (pipeline_fixer_util::IsRunningMeanAccumulatorScale(
+                   grad_accum_scale)) {
+      info.is_running_mean = true;
+    } else {
+      VLOG(3) << "Cannot break up accumulation as the scale of the gradient "
+                 "accumulator is not 1.0 or running mean.";
+      continue;
+    }
 
     std::queue<HloInstruction*> to_visit;
     absl::flat_hash_set<const HloInstruction*> visited;
@@ -357,15 +514,21 @@ StatusOr<bool> PipelineFixer::BreakUpGradientAccumulationOperations() {
           break;
         }
 
+        if (info.is_running_mean &&
+            !pipeline_fixer_util::IsRunningMeanGradient(gradient)) {
+          valid_to_break_up = false;
+          break;
+        }
+
         HloInstruction* pipeline_stage = *std::begin(pipeline_stages);
         TF_ASSIGN_OR_RETURN(auto stage_id,
                             analysis->GetStageID(pipeline_stage));
 
-        info[stage_id.id].push_back(gradient);
+        info.gradient_sources[stage_id.id].push_back(gradient);
       }
     }
 
-    if (valid_to_break_up && info.size() > 1) {
+    if (valid_to_break_up && info.gradient_sources.size() > 1) {
       gradient_adds_to_break_up[inst] = info;
     } else {
       VLOG(3) << "Cannot breakup gradients for " << inst->ToString();
@@ -404,14 +567,36 @@ StatusOr<bool> PipelineFixer::BreakUpGradientAccumulationOperations() {
     VLOG(3) << "Breaking up " << accumulation_add->ToString();
 
     std::vector<HloInstruction*> new_accumulation_adds;
-    for (auto& stage_pair : info) {
+    const int64 first_stage_id = std::begin(info.gradient_sources)->first;
+
+    for (auto& stage_pair : info.gradient_sources) {
       const int64 stage_id = stage_pair.first;
       std::vector<HloInstruction*> gradients = stage_pair.second;
       // Reverse the order of the gradients so that they are combined in the
       // same order as before to prevent changes to the liveness of the graph.
       absl::c_reverse(gradients);
       HloInstruction* gradient_tail = nullptr;
+
+      // When using running mean, the gradients might need to be rescaled
+      // based on the schedule.
+      TF_ASSIGN_OR_RETURN(bool rescale_gradients,
+                          pipeline_fixer_util::GradientsNeedRescaling(
+                              schedule_, first_stage_id, stage_id));
+      HloInstruction* running_mean_scale = nullptr;
+
       for (HloInstruction* gradient : gradients) {
+        // Rescale gradients for running mean.
+        if (info.is_running_mean && rescale_gradients) {
+          if (!running_mean_scale) {
+            TF_ASSIGN_OR_RETURN(
+                running_mean_scale,
+                pipeline_fixer_util::GetGradientScale(
+                    accumulation_count, first_stage_id, stage_id));
+          }
+          TF_ASSIGN_OR_RETURN(gradient, pipeline_fixer_util::RescaleGradient(
+                                            gradient, running_mean_scale));
+        }
+
         if (gradient_tail) {
           TF_ASSIGN_OR_RETURN(
               gradient_tail,
@@ -755,14 +940,16 @@ StatusOr<bool> PipelineFixer::LowerParameterUsagesIntoStages() {
   return changed;
 }
 
-StatusOr<bool> PipelineFixer::LowerOpsIntoPipelineStages() {
+StatusOr<bool> PipelineFixer::LowerOpsIntoPipelineStages(
+    HloInstruction* accumulation_count) {
   // Breakup elementwise operations where the inputs originate from different
   // stages.
   TF_ASSIGN_OR_RETURN(bool breakup_elementwise, BreakUpElementwiseOperations());
   // Breakup gradient accumulation operations where the inputs originate from
   // different stages.
-  TF_ASSIGN_OR_RETURN(bool breakup_gradients,
-                      BreakUpGradientAccumulationOperations());
+  TF_ASSIGN_OR_RETURN(
+      bool breakup_gradients,
+      BreakUpGradientAccumulationOperations(accumulation_count));
   // Lower any outputs from stages into stages if possible.
   TF_ASSIGN_OR_RETURN(bool lowered_outputs, LowerPipelineStagesOutputs());
   // Lower any inputs into stages if possible.
@@ -1037,6 +1224,9 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   TF_RETURN_IF_ERROR(InsertDummyBackwardStages(pipeline_comp));
 
   TF_ASSIGN_OR_RETURN(stages_, GetPipelineStages(pipeline_comp));
+
+  TF_ASSIGN_OR_RETURN(schedule_, GetPipelineSchedule(pipeline_op));
+
   if (stages_.recomputation.size()) {
     return FailedPrecondition(
         "PipelineStageRecomputation stages are not allowed in the"
@@ -1055,6 +1245,20 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   HloDCE dce;
   TF_RETURN_IF_ERROR(dce.Run(pipeline_op->GetModule()).status());
 
+  // Try and evaluate the accumulation count to be a constant.
+  int64_t accumulation_count_idx =
+      GetAccumulationCountOperandIndex(pipeline_op);
+  HloInstruction* accumulation_count = nullptr;
+  auto accumulation_count_value =
+      GetConstantValue<int32>(pipeline_op->operand(accumulation_count_idx));
+  if (accumulation_count_value) {
+    accumulation_count =
+        MakeR0ConstantHlo<int32>(pipeline_comp, *accumulation_count_value);
+  } else {
+    accumulation_count =
+        pipeline_comp->parameter_instruction(accumulation_count_idx);
+  }
+
   // Insert GTE edges such that every user of a stage is a GTE.
   TF_RETURN_IF_ERROR(InsertGTEEdges(stages_).status());
   // Duplicate edges - this makes analysis easier.
@@ -1066,17 +1270,14 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   // Verify we can actually try and lower this Pipeline.
   TF_RETURN_IF_ERROR(VerifyPipelineStagesBeforeFixing(stages_));
   // Run the lowering on pipeline stages.
-  TF_RETURN_IF_ERROR(LowerOpsIntoPipelineStages().status());
+  TF_RETURN_IF_ERROR(LowerOpsIntoPipelineStages(accumulation_count).status());
   // Run the fixing for constant gradients.
   TF_RETURN_IF_ERROR(
       FixConstantGradients(GetPipelineBatchSerializationIterations(pipeline_op),
                            pipeline_op)
           .status());
   // Run the lowering on the resource update.
-  TF_RETURN_IF_ERROR(LowerResourceUpdateInputs(
-                         pipeline_comp->parameter_instruction(
-                             GetAccumulationCountOperandIndex(pipeline_op)))
-                         .status());
+  TF_RETURN_IF_ERROR(LowerResourceUpdateInputs(accumulation_count).status());
   // Tidy again.
   TF_RETURN_IF_ERROR(dce.Run(pipeline_op->GetModule()).status());
   // Verify the pipeline is now ok to be lowered.

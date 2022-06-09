@@ -1250,7 +1250,7 @@ pipeline_wrapper {
   add_grads_partial = f32[2] add(bwd_stage_1.1, bwd_stage_0.0)
   add_grads = f32[2] add(add_grads_partial, bwd_stage_2.1)
 
-  acc_scale = f32[] constant(0.1)
+  acc_scale = f32[] constant(1)
   create = f32[2] custom-call(p0), custom_call_target="GradientAccumulatorCreate", backend_config="{}"
   add = f32[2] custom-call(create, add_grads, acc_scale), custom_call_target="GradientAccumulatorAddWithScale", backend_config="{}"
   sink = f32[2] custom-call(add), custom_call_target="GradientAccumulatorSink", backend_config="{}"
@@ -1308,7 +1308,7 @@ ENTRY e {
       Match(stages.backward[2]->to_apply()->root_instruction(),
             m::Tuple(m::Parameter(0), m::Log(m::Parameter(0)),
                      m::CustomCall(m::Parameter(1), m::Log(m::Parameter(0)),
-                                   m::ConstantScalar(0.1f)))));
+                                   m::ConstantScalar(1.f)))));
 
   EXPECT_TRUE(
       Match(stages.backward[1]->to_apply()->root_instruction(),
@@ -1320,6 +1320,176 @@ ENTRY e {
       stages.backward[0]->to_apply()->root_instruction(),
       m::Tuple(m::Parameter(0), m::CustomCall(m::Parameter(1), m::Parameter(0),
                                               m::ConstantScalar(1.f)))));
+}
+
+TEST_F(PipelineFixerTest, TestIsRunningMeanAccumulatorScale) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY e {
+  counter = s32[] custom-call(), custom_call_target="ExecutionCounter", backend_config="{\"lower_into_pipeline_stage\":true}"
+  counter_f32 = f32[] convert(counter)
+  one = f32[] constant(1)
+  counter_plus_one = f32[] add(counter_f32, one)
+  inv_counter_plus_one = f32[] divide(one, counter_plus_one)
+  running_mean_scale_valid = f32[] multiply(counter_f32, inv_counter_plus_one)
+
+  running_mean_scale_invalid = f32[] multiply(counter_f32, counter_plus_one)
+  ROOT t = () tuple()
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo));
+
+  TF_ASSERT_OK_AND_ASSIGN(bool custom_op_replaced,
+                          CustomOpReplacer().Run(module.get()));
+  ASSERT_TRUE(custom_op_replaced);
+
+  HloInstruction* running_mean_scale_valid =
+      FindInstruction(module.get(), "running_mean_scale_valid");
+  HloInstruction* running_mean_scale_invalid =
+      FindInstruction(module.get(), "running_mean_scale_invalid");
+
+  EXPECT_TRUE(pipeline_fixer_util::IsRunningMeanAccumulatorScale(
+      running_mean_scale_valid));
+  EXPECT_FALSE(pipeline_fixer_util::IsRunningMeanAccumulatorScale(
+      running_mean_scale_invalid));
+}
+
+TEST_F(PipelineFixerTest, TestIsRunningMeanGradient) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY e {
+  p0 = f16[2] parameter(0)
+  p1 = f32[2] parameter(1)
+
+  counter = s32[] custom-call(), custom_call_target="ExecutionCounter", backend_config="{\"lower_into_pipeline_stage\":true}"
+  counter_f32 = f32[] convert(counter)
+  one = f32[] constant(1)
+  counter_plus_one = f32[] add(counter_f32, one)
+  scale = f32[] divide(one, counter_plus_one)
+
+  convert = f16[] convert(scale)
+  b_scale0 = f16[2] broadcast(convert), dimensions={}
+  grad0 = f16[2] multiply(p0, b_scale0)
+
+  b_scale1 = f32[2] broadcast(scale), dimensions={}
+  grad1 = f32[2] multiply(p1, b_scale1)
+
+  grad_invalid = f32[] add(counter_f32, counter_plus_one)
+  ROOT t = () tuple()
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo));
+
+  TF_ASSERT_OK_AND_ASSIGN(bool custom_op_replaced,
+                          CustomOpReplacer().Run(module.get()));
+  ASSERT_TRUE(custom_op_replaced);
+
+  HloInstruction* grad0 = FindInstruction(module.get(), "grad0");
+  HloInstruction* grad1 = FindInstruction(module.get(), "grad1");
+  HloInstruction* grad_invalid = FindInstruction(module.get(), "grad_invalid");
+
+  EXPECT_TRUE(pipeline_fixer_util::IsRunningMeanGradient(grad0));
+  EXPECT_TRUE(pipeline_fixer_util::IsRunningMeanGradient(grad1));
+  EXPECT_FALSE(pipeline_fixer_util::IsRunningMeanGradient(grad_invalid));
+}
+
+TEST_F(PipelineFixerTest, TestGradientsNeedRescaling) {
+  using pipeline_config = PoplarBackendConfig::CallConfig::PipelineConfig;
+  {
+    TF_ASSERT_OK_AND_ASSIGN(bool needs_rescaling,
+                            pipeline_fixer_util::GradientsNeedRescaling(
+                                pipeline_config::Grouped, 2, 2));
+    EXPECT_FALSE(needs_rescaling);
+  }
+  {
+    TF_ASSERT_OK_AND_ASSIGN(bool needs_rescaling,
+                            pipeline_fixer_util::GradientsNeedRescaling(
+                                pipeline_config::Grouped, 2, 1));
+    EXPECT_TRUE(needs_rescaling);
+  }
+  {
+    TF_ASSERT_OK_AND_ASSIGN(bool needs_rescaling,
+                            pipeline_fixer_util::GradientsNeedRescaling(
+                                pipeline_config::Sequential, 2, 1));
+    EXPECT_FALSE(needs_rescaling);
+  }
+  {
+    EXPECT_FALSE(pipeline_fixer_util::GradientsNeedRescaling(
+                     pipeline_config::Interleaved, 2, 1)
+                     .ok());
+  }
+}
+
+TEST_F(PipelineFixerTest, TestGetGradientScale) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY e {
+  p0 = s32[] parameter(0)
+  ROOT t = () tuple()
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo));
+
+  HloInstruction* p0 = FindInstruction(module.get(), "p0");
+  TF_ASSERT_OK_AND_ASSIGN(HloInstruction * scale,
+                          pipeline_fixer_util::GetGradientScale(p0, 4, 0));
+
+  EXPECT_TRUE(
+      Match(scale,
+            m::CustomCall(m::Select(
+                m::Compare(m::Subtract(m::Parameter(0), m::ConstantScalar(4)),
+                           m::CustomCall())
+                    .WithComparisonDirection(ComparisonDirection::kLe),
+                m::Convert(m::Parameter(0)),
+                m::Add(m::Convert(m::CustomCall()), m::ConstantScalar(4.f))))));
+}
+
+TEST_F(PipelineFixerTest, TestRescaleGradient) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY e {
+  p0 = f16[2] parameter(0)
+  p1 = f32[2] parameter(1)
+  p2 = f32[] parameter(2)
+
+  new_scale = f32[] constant(10)
+
+  convert = f16[] convert(p2)
+  b_scale0 = f16[2] broadcast(convert), dimensions={}
+  grad0 = f16[2] multiply(p0, b_scale0)
+
+  b_scale1 = f32[2] broadcast(p2), dimensions={}
+  grad1 = f32[2] multiply(p1, b_scale1)
+
+  ROOT t = () tuple()
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo));
+
+  HloInstruction* grad0 = FindInstruction(module.get(), "grad0");
+  HloInstruction* grad1 = FindInstruction(module.get(), "grad1");
+  HloInstruction* new_scale = FindInstruction(module.get(), "new_scale");
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      HloInstruction * new_grad0,
+      pipeline_fixer_util::RescaleGradient(grad0, new_scale));
+  EXPECT_TRUE(Match(
+      new_grad0, m::Multiply(m::Parameter(0),
+                             m::Broadcast(m::Convert(m::ConstantScalar(10))))));
+  TF_ASSERT_OK_AND_ASSIGN(
+      HloInstruction * new_grad1,
+      pipeline_fixer_util::RescaleGradient(grad1, new_scale));
+  EXPECT_TRUE(
+      Match(new_grad1,
+            m::Multiply(m::Parameter(1), m::Broadcast(m::ConstantScalar(10)))));
 }
 
 }  // namespace
