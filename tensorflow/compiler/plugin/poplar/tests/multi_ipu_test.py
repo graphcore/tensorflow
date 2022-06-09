@@ -91,7 +91,6 @@ class MultiIpuTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     ok = [
         'add*/add*/Add',
-        'switchControlBroadcast2/*OnTileCopy',
         'Copy_*/inter-ipu-copy*/OnTileCopy',
     ]
     self.assert_all_compute_sets_and_list(report, ok)

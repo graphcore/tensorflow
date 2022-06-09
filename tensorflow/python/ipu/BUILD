@@ -1663,6 +1663,7 @@ poprun_py_test(
     main = "tests/poprun_replica_partitioning_test.py",
     num_instances = 2,
     num_replicas = 8,
+    tags = ["disabled_poplar_test"],
     deps = [
         ":pipelining_test_util",
         "//tensorflow:tensorflow_py",

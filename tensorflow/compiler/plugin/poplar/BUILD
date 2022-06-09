@@ -3337,6 +3337,7 @@ tf_xla_py_test(
         main = "tests/poprun_basic_test.py",
         num_instances = N,
         num_replicas = M,
+        tags = ["disabled_poplar_test"],
         deps = [
             "//tensorflow/compiler/tests:xla_test",
             "//tensorflow/python/ipu:ipu_lib",
