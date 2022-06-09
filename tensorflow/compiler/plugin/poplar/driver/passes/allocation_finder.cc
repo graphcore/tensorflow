@@ -312,6 +312,7 @@ void AllocationFinder::FindConsumers(
     absl::optional<std::vector<int64_t>> permutation,
     std::vector<const HloInstruction*>& path,
     absl::flat_hash_set<TensorLocation>& explored) {
+  VLOG(10) << "Finding consumers of " << tgt->name();
   path.emplace_back(tgt);
   auto tgt_location = TensorLocation{tgt, index};
 
@@ -330,6 +331,7 @@ void AllocationFinder::FindConsumers(
       // No target has been found yet, meaning there are no targets on this
       // path.
       path.pop_back();
+      VLOG(10) << "No target has been previously found.";
       return;
     }
     auto& allocation_path = itr->second.backward_path;
@@ -348,6 +350,7 @@ void AllocationFinder::FindConsumers(
       // there is no point reexploring the rest of it. The current path can
       // only get less preferable as it gets longer.
       path.pop_back();
+      VLOG(10) << "This path isn't preferable.";
       return;
     }
   }
@@ -367,6 +370,7 @@ void AllocationFinder::FindConsumers(
       // infer that there are no targets in this part of the graph so we do not
       // need to traverse it.
       path.pop_back();
+      VLOG(10) << "This path isn't preferable.";
       return;
     }
     TensorTarget new_target =
@@ -374,11 +378,13 @@ void AllocationFinder::FindConsumers(
     if (IsInferredTargetCompatible(src, new_target)) {
       AddTensorTarget(src, new_target);
       path.pop_back();
+      VLOG(10) << "Inferred target is not compatible.";
       return;
     }
   }
 
   for (auto user : tgt->users()) {
+    VLOG(10) << "Inspecting user " << user->name();
     int repeated_operand_offset = 0;
     auto& operands = user->operands();
 
@@ -479,17 +485,26 @@ void AllocationFinder::FindConsumers(
       switch (result.do_find_consumers) {
         case DoFindConsumers::UNSPECIFIED: {
           if (ShapeUtil::Compatible(tgt->shape(), user->shape())) {
+            VLOG(10) << "FindConsumer extension returned UNSPECIFIED and "
+                        "shapes are compatible.";
             FindConsumers(src, user, index, permutation, path, explored);
+          } else {
+            VLOG(10) << "FindConsumer extension returned UNSPECIFIED and "
+                        "shapes are not compatible.";
           }
           break;
         }
         case DoFindConsumers::TRUE: {
+          VLOG(10) << "FindConsumer extension returned TRUE.";
           FindConsumers(src, result.tgt, result.index, result.permutation, path,
                         explored);
           break;
         }
         case DoFindConsumers::FALSE:
-        default: { break; }
+        default: {
+          VLOG(10) << "FindConsumer extension returned FALSE.";
+          break;
+        }
       }
     }
   }
