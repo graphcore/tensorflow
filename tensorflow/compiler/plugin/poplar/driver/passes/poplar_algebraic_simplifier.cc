@@ -4162,6 +4162,17 @@ Status AlgebraicSimplifierVisitor::HandleCustomCall(
       return ReplaceWithNewInstruction(inst, std::move(replacement));
     }
   }
+  if (pp::IsPoplarInstruction(PoplarOp::MaxPoolGrad)(custom_call)) {
+    auto* inst = Cast<pp::HloMaxPoolGradInstruction>(custom_call);
+    TF_ASSIGN_OR_RETURN(
+        bool changed,
+        pp::algebraic_simplifier::custom_call::FoldPaddingIntoMaxPoolGrad(
+            inst));
+    if (changed) {
+      changed_ = true;
+      return Status::OK();
+    }
+  }
   return Status::OK();
 }
 

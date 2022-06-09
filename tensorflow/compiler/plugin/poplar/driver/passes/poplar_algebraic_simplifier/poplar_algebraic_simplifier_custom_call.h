@@ -28,6 +28,7 @@ namespace xla::poplarplugin::algebraic_simplifier::custom_call {
 StatusOr<bool> ElideStatefulGradientAccumulate(HloStatefulGradientAccumulate*);
 StatusOr<std::unique_ptr<HloInstruction>> FoldPaddingIntoMaxPool(
     HloMaxPoolInstruction*);
+StatusOr<bool> FoldPaddingIntoMaxPoolGrad(HloMaxPoolGradInstruction*);
 
 }  // namespace xla::poplarplugin::algebraic_simplifier::custom_call
 
