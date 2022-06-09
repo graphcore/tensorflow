@@ -1096,6 +1096,8 @@ poplar_cc_library(
     ],
     deps = [
         "//tensorflow/compiler/plugin/poplar/driver/tools:util",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:elementwise",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:execution_counter",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:hlo_remote_buffer_info",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:stateful_gradient_accumulate",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:stateful_noop",
