@@ -41,6 +41,7 @@ class ArithmeticExprVisitor : public BaseVisitor {
 
   Status HandleElementwiseUnary(HloInstruction* inst) override;
   Status HandleElementwiseBinary(HloInstruction* inst) override;
+  Status HandleCustomCall(HloInstruction* inst) override;
   Status HandleCompare(HloInstruction* inst) override;
   Status HandleConvert(HloInstruction* inst) override;
   Status HandleSelect(HloInstruction* inst) override;
@@ -68,7 +69,6 @@ class ArithmeticExprVisitor : public BaseVisitor {
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleTranspose);
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleFusion);
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleCall);
-  ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleCustomCall);
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleSlice);
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleDynamicSlice);
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleDynamicUpdateSlice);

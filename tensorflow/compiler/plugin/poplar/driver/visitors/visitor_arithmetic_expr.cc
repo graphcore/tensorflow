@@ -95,6 +95,11 @@ Status ArithmeticExprVisitor::HandleElementwiseUnary(HloInstruction* inst) {
   return Status::OK();
 }
 
+Status ArithmeticExprVisitor::HandleCustomCall(HloInstruction* inst) {
+  CHECK_EQ(inst->operand_count(), 1);
+  return HandleElementwiseUnary(inst);
+}
+
 Status ArithmeticExprVisitor::HandleElementwiseBinary(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   // find the op
