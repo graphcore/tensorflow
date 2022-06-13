@@ -208,8 +208,7 @@ class PoprunReplicaPartitioningTest(test.TestCase):
           process_count=process_count,
           process_index=process_index,
           cross_replica_optimizer_cls=
-          CrossReplicaOptimizerWithCrossReplicaSumAndNorm,
-          scheduler=utils.SchedulingAlgorithm.SHORTEST_PATH)
+          CrossReplicaOptimizerWithCrossReplicaSumAndNorm)
 
     losses_test, variables_test = \
       pipelining_test_util.PipelineTester.pipeline_on_ipu(
@@ -230,11 +229,10 @@ class PoprunReplicaPartitioningTest(test.TestCase):
           ipu_id=ipu_id,
           process_count=process_count,
           process_index=process_index,
-          cross_replica_optimizer_cls=CrossReplicaOptimizerWithCrossReplicaMean,
-          scheduler=utils.SchedulingAlgorithm.SHORTEST_PATH)
+          cross_replica_optimizer_cls=CrossReplicaOptimizerWithCrossReplicaMean)
 
-    self.assertAllClose(losses_ref, losses_test)
-    self.assertAllClose(variables_ref, variables_test)
+    self.assertAllClose(losses_ref, losses_test, rtol=1e-5, atol=1e-5)
+    self.assertAllClose(variables_ref, variables_test, rtol=1e-5, atol=1e-5)
 
 
 if __name__ == "__main__":
