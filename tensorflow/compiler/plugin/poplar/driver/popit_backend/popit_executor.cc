@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_executor.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_platform.h"
+#include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_stream.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/stream_executor/multi_platform_manager.h"
 
@@ -156,7 +157,7 @@ PopItExecutor::CreateKernelImplementation() {
 }
 std::unique_ptr<se::internal::StreamInterface>
 PopItExecutor::GetStreamImplementation() {
-  NOT_IMPLEMENTED;
+  return absl::make_unique<PopItStream>();
 }
 std::unique_ptr<se::internal::TimerInterface>
 PopItExecutor::GetTimerImplementation() {

@@ -16,6 +16,17 @@ popit_cc_library(
 )
 
 popit_cc_library(
+    name = "popit_stream",
+    srcs = [],
+    hdrs = [
+        "popit_stream.h",
+    ],
+    deps = [
+        "//tensorflow/stream_executor:stream_executor_internal",
+    ],
+)
+
+popit_cc_library(
     name = "popit_compiler",
     srcs = [
         "popit_compiler.cc",
@@ -42,6 +53,7 @@ popit_cc_library(
         "popit_platform.h",
     ],
     deps = [
+        ":popit_stream",
         "//tensorflow/compiler/plugin/poplar/driver:poplar_executor",
         "//tensorflow/compiler/plugin/poplar/driver:xla_ipu_common",
         "//tensorflow/compiler/plugin/poplar/driver/tools:tracepoint",
