@@ -111,8 +111,10 @@ Status PopItExecutor::WaitForEvent(se::Stream* stream, se::Event* event) {
 se::Event::Status PopItExecutor::PollForEventStatus(se::Event* event) {
   NOT_IMPLEMENTED;
 }
-bool PopItExecutor::AllocateStream(se::Stream* stream) { NOT_IMPLEMENTED; }
-void PopItExecutor::DeallocateStream(se::Stream* stream) { NOT_IMPLEMENTED; }
+// If we decide to put the popitSession inside the stream then this
+// will create the session but I think the session belongs in the executor
+bool PopItExecutor::AllocateStream(se::Stream* stream) { return true; }
+void PopItExecutor::DeallocateStream(se::Stream* stream) {}
 bool PopItExecutor::CreateStreamDependency(se::Stream* dependent,
                                            se::Stream* other) {
   NOT_IMPLEMENTED;
