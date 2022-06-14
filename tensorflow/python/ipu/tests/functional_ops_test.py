@@ -476,7 +476,6 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     tu.enable_ipu_events(cfg)
-    cfg.scheduling.algorithm = SchedulingAlgorithm.POST_ORDER
     cfg.configure_ipu_system()
 
     with tu.ipu_session() as sess:
@@ -539,7 +538,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     # cached.
     # pylint: disable=line-too-long
     ok = [
-        'MatMul/dot*/Conv_1',
+        'MatMul_1/dot*/Conv_1',
         '*/slice-apply*/Op/Add',
         'Sigmoid/sigmoid/Nonlinearity',
         'sub/subtract*/Op/Subtract',
@@ -551,7 +550,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         'gradients/AddN/scaled-inplace',
         'gradients/AddN/add*/Op/Add',
         'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/scaled-inplace',
-        'gradients/MatMul_grad/MatMul_1/dot',
+        'gradients/MatMul_grad/MatMul/dot',
     ]
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
