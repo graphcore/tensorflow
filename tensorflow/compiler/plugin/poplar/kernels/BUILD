@@ -40,6 +40,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver:threestate_proto_cc_impl",
         "//tensorflow/compiler/plugin/poplar/driver/tools:alias_info_proto_cc_impl",
         "//tensorflow/compiler/plugin/poplar/driver/tools:flags",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_poplar_buffer",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/compiler/xla/service:hlo",
         "//third_party/eigen3",

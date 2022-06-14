@@ -431,6 +431,12 @@ bool IsWideConstantZero(const HloInstruction* inst) {
   return IsConstantZero(inst);
 }
 
+bool IsConstantBroadcast(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kBroadcast &&
+         ShapeUtil::IsScalar(inst->operand(0)->shape()) &&
+         inst->operand(0)->opcode() == HloOpcode::kConstant;
+}
+
 bool IsUniformSingleDimSlice(const HloInstruction* slice) {
   // All the strides are 1.
   if (absl::c_any_of(slice->slice_strides(),

@@ -61,6 +61,13 @@ ExtendedTensor ExtendedTensor::slice(std::size_t begin, std::size_t end,
   return {std::move(ExtendedTensor(t, *this))};
 }
 
+ExtendedTensor ExtendedTensor::slice(poplar::ArrayRef<std::size_t> begin,
+                                     poplar::ArrayRef<std::size_t> end) const {
+  // TODO(T60306) - Remove calls to poplar::Tensor::{slice/slices}
+  auto t = getPoplarTensor().slice(begin, end);
+  return {std::move(ExtendedTensor(t, *this))};
+}
+
 std::vector<ExtendedTensor> ExtendedTensor::slices(
     poplar::ArrayRef<poplar::Interval> intervals, unsigned dimension) const {
   // TODO(T60306) - Remove calls to poplar::Tensor::{slice/slices}

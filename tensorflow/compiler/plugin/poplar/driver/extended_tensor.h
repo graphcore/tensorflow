@@ -52,6 +52,9 @@ class ExtendedTensor : public snap::Tensor {
   ExtendedTensor slice(std::size_t begin, std::size_t end,
                        unsigned dimension = 0) const&;
 
+  ExtendedTensor slice(poplar::ArrayRef<std::size_t> begin,
+                       poplar::ArrayRef<std::size_t> end) const;
+
   std::vector<ExtendedTensor> slices(
       poplar::ArrayRef<poplar::Interval> intervals,
       unsigned dimension = 0) const;

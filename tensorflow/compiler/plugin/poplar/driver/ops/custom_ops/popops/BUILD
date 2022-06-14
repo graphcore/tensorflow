@@ -114,6 +114,17 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "mask",
+    srcs = [
+        "mask.cc",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver:tensor",
+    ],
+    alwayslink = True,
+)
+
+poplar_cc_library(
     name = "multi_slice",
     srcs = [
         "multi_slice.cc",

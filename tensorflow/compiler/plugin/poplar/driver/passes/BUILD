@@ -786,6 +786,19 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "mask_finder",
+    srcs = [
+        "mask_finder.cc",
+    ],
+    hdrs = [
+        "mask_finder.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:util",
+    ],
+)
+
+poplar_cc_library(
     name = "matmul_combiner",
     srcs = [
         "matmul_combiner.cc",
@@ -1736,6 +1749,7 @@ poplar_cc_library(
         ":lift_recompute_suggestion",
         ":lower_frontend_attributes",
         ":mark_replica_identical_instructions",
+        ":mask_finder",
         ":matmul_combiner",
         ":module_flatten",
         ":multi_conv_fixer",

@@ -808,7 +808,7 @@ bool IsUsedOutsideSubcomputation(const HloInstruction& hlo,
 HloInstruction* OutlineExpressionFromComputationWithFusion(
     absl::Span<HloInstruction* const> instructions_to_outline,
     const string& outlined_computation_name, HloComputation* computation,
-    const std::vector<HloInstruction*>& explicit_parameters) {
+    const std::vector<HloInstruction*>& explicit_parameters, bool replace) {
   auto builder = HloComputation::Builder(outlined_computation_name);
 
   // A map from original instructions to their counterparts in the new
@@ -896,12 +896,13 @@ HloInstruction* OutlineExpressionFromComputationWithFusion(
   VLOG(2) << "as a fusion " << fusion->ToString();
   VLOG(2) << "to " << nested_computation->ToString();
 
-  TF_CHECK_OK(output->ReplaceAllUsesWith(fusion));
-  for (auto i = instructions_to_outline.rbegin();
-       i != instructions_to_outline.rend(); ++i) {
-    TF_CHECK_OK(computation->RemoveInstruction(*i));
+  if (replace) {
+    TF_CHECK_OK(output->ReplaceAllUsesWith(fusion));
+    for (auto i = instructions_to_outline.rbegin();
+         i != instructions_to_outline.rend(); ++i) {
+      TF_CHECK_OK(computation->RemoveInstruction(*i));
+    }
   }
-
   return fusion;
 }
 
@@ -1033,7 +1034,7 @@ std::vector<HloInstruction*> FindUnreachableRoots(
   return unreachable_roots;
 }
 
-StatusOr<HloInstruction*> CloneComputationSubtree(HloInstruction* root,
+StatusOr<HloInstruction*> CloneComputationSubtree(const HloInstruction* root,
                                                   HloComputation* to,
                                                   const string& suffix,
                                                   HloCloneContext* context) {
@@ -1500,6 +1501,20 @@ Status SetCopyCloneMethod(HloInstruction* inst,
   TF_RETURN_IF_ERROR(inst->set_backend_config(backend_config));
 
   return Status::OK();
+}
+
+Status SetPoplarUserDescriptions(HloInstruction* inst,
+                                 const HloPoplarUseDescriptions& use_descs,
+                                 bool allow_non_inplace) {
+  TF_ASSIGN_OR_RETURN(auto backend_config,
+                      inst->backend_config<PoplarBackendConfig>());
+  auto* cfg = backend_config.mutable_fusion_config();
+  cfg->set_allow_non_inplace(allow_non_inplace);
+  for (auto& use_desc : use_descs) {
+    auto* proto = cfg->add_inplace_descriptions();
+    *proto = use_desc.ToProto();
+  }
+  return inst->set_backend_config(backend_config);
 }
 
 StatusOr<HloInstruction*> TransposeToFront(HloInstruction* inst,

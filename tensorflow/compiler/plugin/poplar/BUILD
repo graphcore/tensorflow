@@ -3871,6 +3871,19 @@ xla_test(
 )
 
 xla_test(
+    name = "mask_finder_test",
+    size = "medium",
+    srcs = ["tests/mask_finder_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":poplar_test_base",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "multi_slice_test",
     size = "medium",
     srcs = ["tests/multi_slice_test.cc"],

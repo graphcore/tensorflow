@@ -91,6 +91,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lift_recompute_suggestion.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lower_frontend_attributes.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/mark_replica_identical_instructions.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/mask_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/matmul_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_conv_fixer.h"
@@ -1243,6 +1244,8 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
     pipeline.AddPass<RedundantTriangularMaskRemover>(resources.annotations);
     pipeline.AddPass<FuseOpsLate>(resources.annotations);
     pipeline.AddPass<HloPassFix<FuseOpsIntoPoplarOps>>(resources.annotations);
+    pipeline.AddPass<MaskFinder>();
+    pipeline.AddPass<HloDCE>();
     pipeline.AddPass<CommutativeInstructionReorderOperands>();
     pipeline.AddPass<ExpressionOutliner>(/*maximum_num_elements=*/8);
     pipeline.AddPass<ElementwiseSimplifier>();

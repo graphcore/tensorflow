@@ -40,6 +40,7 @@ std::function<bool(const HloInstruction* inst)> IsConstantF(float value);
 bool IsReductionFusion(const HloInstruction*);
 bool IsWideConstant(const HloInstruction*);
 bool IsWideConstantZero(const HloInstruction*);
+bool IsConstantBroadcast(const HloInstruction*);
 bool IsExternalPadding(const HloInstruction*);
 bool IsFloat(const HloInstruction*);
 bool IsScalar(const HloInstruction*);

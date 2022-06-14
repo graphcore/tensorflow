@@ -30,6 +30,7 @@ limitations under the License.
 #include "absl/types/span.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/shape_tree.h"
 #include "tensorflow/compiler/xla/shape_util.h"
@@ -260,7 +261,8 @@ HloInstruction* ConvertInstruction(HloInstruction* inst,
 HloInstruction* OutlineExpressionFromComputationWithFusion(
     absl::Span<HloInstruction* const> instructions_to_outline,
     const string& outlined_computation_name, HloComputation* computation,
-    const std::vector<HloInstruction*>& explicit_parameters = {});
+    const std::vector<HloInstruction*>& explicit_parameters = {},
+    bool replace = true);
 
 // Helper for storing slice dimensions.
 struct SliceInfo {
@@ -340,8 +342,8 @@ std::vector<HloInstruction*> FindUnreachableRoots(
 // Clone of the computation subtree starting at the 'root' to the given
 // computation.
 StatusOr<HloInstruction*> CloneComputationSubtree(
-    HloInstruction* root, HloComputation* to, const string& suffix = "clone",
-    HloCloneContext* context = nullptr);
+    const HloInstruction* root, HloComputation* to,
+    const string& suffix = "clone", HloCloneContext* context = nullptr);
 
 // Get tuple indices for call outputs which are used in multiple places.
 // Returns a map from the tuple index of first occurrence to a set of all other
@@ -428,6 +430,12 @@ StatusOr<HloInstruction*> AddParametersToCall(
 StatusOr<ShapeTree<CloneMethod>> GetCopyCloneMethod(const HloInstruction* inst);
 Status SetCopyCloneMethod(HloInstruction* inst,
                           const ShapeTree<CloneMethod>& clone_method_tree);
+
+// Adds given buffer use descriptors to poplar backend config and optionally
+// sets allow_non_inplace flag.
+Status SetPoplarUserDescriptions(HloInstruction* inst,
+                                 const HloPoplarUseDescriptions& use_descs,
+                                 bool allow_non_inplace = false);
 
 // Transpose the shape such that the specified dims are the first dims.
 StatusOr<HloInstruction*> TransposeToFront(HloInstruction* inst,
