@@ -121,7 +121,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
 
       sess.run(variables.global_variables_initializer())
       report = pva.openReport(report_helper.find_report())
-      self.assert_max_tile_memory(report, 162410)
+      self.assert_max_tile_memory(report, 164426)
     # Skip the rest of the test, broadcast are returned for global initialisers.
 
   def testTrainingBs1(self):
@@ -238,8 +238,8 @@ class MatMulSizeTest(xla_test.XLATestCase):
       self.assertAllClose(np.full([B, I], 129.0), output[0])
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 126942643)
-    self.assert_max_tile_memory(report, 86813)
+    self.assert_total_tile_memory(report, 124892820)
+    self.assert_max_tile_memory(report, 85178)
 
 
 if __name__ == "__main__":

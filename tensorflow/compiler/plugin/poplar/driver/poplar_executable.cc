@@ -101,7 +101,7 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
   info.target_arch = ertc.target_arch();
   info.gateway_mode = ertc.gateway_mode();
   info.supports_remote_buffers = ertc.supports_remote_buffers();
-  info.supports_remote_buffers = ertc.remote_memory_entry_params();
+  info.remote_memory_entry_params = ertc.remote_memory_entry_params();
   info.executable_can_stall = ertc.executable_can_stall();
 
   info.tf_major_version = proto.tf_major_version();

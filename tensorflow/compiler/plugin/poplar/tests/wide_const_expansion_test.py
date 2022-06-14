@@ -63,7 +63,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       sess.run(variables.global_variables_initializer())
 
       report = pva.openReport(report_helper.find_report())
-      self.assert_max_tile_memory(report, 71020)
+      self.assert_max_tile_memory(report, 71848)
       report_helper.clear_reports()
 
       out = sess.run(output, {pb: np.ones(shape=shape, dtype=dtype)})
@@ -156,7 +156,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       self.assertAllClose(np.zeros(pb.shape), out[0])
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_max_tile_memory(report, 409452)
+    self.assert_max_tile_memory(report, 403619)
 
   def testCheckMaxTileSizePadding2(self):
     cfg = IPUConfig()
@@ -192,7 +192,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       self.assertAllClose(np.full(pb.shape, 65.0), out[0])
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_max_tile_memory(report, 21979, tolerance=0.1)
+    self.assert_max_tile_memory(report, 13636, tolerance=0.1)
 
 
 if __name__ == "__main__":
