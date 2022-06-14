@@ -243,21 +243,21 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       {
           'testcase_name': 'tf_rnn1',
           'build': build_tf_rnn1,
-          'cycles': 11974519,
-          'total_memory': 19796922,
-          'max_memory': 21674
+          'cycles': 10773225,
+          'total_memory': 20259402,
+          'max_memory': 21282
       }, {
           'testcase_name': 'tf_rnn2',
           'build': build_tf_rnn2,
-          'cycles': 20789298,
-          'total_memory': 18678194,
-          'max_memory': 23646
+          'cycles': 17340132,
+          'total_memory': 19675908,
+          'max_memory': 22038
       }, {
           'testcase_name': 'tf_lstm1',
           'build': build_tf_lstm1,
-          'cycles': 26924294,
+          'cycles': 24416546,
           'total_memory': 57301126,
-          'max_memory': 49837,
+          'max_memory': 47800,
           'options': {
               'dims': 64,
               'steps': 3
@@ -265,25 +265,25 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'testcase_name': 'tf_gru1',
           'build': build_tf_gru1,
-          'cycles': 52940411,
-          'total_memory': 36118038,
-          'max_memory': 38320
+          'cycles': 47021629,
+          'total_memory': 37378608,
+          'max_memory': 35128
       }, {
           'testcase_name': 'model_rnn1',
           'build': build_model_rnn1,
-          'cycles': 15147991,
-          'total_memory': 20453183,
-          'max_memory': 23621
+          'cycles': 13779950,
+          'total_memory': 20849887,
+          'max_memory': 23069
       }, {
           'testcase_name': 'model_rnn2',
           'build': build_model_rnn2,
-          'cycles': 30380366,
-          'total_memory': 25824241,
-          'max_memory': 30714
+          'cycles': 26412619,
+          'total_memory': 27357268,
+          'max_memory': 29247
       }, {
           'testcase_name': 'model_cnn1',
           'build': build_model_cnn1,
-          'cycles': 10219500,
+          'cycles': 8213006,
           'total_memory': 29405932,
           'max_memory': 30289,
           'options': {
@@ -293,9 +293,9 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'testcase_name': 'trivial_multiply',
           'build': build_trivial_while,
-          'cycles': 60961863,
-          'total_memory': 17700097,
-          'max_memory': 15865,
+          'cycles': 72865837,
+          'total_memory': 18036292,
+          'max_memory': 15367,
           'options': {
               'batch_size': 4,
               'steps': 32,
@@ -393,17 +393,17 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with self.subTest("cycles check"):
       self.assert_execution_report_cycles(report,
-                                          3764257,
+                                          3657722,
                                           tolerance=opts.assert_tolerance)
 
     with self.subTest("total tile memory check"):
       self.assert_total_tile_memory(report,
-                                    112164,
+                                    115370,
                                     tolerance=opts.assert_tolerance)
 
     with self.subTest("max tile memory check"):
       self.assert_max_tile_memory(report,
-                                  12495,
+                                  11585,
                                   tolerance=opts.assert_tolerance)
 
 
@@ -450,16 +450,16 @@ class RNNKerasModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           "testcase_name": "lstm",
           "model_fn": createLSTMKerasModel,
           "ipu_count": 1,
-          "expected_cycles": 32019581,
-          "expected_total_tile_memory": 20844766,
-          "expected_max_tile_memory": 35372
+          "expected_cycles": 25305718,
+          "expected_total_tile_memory": 21240386,
+          "expected_max_tile_memory": 30110
       }, {
           "testcase_name": "pipelined_lstm",
           "model_fn": createPipelinedLSTMKerasModel,
           "ipu_count": 2,
-          "expected_cycles": 29032125,
+          "expected_cycles": 23716090,
           "expected_total_tile_memory": 33659480,
-          "expected_max_tile_memory": 32061
+          "expected_max_tile_memory": 26134
       })
   @test_util.run_v2_only
   def test_model(self, model_fn, ipu_count, expected_cycles,
