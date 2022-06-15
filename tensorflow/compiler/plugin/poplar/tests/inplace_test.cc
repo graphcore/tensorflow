@@ -831,7 +831,7 @@ ENTRY c1 {
   j = f16[20] convert(g)
   k = f16[20] add(h, i)
   l = f16[20] add(j, k)
-  ROOT t = (f32[20], f16[10,2]) tuple(l, e)
+  ROOT t = (f16[20], f32[10,2]) tuple(l, e)
 }
 
 )";
@@ -1368,7 +1368,7 @@ ENTRY entry {
   p1 = f32[10] parameter(1)
   while_init = (s32[],s32[],f32[10],f32[10]) tuple(const_0, add_1, p0, p1)
   while_output = (s32[],s32[],f32[10],f32[10]) while(while_init), condition=condition, body=body
-  ROOT root = (s32[], s32[], (s32[],s32[],f32[10],f32[10]), (s32[],s32[],f32[10],f32[10])) tuple(p0, while_init, while_output)
+  ROOT root = (s32[], (s32[],s32[],f32[10],f32[10]), (s32[],s32[],f32[10],f32[10])) tuple(p0, while_init, while_output)
 }
 )";
 

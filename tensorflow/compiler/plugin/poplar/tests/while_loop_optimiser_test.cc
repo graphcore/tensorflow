@@ -48,20 +48,20 @@ TEST_F(WhileLoopOptimiserTest, DetectSingleBroadcast) {
 HloModule ModuleWithWhile
 
 body {
-  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body = (s32[],s32[10,1]) parameter(0)
   p_body.0 = s32[] get-tuple-element(p_body), index=0
   one = s32[] constant(1)
   zero = s32[] constant(0)
   add = s32[] add(p_body.0, one)
   two = s32[] constant(2)
-  slice-input = s32[1, 1] reshape(two)
-  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
-  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+  slice-input = s32[1,1] reshape(two)
+  p_body.1 = s32[10,1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10,1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[], s32[10,1]) tuple(add, dyn_update)
 }
 
 condition {
-  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond = (s32[],s32[10,1]) parameter(0)
   p_cond.0 = s32[] get-tuple-element(p_cond), index=0
   const = s32[] constant(10)
   ROOT result = pred[] compare(p_cond.0, const), direction=LT
@@ -69,12 +69,12 @@ condition {
 
 ENTRY entry {
   const_0 = s32[] constant(0)
-  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_1 = s32[10,1] broadcast(const_0), dimensions={}
   const_2 = s32[] constant(1)
-  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
-  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
-  broadcast = s32[10, 1] get-tuple-element(while), index=1
-  ROOT slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+  repeat_init = (s32[],s32[10,1]) tuple(const_0, const_1)
+  while = (s32[],s32[10,1]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10,1] get-tuple-element(while), index=1
+  ROOT slice = s32[1,1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
 }
 )";
 
@@ -91,22 +91,22 @@ TEST_F(WhileLoopOptimiserTest, DetectTwoIdentical) {
 HloModule ModuleWithWhile
 
 body {
-  p_body = (s32[],s32[10, 1], s32[10, 1]) parameter(0)
+  p_body = (s32[], s32[10,1], s32[10,1]) parameter(0)
   p_body.0 = s32[] get-tuple-element(p_body), index=0
   one = s32[] constant(1)
   zero = s32[] constant(0)
   add = s32[] add(p_body.0, one)
   two = s32[] constant(2)
-  slice-input = s32[1, 1] reshape(two)
-  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
-  p_body.2 = s32[10, 1] get-tuple-element(p_body), index=2
-  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
-  dyn_update.2 = s32[10, 1] dynamic-update-slice(p_body.2, slice-input, p_body.0, zero)
-  ROOT root = (s32[],s32[10, 1], s32[10,1]) tuple(add, dyn_update, dyn_update.2)
+  slice-input = s32[1,1] reshape(two)
+  p_body.1 = s32[10,1] get-tuple-element(p_body), index=1
+  p_body.2 = s32[10,1] get-tuple-element(p_body), index=2
+  dyn_update = s32[10,1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  dyn_update.2 = s32[10,1] dynamic-update-slice(p_body.2, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[10,1], s32[10,1]) tuple(add, dyn_update, dyn_update.2)
 }
 
 condition {
-  p_cond = (s32[],s32[10, 1], s32[10, 1]) parameter(0)
+  p_cond = (s32[], s32[10,1], s32[10,1]) parameter(0)
   p_cond.0 = s32[] get-tuple-element(p_cond), index=0
   const = s32[] constant(10)
   ROOT result = pred[] compare(p_cond.0, const), direction=LT
@@ -114,14 +114,14 @@ condition {
 
 ENTRY entry {
   const_0 = s32[] constant(0)
-  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_1 = s32[10,1] broadcast(const_0), dimensions={}
   const_2 = s32[] constant(1)
-  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1, const_1)
-  while = (s32[],s32[10, 1], s32[10, 1]) while(repeat_init), condition=condition, body=body
-  broadcast = s32[10, 1] get-tuple-element(while), index=1
-  broadcast.2 = s32[10, 1] get-tuple-element(while), index=2
-  slice.2 = s32[1, 1] dynamic-slice(broadcast.2, const_0, const_0), dynamic_slice_sizes={1, 1}
-  ROOT slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+  repeat_init = (s32[], s32[10,1], s32[10,1]) tuple(const_0, const_1, const_1)
+  while = (s32[], s32[10,1], s32[10,1]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10,1] get-tuple-element(while), index=1
+  broadcast.2 = s32[10,1] get-tuple-element(while), index=2
+  slice.2 = s32[1,1] dynamic-slice(broadcast.2, const_0, const_0), dynamic_slice_sizes={1, 1}
+  ROOT slice = s32[1,1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
 }
 )";
 
@@ -138,20 +138,20 @@ TEST_F(WhileLoopOptimiserTest, UsedByRoot) {
 HloModule ModuleWithWhile
 
 body {
-  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body = (s32[],s32[10,1]) parameter(0)
   p_body.0 = s32[] get-tuple-element(p_body), index=0
   one = s32[] constant(1)
   zero = s32[] constant(0)
   add = s32[] add(p_body.0, one)
   two = s32[] constant(2)
-  slice-input = s32[1, 1] reshape(two)
-  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
-  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+  slice-input = s32[1,1] reshape(two)
+  p_body.1 = s32[10,1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10,1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[], s32[10,1]) tuple(add, dyn_update)
 }
 
 condition {
-  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond = (s32[],s32[10,1]) parameter(0)
   p_cond.0 = s32[] get-tuple-element(p_cond), index=0
   const = s32[] constant(10)
   ROOT result = pred[] compare(p_cond.0, const), direction=LT
@@ -159,12 +159,12 @@ condition {
 
 ENTRY entry {
   const_0 = s32[] constant(0)
-  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_1 = s32[10,1] broadcast(const_0), dimensions={}
   const_2 = s32[] constant(1)
-  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
-  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
-  ROOT broadcast = s32[10, 1] get-tuple-element(while), index=1
-  slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+  repeat_init = (s32[],s32[10,1]) tuple(const_0, const_1)
+  while = (s32[],s32[10,1]) while(repeat_init), condition=condition, body=body
+  ROOT broadcast = s32[10,1] get-tuple-element(while), index=1
+  slice = s32[1,1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
 }
 )";
 
@@ -181,41 +181,41 @@ TEST_F(WhileLoopOptimiserTest, TestReshaping) {
 HloModule ModuleWithWhile
 
 body {
-  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body = (s32[],s32[10,1]) parameter(0)
   p_body.0 = s32[] get-tuple-element(p_body), index=0
   one = s32[] constant(1)
   zero = s32[] constant(0)
   add = s32[] add(p_body.0, one)
   two = s32[] constant(2)
-  slice-input = s32[1, 1] reshape(two)
-  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
-  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+  slice-input = s32[1,1] reshape(two)
+  p_body.1 = s32[10,1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10,1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[10,1]) tuple(add, dyn_update)
 }
 
 condition {
-  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond = (s32[],s32[10,1]) parameter(0)
   p_cond.0 = s32[] get-tuple-element(p_cond), index=0
   const = s32[] constant(10)
   ROOT result = pred[] compare(p_cond.0, const), direction=LT
 }
 
 func {
-  p_func = s32[10, 1] parameter(0)
-  unused = s32[10, 1] parameter(1)
-  ROOT copym = s32[10, 1] copy(p_func)
+  p_func = s32[10,1] parameter(0)
+  unused = s32[10,1] parameter(1)
+  ROOT copym = s32[10,1] copy(p_func)
 }
 
 ENTRY entry {
   const_0 = s32[] constant(0)
-  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_1 = s32[10,1] broadcast(const_0), dimensions={}
   new_shape = s32[11, 1] broadcast(const_0), dimensions={}
   const_2 = s32[] constant(1)
-  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
-  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
-  call = s32[10, 1] call(const_1, const_1), to_apply=func
-  broadcast = s32[10, 1] get-tuple-element(while), index=1
-  ROOT slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+  repeat_init = (s32[],s32[10,1]) tuple(const_0, const_1)
+  while = (s32[],s32[10,1]) while(repeat_init), condition=condition, body=body
+  call = s32[10,1] call(const_1, const_1), to_apply=func
+  broadcast = s32[10,1] get-tuple-element(while), index=1
+  ROOT slice = s32[1,1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
 }
 )";
 
@@ -237,20 +237,20 @@ TEST_F(WhileLoopOptimiserTest, UsedInsideWhile) {
 HloModule ModuleWithWhile
 
 body {
-  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body = (s32[],s32[10,1]) parameter(0)
   p_body.0 = s32[] get-tuple-element(p_body), index=0
   one = s32[] constant(1)
   zero = s32[] constant(0)
   add = s32[] add(p_body.0, one)
   two = s32[] constant(2)
-  slice-input = s32[1, 1] reshape(two)
-  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
-  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+  slice-input = s32[1,1] reshape(two)
+  p_body.1 = s32[10,1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10,1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[10,1]) tuple(add, dyn_update)
 }
 
 condition {
-  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond = (s32[],s32[10,1]) parameter(0)
   p_cond.0 = s32[] get-tuple-element(p_cond), index=0
   const = s32[] constant(10)
   ROOT result = pred[] compare(p_cond.0, const), direction=LT
@@ -259,18 +259,18 @@ condition {
 bwd_body {
   zilch = s32[] constant(0)
   uno = s32[] constant(1)
-  b_body = (s32[], s32[1, 1], s32[10, 1]) parameter(0)
+  b_body = (s32[], s32[1,1], s32[10,1]) parameter(0)
   index = s32[] get-tuple-element(b_body), index=0
-  to_add = s32[1, 1] get-tuple-element(b_body), index=1
-  to_slice = s32[10, 1] get-tuple-element(b_body), index=2
-  update = s32[1, 1] dynamic-slice(to_slice, zilch, zilch), dynamic_slice_sizes={1, 1}
-  counter = s32[1, 1] add(update, to_add)
+  to_add = s32[1,1] get-tuple-element(b_body), index=1
+  to_slice = s32[10,1] get-tuple-element(b_body), index=2
+  update = s32[1,1] dynamic-slice(to_slice, zilch, zilch), dynamic_slice_sizes={1, 1}
+  counter = s32[1,1] add(update, to_add)
   next_index = s32[] add(index, uno)
-  ROOT broot = (s32[], s32[1, 1], s32[10, 1]) tuple(next_index, counter, to_slice)
+  ROOT broot = (s32[], s32[1,1], s32[10,1]) tuple(next_index, counter, to_slice)
 }
 
 bwd_condition {
-  b_cond = (s32[], s32[1, 1], s32[10, 1]) parameter(0)
+  b_cond = (s32[], s32[1,1], s32[10,1]) parameter(0)
   b_cond.0 = s32[] get-tuple-element(b_cond), index=0
   b_const = s32[] constant(10)
   ROOT result = pred[] compare(b_cond.0, b_const), direction=LT
@@ -278,16 +278,16 @@ bwd_condition {
 
 ENTRY entry {
   const_0 = s32[] constant(0)
-  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_1 = s32[10,1] broadcast(const_0), dimensions={}
   const_2 = s32[] constant(1)
-  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
-  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
-  broadcast = s32[10, 1] get-tuple-element(while), index=1
-  slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+  repeat_init = (s32[],s32[10,1]) tuple(const_0, const_1)
+  while = (s32[],s32[10,1]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10,1] get-tuple-element(while), index=1
+  slice = s32[1,1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
 
-  bwd_init = (s32[], s32[1, 1], s32[10, 1]) tuple(const_0, slice, broadcast)
-  bwd_while = (s32[], s32[1, 1], s32[10, 1]) while(bwd_init), condition=bwd_condition, body=bwd_body
-  ROOT final = s32[1, 1] get-tuple-element(bwd_while), index=1
+  bwd_init = (s32[], s32[1,1], s32[10,1]) tuple(const_0, slice, broadcast)
+  bwd_while = (s32[], s32[1,1], s32[10,1]) while(bwd_init), condition=bwd_condition, body=bwd_body
+  ROOT final = s32[1,1] get-tuple-element(bwd_while), index=1
 }
 )";
 
@@ -304,20 +304,20 @@ TEST_F(WhileLoopOptimiserTest, IndexTooLarge) {
 HloModule ModuleWithWhile
 
 body {
-  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body = (s32[],s32[10,1]) parameter(0)
   p_body.0 = s32[] get-tuple-element(p_body), index=0
   one = s32[] constant(1)
   zero = s32[] constant(0)
   add = s32[] add(p_body.0, one)
   two = s32[] constant(2)
-  slice-input = s32[1, 1] reshape(two)
-  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
-  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+  slice-input = s32[1,1] reshape(two)
+  p_body.1 = s32[10,1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10,1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[10,1]) tuple(add, dyn_update)
 }
 
 condition {
-  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond = (s32[],s32[10,1]) parameter(0)
   p_cond.0 = s32[] get-tuple-element(p_cond), index=0
   const = s32[] constant(3)
   ROOT result = pred[] compare(p_cond.0, const), direction=LT
@@ -325,13 +325,13 @@ condition {
 
 ENTRY entry {
   const_0 = s32[] constant(0)
-  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_1 = s32[10,1] broadcast(const_0), dimensions={}
   const_2 = s32[] constant(1)
   const_3 = s32[] constant(9)
-  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
-  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
-  broadcast = s32[10, 1] get-tuple-element(while), index=1
-  ROOT slice = s32[1, 1] dynamic-slice(broadcast, const_3, const_0), dynamic_slice_sizes={1, 1}
+  repeat_init = (s32[],s32[10,1]) tuple(const_0, const_1)
+  while = (s32[],s32[10,1]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10,1] get-tuple-element(while), index=1
+  ROOT slice = s32[1,1] dynamic-slice(broadcast, const_3, const_0), dynamic_slice_sizes={1, 1}
 }
 )";
 
@@ -348,20 +348,20 @@ TEST_F(WhileLoopOptimiserTest, IndexUnknown) {
 HloModule ModuleWithWhile
 
 body {
-  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body = (s32[],s32[10,1]) parameter(0)
   p_body.0 = s32[] get-tuple-element(p_body), index=0
   one = s32[] constant(1)
   zero = s32[] constant(0)
   add = s32[] add(p_body.0, one)
   two = s32[] constant(2)
-  slice-input = s32[1, 1] reshape(two)
-  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
-  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+  slice-input = s32[1,1] reshape(two)
+  p_body.1 = s32[10,1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10,1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[10,1]) tuple(add, dyn_update)
 }
 
 condition {
-  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond = (s32[],s32[10,1]) parameter(0)
   p_cond.0 = s32[] get-tuple-element(p_cond), index=0
   const = s32[] constant(3)
   ROOT result = pred[] compare(p_cond.0, const), direction=LT
@@ -369,13 +369,13 @@ condition {
 
 ENTRY entry {
   const_0 = s32[] constant(0)
-  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_1 = s32[10,1] broadcast(const_0), dimensions={}
   const_2 = s32[] constant(1)
   const_3 = s32[] parameter(0)
-  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
-  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
-  broadcast = s32[10, 1] get-tuple-element(while), index=1
-  ROOT slice = s32[1, 1] dynamic-slice(broadcast, const_3, const_0), dynamic_slice_sizes={1, 1}
+  repeat_init = (s32[],s32[10,1]) tuple(const_0, const_1)
+  while = (s32[],s32[10,1]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10,1] get-tuple-element(while), index=1
+  ROOT slice = s32[1,1] dynamic-slice(broadcast, const_3, const_0), dynamic_slice_sizes={1, 1}
 }
 )";
 
@@ -392,21 +392,21 @@ TEST_F(WhileLoopOptimiserTest, IndexDecrementedInBwds) {
 HloModule ModuleWithWhile
 
 body {
-  p_body = (s32[], s32[10, 1], s32[]) parameter(0)
+  p_body = (s32[], s32[10,1], s32[]) parameter(0)
   p_body.0 = s32[] get-tuple-element(p_body), index=0
   one = s32[] constant(1)
   zero = s32[] constant(0)
   add = s32[] add(p_body.0, one)
   two = s32[] constant(2)
-  slice-input = s32[1, 1] reshape(two)
-  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
-  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  slice-input = s32[1,1] reshape(two)
+  p_body.1 = s32[10,1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10,1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
   count = s32[] get-tuple-element(p_body), index=2
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update, count)
+  ROOT root = (s32[],s32[10,1],s32[]) tuple(add, dyn_update, count)
 }
 
 condition {
-  p_cond = (s32[],s32[10, 1], s32[]) parameter(0)
+  p_cond = (s32[],s32[10,1], s32[]) parameter(0)
   p_cond.0 = s32[] get-tuple-element(p_cond), index=0
   const = s32[] get-tuple-element(p_cond), index=2
   ROOT result = pred[] compare(p_cond.0, const), direction=LT
@@ -415,10 +415,10 @@ condition {
 bwd_body {
   zilch = s32[] constant(0)
   uno = s32[] constant(1)
-  b_body = (s32[], s32[1, 1], s32[10, 1], s32[]) parameter(0)
+  b_body = (s32[], s32[1,1], s32[10,1], s32[]) parameter(0)
   index = s32[] get-tuple-element(b_body), index=0
-  to_add = s32[1, 1] get-tuple-element(b_body), index=1
-  to_slice = s32[10, 1] get-tuple-element(b_body), index=2
+  to_add = s32[1,1] get-tuple-element(b_body), index=1
+  to_slice = s32[10,1] get-tuple-element(b_body), index=2
 
   old-trip-count = s32[] get-tuple-element(b_body), index=3
   minus-one = s32[] constant(-1)
@@ -426,14 +426,14 @@ bwd_body {
   slice-index-p1 = s32[] add(old-trip-count, negative-index)
   slice-index = s32[] add(slice-index-p1, minus-one)
 
-  update = s32[1, 1] dynamic-slice(to_slice, slice-index, zilch), dynamic_slice_sizes={1, 1}
-  counter = s32[1, 1] add(update, to_add)
+  update = s32[1,1] dynamic-slice(to_slice, slice-index, zilch), dynamic_slice_sizes={1, 1}
+  counter = s32[1,1] add(update, to_add)
   next_index = s32[] add(index, uno)
-  ROOT broot = (s32[], s32[1, 1], s32[10, 1], s32[]) tuple(next_index, counter, to_slice, old-trip-count)
+  ROOT broot = (s32[], s32[1,1], s32[10,1], s32[]) tuple(next_index, counter, to_slice, old-trip-count)
 }
 
 bwd_condition {
-  b_cond = (s32[], s32[1, 1], s32[10, 1], s32[]) parameter(0)
+  b_cond = (s32[], s32[1,1], s32[10,1], s32[]) parameter(0)
   b_cond.0 = s32[] get-tuple-element(b_cond), index=0
   b_const = s32[] constant(10)
   ROOT result = pred[] compare(b_cond.0, b_const), direction=LT
@@ -442,18 +442,18 @@ bwd_condition {
 ENTRY entry {
   loop_counter = s32[] parameter(0)
   const_0 = s32[] constant(0)
-  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_1 = s32[10,1] broadcast(const_0), dimensions={}
   const_2 = s32[] constant(1)
   const_m1 = s32[] constant(-1)
-  repeat_init = (s32[],s32[10, 1], s32[]) tuple(const_0, const_1, loop_counter)
-  while = (s32[],s32[10, 1], s32[]) while(repeat_init), condition=condition, body=body
+  repeat_init = (s32[],s32[10,1], s32[]) tuple(const_0, const_1, loop_counter)
+  while = (s32[],s32[10,1], s32[]) while(repeat_init), condition=condition, body=body
   old_trip_count = s32[] get-tuple-element(while), index=0
-  broadcast = s32[10, 1] get-tuple-element(while), index=1
+  broadcast = s32[10,1] get-tuple-element(while), index=1
   otc-m1 = s32[] add(old_trip_count, const_m1)
-  slice = s32[1, 1] dynamic-slice(broadcast, otc-m1, const_0), dynamic_slice_sizes={1, 1}
-  bwd_init = (s32[], s32[1, 1], s32[10, 1], s32[]) tuple(const_0, slice, broadcast, old_trip_count)
-  bwd_while = (s32[], s32[1, 1], s32[10, 1], s32[]) while(bwd_init), condition=bwd_condition, body=bwd_body
-  ROOT final = s32[1, 1] get-tuple-element(bwd_while), index=1
+  slice = s32[1,1] dynamic-slice(broadcast, otc-m1, const_0), dynamic_slice_sizes={1, 1}
+  bwd_init = (s32[], s32[1,1], s32[10,1], s32[]) tuple(const_0, slice, broadcast, old_trip_count)
+  bwd_while = (s32[], s32[1,1], s32[10,1], s32[]) while(bwd_init), condition=bwd_condition, body=bwd_body
+  ROOT final = s32[1,1] get-tuple-element(bwd_while), index=1
 }
 )";
 
@@ -470,21 +470,21 @@ TEST_F(WhileLoopOptimiserTest, OneBadRead) {
 HloModule ModuleWithWhile
 
 body {
-  p_body = (s32[], s32[10, 1], s32[]) parameter(0)
+  p_body = (s32[], s32[10,1], s32[]) parameter(0)
   p_body.0 = s32[] get-tuple-element(p_body), index=0
   one = s32[] constant(1)
   zero = s32[] constant(0)
   add = s32[] add(p_body.0, one)
   two = s32[] constant(2)
-  slice-input = s32[1, 1] reshape(two)
-  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
-  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  slice-input = s32[1,1] reshape(two)
+  p_body.1 = s32[10,1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10,1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
   count = s32[] get-tuple-element(p_body), index=2
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update, count)
+  ROOT root = (s32[],s32[10,1],s32[]) tuple(add, dyn_update, count)
 }
 
 condition {
-  p_cond = (s32[],s32[10, 1], s32[]) parameter(0)
+  p_cond = (s32[],s32[10,1], s32[]) parameter(0)
   p_cond.0 = s32[] get-tuple-element(p_cond), index=0
   const = s32[] get-tuple-element(p_cond), index=2
   ROOT result = pred[] compare(p_cond.0, const), direction=LT
@@ -493,10 +493,10 @@ condition {
 bwd_body {
   zilch = s32[] constant(0)
   uno = s32[] constant(1)
-  b_body = (s32[], s32[1, 1], s32[10, 1], s32[]) parameter(0)
+  b_body = (s32[], s32[1,1], s32[10,1], s32[]) parameter(0)
   index = s32[] get-tuple-element(b_body), index=0
-  to_add = s32[1, 1] get-tuple-element(b_body), index=1
-  to_slice = s32[10, 1] get-tuple-element(b_body), index=2
+  to_add = s32[1,1] get-tuple-element(b_body), index=1
+  to_slice = s32[10,1] get-tuple-element(b_body), index=2
 
   old-trip-count = s32[] get-tuple-element(b_body), index=3
   minus-one = s32[] constant(-1)
@@ -504,14 +504,14 @@ bwd_body {
   slice-index-p1 = s32[] add(old-trip-count, negative-index)
   slice-index = s32[] add(slice-index-p1, minus-one)
 
-  update = s32[1, 1] dynamic-slice(to_slice, slice-index-p1, zilch), dynamic_slice_sizes={1, 1}
-  counter = s32[1, 1] add(update, to_add)
+  update = s32[1,1] dynamic-slice(to_slice, slice-index-p1, zilch), dynamic_slice_sizes={1, 1}
+  counter = s32[1,1] add(update, to_add)
   next_index = s32[] add(index, uno)
-  ROOT broot = (s32[], s32[1, 1], s32[10, 1], s32[]) tuple(next_index, counter, to_slice, old-trip-count)
+  ROOT broot = (s32[], s32[1,1], s32[10,1], s32[]) tuple(next_index, counter, to_slice, old-trip-count)
 }
 
 bwd_condition {
-  b_cond = (s32[], s32[1, 1], s32[10, 1], s32[]) parameter(0)
+  b_cond = (s32[], s32[1,1], s32[10,1], s32[]) parameter(0)
   b_cond.0 = s32[] get-tuple-element(b_cond), index=0
   b_const = s32[] constant(10)
   ROOT result = pred[] compare(b_cond.0, b_const), direction=LT
@@ -520,18 +520,18 @@ bwd_condition {
 ENTRY entry {
   loop_counter = s32[] parameter(0)
   const_0 = s32[] constant(0)
-  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_1 = s32[10,1] broadcast(const_0), dimensions={}
   const_2 = s32[] constant(1)
   const_m1 = s32[] constant(-1)
-  repeat_init = (s32[],s32[10, 1], s32[]) tuple(const_0, const_1, loop_counter)
-  while = (s32[],s32[10, 1], s32[]) while(repeat_init), condition=condition, body=body
+  repeat_init = (s32[],s32[10,1], s32[]) tuple(const_0, const_1, loop_counter)
+  while = (s32[],s32[10,1], s32[]) while(repeat_init), condition=condition, body=body
   old_trip_count = s32[] get-tuple-element(while), index=0
-  broadcast = s32[10, 1] get-tuple-element(while), index=1
+  broadcast = s32[10,1] get-tuple-element(while), index=1
   otc-m1 = s32[] add(old_trip_count, const_m1)
-  slice = s32[1, 1] dynamic-slice(broadcast, otc-m1, const_0), dynamic_slice_sizes={1, 1}
-  bwd_init = (s32[], s32[1, 1], s32[10, 1], s32[]) tuple(const_0, slice, broadcast, old_trip_count)
-  bwd_while = (s32[], s32[1, 1], s32[10, 1], s32[]) while(bwd_init), condition=bwd_condition, body=bwd_body
-  ROOT final = s32[1, 1] get-tuple-element(bwd_while), index=1
+  slice = s32[1,1] dynamic-slice(broadcast, otc-m1, const_0), dynamic_slice_sizes={1, 1}
+  bwd_init = (s32[], s32[1,1], s32[10,1], s32[]) tuple(const_0, slice, broadcast, old_trip_count)
+  bwd_while = (s32[], s32[1,1], s32[10,1], s32[]) while(bwd_init), condition=bwd_condition, body=bwd_body
+  ROOT final = s32[1,1] get-tuple-element(bwd_while), index=1
 }
 )";
 
@@ -548,20 +548,20 @@ TEST_F(WhileLoopOptimiserTest, EliminateSingleBroadcast) {
 HloModule ModuleWithWhile
 
 body {
-  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body = (s32[],s32[10,1]) parameter(0)
   p_body.0 = s32[] get-tuple-element(p_body), index=0
   one = s32[] constant(1)
   zero = s32[] constant(0)
   add = s32[] add(p_body.0, one)
   two = s32[] constant(2)
-  slice-input = s32[1, 1] reshape(two)
-  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
-  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+  slice-input = s32[1,1] reshape(two)
+  p_body.1 = s32[10,1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10,1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[10,1]) tuple(add, dyn_update)
 }
 
 condition {
-  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond = (s32[],s32[10,1]) parameter(0)
   p_cond.0 = s32[] get-tuple-element(p_cond), index=0
   const = s32[] constant(10)
   ROOT result = pred[] compare(p_cond.0, const), direction=LT
@@ -569,12 +569,12 @@ condition {
 
 ENTRY entry {
   const_0 = s32[] constant(0)
-  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_1 = s32[10,1] broadcast(const_0), dimensions={}
   const_2 = s32[] constant(1)
-  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
-  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
-  broadcast = s32[10, 1] get-tuple-element(while), index=1
-  ROOT slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+  repeat_init = (s32[],s32[10,1]) tuple(const_0, const_1)
+  while = (s32[],s32[10,1]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10,1] get-tuple-element(while), index=1
+  ROOT slice = s32[1,1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
 }
 )";
 
@@ -598,23 +598,23 @@ TEST_F(WhileLoopOptimiserTest, EliminateMultipleBroadcast) {
 HloModule ModuleWithWhile
 
 body {
-  p_body = (s32[], s32[10, 1], s32[1, 1], s32[10, 1]) parameter(0)
+  p_body = (s32[], s32[10,1], s32[1,1], s32[10,1]) parameter(0)
   p_body.0 = s32[] get-tuple-element(p_body), index=0
-  p_body.2 = s32[1, 1] get-tuple-element(p_body), index=2
-  p_body.3 = s32[10, 1] get-tuple-element(p_body), index=3
+  p_body.2 = s32[1,1] get-tuple-element(p_body), index=2
+  p_body.3 = s32[10,1] get-tuple-element(p_body), index=3
   one = s32[] constant(1)
   zero = s32[] constant(0)
   add = s32[] add(p_body.0, one)
   two = s32[] constant(2)
-  slice-input = s32[1, 1] reshape(two)
-  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
-  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
-  dyn_update.2 = s32[10, 1] dynamic-update-slice(p_body.3, p_body.2, p_body.0, zero)
-  ROOT root = (s32[], s32[10, 1], s32[1, 1], s32[10, 1]) tuple(add, dyn_update, p_body.2, dyn_update.2)
+  slice-input = s32[1,1] reshape(two)
+  p_body.1 = s32[10,1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10,1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  dyn_update.2 = s32[10,1] dynamic-update-slice(p_body.3, p_body.2, p_body.0, zero)
+  ROOT root = (s32[], s32[10,1], s32[1,1], s32[10,1]) tuple(add, dyn_update, p_body.2, dyn_update.2)
 }
 
 condition {
-  p_cond = (s32[], s32[10, 1], s32[1, 1], s32[10, 1]) parameter(0)
+  p_cond = (s32[], s32[10,1], s32[1,1], s32[10,1]) parameter(0)
   p_cond.0 = s32[] get-tuple-element(p_cond), index=0
   const = s32[] constant(10)
   ROOT result = pred[] compare(p_cond.0, const), direction=LT
@@ -622,15 +622,15 @@ condition {
 
 ENTRY entry {
   const_0 = s32[] constant(0)
-  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_1 = s32[10,1] broadcast(const_0), dimensions={}
   const_2 = s32[] constant(1)
-  reshape = s32[1, 1] reshape(const_0)
-  repeat_init = (s32[], s32[10, 1], s32[1, 1], s32[10, 1]) tuple(const_0, const_1, reshape, const_1)
-  while = (s32[], s32[10, 1], s32[1, 1], s32[10, 1]) while(repeat_init), condition=condition, body=body
-  broadcast.1 = s32[10, 1] get-tuple-element(while), index=1
-  ROOT slice = s32[1, 1] dynamic-slice(broadcast.1, const_0, const_0), dynamic_slice_sizes={1, 1}
-  broadcast.2 = s32[10, 1] get-tuple-element(while), index=3
-  slice.2 = s32[1, 1] dynamic-slice(broadcast.2, const_0, const_0), dynamic_slice_sizes={1, 1}
+  reshape = s32[1,1] reshape(const_0)
+  repeat_init = (s32[], s32[10,1], s32[1,1], s32[10,1]) tuple(const_0, const_1, reshape, const_1)
+  while = (s32[], s32[10,1], s32[1,1], s32[10,1]) while(repeat_init), condition=condition, body=body
+  broadcast.1 = s32[10,1] get-tuple-element(while), index=1
+  ROOT slice = s32[1,1] dynamic-slice(broadcast.1, const_0, const_0), dynamic_slice_sizes={1, 1}
+  broadcast.2 = s32[10,1] get-tuple-element(while), index=3
+  slice.2 = s32[1,1] dynamic-slice(broadcast.2, const_0, const_0), dynamic_slice_sizes={1, 1}
 }
 )";
 
@@ -657,20 +657,20 @@ TEST_F(WhileLoopOptimiserTest, MakeUninitialised) {
 HloModule ModuleWithWhile
 
 body {
-  p_body = (s32[],s32[10, 1]) parameter(0)
+  p_body = (s32[],s32[10,1]) parameter(0)
   p_body.0 = s32[] get-tuple-element(p_body), index=0
   one = s32[] constant(1)
   zero = s32[] constant(0)
   add = s32[] add(p_body.0, one)
   two = s32[] constant(2)
-  slice-input = s32[1, 1] reshape(two)
-  p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
-  dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update)
+  slice-input = s32[1,1] reshape(two)
+  p_body.1 = s32[10,1] get-tuple-element(p_body), index=1
+  dyn_update = s32[10,1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
+  ROOT root = (s32[],s32[10,1]) tuple(add, dyn_update)
 }
 
 condition {
-  p_cond = (s32[],s32[10, 1]) parameter(0)
+  p_cond = (s32[],s32[10,1]) parameter(0)
   p_cond.0 = s32[] get-tuple-element(p_cond), index=0
   const = s32[] constant(10)
   ROOT result = pred[] compare(p_cond.0, const), direction=LT
@@ -678,12 +678,12 @@ condition {
 
 ENTRY entry {
   const_0 = s32[] constant(0)
-  const_1 = s32[10, 1] broadcast(const_0), dimensions={}
+  const_1 = s32[10,1] broadcast(const_0), dimensions={}
   const_2 = s32[] constant(1)
-  repeat_init = (s32[],s32[10, 1]) tuple(const_0, const_1)
-  while = (s32[],s32[10, 1]) while(repeat_init), condition=condition, body=body
-  broadcast = s32[10, 1] get-tuple-element(while), index=1
-  ROOT slice = s32[1, 1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
+  repeat_init = (s32[],s32[10,1]) tuple(const_0, const_1)
+  while = (s32[],s32[10,1]) while(repeat_init), condition=condition, body=body
+  broadcast = s32[10,1] get-tuple-element(while), index=1
+  ROOT slice = s32[1,1] dynamic-slice(broadcast, const_0, const_0), dynamic_slice_sizes={1, 1}
 }
 )";
 
@@ -726,20 +726,20 @@ condition {
 bwd_body {
   zilch = s32[] constant(0)
   uno = s32[] constant(1)
-  b_body = (s32[], s32[1, 1], s32[10, 12]) parameter(0)
+  b_body = (s32[], s32[1,1], s32[10, 12]) parameter(0)
   index = s32[] get-tuple-element(b_body), index=0
-  to_add = s32[1, 1] get-tuple-element(b_body), index=1
+  to_add = s32[1,1] get-tuple-element(b_body), index=1
   to_slice = s32[10, 12] get-tuple-element(b_body), index=2
   zilchs = s32[10, 12] broadcast(zilch), dimensions={}
 
   dot2 = s32[12, 12] dot(to_slice, zilchs), lhs_contracting_dims={0}, rhs_contracting_dims={0}
-  counter = s32[1, 1] add(to_add, to_add)
+  counter = s32[1,1] add(to_add, to_add)
   next_index = s32[] add(index, uno)
-  ROOT broot = (s32[], s32[1, 1], s32[10, 12]) tuple(next_index, counter, to_slice)
+  ROOT broot = (s32[], s32[1,1], s32[10, 12]) tuple(next_index, counter, to_slice)
 }
 
 bwd_condition {
-  b_cond = (s32[], s32[1, 1], s32[10, 12]) parameter(0)
+  b_cond = (s32[], s32[1,1], s32[10, 12]) parameter(0)
   b_cond.0 = s32[] get-tuple-element(b_cond), index=0
   b_const = s32[] constant(10)
   ROOT result = pred[] compare(b_cond.0, b_const), direction=LT
@@ -752,11 +752,11 @@ ENTRY entry {
   repeat_init = (s32[],s32[10, 12]) tuple(const_0, const_1)
   while = (s32[],s32[10, 12]) while(repeat_init), condition=condition, body=body
   broadcast = s32[10, 12] get-tuple-element(while), index=1
-  slice = s32[1, 1] reshape(const_2)
+  slice = s32[1,1] reshape(const_2)
 
-  bwd_init = (s32[], s32[1, 1], s32[10, 12]) tuple(const_0, slice, broadcast)
-  bwd_while = (s32[], s32[1, 1], s32[10, 12]) while(bwd_init), condition=bwd_condition, body=bwd_body
-  ROOT final = s32[1, 1] get-tuple-element(bwd_while), index=1
+  bwd_init = (s32[], s32[1,1], s32[10, 12]) tuple(const_0, slice, broadcast)
+  bwd_while = (s32[], s32[1,1], s32[10, 12]) while(bwd_init), condition=bwd_condition, body=bwd_body
+  ROOT final = s32[1,1] get-tuple-element(bwd_while), index=1
 }
 )";
 
@@ -797,20 +797,20 @@ condition {
 bwd_body {
   zilch = s32[] constant(0)
   uno = s32[] constant(1)
-  b_body = (s32[], s32[1, 1], s32[10, 12]) parameter(0)
+  b_body = (s32[], s32[1,1], s32[10, 12]) parameter(0)
   index = s32[] get-tuple-element(b_body), index=0
-  to_add = s32[1, 1] get-tuple-element(b_body), index=1
+  to_add = s32[1,1] get-tuple-element(b_body), index=1
   to_slice = s32[10, 12] get-tuple-element(b_body), index=2
   zilchs = s32[10, 12] broadcast(zilch), dimensions={}
 
   dot2 = s32[10, 10] dot(to_slice, zilchs), lhs_contracting_dims={1}, rhs_contracting_dims={1}
-  counter = s32[1, 1] add(to_add, to_add)
+  counter = s32[1,1] add(to_add, to_add)
   next_index = s32[] add(index, uno)
-  ROOT broot = (s32[], s32[1, 1], s32[10, 12]) tuple(next_index, counter, to_slice)
+  ROOT broot = (s32[], s32[1,1], s32[10, 12]) tuple(next_index, counter, to_slice)
 }
 
 bwd_condition {
-  b_cond = (s32[], s32[1, 1], s32[10, 12]) parameter(0)
+  b_cond = (s32[], s32[1,1], s32[10, 12]) parameter(0)
   b_cond.0 = s32[] get-tuple-element(b_cond), index=0
   b_const = s32[] constant(10)
   ROOT result = pred[] compare(b_cond.0, b_const), direction=LT
@@ -823,11 +823,11 @@ ENTRY entry {
   repeat_init = (s32[],s32[10, 12]) tuple(const_0, const_1)
   while = (s32[],s32[10, 12]) while(repeat_init), condition=condition, body=body
   broadcast = s32[10, 12] get-tuple-element(while), index=1
-  slice = s32[1, 1] reshape(const_2)
+  slice = s32[1,1] reshape(const_2)
 
-  bwd_init = (s32[], s32[1, 1], s32[10, 12]) tuple(const_0, slice, broadcast)
-  bwd_while = (s32[], s32[1, 1], s32[10, 12]) while(bwd_init), condition=bwd_condition, body=bwd_body
-  ROOT final = s32[1, 1] get-tuple-element(bwd_while), index=1
+  bwd_init = (s32[], s32[1,1], s32[10, 12]) tuple(const_0, slice, broadcast)
+  bwd_while = (s32[], s32[1,1], s32[10, 12]) while(bwd_init), condition=bwd_condition, body=bwd_body
+  ROOT final = s32[1,1] get-tuple-element(bwd_while), index=1
 }
 )";
 

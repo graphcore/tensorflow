@@ -39,7 +39,7 @@ ENTRY %cluster_1  {
   %c2 = f32[2,4]{1,0} constant({ { 1.0, 2.0, 3.0, 4.0 }, { 5.1, 6.2, 7.3, 8.4 } })
   %c3 = f32[4]{0} constant({10.0, 11.0, 12.0, 13.0})
   %add = f32[4]{0} add(%c0, %c1)
-  ROOT %tuple = (f32[]) tuple(%add)
+  ROOT %tuple = (f32[4]) tuple(%add)
 }
   )";
 
@@ -65,7 +65,7 @@ ENTRY %cluster_2  {
   %c2 = f16[2,4]{1,0} constant({ { 1.0, 2.0, 3.0, 4.0 }, { 5.1, 6.2, 7.3, 8.4 } })
   %c3 = f16[4]{0} constant({10.0, 11.0, 12.0, 13.0})
   %add = f16[4]{0} add(%c0, %c1)
-  ROOT %tuple = (f16[]) tuple(%add)
+  ROOT %tuple = (f16[4]) tuple(%add)
 }
   )";
 
@@ -88,7 +88,7 @@ HloModule top
 
 ENTRY %cluster_3  {
   %c0 = f32[4]{0} constant({1.0, nan, 1.0, 1.0})
-  ROOT %tuple = (f32[]) tuple(%c0)
+  ROOT %tuple = (f32[4]) tuple(%c0)
 }
   )";
 
@@ -110,7 +110,7 @@ HloModule top
 
 ENTRY %cluster_4  {
   %c0 = f16[4]{0} constant({1.0, 1.0, 1.0, nan})
-  ROOT %tuple = (f16[]) tuple(%c0)
+  ROOT %tuple = (f16[4]) tuple(%c0)
 }
   )";
 

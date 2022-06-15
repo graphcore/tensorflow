@@ -82,7 +82,7 @@ body {
   p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
   dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
   count = s32[] get-tuple-element(p_body), index=2
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update, count)
+  ROOT root = (s32[], s32[10, 1], s32[]) tuple(add, dyn_update, count)
 }
 
 condition {
@@ -171,7 +171,7 @@ body {
   p_body.1 = s32[10, 1] get-tuple-element(p_body), index=1
   dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
   count = s32[] get-tuple-element(p_body), index=2
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update, count)
+  ROOT root = (s32[], s32[10, 1], s32[]) tuple(add, dyn_update, count)
 }
 
 condition {
@@ -372,7 +372,7 @@ body {
   dyn_update = s32[10, 1] dynamic-update-slice(p_body.1, slice-input, p_body.0, zero)
   count = s32[] get-tuple-element(p_body), index=2
   tok = token[] get-tuple-element(p_body), index=3
-  ROOT root = (s32[],s32[]) tuple(add, dyn_update, count, tok)
+  ROOT root = (s32[], s32[10, 1], s32[], token[]) tuple(add, dyn_update, count, tok)
 }
 
 condition {

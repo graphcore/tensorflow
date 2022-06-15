@@ -51,7 +51,7 @@ ENTRY test {
 
   differing_call = f32[] call(differing0, differing1), to_apply=funcB, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
 
-  ROOT differing_root = (f32[], f32[], f32[]) tuple(identical_call, differing_call)
+  ROOT differing_root = (f32[], f32[]) tuple(identical_call, differing_call)
 }
 )";
 TEST_F(MarkReplicaIdenticalInstructionsTest, SetsIsReplicaIdenticalOption) {

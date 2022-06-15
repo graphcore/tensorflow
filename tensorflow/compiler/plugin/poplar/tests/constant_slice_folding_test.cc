@@ -34,7 +34,7 @@ HloModule top
 %cluster_1  {
   arg0 = f32[4] constant({0.0, 1.0, 2.0, 3.0})
   s = f32[1] slice(arg0), slice={[1:2]}
-  ROOT t = (f32[]) tuple(s)
+  ROOT t = (f32[1]) tuple(s)
 }
   )";
 
@@ -64,7 +64,7 @@ HloModule top
   arg0 = f32[4] constant({0.0, 1.0, 2.0, 3.0})
   s = f32[1] slice(arg0), slice={[2:3]}
   r = f32[1] reshape(s)
-  ROOT t = (f32[]) tuple(r)
+  ROOT t = (f32[1]) tuple(r)
 }
   )";
 

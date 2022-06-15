@@ -508,7 +508,7 @@ cluster_1  {
   a0 = f16[4] parameter(0), sharding={maximal device=1}
   a1 = f16[4] parameter(1), sharding={maximal device=0}
   a2 = f16[4] parameter(2), sharding={maximal device=0}
-  t0 = (s32[], f16[4], f16[4]) tuple(a0, a1, a2),
+  t0 = (f16[4], f16[4], f16[4]) tuple(a0, a1, a2),
       sharding={{maximal device=1}, {maximal device=0}, {maximal device=0}}
   ROOT e1 = f16[4] get-tuple-element(t0), index=0, sharding={maximal device=0}
 }

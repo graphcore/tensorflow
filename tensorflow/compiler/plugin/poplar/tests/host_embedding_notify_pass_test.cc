@@ -99,7 +99,7 @@ pipeline {
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2, in4)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(gte0, gte1, gte2, in4)
 }
 
 ENTRY e {
@@ -187,7 +187,7 @@ pipeline {
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2, in4)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(gte0, gte1, gte2, in4)
 }
 
 ENTRY e {
@@ -296,7 +296,7 @@ pipeline {
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2, in4)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(gte0, gte1, gte2, in4)
 }
 
 ENTRY e {

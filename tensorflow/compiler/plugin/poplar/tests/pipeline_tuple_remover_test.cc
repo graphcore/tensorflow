@@ -165,7 +165,7 @@ stage_2 {
   stage_2_p1 = (f32[1024]) parameter(1)
   stage_2_p2 = (f32[1,1,1]) parameter(2)
 
-  stage_2_p0p1p2 = (((f32[1,1,1]), (f32[1,2])), (f32[1,2]), (f32[1,1,1])) tuple(stage_2_p0, stage_2_p1, stage_2_p2)
+  stage_2_p0p1p2 = (((f32[1,1,1]), (f32[1,2])), (f32[1024]), (f32[1,1,1])) tuple(stage_2_p0, stage_2_p1, stage_2_p2)
 
   stage_2_t = token[] after-all()
   stage_2_outfeed = token[] outfeed(stage_2_p0p1p2, stage_2_t)

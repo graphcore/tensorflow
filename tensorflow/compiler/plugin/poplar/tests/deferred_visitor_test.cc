@@ -983,7 +983,6 @@ ENTRY main (arg0.1: f32[2,2], arg1.2: f32[2,2], arg2.3: f32[2,2], arg3.4: pred[]
   auto entry_computation = module->entry_computation();
 
   EntryVisitor visitor(*resources.get(), entry_computation);
-  VLOG(0) << module->ToString();
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
   auto entry_tensor_map =
       resources->tensor_maps.GetTensorMapForComputation("main");
@@ -1074,7 +1073,7 @@ ENTRY cluster {
   copy.1 = f32[256] copy(p0), backend_config="{\"copy_config\":{\"clone_method\": \"CloneMethod_PreserveOrderUnlessAliases\"}}"
   copy.2 = f32[256] copy(bcast), backend_config="{\"copy_config\":{\"clone_method\": \"CloneMethod_PreserveOrderUnlessAliases\"}}"
   copy.3 = f32[256] copy(concat)
-  ROOT tuple = (f32[256], f32[256], f32[256], f32[256]) tuple(copy.1, copy.2, copy.3)
+  ROOT tuple = (f32[256], f32[256], f32[256]) tuple(copy.1, copy.2, copy.3)
 }
 )";
   std::unique_ptr<HloModule> module =

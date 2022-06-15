@@ -1107,7 +1107,7 @@ stage_0_fwd {
   infeed = (f32[1,4,4,2], token[]) infeed(after-all), infeed_config="140121807314577"
   gte = f32[1,4,4,2] get-tuple-element(infeed), index=0, backend_config="{\"isInplace\":true}"
   add = f32[1,4,4,2] add(gte, in1), backend_config="{\"isInplace\":true}"
-  ROOT tuple = (f32[1,4,4,2]) tuple(add, in2), backend_config="{\"isInplace\":true}"
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(add, in2), backend_config="{\"isInplace\":true}"
 }
 
 stage_1_fwd {
@@ -1126,7 +1126,7 @@ pipeline {
   stage_1 = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_0, stage_0_1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
   stage_1_0 = f32[1,4,4,2] get-tuple-element(stage_1), index=0
   stage_1_1 = f32[1,4,4,2] get-tuple-element(stage_1), index=1
-  ROOT tuple = (f32[1,4,4,2]) tuple(stage_1_0, stage_1_1)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(stage_1_0, stage_1_1)
 }
 
 ENTRY e {
@@ -1309,7 +1309,7 @@ pipeline {
   call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, in3)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], opaque[]) tuple(gte0, gte1, in3)
 }
 
 ENTRY e {

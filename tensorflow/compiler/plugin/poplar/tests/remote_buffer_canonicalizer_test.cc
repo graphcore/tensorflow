@@ -81,7 +81,7 @@ ENTRY e {
   
   param0_load = f32[] custom-call(param0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
   load_reshape = f32[1] reshape(param0_load)
-  ROOT t = (f32[]) tuple(load_reshape)
+  ROOT t = (f32[1]) tuple(load_reshape)
 }
 )";
 

@@ -1837,7 +1837,7 @@ ENTRY c1 {
   ad = f32[1] add-dependency(p2, aa)
   m2 = f32[1] add(m1, ad)
 
-  ROOT o = (f32[1]) tuple(m2, s0)
+  ROOT o = (f32[1],f32[1]) tuple(m2, s0)
  }
 )";
 
@@ -1896,7 +1896,7 @@ ENTRY c1 {
   ad = f32[1] add-dependency(m1, aa)
   m2 = f32[1] add(ad, p2)
 
-  ROOT o = (f32[1]) tuple(m2, s0)
+  ROOT o = (f32[1],f32[1]) tuple(m2, s0)
  }
 )";
 
@@ -1948,7 +1948,7 @@ ENTRY c1 {
 
   ad = f32[1] add-dependency(p1, aa)
   s0 = f32[1] sine(ad)
-  ROOT o = (f32[1]) tuple(m2, s0)
+  ROOT o = (f32[1],f32[1]) tuple(m2, s0)
  }
 )";
 

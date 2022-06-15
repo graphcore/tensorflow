@@ -48,7 +48,7 @@ HloModule top
   cos0 = f32[] cosine(p0)
   add0 = f32[] add(cos0, p1)
   add1 = f32[] add(add0, p2)
-  ROOT tuple = (f16[]) tuple(add1)
+  ROOT tuple = (f32[]) tuple(add1)
 }
   )";
 
@@ -60,8 +60,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -103,7 +102,7 @@ HloModule top
   cos3 = f32[] cosine(cos1)
   cos4 = f32[] cosine(cos2)  
 
-  ROOT tuple = (f16[]) tuple(cos4, cos3)
+  ROOT tuple = (f32[], f32[]) tuple(cos4, cos3)
 }
   )";
 
@@ -115,8 +114,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -158,8 +156,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -204,8 +201,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -246,7 +242,7 @@ HloModule top
   cos0 = f32[] cosine(p0)
   add0 = f32[] add(cos0, p1)
   add1 = f32[] add(add0, p2)
-  ROOT tuple = (f16[]) tuple(add1)
+  ROOT tuple = (f32[]) tuple(add1)
 }
   )";
 
@@ -258,8 +254,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -308,8 +303,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -346,7 +340,7 @@ cluster_1  {
   cos1 = f32[] cosine(cos0)
   cos2 = f32[] cosine(cos1)
   cos3 = f32[] cosine(p1)  
-  ROOT tuple = (f16[]) tuple(cos2, cos3)
+  ROOT tuple = (f32[], f32[]) tuple(cos2, cos3)
 }
   )";
 
@@ -358,8 +352,7 @@ cluster_1  {
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -397,7 +390,7 @@ cluster_1  {
   cos1 = f32[] cosine(cos0)
   cos2 = f32[] cosine(cos1)
   cos3 = f32[] cosine(const1)  
-  ROOT tuple = (f16[]) tuple(cos2, cos3)
+  ROOT tuple = (f32[], f32[]) tuple(cos2, cos3)
 }
   )";
 
@@ -409,8 +402,7 @@ cluster_1  {
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -458,7 +450,7 @@ HloModule top
   c1 = f32[] cosine(a2) 
   a3 = f32[] add(c0, c1)  
   c2 = f32[] cosine(a3) 
-  ROOT tuple = (f16[]) tuple(c2)
+  ROOT tuple = (f32[]) tuple(c2)
 }
   )";
 
@@ -470,8 +462,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -549,8 +540,8 @@ HloModule top
   a3 = f32[] add(c0, c1)  
   c2 = f32[] cosine(a3)
   s0 = f32[] sine(a2)
-  tuple1 = (f16[]) tuple(s0)
-  ROOT tuple0 = (f16[]) tuple(c2)
+  tuple1 = (f32[]) tuple(s0)
+  ROOT tuple0 = (f32[]) tuple(c2)
 }
   )";
 
@@ -562,8 +553,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -632,10 +622,10 @@ HloModule top
   a3 = f32[] add(c0, c1)  
   c2 = f32[] cosine(a3)
   s0 = f32[] sine(a2)
-  tuple1 = (f16[]) tuple(s0)
+  tuple1 = (f32[]) tuple(s0)
   s1 = f32[] sine(p5)
-  tuple2 = (f16[]) tuple(s1)  
-  ROOT tuple0 = (f16[]) tuple(c2)
+  tuple2 = (f32[]) tuple(s1)
+  ROOT tuple0 = (f32[]) tuple(c2)
 }
   )";
 
@@ -647,8 +637,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -727,7 +716,7 @@ HloModule top
   s1 = f32[] sine(c5)
   s2 = f32[] sine(c3)
   s3 = f32[] sine(c2)      
-  ROOT tuple0 = (f16[]) tuple(s0, s1, s2, s3)
+  ROOT tuple0 = (f32[], f32[], f32[], f32[]) tuple(s0, s1, s2, s3)
 }
   )";
 
@@ -739,8 +728,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -781,8 +769,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -812,8 +799,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -843,7 +829,7 @@ HloModule top
   cos0 = f32[] cosine(p0)
   add0 = f32[] add(cos0, p1)
   add1 = f32[] add(add0, p2)
-  ROOT tuple = (f16[]) tuple(add1)
+  ROOT tuple = (f32[]) tuple(add1)
 }
   )";
 
@@ -855,8 +841,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -894,7 +879,7 @@ HloModule top
   cos0 = f32[] cosine(add0)
   p2 = f32[] parameter(2)
   add1 = f32[] add(cos0, p2)
-  ROOT tuple = (f16[]) tuple(add1)
+  ROOT tuple = (f32[]) tuple(add1)
 }
   )";
 
@@ -906,8 +891,7 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -945,8 +929,7 @@ HloModule top
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
 
@@ -978,8 +961,7 @@ comp {
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  IpuScheduler scheduler(
-      CreateShortestPathScheduler(CompilerInformation()));
+  IpuScheduler scheduler(CreateShortestPathScheduler(CompilerInformation()));
 
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
 

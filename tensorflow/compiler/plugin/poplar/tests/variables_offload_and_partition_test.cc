@@ -85,7 +85,7 @@ resource_update {
   arg5_new = f32[1,4,4,2] add(arg5, arg3)
   arg0_new = f32[1,4,4,2] add(arg0, arg4_new)
   arg1_new = f32[1,4,4,2] add(arg1, arg5_new)
-  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0_new, arg1_new, arg4_new, arg5_new)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0_new, arg1_new, arg4_new, arg5_new)
 }
 
 pipeline {
@@ -742,7 +742,7 @@ resource_update {
   arg3 = f32[1,4,4,2] parameter(3)
   arg2_new = f32[1,4,4,2] add(arg2, arg0)
   arg3_new = f32[1,4,4,2] add(arg3, arg1)
-  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2_new, arg3_new)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2_new, arg3_new)
 }
 
 pipeline {
@@ -833,7 +833,7 @@ resource_update {
   arg3 = f32[1,4,4,2] parameter(3)
   arg2_new = f32[1,4,4,2] add(arg2, arg0)
   arg3_new = f32[1,4,4,2] add(arg3, arg1)
-  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2_new, arg3_new)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2_new, arg3_new)
 }
 
 pipeline {
@@ -922,7 +922,7 @@ resource_update {
   arg3 = f32[1,4,4,2] parameter(3)
   arg2_new = f32[1,4,4,2] add(arg2, arg0)
   arg3_new = f32[1,4,4,2] add(arg3, arg1)
-  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2_new, arg3_new)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2_new, arg3_new)
 }
 
 pipeline {
@@ -992,7 +992,7 @@ resource_update {
   arg2_new = f32[1,4,4,2] add(arg2, arg0)
   arg3_new = f32[1,4,4,2] add(arg3, arg1)
   arg3_new_new = f32[1,4,4,2] add(arg3_new, arg2_new)
-  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2, arg3_new_new)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2, arg3_new_new)
 }
 
 loop {
@@ -1204,7 +1204,7 @@ resource_update {
   arg3 = f32[1,4,4,2] parameter(3)
   arg2_new = f32[1,4,4,2] add(arg2, arg0)
   arg3_new = f32[1,4,4,2] add(arg3, arg1)
-  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2_new, arg3_new)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2_new, arg3_new)
 }
 
 pipeline {
@@ -1328,7 +1328,7 @@ resource_update {
   arg3 = f32[1,4,4,2] parameter(3)
   arg2_new = f32[1,4,4,2] add(arg2, arg0)
   arg3_new = f32[1,4,4,2] add(arg3, arg1)
-  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2_new, arg3_new)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2_new, arg3_new)
 }
 
 pipeline {
@@ -1447,7 +1447,7 @@ resource_update {
   arg3 = f32[1,5,5,3] parameter(3)
   arg2_new = f32[1,5,5,3] add(arg2, arg0)
   arg3_new = f32[1,5,5,3] add(arg3, arg1)
-  ROOT t = (f32[1,5,5,3], f32[1,5,5,3], f32[1,5,5,3]) tuple(arg0, arg1, arg2_new, arg3_new)
+  ROOT t = (f32[1,5,5,3], f32[1,5,5,3], f32[1,5,5,3], f32[1,5,5,3]) tuple(arg0, arg1, arg2_new, arg3_new)
 }
 
 pipeline {
@@ -1549,7 +1549,7 @@ resource_update {
   arg2_new = f32[1,4,4,2] add(arg2, arg0)
   arg3_new = f32[1,4,4,2] add(arg3, arg1)
   arg3_new_new = f32[1,4,4,2] add(arg3_new, arg2_new)
-  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2, arg3_new_new)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2, arg3_new_new)
 }
 
 loop {

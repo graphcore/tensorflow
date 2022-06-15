@@ -258,7 +258,7 @@ pipeline {
   stage_0_bwd_0 = f32[2] get-tuple-element(stage_0_bwd), index=0
   call_ru = (f32[2]) call(stage_0_bwd_0, in0), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[2] get-tuple-element(call_ru), index=0
-  ROOT tuple = (f32[2], f32[2]) tuple(gte0)
+  ROOT tuple = (f32[2]) tuple(gte0)
 }
 
 ENTRY e {
@@ -661,7 +661,7 @@ stage_0_fwd {
   checkpoint2 = f32[2] custom-call(add), custom_call_target="RecomputationCheckpoint"
   checkpoint3 = f32[2] custom-call(add), custom_call_target="RecomputationCheckpoint"
   add2 = f32[2] add(in1, checkpoint3)
-  ROOT tuple = (f32[2], f32[2]) tuple(in0, checkpoint2, add2)
+  ROOT tuple = (f32[2], f32[2], f32[2]) tuple(in0, checkpoint2, add2)
 }
 
 stage_1_fwd {
@@ -700,7 +700,7 @@ pipeline {
   stage_0_bwd_0 = f32[2] get-tuple-element(stage_0_bwd), index=0
   call_ru = (f32[2]) call(stage_0_bwd_0, in0), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[2] get-tuple-element(call_ru), index=0
-  ROOT tuple = (f32[2], f32[2]) tuple(gte0)
+  ROOT tuple = (f32[2]) tuple(gte0)
 }
 
 ENTRY e {

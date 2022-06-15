@@ -90,7 +90,7 @@ ENTRY main {
   offsets2 = s32[12,1] parameter(2)
   slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
   slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice", backend_config="{\"indices_are_sorted\":false}"
-  ROOT t = (f32[24,16], s32[12,16]) tuple(slice1, slice2)
+  ROOT t = (f32[24,16], f32[12,16]) tuple(slice1, slice2)
 }
 )";
   std::unique_ptr<HloModule> module =
@@ -391,7 +391,7 @@ ENTRY main {
   update1 = f32[100,16] custom-call(input, offsets, slice_modified), custom_call_target="MultiUpdate", backend_config="{\"indices_are_sorted\":false}\n"
   lr = f32[] constant(-0.1)
   update2 = f32[100,16] custom-call(input, offsets, slice_modified, lr), custom_call_target="MultiUpdateAdd", backend_config="{\"indices_are_sorted\":false}\n"
-  ROOT t = (f32[24,16], f32[12,16], f32[100,16]) tuple(slice1, update1, update2)
+  ROOT t = (f32[24,16], f32[100,16], f32[100,16]) tuple(slice1, update1, update2)
 }
 )";
   std::unique_ptr<HloModule> module =

@@ -84,7 +84,7 @@ pipeline_ru {
   ru1_bwd_update = f32[1,4,4,2] multiply(ru1_bwd_acts_0_bwd, ru1_bwd_lr_bcast)
   ru1_bwd_weights1 = f32[1,4,4,2] parameter(3)
   ru1_bwd_weights1_new = f32[1,4,4,2] subtract(ru1_bwd_weights1, ru1_bwd_update)
-  ROOT ru0_bwd_tuple = (f32[1,4,4,2]) tuple(ru0_bwd_weights0_new, ru1_bwd_weights1_new)
+  ROOT ru0_bwd_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(ru0_bwd_weights0_new, ru1_bwd_weights1_new)
 }
 
 pipeline {
@@ -175,7 +175,7 @@ pipeline_ru {
   ru1_bwd_update = f32[1,4,4,2] multiply(ru1_bwd_acts_0_bwd, ru1_bwd_lr_bcast)
   ru1_bwd_weights1 = f32[1,4,4,2] parameter(3)
   ru1_bwd_weights1_new = f32[1,4,4,2] subtract(ru1_bwd_weights1, ru1_bwd_update)
-  ROOT ru0_bwd_tuple = (f32[1,4,4,2]) tuple(ru0_bwd_weights0_new, ru1_bwd_weights1_new)
+  ROOT ru0_bwd_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(ru0_bwd_weights0_new, ru1_bwd_weights1_new)
 }
 
 pipeline {
@@ -944,7 +944,7 @@ stage_0_bwd {
 resource_update {
   arg0 = f32[1,4,4,2] parameter(0)
   arg1 = f32[1,4,4,2] parameter(1)
-  ROOT t = (f32[1,4,4,2]) tuple(arg0, arg1)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1)
 }
 
 pipeline {

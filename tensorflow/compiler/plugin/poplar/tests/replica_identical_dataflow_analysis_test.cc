@@ -259,7 +259,7 @@ static const HloTestCase simple_pipeline = {"simple_pipeline", R"(
 HloModule test
 stage_0_fwd {
   x = f32[1,4,4,2] parameter(0)
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,42]) tuple(x, x)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(x, x)
 }
 
 stage_1_fwd {
@@ -688,7 +688,7 @@ static const HloTestCase pipeline_with_differing_gradient_accumulation_count = {
 HloModule test
 stage_0_fwd {
   x = f32[1,4,4,2] parameter(0)
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,42]) tuple(x, x)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(x, x)
 }
 
 stage_1_fwd {
@@ -897,7 +897,7 @@ HloModule test
 ENTRY test {
    identical0 = f32[] parameter(0)
    identical1 = f32[] parameter(1)
-   ROOT identical_tuple = (f32[1, 1, 2, 4], f32[1, 1, 2, 4]) tuple(identical0, identical1)
+   ROOT identical_tuple = (f32[], f32[]) tuple(identical0, identical1)
 }
 )"};
 static const HloTestCase differing_tuple_output = {"differing_tuple", R"(
@@ -906,7 +906,7 @@ ENTRY test {
    identical0 = f32[] parameter(0)
    after-all = token[] after-all()
    differing = (f32[], token[]) infeed(token[] after-all), infeed_config="\010\001\022\005feed1\"\002\001\001"
-   ROOT mixed_tuple = (f32[1, 1, 2, 4], f32[1, 1, 2, 4]) tuple(identical0, differing)
+   ROOT mixed_tuple = (f32[], (f32[], token[])) tuple(identical0, differing)
 }
 )"};
 TEST_P(ReplicaValueCategoryTupleOutputTest, ValueIsIdenticalIfSubShapesAre) {
@@ -1002,7 +1002,7 @@ ENTRY test {
   identical_call = f32[] call(), to_apply=identical_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
   differing_call = f32[] call(), to_apply=differing_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
 
-  ROOT tuple = (f32[], f32[], f32[]) tuple(identical_call, differing_call)
+  ROOT tuple = (f32[], f32[]) tuple(identical_call, differing_call)
 }
 )";
 TEST_F(ReplicaIdenticalDataflowAnalysisTest, ParamlessCallValueCategory) {

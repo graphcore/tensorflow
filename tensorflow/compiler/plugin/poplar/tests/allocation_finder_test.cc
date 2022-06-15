@@ -336,7 +336,7 @@ ENTRY c1 {
   p1_t = f16[1024, 64] transpose(p1), dimensions={1, 0}
   mu = f16[1024, 64] custom-call(p1_t, p2, p0), custom_call_target="MultiUpdate", backend_config="{\"indices_are_sorted\":false}\n"
   dot = f16[2, 1024] dot(p0, p1), lhs_contracting_dims={1}, rhs_contracting_dims={0}
-  ROOT t = (f16[2, 64], f16[2, 1024]) tuple(mu, dot)
+  ROOT t = (f16[1024, 64], f16[2, 1024]) tuple(mu, dot)
 }
 )";
 

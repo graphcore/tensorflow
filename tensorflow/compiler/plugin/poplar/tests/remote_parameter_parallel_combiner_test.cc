@@ -573,20 +573,20 @@ stage_0_fwd {
   in0 = f32[1,4,4,2] parameter(0)
   in1 = f32[1,4,4,1] parameter(1)
   in2 = f32[] parameter(2)
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(in0, in1, in2)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,1], f32[]) tuple(in0, in1, in2)
 }
 
 stage_1_fwd {
   in1 = f32[1,4,4,2] parameter(0)
   in2 = f32[1,4,4,1] parameter(1)
   in3 = f32[] parameter(2)
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(in1, in2, in3)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,1], f32[]) tuple(in1, in2, in3)
 }
 
 stage_1_bwd {
   in1_grad = f32[1,4,4,2] parameter(0)
   in2_grad = f32[1,4,4,1] parameter(1)
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in1_grad, in2_grad)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,1]) tuple(in1_grad, in2_grad)
 }
 
 stage_0_bwd {
@@ -649,7 +649,7 @@ pipeline {
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,4,4,1] get-tuple-element(call_ru), index=2
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,1]) tuple(gte0, gte1, gte2, in4)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,1], f32[]) tuple(gte0, gte1, gte2, in4)
 }
 
 ENTRY e {
@@ -744,7 +744,7 @@ ENTRY top {
   load2 = f32[2] custom-call(arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
   load3 = f32[1] custom-call(arg3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
   load4 = f32[1] custom-call(arg4), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
-  ROOT tuple = (f32[2], f32[2]) tuple(load1, load2, load3, load4)
+  ROOT tuple = (f32[2], f32[2], f32[1], f32[1]) tuple(load1, load2, load3, load4)
 }
   )";
 

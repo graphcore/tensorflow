@@ -603,7 +603,7 @@ subcomp {
   s2 = (f16[4], f16[4]) parameter(2)
   s3 = f16[4] add(s0, s1), sharding={maximal device=1}
   s4 = f16[4] add(s3, s1), sharding={maximal device=0}
-  ROOT t = (f16[4], f16[4]) tuple(s3, s2)
+  ROOT t = (f16[4], (f16[4], f16[4])) tuple(s3, s2)
 }
 
 main {
@@ -807,15 +807,13 @@ HloModule top
 main {
   arg0 = f32[1] parameter(0)
   tok1 = token[] after-all(), sharding={maximal device=0}
-  inf1 = ((f32[1], f32[1]), token[]) infeed(tok1), sharding={maximal
-  device=0} gte1 = (f32[1], f32[1]) get-tuple-element(inf1), index=0,
-      sharding={maximal device=0}
+  inf1 = ((f32[1], f32[1]), token[]) infeed(tok1), sharding={maximal device=0}
+  gte1 = (f32[1], f32[1]) get-tuple-element(inf1), index=0, sharding={maximal device=0}
   gte2 = f32[1] get-tuple-element(gte1), index=0, sharding={maximal device=0}
   gte3 = f32[1] get-tuple-element(gte1), index=1, sharding={maximal device=0}
   add1 = f32[1] add(arg0, gte2), sharding={maximal device=1}
   add2 = f32[1] add(add1, gte3), sharding={maximal device=1}
-
-  ROOT tuple = (f32[1,4,4,2]) tuple(add2)
+  ROOT tuple = (f32[1]) tuple(add2)
 }
   )";
 
@@ -2397,7 +2395,7 @@ ENTRY main (a0: f16[4], a1:f16[4]) -> (f16[4], f16[4]) {
   call0 = (f16[4], f16[4]) call(a0,a1), to_apply=repeat_body, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
   gte0 = f16[4] get-tuple-element(call0), index=0
   gte1 = f16[4] get-tuple-element(call0), index=1
-  ROOT out = (f16[4]) tuple(gte0, gte1)
+  ROOT out = (f16[4], f16[4]) tuple(gte0, gte1)
 }
   )";
 

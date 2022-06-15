@@ -90,7 +90,7 @@ ENTRY main {
   new_param_3 = f32[$N] custom-call(param_3, c1_gte1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":$R}\n"
   new_param_4 = f32[$N] custom-call(param_4, c1_gte2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":$R}\n"
 
-  ROOT t = (f32[$N], f32[$N], f32[$N], f32[$N], f32[$RN], f32[$RN]) tuple(new_param_0, new_param_1, new_param_3, new_param_4, c0_gte0, c1_gte0)
+  ROOT t = (f32[$N], f32[$N], f32[$N], f32[$N], f32[$N], f32[$N]) tuple(new_param_0, new_param_1, new_param_3, new_param_4, c0_gte0, c1_gte0)
 }
 )";
   hlo = tensorflow::str_util::StringReplace(
@@ -196,7 +196,7 @@ ENTRY main {
   new_param_0 = f32[$N] custom-call(param_0, c0_gte1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":$R}\n"
   new_param_1 = f32[$N] custom-call(param_1, c0_gte2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":$R}\n"
 
-  ROOT t = (f32[$N], f32[$N], f32[$N], f32[$N], f32[$RN], f32[$RN]) tuple(new_param_0, new_param_1)
+  ROOT t = (f32[$N], f32[$N]) tuple(new_param_0, new_param_1)
 }
 )";
   hlo = tensorflow::str_util::StringReplace(

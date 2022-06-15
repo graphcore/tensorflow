@@ -293,7 +293,7 @@ ENTRY main {
   add3 = $GT[10, 16] add(add2, p6)
   acc_scale = $AT[] constant($ACC_SCALE)
   add = $AT[10, 16] custom-call(accumulator, add3, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
-  ROOT t = ($AT[100, 16]) tuple(add)
+  ROOT t = ($AT[10, 16]) tuple(add)
 }
 )";
   const auto param = GetParam();
@@ -427,7 +427,7 @@ ENTRY main {
   m = $GT[10, 16] multiply(a, bscale)
   acc_scale = $AT[] constant($ACC_SCALE)
   add = $AT[10, 16] custom-call(accumulator, m, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
-  ROOT t = ($AT[100, 16]) tuple(add)
+  ROOT t = ($AT[10, 16]) tuple(add)
 }
 )";
   const auto param = GetParam();
@@ -626,7 +626,7 @@ ENTRY main {
   add3 = $GT[10, 16] add(add2, p6)
   acc_scale = $AT[] constant($ACC_SCALE)
   add = $AT[10, 16] custom-call(accumulator, add3, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
-  ROOT t = ($AT[100, 16]) tuple(add)
+  ROOT t = ($AT[10, 16]) tuple(add)
 }
 )";
   const auto param = GetParam();
@@ -762,7 +762,7 @@ ENTRY main {
   m_t = $GT[10, 16] transpose(m), dimensions={1,0}
   acc_scale = $AT[] constant($ACC_SCALE)
   add = $AT[10, 16] custom-call(accumulator, m_t, acc_scale), custom_call_target="GradientAccumulatorAddWithScale"
-  ROOT t = ($AT[100, 16]) tuple(add)
+  ROOT t = ($AT[10, 16]) tuple(add)
 }
 )";
   const auto param = GetParam();
