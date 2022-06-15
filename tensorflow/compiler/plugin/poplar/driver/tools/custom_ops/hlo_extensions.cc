@@ -214,6 +214,25 @@ void RegisterConvolutionExtensions(HloOpcode opcode) {
 }
 REGISTER_HLO_INST_EXTENSIONS(kConvolution, RegisterConvolutionExtensions);
 
+REGISTER_HLO_INST_EXTENSIONS(kCopy, [](HloOpcode opcode) {
+  auto allocating_output = [](const HloInstruction* inst) {
+    auto clone_method_tree = GetCopyCloneMethod(inst).ValueOrDie();
+    return absl::c_any_of(
+        clone_method_tree.leaves(),
+        [](const std::pair<ShapeIndex, CloneMethod>& pair) -> bool {
+          auto method = pair.second;
+          return method == CloneMethod::CloneMethod_DeduceNewOrderOrBypass ||
+                 method ==
+                     CloneMethod::CloneMethod_DeduceNewOrderOrPreserveAliases ||
+                 method ==
+                     CloneMethod::CloneMethod_DeduceNewOrderOrExpandAliases;
+        });
+  };
+
+  RegisterHloInstructionExtension<AllocatingOutputExtension>(opcode,
+                                                             allocating_output);
+});
+
 void RegisterCallExtensions(HloOpcode opcode) {
   RegisterHloInstructionExtension<FindConsumersExtension>(
       opcode,

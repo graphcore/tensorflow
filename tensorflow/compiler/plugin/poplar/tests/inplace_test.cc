@@ -1319,7 +1319,7 @@ ENTRY c1 {
   EXPECT_TRUE(AllocationFinder(annotations).Run(module0).ValueOrDie());
   EXPECT_TRUE(ForwardAllocation(annotations).Run(module0).ValueOrDie());
   EXPECT_EQ(annotations.tensor_allocation_map.size(),
-            convert_to_repeat ? 6 : 7);
+            convert_to_repeat ? 7 : 8);
   HloInstruction* copy = FindInstruction(module0, "copy");
   auto clone_methods = GetCopyCloneMethod(copy).ConsumeValueOrDie();
   for (auto& clone_method : clone_methods.leaves()) {

@@ -137,18 +137,6 @@ StatusOr<bool> InstructionCreatesNewMapping(HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kDot) {
     return true;
   }
-  if (inst->opcode() == HloOpcode::kCopy) {
-    TF_ASSIGN_OR_RETURN(auto clone_method_tree, GetCopyCloneMethod(inst));
-    return absl::c_any_of(
-        clone_method_tree.leaves(),
-        [](const std::pair<ShapeIndex, CloneMethod>& pair) -> bool {
-          auto method = pair.second;
-          return method ==
-                     CloneMethod::CloneMethod_DeduceNewOrderOrPreserveAliases ||
-                 method ==
-                     CloneMethod::CloneMethod_DeduceNewOrderOrExpandAliases;
-        });
-  }
   // The extension only works for custom ops hence the check for dots above
   return CallHloInstructionExtension<AllocatingOutputExtension>(inst);
 }

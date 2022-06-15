@@ -1256,7 +1256,7 @@ ENTRY entry {
       *resources.get(), entry_computation,
       [&](const DeferredAllocations& deferred_allocations,
           const HloInstruction* inst) {
-        if (inst == p0_copy || inst == p1_copy || inst == p2_copy) {
+        if (inst == p2_copy) {
           VLOG(1) << "Validate " << inst->name();
           EXPECT_TRUE(deferred_allocations.IsDeferredAllocationLocation(
               *resources, TensorLocation{inst, 0}));

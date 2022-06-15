@@ -766,7 +766,9 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
   TF_ASSIGN_OR_RETURN(auto* deferred_allocation, GetDeferredAllocations());
 
   int64_t tuple_idx = 0;
-  for (auto& leaf : clone_method_tree.leaves()) {
+  auto leaves = clone_method_tree.leaves();
+  for (auto it = leaves.begin(); it != leaves.end(); ++it, ++tuple_idx) {
+    const auto& leaf = *it;
     const auto& shape_index = leaf.first;
     const auto clone_method = leaf.second;
     TensorLocation input_location{op, tuple_idx};
@@ -775,7 +777,11 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
         ShapeUtil::GetSubshape(op->shape(), shape_index);
     auto& input = inputs[0][tuple_idx];
 
-    const bool allocate_now =
+    // TODO(T54942): remove it.
+    bool allocate_now =
+        clone_method != CloneMethod_PreserveOrderAndAliases &&
+        clone_method != CloneMethod_PreserveOrderUnlessAliases &&
+        clone_method != CloneMethod_Bypass &&
         HasTensorAllocationTarget(output_location, resources_);
 
     // Deferred allocation without copy.
@@ -787,7 +793,7 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
         TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocationUser(
             input_location, output_location));
       }
-      return Status::OK();
+      continue;
     }
 
     // Defer copy if there's no allocation target. Currently deferring is
@@ -798,15 +804,15 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
         clone_method == CloneMethod_DeduceNewOrderOrPreserveAliases ||
         clone_method == CloneMethod_DeduceNewOrderOrExpandAliases ||
         clone_method == CloneMethod_DeduceNewOrderOrBypass;
-    if (can_defer && !allocate_now && !input_subshape.IsOpaque() &&
+    if (!input && can_defer && !input_subshape.IsOpaque() &&
         !input_subshape.IsToken()) {
       VLOG(3) << "Deferring a copy at " << inst->name();
       auto op_dnai = GetDebugNameAndId(op);
       // Allocation function for copy instruction:
       // Find instruction input and create destination tensor according to the
-      // desired clone method. Don't do actual copy yet (alocation function will
-      // be called for the most layout sensitive instruction and this is just a
-      // fallback).
+      // desired clone method. Don't do actual copy yet (allocation function
+      // will be called for the most layout sensitive instruction and this is
+      // just a fallback).
       DeferredAllocateFunction allocate_fn =
           [this, &graph, inst, op, clone_method, tuple_idx, dnai, op_dnai](
               TensorLocation allocation_location) -> StatusOr<DriverTensor> {
@@ -882,56 +888,43 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
     if (input->IsTensor()) {
       auto tensor_input = input->AsTensor();
       DriverTensor out;
-      switch (clone_method) {
-        case CloneMethod_PreserveOrderAndAliases: {
-          out = DriverTensor(
-              poputil::duplicate(
-                  graph, tensor_input, seq, {dnai, std::to_string(tuple_idx)},
-                  poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES),
-              graph);
-          break;
-        }
-        case CloneMethod_PreserveOrderUnlessAliases: {
-          out = TensorCloneAndRebalanceAliasing(graph, resources_, tensor_input,
-                                                {dnai});
-          seq.add(DriverProgramCopy(tensor_input, out, false, {dnai}));
-          break;
-        }
-        case CloneMethod_DeduceNewOrderOrBypass:
-        case CloneMethod_Bypass: {
-          out = tensor_input;
-          break;
-        }
-        case CloneMethod_DeduceNewOrderOrPreserveAliases:
-        case CloneMethod_DeduceNewOrderOrExpandAliases: {
-          // Create a new tensor using "AddTensor" to get a good layout.
-          if (allocate_now) {
-            TF_ASSIGN_OR_RETURN(out,
-                                AddTensor(graph, input_location, input_subshape,
-                                          resources_, tensor_map, {dnai}));
-            // Copy the original into the new layout.
-            seq.add(poplar::program::Copy(tensor_input, out, false, {dnai}));
-          } else if (clone_method ==
-                     CloneMethod_DeduceNewOrderOrExpandAliases) {
-            out = TensorCloneAndRebalanceAliasing(graph, resources_,
-                                                  tensor_input, {dnai});
-            seq.add(poplar::program::Copy(tensor_input, out, false, {dnai}));
-          } else {
-            CHECK_EQ(clone_method, CloneMethod_DeduceNewOrderOrPreserveAliases);
-            // Fall back to default copy
+      if (allocate_now) {
+        // Create a new tensor using "AddTensor" to get a good layout.
+        TF_ASSIGN_OR_RETURN(
+            out, AddTensor(graph, output_location, input_subshape, resources_,
+                           tensor_map, {dnai}));
+        // Copy the original into the new layout.
+        seq.add(poplar::program::Copy(tensor_input, out, false, {dnai}));
+      } else {
+        switch (clone_method) {
+          case CloneMethod_DeduceNewOrderOrPreserveAliases:
+          case CloneMethod_PreserveOrderAndAliases: {
             out = DriverTensor(
                 poputil::duplicate(
                     graph, tensor_input, seq, {dnai, std::to_string(tuple_idx)},
                     poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES),
                 graph);
+            break;
           }
-          break;
+          case CloneMethod_DeduceNewOrderOrExpandAliases:
+          case CloneMethod_PreserveOrderUnlessAliases: {
+            out = TensorCloneAndRebalanceAliasing(graph, resources_,
+                                                  tensor_input, {dnai});
+            seq.add(DriverProgramCopy(tensor_input, out, false, {dnai}));
+            break;
+          }
+          case CloneMethod_DeduceNewOrderOrBypass:
+          case CloneMethod_Bypass: {
+            out = tensor_input;
+            break;
+          }
+          default:
+            return xla::FailedPrecondition(
+                "Found invalid clone method for a copy instruction '%s' at "
+                "input "
+                "%d.",
+                inst->name(), tuple_idx);
         }
-        default:
-          return xla::FailedPrecondition(
-              "Found invalid clone method for a copy instruction '%s' at input "
-              "%d.",
-              inst->name(), tuple_idx);
       }
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, out));
     } else if (input->IsOpaque()) {
@@ -943,7 +936,6 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
           "at input %d.",
           inst->ToString(), tuple_idx);
     }
-    ++tuple_idx;
   }
   return AddSequenceForInstruction(inst, seq);
 }
