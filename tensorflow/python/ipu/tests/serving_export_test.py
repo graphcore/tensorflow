@@ -39,6 +39,7 @@ from tensorflow.python.saved_model import load
 from tensorflow.python.saved_model import loader
 from tensorflow.python.saved_model import signature_constants
 from tensorflow.python.saved_model import tag_constants
+import popef
 
 
 class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
@@ -83,6 +84,54 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
         results = sess.run(output_tensors, feed_dict=feed_dict)
 
     return results[0] if len(results) == 1 else results
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.deprecated_graph_mode_only
+  def test_export_programs_names(self):
+    element_count = 3
+    input_shape = (element_count,)
+    input_signatures = (tensor_spec.TensorSpec(shape=input_shape,
+                                               dtype=np.float16,
+                                               name='in_x'),
+                        tensor_spec.TensorSpec(shape=input_shape,
+                                               dtype=np.float16,
+                                               name='in_y'))
+    var_value = np.float16(4.)
+
+    def my_net(x, y):
+      w = variables.Variable(var_value)
+      return x * y + w
+
+    def init_variables(sess):
+      init = variables.global_variables_initializer()
+      sess.run(init)
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      iterations = 16
+      serving.export_single_step(my_net,
+                                 tmp_folder,
+                                 iterations,
+                                 input_signatures,
+                                 variable_initializer=init_variables,
+                                 output_names="out_z")
+
+      assets_dir = os.path.join(tmp_folder, 'assets')
+      popef_dir = os.path.join(assets_dir, os.listdir(assets_dir)[0])
+      reader = popef.Reader()
+      reader.parseFile(popef_dir)
+      metadata = reader.metadata()[0]
+      anchors = metadata.anchors()
+
+      main_prog_idx = 1
+      for idx in range(3):
+        self.assertEqual(anchors[idx].programs(), [
+            main_prog_idx,
+        ])
+
+      programs_map = metadata.programsMap()
+      self.assertEqual(programs_map[0], 'load_program')
+      self.assertEqual(programs_map[1], 'main_program')
+      self.assertEqual(programs_map[2], 'save_program')
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only

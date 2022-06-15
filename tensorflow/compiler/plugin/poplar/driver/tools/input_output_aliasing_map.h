@@ -69,6 +69,7 @@ class InputOutputAliasingMap {
     const uint64 GetOutputIndex() const;
     const std::vector<std::string>& Handles() const;
     const int64 GetParameterIndex() const;
+    const Type GetType() const { return type_; }
 
    private:
     Type type_;
@@ -113,6 +114,7 @@ class InputOutputAliasingMap {
     const bool IsResourceModified() const;
     const uint64 GetInputIndex() const;
     const std::vector<std::string>& Handles() const;
+    const Type GetType() const { return type_; }
 
    private:
     Type type_;
