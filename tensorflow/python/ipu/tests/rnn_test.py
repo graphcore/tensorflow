@@ -243,21 +243,21 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       {
           'testcase_name': 'tf_rnn1',
           'build': build_tf_rnn1,
-          'cycles': 10773225,
+          'cycles': 10999625,
           'total_memory': 20259402,
           'max_memory': 21282
       }, {
           'testcase_name': 'tf_rnn2',
           'build': build_tf_rnn2,
-          'cycles': 17340132,
-          'total_memory': 19675908,
-          'max_memory': 22038
+          'cycles': 16464234,
+          'total_memory': 19420572,
+          'max_memory': 21746
       }, {
           'testcase_name': 'tf_lstm1',
           'build': build_tf_lstm1,
-          'cycles': 24416546,
-          'total_memory': 57301126,
-          'max_memory': 47800,
+          'cycles': 19966644,
+          'total_memory': 61549834,
+          'max_memory': 48463,
           'options': {
               'dims': 64,
               'steps': 3
@@ -265,9 +265,9 @@ class RNNModelTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       }, {
           'testcase_name': 'tf_gru1',
           'build': build_tf_gru1,
-          'cycles': 47021629,
-          'total_memory': 37378608,
-          'max_memory': 35128
+          'cycles': 39319429,
+          'total_memory': 38483422,
+          'max_memory': 35952
       }, {
           'testcase_name': 'model_rnn1',
           'build': build_model_rnn1,
