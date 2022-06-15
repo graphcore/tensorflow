@@ -104,7 +104,7 @@ class IPUPipelineEstimatorSpec(
         during evaluation.
       prediction_hooks: List of instances of `tf.estimator.SessionRunHook` used
         during prediction.
-      reduction_method: (Experimental) Reduction method to use when accumulating
+      reduction_method: Reduction method to use when accumulating
         gradients. During the iterations in each optimizer step, the computed
         gradients can either be directly summed up or scaled such that we
         compute a mean of all gradients for each variable. Computing a mean
