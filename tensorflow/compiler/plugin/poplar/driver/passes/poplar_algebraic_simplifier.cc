@@ -2111,6 +2111,12 @@ Status AlgebraicSimplifierVisitor::HandleConvert(HloInstruction* convert) {
   if (src_type == dest_type) {
     return ReplaceInstruction(convert, convert->mutable_operand(0));
   }
+  if (convert->operand(0)->opcode() == HloOpcode::kConvert) {
+    // Combine two subsequant casts where the intermediate result is not used.
+    changed_ = true;
+    return convert->ReplaceOperandWithDifferentShape(
+        0, convert->mutable_operand(0)->mutable_operand(0));
+  }
   return Status::OK();
 }
 

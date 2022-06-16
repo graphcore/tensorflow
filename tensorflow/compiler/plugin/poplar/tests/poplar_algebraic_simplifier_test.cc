@@ -6810,6 +6810,31 @@ ENTRY f {
                         m::CustomCall(m::Parameter(0)), m::Parameter(0)))));
 }
 
+// Test eliding two casts into one.
+TEST_F(PoplarAlgebraicSimplifierTest, ElidingDoubleCast) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  param = u32[8, 8] parameter(0)
+  cast1 = f32[8, 8] convert(param)
+  cast2 = f16[8, 8] convert(cast1)
+  dot = f16[8, 8] dot(cast2, cast2), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module.get()).ValueOrDie());
+  VLOG(2) << "After rewrite \n" << module->ToString();
+
+  HloInstruction* root = module->entry_computation()->root_instruction();
+
+  // The two casts are elided into one.
+  EXPECT_THAT(root, GmockMatch(m::Dot(m::Convert(m::Parameter(0)),
+                                      m::Convert(m::Parameter(0)))));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
