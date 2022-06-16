@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/expression_outliner.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/core/lib/core/errors.h"
@@ -74,12 +73,6 @@ bool IsSupportedElementwise(const HloInstruction* inst) {
     case HloOpcode::kSelect:
     case HloOpcode::kClamp:
       return true;
-    case HloOpcode::kCustomCall: {
-      return IsPoplarInstruction(PoplarOp::Square, inst) ||
-             IsPoplarInstruction(PoplarOp::Inverse, inst) ||
-             IsPoplarInstruction(PoplarOp::Erf, inst) ||
-             IsPoplarInstruction(PoplarOp::GeluErf, inst);
-    }
     // Ops not supported in Expressions
     // Unary
     case HloOpcode::kBitcastConvert:
@@ -189,7 +182,8 @@ StatusOr<bool> ExpressionOutliner::ModuleExpressionOutliner(
         has_sharding = true;
       }
 
-      absl::c_reverse(instructions_to_outline);
+      std::reverse(instructions_to_outline.begin(),
+                   instructions_to_outline.end());
 
       auto* fusion = OutlineExpressionFromComputationWithFusion(
           instructions_to_outline, "_pop_op_arithmetic_expression", comp);

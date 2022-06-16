@@ -33,16 +33,6 @@ std::unique_ptr<HloInstruction> CreateSquare(HloInstruction* const operand) {
   return absl::make_unique<HloSquareInstruction>(operand);
 }
 
-namespace {
-StatusOr<std::unique_ptr<HloInstruction>> HloSquareInstructionFactoryFunc(
-    HloCustomCallInstruction* call) {
-  return CreateSquare(call->mutable_operand(0));
-}
-
-static HloPoplarInstructionFactory square_factory(
-    PoplarOp::Square, HloSquareInstructionFactoryFunc);
-}  // namespace
-
 // Inverse
 std::unique_ptr<HloInstruction> HloInverseInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
@@ -53,16 +43,6 @@ std::unique_ptr<HloInstruction> HloInverseInstruction::CloneWithNewOperandsImpl(
 std::unique_ptr<HloInstruction> CreateInverse(HloInstruction* const operand) {
   return absl::make_unique<HloInverseInstruction>(operand);
 }
-
-namespace {
-StatusOr<std::unique_ptr<HloInstruction>> HloInverseInstructionFactoryFunc(
-    HloCustomCallInstruction* call) {
-  return CreateInverse(call->mutable_operand(0));
-}
-
-static HloPoplarInstructionFactory inverse_factory(
-    PoplarOp::Inverse, HloInverseInstructionFactoryFunc);
-}  // namespace
 
 // Erf
 std::unique_ptr<HloInstruction> HloErfInstruction::CloneWithNewOperandsImpl(

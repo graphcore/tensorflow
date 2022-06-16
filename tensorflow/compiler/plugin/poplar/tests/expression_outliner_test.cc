@@ -14,10 +14,11 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/expression_outliner.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
+
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/service/shape_inference.h"
+
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
@@ -308,10 +309,10 @@ HloModule top
   a3 = f16[] parameter(3)
   sin1 = f16[] sine(a0)
   sin2 = f16[] sine(a1)
-  inv3 = f16[] custom-call(a2), custom_call_target="Inverse", backend_config="{}"
+  sin3 = f16[] sine(a2)
   sin4 = f16[] sine(a3)
   sub1 = f16[] subtract(sin1, sin2)
-  sub2 = f16[] subtract(inv3, sin4)
+  sub2 = f16[] subtract(sin3, sin4)
   ROOT %tuple = (f16[], f16[]) tuple(sub1, sub2)
 }
   )";
@@ -323,10 +324,6 @@ HloModule top
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-
-  TF_ASSERT_OK_AND_ASSIGN(bool custom_op_replaced,
-                          CustomOpReplacer().Run(module));
-  ASSERT_TRUE(custom_op_replaced);
 
   ExpressionOutliner eo;
   EXPECT_TRUE(eo.Run(module).ValueOrDie());
