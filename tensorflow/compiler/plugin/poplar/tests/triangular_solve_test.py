@@ -75,8 +75,8 @@ class TriangularSolvePerformanceTest(xla_test.XLATestCase):
     report_helper = self._solveTestImpl(64, 64, 16, True, True)
     report = pva.openReport(report_helper.find_report())
     self.assert_execution_report_cycles(report, 1110077, tolerance=0.1)
-    self.assert_max_tile_memory(report, 26029, tolerance=0.1)
-    self.assert_total_tile_memory(report, 103326, tolerance=0.1)
+    self.assert_max_tile_memory(report, 30231, tolerance=0.1)
+    self.assert_total_tile_memory(report, 114414, tolerance=0.1)
 
   def testLowerNonAdjoint(self):
     report_helper = self._solveTestImpl(64, 64, 16, True, False)
