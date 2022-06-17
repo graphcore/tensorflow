@@ -14,8 +14,14 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_executor.h"
 
+#include <poplar/DeviceManager.hpp>
+#include <poplar/IPUModel.hpp>
+#include <poplar/Target.hpp>
+#include "absl/container/inlined_vector.h"
+#include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_stream.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/stream_executor/multi_platform_manager.h"
 
@@ -26,8 +32,122 @@ namespace se = ::stream_executor;
 namespace xla {
 namespace poplarplugin {
 
+bool HasIpuHardware() {
+  auto device_manager = poplar::DeviceManager::createDeviceManager();
+  auto device_list = device_manager.getDevices();
+  for (const auto& d : device_list) {
+    if (d.getTarget().getTargetType() == poplar::TargetType::IPU) {
+      return true;
+    }
+  }
+  return false;
+}
+
+Status ValidTargetOptions(const IpuOptions& options, int ordinal) {
+  if (options.device_config_size() > 0 &&
+      ordinal >= options.device_config_size()) {
+    return InternalError("Device ordinal %d not in device configuration list.",
+                         ordinal);
+  }
+  return Status::OK();
+}
+
+poplar::Target CreateIPUModelTarget(const IpuOptions& options, int num_ipus) {
+  const auto& model_config = options.ipu_model_config();
+  const auto version_string = model_config.ipu_model_version();
+  poplar::IPUModel model(version_string.c_str());
+
+  model.numIPUs = num_ipus;
+  model.compileIPUCode = model_config.compile_ipu_code();
+  if (model_config.tiles_per_ipu() > 0) {
+    model.tilesPerIPU = model_config.tiles_per_ipu();
+  } else if (PoplarXlaFlags::Get().ipu_model_tiles > 0) {
+    model.tilesPerIPU = PoplarXlaFlags::Get().ipu_model_tiles;
+  }
+  auto device = model.createDevice();
+  return device.getTarget();
+}
+
+poplar::Target CreateTargetWithNIPUs(int num_ipus) {
+  // TODO(samuelh) want to extend this to support all systems
+  // think easy way to get this string might just be
+  // to get any device from the device manager and then just
+  // return the system string from that device
+  return poplar::Target::createIPUTarget(num_ipus, "IPU-POD16");
+}
+
+StatusOr<poplar::Target> CreatePoplarTarget(
+    const absl::optional<IpuOptions>& ipu_options, int ordinal) {
+  if (!ipu_options) {
+    // By default we will make eager mode deal with single ipu
+    // devices
+    return CreateTargetWithNIPUs(1);
+  }
+  const auto& options = *ipu_options;
+  TF_RETURN_IF_ERROR(ValidTargetOptions(options, ordinal));
+  if (PoplarXlaFlags::Get().use_ipu_model) {
+    // only create single ipu model targets
+    return CreateIPUModelTarget(options, 1);
+  }
+  const bool has_config = options.device_config_size() > 0;
+  if (!has_config) {
+    return CreateTargetWithNIPUs(1);
+  }
+  auto device_config = options.device_config(ordinal);
+  if (device_config.selection_case() ==
+      IpuOptions::DeviceConfig::SelectionCase::kAutoCount) {
+    return CreateTargetWithNIPUs(device_config.auto_count());
+  }
+  // create a device to match the hardware for this ordinal
+  CHECK(HasIpuHardware());
+  auto device_manager = poplar::DeviceManager::createDeviceManager();
+  auto device_list = device_manager.getDevices();
+  auto& device = device_list.at(device_config.cfg_index());
+
+  return device.getTarget();
+}
+
+unsigned GetSessionReplicationFactor(
+    const absl::optional<IpuOptions>& ipu_options) {
+  if (!ipu_options) {
+    return 1;
+  }
+  // TODO(samuelh) this isn't right but I think it is really ridiculous
+  // to have the session need a replication factor;
+  return ipu_options->multi_replica_process_count();
+}
+
+absl::InlinedVector<popitMemSpaceDesc, 2> CreateMemSpaces(
+    const absl::optional<IpuOptions>& ipu_options,
+    const poplar::Target& target) {
+  if (!ipu_options) {
+    return {
+        {popitMemSpaceType_t::POPIT_MEMSPACE_GENERAL, target.getNumTiles()}};
+  }
+  absl::InlinedVector<popitMemSpaceDesc, 2> result;
+  for (int64_t ipu = 0; ipu < target.getNumIPUs(); ++ipu) {
+    int64_t num_io_tiles = ipu_options->num_io_tiles();
+    result.emplace_back(
+        popitMemSpaceDesc{popitMemSpaceType_t::POPIT_MEMSPACE_GENERAL,
+                          target.getTilesPerIPU() - num_io_tiles});
+    if (num_io_tiles) {
+      result.emplace_back(popitMemSpaceDesc{
+          popitMemSpaceType_t::POPIT_MEMSPACE_IO, num_io_tiles});
+    }
+  }
+  return result;
+}
+
 Status PopItExecutor::Init(int device_ordinal,
                            se::DeviceOptions device_options) {
+  TF_ASSIGN_OR_RETURN(const auto target,
+                      CreatePoplarTarget(ipu_options_, device_ordinal));
+  auto mem_spaces = CreateMemSpaces(ipu_options_, target);
+  auto session_ptr = popitCreateSession(
+      reinterpret_cast<const poplarTarget_t*>(&target),
+      GetSessionReplicationFactor(ipu_options_), mem_spaces.data(),
+      static_cast<unsigned>(mem_spaces.size()));
+  session_ = SessionType(session_ptr);
   return Status::OK();
 }
 

@@ -18,17 +18,28 @@ limitations under the License.
 
 #include <memory>
 
+#include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/stream_executor/stream_executor_internal.h"
+
+#include <popit/popit.hpp>
 
 namespace se = stream_executor;
 
 namespace xla {
 namespace poplarplugin {
 
+struct PopItDeleter {
+  void operator()(popitSession_t* session) { popitDestroySession(session); }
+};
+
 class PopItExecutor : public se::internal::StreamExecutorInterface {
+  absl::optional<IpuOptions> ipu_options_;
+  using SessionType = std::unique_ptr<popitSession_t, PopItDeleter>;
+  SessionType session_;
+
  public:
   Status Init(int device_ordinal, se::DeviceOptions device_options) override;
   se::DeviceMemoryBase Allocate(uint64 size, int64_t memory_space) override;
