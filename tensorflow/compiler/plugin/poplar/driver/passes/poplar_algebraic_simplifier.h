@@ -63,7 +63,7 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   explicit AlgebraicSimplifierVisitor(
       PoplarAlgebraicSimplifier* simplifier,
       poplarplugin::IpuOptions_IpuAlgebraicSimplifierConfig config)
-      : config_(std::move(config)), simplifier_(simplifier) {}
+      : simplifier_(simplifier), config_(std::move(config)) {}
 
   friend StatusOr<HloInstruction*>
   xla::poplarplugin::algebraic_simplifier::dot::OptimizeDotOfConcatHelper(

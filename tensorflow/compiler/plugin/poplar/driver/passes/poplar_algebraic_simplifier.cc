@@ -1240,6 +1240,16 @@ StatusOr<bool> AlgebraicSimplifierVisitor::RemoveDegenerateDimensionFromDot(
 Status AlgebraicSimplifierVisitor::HandleDot(HloInstruction* dot) {
   CHECK(computation_ == dot->parent());
   HloInstruction *lhs, *rhs;
+
+  for (int64_t i = 0; i < 2; ++i) {
+    const HloInstruction* op = dot->operand(i);
+    if (Match(op, m::Convert(m::Compare(m::Iota(), m::Iota())
+                                 .WithComparisonDirection(
+                                     ComparisonDirection::kEq)))) {
+      return ReplaceInstruction(dot, dot->mutable_operand(1 - i));
+    }
+  }
+
   CHECK(Match(dot, m::Dot(m::Op(&lhs), m::Op(&rhs))));
   // Replace a zero element dot with a broadcast of the constant 0.
   if (ShapeUtil::IsZeroElementArray(dot->shape()) ||

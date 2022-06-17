@@ -3868,6 +3868,30 @@ TEST_F(PoplarAlgebraicSimplifierTest, TestZeroLHSInDot) {
   EXPECT_THAT(root, GmockMatch(m::Broadcast()));
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, TestIdentityInDot) {
+  const char* hlo_string = R"(
+HloModule IdentityDot
+
+ENTRY IdentityDot {
+  p.0 = f32[100,100] parameter(0)
+  iota.0 = s32[100,100] iota(), iota_dimension=0
+  iota.1 = s32[100,100] iota(), iota_dimension=1
+  c = pred[100,100] compare(iota.0, iota.1), direction=EQ
+  i = f32[100,100] convert(c)
+  ROOT dot = f32[100,100] dot(p.0, i), lhs_contracting_dims={1},rhs_contracting_dims={0}
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  IpuOptions_IpuAlgebraicSimplifierConfig config;
+  PoplarAlgebraicSimplifier simplifier(config);
+  ASSERT_TRUE(simplifier.Run(module.get()).ValueOrDie());
+
+  const auto root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::Parameter()));
+}
+
 // Verify that when the RHS of a dot operation is zero the operation is
 // skipped and the output is just 0 broadcast to the output shape.
 TEST_F(PoplarAlgebraicSimplifierTest, TestZeroRHSInDot) {
