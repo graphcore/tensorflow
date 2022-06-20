@@ -148,7 +148,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/variables_offload_and_partition.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_condition_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_optimiser.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_recomputation_optimiser.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/wide_const_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
@@ -1182,10 +1181,6 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
           WorthHoistingOnIpu);
       pass.AddPass<TupleSimplifier>(true);
       pass.AddPass<HloCSE>(true);
-      pass.AddPass<HloDCE>();
-      pass.AddPass<HloPassFix<WhileLoopSimplifier>>();
-      pass.AddPass<PoplarWhileLoopRecomputationOptimiser>();
-      pass.AddPass<HloPassFix<WhileLoopSimplifier>>();
       pass.AddPass<HloDCE>();
       pass.AddPass<PoplarWhileLoopOptimiser>(resources.num_uninitialised);
     }

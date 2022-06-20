@@ -1661,27 +1661,6 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
-    name = "while_loop_recomputation_optimiser",
-    srcs = [
-        "while_loop_recomputation_optimiser.cc",
-    ],
-    hdrs = [
-        "while_loop_recomputation_optimiser.h",
-    ],
-    deps = [
-        ":allocation_analysis",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:print_util",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:slice_util",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:util",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:while_loop_optimisation_utils",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:while_loop_util",
-        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops",
-        "//tensorflow/compiler/xla/service:while_loop_analysis",
-        "//tensorflow/compiler/xla/service:while_loop_invariant_code_motion",
-    ],
-)
-
-poplar_cc_library(
     name = "while_loop_to_repeat_simplify",
     srcs = [
         "while_loop_to_repeat_simplify.cc",
@@ -1828,7 +1807,6 @@ poplar_cc_library(
         ":variables_offload_and_partition",
         ":while_loop_condition_simplify",
         ":while_loop_optimiser",
-        ":while_loop_recomputation_optimiser",
         ":while_loop_to_repeat_simplify",
         ":wide_const_finder",
     ],
