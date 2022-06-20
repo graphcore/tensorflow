@@ -621,6 +621,18 @@ xla_test(
 )
 
 xla_test(
+    name = "while_loop_recomputation_optimiser_test",
+    srcs = ["tests/while_loop_recomputation_optimiser_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "while_loop_to_repeat_simplify_test",
     srcs = ["tests/while_loop_to_repeat_simplify_test.cc"],
     backends = ["poplar"],
