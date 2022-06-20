@@ -50,7 +50,7 @@ class HloNonLinearity : public HloPoplarInstruction {
 
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const {
-    return FindConsumersExtensionResults::DoNotFindConsumers();
+    return FindConsumersExtensionResults();
   }
 
   bool AllowNonInplaceLowering() const override { return true; }
@@ -122,7 +122,7 @@ class HloNonLinearityGrad : public HloPoplarInstruction {
 
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const {
-    return FindConsumersExtensionResults::DoNotFindConsumers();
+    return FindConsumersExtensionResults();
   }
 
   bool AllowNonInplaceLowering() const override { return false; }
