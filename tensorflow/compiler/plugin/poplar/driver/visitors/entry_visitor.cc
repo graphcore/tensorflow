@@ -101,8 +101,7 @@ DriverTensor RestrictTensorToSingleIPU(DriverGraph& graph,
 
   seq.add(DriverProgramCopy(t, new_tensor));
 
-  // Workaround for `new_tensor` taking a reference of `virtual_graph`.
-  return graph.clone(new_tensor);
+  return new_tensor;
 }
 
 Status AddHostToDeviceCopy(const poplar::DataStream& stream, DriverTensor dst,

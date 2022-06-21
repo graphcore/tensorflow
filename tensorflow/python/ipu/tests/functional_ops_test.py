@@ -111,8 +111,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         'sub/subtract*/Op/Subtract',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
-    self.assert_total_tile_memory(report, 183108, tolerance=0.1)
-    self.assert_max_tile_memory(report, 22906, tolerance=0.1)
+    self.assert_total_tile_memory(report, 204616, tolerance=0.1)
+    self.assert_max_tile_memory(report, 25647, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionTraining(self):
@@ -376,8 +376,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         'slice_9*/add.*/Op/Add',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
-    self.assert_total_tile_memory(report, 5173890, tolerance=0.1)
-    self.assert_max_tile_memory(report, 647062, tolerance=0.1)
+    self.assert_total_tile_memory(report, 6415442, tolerance=0.1)
+    self.assert_max_tile_memory(report, 802278, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionsNoMatch(self):

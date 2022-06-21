@@ -80,7 +80,10 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       self.assertAllClose(result, np_result)
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['__seed*', 'add/add.*/Op/Add', 'truediv/divide.*/Op/Divide']
+    ok = [
+        '__seed*', 'host-exchange-local-copy-', 'add/add.*/Op/Add',
+        'truediv/divide.*/Op/Divide'
+    ]
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testInplaceAddCopyWithInplacePeer2(self):
