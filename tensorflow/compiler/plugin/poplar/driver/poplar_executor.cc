@@ -1977,6 +1977,10 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   if (env_engine_options) {
     target_hash.push_back(std::hash<string>()(std::string(env_engine_options)));
   }
+  char* env_target_options = getenv("POPLAR_TARGET_OPTIONS");
+  if (env_target_options) {
+    target_hash.push_back(std::hash<string>()(std::string(env_target_options)));
+  }
 
   // Get remote memory support.
   target_hash.push_back(SupportsRemoteBuffers());
