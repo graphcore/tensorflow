@@ -41,18 +41,18 @@ To export such a model, the function's input signature has to be defined. This c
 
 All of the above methods are functionally equivalent and can be used interchangeably based on what you find more convenient.
 
-You can also specify a `var_initializer` function that performs an initialization of all the graph's variables.
+You can also specify a `variable_initializer` function that performs an initialization of all the graph's variables.
 This function takes a `tf.Session` instance as the only argument.
 The example below shows how it can be used for restoring values of variables from a checkpoint.
 
 .. code-block:: python
 
-  def var_initializer(session):
+  def variable_initializer(session):
     saver = tf.train.Saver()
     ipu.utils.move_variable_initialization_to_cpu()
     init = tf.global_variables_initializer()
     session.run(init)
-    valid_saver.restore(session, 'path/to/checkpoint')
+    saver.restore(session, 'path/to/checkpoint')
 
 
 Example of exporting non-pipelined model defined inside a function
@@ -85,7 +85,7 @@ You can do this in the same three ways as non-pipelined models.
 It's worth noting that for the first option---passing the input signature to the
 `@tf.function` decorator---you only need to do that for the first computational stage.
 
-For pipelined models you can also specify a `var_initializer` function. It works exactly the same as in case of non-pipelined models.
+For pipelined models you can also specify a `variable_initializer` function. It works exactly the same as in case of non-pipelined models.
 
 Pipeline example
 ________________
