@@ -920,6 +920,46 @@ TEST_F(PoplarAlgebraicSimplifierTest, SubBroadcastConstCanonicalization) {
                         m::Broadcast(m::Negate(m::ConstantScalar(0.125))))));
 }
 
+// Test that (X * A) - X is canonicalized to X * (A - 1).
+TEST_F(PoplarAlgebraicSimplifierTest, CanonicalizeSubtractForFusion) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[4] parameter(0)
+      a = f32[4] constant({0.1, 0.2, 0.3, 0.4})
+      m = f32[4] multiply(x, a)
+      ROOT sub = f32[4] subtract(m, x)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Multiply(
+          m::Parameter(0),
+          m::Subtract(m::Constant(), m::Broadcast(m::ConstantScalar(1))))));
+}
+
+// Test that X - (X * A) is canonicalized to X * (1 - A).
+TEST_F(PoplarAlgebraicSimplifierTest, CanonicalizeSubtractForFusion2) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[4] parameter(0)
+      a = f32[4] constant({0.1, 0.2, 0.3, 0.4})
+      m = f32[4] multiply(x, a)
+      ROOT sub = f32[4] subtract(x, m)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Multiply(
+          m::Parameter(0),
+          m::Subtract(m::Broadcast(m::ConstantScalar(1)), m::Constant()))));
+}
+
 // Test that (A/B)/C is simplified to A/(B*C).
 TEST_F(PoplarAlgebraicSimplifierTest, LhsDivOfDiv) {
   auto m = CreateNewVerifiedModule();

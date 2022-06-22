@@ -790,6 +790,39 @@ Status AlgebraicSimplifierVisitor::HandleSubtract(HloInstruction* sub) {
                                           negative_const));
   }
 
+  // Canonicalize (X * A) - X into X * (A - 1) so it can potentially be fused
+  // into a scaled_inplace_axby later.
+  HloInstruction *x, *a;
+  if (Match(lhs, m::Multiply(m::Op(&x), m::Op(&a))) &&
+      Match(rhs, m::Op().Is(x))) {
+    HloInstruction* one =
+        computation_->AddInstruction(HloInstruction::CreateConstant(
+            LiteralUtil::One(sub->shape().element_type())));
+    HloInstruction* ones = computation_->AddInstruction(
+        HloInstruction::CreateBroadcast(sub->shape(), one, {}));
+    return ReplaceWithNewInstruction(
+        sub, HloInstruction::CreateBinary(
+                 sub->shape(), HloOpcode::kMultiply, x,
+                 computation_->AddInstruction(HloInstruction::CreateBinary(
+                     sub->shape(), HloOpcode::kSubtract, a, ones))));
+  }
+
+  // Canonicalize X - (X * A) into X * (1 - A) so it can potentially be fused
+  // into a scaled_inplace_axby later.
+  if (Match(lhs, m::Op(&x)) &&
+      Match(rhs, m::Multiply(m::Op().Is(x), m::Op(&a)))) {
+    HloInstruction* one =
+        computation_->AddInstruction(HloInstruction::CreateConstant(
+            LiteralUtil::One(sub->shape().element_type())));
+    HloInstruction* ones = computation_->AddInstruction(
+        HloInstruction::CreateBroadcast(sub->shape(), one, {}));
+    return ReplaceWithNewInstruction(
+        sub, HloInstruction::CreateBinary(
+                 sub->shape(), HloOpcode::kMultiply, x,
+                 computation_->AddInstruction(HloInstruction::CreateBinary(
+                     sub->shape(), HloOpcode::kSubtract, ones, a))));
+  }
+
   return Status::OK();
 }
 namespace {
