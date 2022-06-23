@@ -3810,10 +3810,58 @@ tf_docs_py_test(
 )
 
 tf_docs_py_test(
+    name = "exporting_model_preprocessing_example",
+    size = "large",
+    srcs = ["docs/exporting_model_preprocessing_example.py"],
+    main = "docs/exporting_model_preprocessing_example.py",
+    num_ipus = 1,
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_docs_py_test(
+    name = "exporting_model_preprocessing_cpu_example",
+    size = "large",
+    srcs = ["docs/exporting_model_preprocessing_cpu_example.py"],
+    main = "docs/exporting_model_preprocessing_cpu_example.py",
+    num_ipus = 1,
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_docs_py_test(
     name = "exporting_pipelined_model_example",
     size = "large",
     srcs = ["docs/exporting_pipelined_model_example.py"],
     main = "docs/exporting_pipelined_model_example.py",
+    num_ipus = 2,
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_docs_py_test(
+    name = "exporting_pipelined_model_preprocessing_example",
+    size = "large",
+    srcs = ["docs/exporting_pipelined_model_preprocessing_example.py"],
+    main = "docs/exporting_pipelined_model_preprocessing_example.py",
+    num_ipus = 4,
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_docs_py_test(
+    name = "exporting_pipelined_model_preprocessing_cpu_example",
+    size = "large",
+    srcs = ["docs/exporting_pipelined_model_preprocessing_cpu_example.py"],
+    main = "docs/exporting_pipelined_model_preprocessing_cpu_example.py",
     num_ipus = 2,
     deps = [
         "//tensorflow:tensorflow_py",

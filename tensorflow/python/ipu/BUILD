@@ -1747,6 +1747,7 @@ tf_py_test(
     name = "serving_export_test",
     size = "large",
     srcs = ["tests/serving_export_test.py"],
+    shard_count = 19,
     tags = ["hw_poplar_test_1_ipus"],
     deps = [
         "//tensorflow/compiler/tests:xla_test",

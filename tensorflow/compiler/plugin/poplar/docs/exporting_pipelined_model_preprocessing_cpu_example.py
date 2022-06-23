@@ -9,10 +9,19 @@ from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import serving
 
 # Directory where SavedModel will be written.
-saved_model_directory = './my_saved_model_ipu/002'
+saved_model_directory = './my_saved_model_ipu/006'
 # Directory should be empty or should not exist.
 if os.path.exists(saved_model_directory):
   shutil.rmtree(saved_model_directory)
+
+
+# The preprocessing stage is performed fully on the CPU.
+@tf.function
+def preprocessing_step(x):
+  transform_fn = lambda input: tf.constant(
+      1.0) if input == "graphcore" else tf.random.uniform(shape=tuple())
+
+  return tf.stack([transform_fn(elem) for elem in tf.unstack(x)])
 
 
 # The pipeline's stages to export.
@@ -35,9 +44,13 @@ cfg.device_connection.enable_remote_buffers = True
 cfg.device_connection.type = config.DeviceConnectionType.ON_DEMAND
 cfg.configure_ipu_system()
 
-input_shape = (4,)
+input_shape = (6,)
 # Prepare the input signature.
 predict_step_signature = (tf.TensorSpec(shape=input_shape, dtype=np.float32),)
+# Prepare the `preprocessing_step` function signature.
+preprocessing_step_signature = (tf.TensorSpec(shape=input_shape,
+                                              dtype=tf.string),)
+
 # Number of times each pipeline stage is executed.
 iterations = 10
 
@@ -48,13 +61,20 @@ runtime_func = serving.export_pipeline(
     saved_model_directory,
     iterations=iterations,
     device_mapping=[0, 1],
-    predict_step_signature=predict_step_signature)
+    predict_step_signature=predict_step_signature,
+    preprocessing_step=preprocessing_step,
+    preprocessing_step_signature=preprocessing_step_signature)
 print(f"SavedModel written to {saved_model_directory}")
 
 # You can test the exported executable using returned `runtime_func`.
 # This should print numbers from 3 to 33.
 strategy = ipu_strategy.IPUStrategy()
 with strategy.scope():
-  for i in range(iterations):
-    input_data = np.ones(input_shape, dtype=np.float32) * i
-    print(runtime_func(input_data))
+  print(
+      runtime_func(
+          tf.constant(["graphcore", "is", "the", "best", "AI", "company"],
+                      dtype=tf.string)))
+  print(
+      runtime_func(
+          tf.constant(["make", "new", "AI", "breakthroughs", "with", "IPUS"],
+                      dtype=tf.string)))

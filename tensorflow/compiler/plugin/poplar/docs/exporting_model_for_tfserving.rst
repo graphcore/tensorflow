@@ -1,9 +1,9 @@
 Exporting precompiled models for TensorFlow Serving
 ---------------------------------------------------
-TensorFlow applications compiled for the IPU can be exported to standard TensorFlow SavedModel format
-and deployed to a TensorFlow Serving instance. The exported SavedModel contains the executable compiled for the IPU
-and a simple TensorFlow graph with :ref:`embedded_application_runtime` operations which allow you to
-run the executable as part of the TensorFlow graph.
+TensorFlow applications compiled for the IPU can be exported to the standard TensorFlow SavedModel format
+and deployed to a TensorFlow Serving instance. The exported SavedModel contains the executable compiled for the IPU,
+and a TensorFlow graph with :ref:`embedded_application_runtime` operations which allow you to run the executable as
+part of the TensorFlow graph. The exported graph may contain an optional preprocessing part which is executed on the CPU.
 
 The Graphcore TensorFlow API for exporting models for TensorFlow Serving supports three different use cases:
 
@@ -29,16 +29,20 @@ Exporting the forward pass of a non-pipelined model can be done with the
 A function that defines the forward pass of the model is required as a first argument.
 Under the hood, the :py:func:`export_single_step` wraps that function into a while loop optimized for the IPU,
 with the `iterations` parameter denoting the number of loop iterations.
+This function adds the possibility of passing the `preprocessing_step` function which will be included
+into the SavedModel graph and executed on the CPU on the server side. If all preprocessing operations are
+available on the IPU, the `preprocessing_step` function should be called inside the `predict_step` function. Then it
+will be compiled together with the inference model.
 You can use this parameter to tweak the model's latency; its optimal value is use-case specific.
 Additionally, the function adds the infeed and outfeed queues, so you do not have to take care of it.
 Then the model is compiled into an executable and included as an asset in the SavedModel
 stored at the `export_dir` location.
 
-To export such a model, the function's input signature has to be defined. This can be accomplished in one of three ways:
+To export such a model, the `predict_step` function's input signature has to be defined. This can be accomplished in one of three ways:
 
-* You can decorate the function with `@tf.function` decorator which takes the `input_signature` argument;
-* You can pass the `input_signature` directly to the :py:func:`tensorflow.python.ipu.serving.export_single_step` function;
-* You can pass the `input_dataset` to the :py:func:`tensorflow.python.ipu.serving.export_single_step` function and the input signature will be inferred from it.
+* You can decorate the function with the `@tf.function` decorator which takes the `input_signature` argument;
+* You can pass the `predict_step` function signature (`predict_step_signature`) directly to the :py:func:`tensorflow.python.ipu.serving.export_single_step` function;
+* You can pass the input dataset (`input_dataset`) to the :py:func:`tensorflow.python.ipu.serving.export_single_step` function and the exported model's input signature will be inferred from it.
 
 All of the above methods are functionally equivalent and can be used interchangeably based on what you find more convenient.
 
@@ -48,6 +52,23 @@ __________________________________________________________________
 This example exports a very simple model with embedded IPU program that doubles the input tensor.
 
 .. literalinclude:: exporting_model_example.py
+  :language: python
+  :linenos:
+
+Example of exporting non-pipelined model defined inside a function with additional preprocessing step
+_____________________________________________________________________________________________________
+
+This example exports a very simple model with an embedded IPU program, which doubles the input tensor and also performs
+an additional IPU preprocessing step to compute the absolute value of the input.
+
+.. literalinclude:: exporting_model_preprocessing_example.py
+  :language: python
+  :linenos:
+
+This example exports a very simple model with an embedded IPU program, which doubles the input tensor and also performs
+an additional CPU preprocessing step to convert string tensors to floats.
+
+.. literalinclude:: exporting_model_preprocessing_cpu_example.py
   :language: python
   :linenos:
 
@@ -81,6 +102,25 @@ This example exports a simple pipelined IPU program that performs `2x+3` functio
 .. literalinclude:: exporting_pipelined_model_example.py
   :language: python
   :linenos:
+
+Pipeline example with preprocessing
+___________________________________
+
+This example exports a simple pipelined IPU program that computes the function ``2x+3`` on the input and includes a
+preprocessing computational stage which computes the absolute value of the input.
+
+.. literalinclude:: exporting_pipelined_model_preprocessing_example.py
+  :language: python
+  :linenos:
+
+
+This example exports a simple pipelined IPU program that computes the function ``2x+3`` on the input and includes a
++ preprocessing computational stage which computes the absolute value of the input.
+
+.. literalinclude:: exporting_pipelined_model_preprocessing_cpu_example.py
+  :language: python
+  :linenos:
+
 
 
 Exporting Keras models
