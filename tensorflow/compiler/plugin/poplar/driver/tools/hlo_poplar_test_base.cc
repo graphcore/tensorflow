@@ -19,6 +19,7 @@ limitations under the License.
 #include <poplar/IPUModel.hpp>
 #include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 #include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
@@ -133,6 +134,10 @@ StatusOr<int32> HloPoplarTestBase::GetMaxIpuCount() {
 StatusOr<poplar::Engine> HloPoplarTestBase::Compile(
     CompilerResources& resources, HloModule* module) {
   VLOG(3) << "Compiling...";
+
+  // Allows single module to be passed multiple times here.
+  TF_RETURN_IF_ERROR(HloDescheduler().Run(module).status());
+
   XLA_VLOG_LINES(1, module->ToString());
 
   EXPECT_TRUE(HloTrivialScheduler().Run(module).ValueOrDie());
@@ -149,6 +154,65 @@ StatusOr<poplar::Engine> HloPoplarTestBase::Compile(
       visitor.GetSequenceAndInitializeCounters(*resources.main_graph));
 
   return poplar::Engine(*resources.main_graph, main_program);
+}
+
+StatusOr<std::vector<Literal>> HloPoplarTestBase::ExecuteNoHloPasses(
+    const poplar::Device& device, CompilerResources& resources,
+    HloModule* module, absl::Span<Literal* const> args) {
+  TF_ASSIGN_OR_RETURN(poplar::Engine engine, Compile(resources, module));
+  engine.load(device);
+  auto& io_map = resources.annotations.input_output_aliasing_map;
+  auto& inputs = io_map.GetEntryInputInfos();
+  auto& outputs = io_map.GetEntryOutputInfos();
+  CHECK_EQ(args.size(), inputs.size());
+
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    auto& input = inputs[i];
+    auto& handles = input.Handles();
+    CHECK(input.Shape().IsArray()) << "Only array inputs are supported now.";
+    CHECK_EQ(handles.size(), 1);
+    engine.connectStream(handles[0], args[i]->untyped_data());
+  }
+
+  size_t output_count = outputs.size();
+  std::vector<std::vector<char>> output_buffers(output_count);
+  for (size_t i = 0; i < output_count; ++i) {
+    auto& output = outputs[i];
+    CHECK(output.Shape().IsArray()) << "Only array outputs are supported now.";
+    auto& buffer = output_buffers[i];
+
+    const Shape& shape = output.Shape();
+    buffer.resize(ShapeUtil::ByteSizeOf(shape));
+
+    auto& handles = outputs[i].Handles();
+    CHECK_EQ(handles.size(), 1);
+    engine.connectStream(handles[0], buffer.data());
+  }
+
+  engine.run(0);
+
+  std::vector<Literal> result;
+  for (size_t i = 0; i < output_count; ++i) {
+    const Shape& shape = outputs[i].Shape();
+    Literal literal(shape);
+    memcpy(literal.untyped_data(), output_buffers[i].data(),
+           output_buffers[i].size());
+    result.push_back(std::move(literal));
+  }
+  return result;
+}
+
+StatusOr<std::vector<Literal>> HloPoplarTestBase::ExecuteNoHloPassesOnIpuModel(
+    HloModule* module, absl::Span<Literal* const> args, int32 num_ipus,
+    int32 num_tiles) {
+  if (num_tiles == 0) {
+    if (PoplarXlaFlags::Get().ipu_model_tiles > 0) {
+      num_tiles = PoplarXlaFlags::Get().ipu_model_tiles;
+    }
+  }
+  poplar::Device device = CreateIpuModel(num_ipus, num_tiles);
+  auto resources = GetMockResources(device, module);
+  return ExecuteNoHloPasses(device, *resources, module, args);
 }
 
 }  // namespace poplarplugin

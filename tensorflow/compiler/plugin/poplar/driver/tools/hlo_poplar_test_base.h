@@ -17,6 +17,7 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_HLO_POPLAR_TEST_BASE_H_
 
 #include <memory>
+#include <vector>
 
 #include <poplar/Device.hpp>
 #include <poplar/Engine.hpp>
@@ -52,6 +53,17 @@ class HloPoplarTestBase : public HloTestBase {
 
   static StatusOr<poplar::Engine> Compile(CompilerResources& resources,
                                           HloModule* module);
+
+  // Compiles module, connects input/output streams, passes literals to inputs,
+  // executes engine and return outputs as literals.
+  static StatusOr<std::vector<Literal>> ExecuteNoHloPasses(
+      const poplar::Device& device, CompilerResources& resources,
+      HloModule* module, absl::Span<Literal* const> args);
+
+  // Creates IPU model device and call ExecuteNoHloPasses(...) on it.
+  static StatusOr<std::vector<Literal>> ExecuteNoHloPassesOnIpuModel(
+      HloModule* module, absl::Span<Literal* const> args, int32 num_ipus = 0,
+      int32 num_tiles = 0);
 
  protected:
   using HloTestBase::HloTestBase;

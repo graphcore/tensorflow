@@ -15,7 +15,9 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/mask_finder.h"
 #include "absl/strings/str_replace.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 
 namespace xla {
@@ -58,7 +60,7 @@ std::ostream& operator<<(std::ostream& os, const MaskFinderTestSpec& spec) {
 }
 
 class MaskFinderTest
-    : public HloTestBase,
+    : public HloPoplarTestBase,
       public ::testing::WithParamInterface<MaskFinderTestSpec> {};
 
 static std::string GetSimpleCompareTestSource(const std::string& direction,
@@ -111,8 +113,11 @@ static std::string GetDotCompareTestSource() {
     p.0 = f32[3,3] parameter(0)
     iota.1 = s32[3,1] iota(), iota_dimension=0
     iota.2 = s32[1,3] iota(), iota_dimension=1
-    dot = s32[3,3] dot(iota.1, iota.2), lhs_contracting_dims={1}, rhs_contracting_dims={0}
-    transpose = s32[3,3] transpose(dot), dimensions={1, 0}
+    convert.1 = f32[3,1] convert(iota.1)
+    convert.2 = f32[1,3] convert(iota.2)
+    dot = f32[3,3] dot(convert.1, convert.2), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+    convert.3 = s32[3,3] convert(dot)
+    transpose = s32[3,3] transpose(convert.3), dimensions={1, 0}
 
     const.s0 = s32[] constant(0)
     reduce = s32[] reduce(transpose, const.s0), dimensions={0, 1}, to_apply=sum.1
@@ -218,16 +223,18 @@ TEST_P(MaskFinderTest, DoTest) {
   Literal p0 = LiteralUtil::CreateR2<float>({{1, 2, 3}, {4, 5, 6}, {7, 8, 9}});
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(param.hlo));
 
-  auto module_with_mask = module->Clone();
-  TF_ASSERT_OK_AND_ASSIGN(bool changed,
-                          MaskFinder().Run(module_with_mask.get()));
-  ASSERT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(auto expected,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {&p0}));
 
-  TF_ASSERT_OK_AND_ASSIGN(Literal result,
-                          Execute(std::move(module_with_mask), {&p0}));
-  TF_ASSERT_OK_AND_ASSIGN(Literal expected, Execute(std::move(module), {&p0}));
-  EXPECT_TRUE(
-      LiteralTestUtil::NearOrEqual(expected, result, ErrorSpec{1e-4, 1e-4}));
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, MaskFinder().Run(module.get()));
+  ASSERT_TRUE(changed);
+  ASSERT_IS_OK(HloDCE().Run(module.get()).status());
+  TF_ASSERT_OK_AND_ASSIGN(auto result,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {&p0}));
+  EXPECT_EQ(expected.size(), 1);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_TRUE(LiteralTestUtil::NearOrEqual(expected[0], result[0],
+                                           ErrorSpec{1e-4, 1e-4}));
 }
 
 }  // namespace
