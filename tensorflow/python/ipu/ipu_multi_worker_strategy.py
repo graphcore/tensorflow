@@ -38,6 +38,8 @@ from tensorflow.python.util import tf_contextlib
 from tensorflow.python.util import deprecation
 
 
+@deprecation.deprecated(None, """IPUMultiWorkerStrategy will be deprecated in \
+favour of PopDistStrategy""")
 class IPUMultiWorkerStrategyV1(distribute_lib.StrategyV1):
   """This is a distribution strategy for synchronous training using
   IPUs on multiple workers with between-graph replication.
@@ -207,8 +209,6 @@ class IPUMultiWorkerStrategyV1(distribute_lib.StrategyV1):
 
   _collective_key_base = 0
 
-  @deprecation.deprecated(None, """IPUMultiWorkerStrategy will be deprecated in
-    favour of PopDistStrategy""")
   def __init__(self,
                cluster_resolver,
                ipu_device="/device:IPU:0",
