@@ -607,39 +607,30 @@ Status DeferredVisitor::HandleGetTupleElement(HloInstruction* inst) {
     TensorLocation output_location(inst, i);
     TensorLocation input_location(inst->operand(0), flat_tuple_index);
 
-    // Whether this input has an allocation target.
-    const bool has_allocation_target =
-        HasTensorAllocationTarget(output_location, resources_);
     const bool input_location_is_deferred =
         deferred_allocation->IsDeferredAllocationLocation(input_location);
 
-    if (has_allocation_target && input_location_is_deferred) {
-      // There is an allocation for this location, therefore make it.
-      TF_RETURN_IF_ERROR(deferred_allocation->MakeDeferredAllocation(
-          output_location, input_location));
+    // Try to defer the allocation, otherwise get the input tensor and forward
+    // it. Note that getting a tensor means that it will be allocated.
+    const bool can_defer = input_location_is_deferred;
+    if (can_defer) {
+      VLOG(3) << "Deferring use of " << inst->name() << " sub tensor " << i
+              << ".";
+      TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocationUser(
+          input_location, output_location));
     } else {
-      // Try to defer the allocation, otherwise get the input tensor and forward
-      // it. Note that getting a tensor means that it will be allocated.
-      const bool can_defer = input_location_is_deferred;
-      if (can_defer) {
-        VLOG(3) << "Deferring use of " << inst->name() << " sub tensor " << i
-                << ".";
-        TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocationUser(
-            input_location, output_location));
-      } else {
-        DriverProgramSequence seq(graph, debug_name_and_id);
+      DriverProgramSequence seq(graph, debug_name_and_id);
 
-        // Cannot defer the use of this tensor, hence get the input tensor and
-        // set it as output.
+      // Cannot defer the use of this tensor, hence get the input tensor and
+      // set it as output.
 
-        TensorOrRemoteBufferVector outputs = FindInstructionInputsInRange(
-            tensor_map, resources_, inst, 0,
-            {flat_tuple_index, flat_tuple_index + 1}, seq, debug_name_and_id,
-            /*expand_aliasing=*/false);
-        CHECK_EQ(outputs.size(), 1);
-        TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, i, outputs[0]));
-        TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
-      }
+      TensorOrRemoteBufferVector outputs = FindInstructionInputsInRange(
+          tensor_map, resources_, inst, 0,
+          {flat_tuple_index, flat_tuple_index + 1}, seq, debug_name_and_id,
+          /*expand_aliasing=*/false);
+      CHECK_EQ(outputs.size(), 1);
+      TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, i, outputs[0]));
+      TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
     }
   }
   return Status::OK();
