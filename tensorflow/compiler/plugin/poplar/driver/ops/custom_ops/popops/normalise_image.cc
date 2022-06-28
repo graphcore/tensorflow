@@ -46,9 +46,17 @@ class NormaliseImageOp : public PoplarOpDef {
         poplar::Tensor channel_scales,
         FindInstructionInput(tensor_map, res, inst, 2, seq, {debug_info}));
 
+    // normaliseImage will error out if the input tensor is not layed out
+    // correctly. We copy to a correctly layed out tensor, and it will be
+    // elided in Poplar if it is unnecessary.
+    poplar::Tensor image_copy = popops::createNormaliseImageInput(
+        graph, image.elementType(), image.shape(),
+        {debug_context, "CreateInput"});
+    seq.add(poplar::program::Copy(image, image_copy));
+
     poplar::DebugNameAndId debug_name_and_id(debug_info);
     poplar::Tensor out =
-        popops::normaliseImage(graph, seq, image, scale, channel_offsets,
+        popops::normaliseImage(graph, seq, image_copy, scale, channel_offsets,
                                channel_scales, {debug_name_and_id});
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
