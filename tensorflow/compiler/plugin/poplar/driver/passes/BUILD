@@ -1224,6 +1224,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/tools:util",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:arg_min_max",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:hlo_remote_buffer_info",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:normalise_image",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:pooling",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:stateful_gradient_accumulate",
     ],

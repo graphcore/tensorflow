@@ -6899,6 +6899,31 @@ ENTRY f {
                                       m::Convert(m::Parameter(0)))));
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, FoldingCastIntoNormaliseImage) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  param = u8[1, 8, 8, 3] parameter(0)
+  offset = f16[3]{0} constant({0.4, 0.5, 0.6})
+  scale = f16[3]{0} constant({3, 2, 1})
+  cast = f16[1, 8, 8, 3] convert(param)
+  ROOT normalise-image = f16[1, 8, 8, 4] custom-call(cast, offset, scale), custom_call_target="NormaliseImage", backend_config="{\n\t\"scale\" : 0.1\n}"
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module.get()).ValueOrDie());
+  VLOG(2) << "After rewrite \n" << module->ToString();
+
+  HloInstruction* root = module->entry_computation()->root_instruction();
+
+  EXPECT_THAT(root, GmockMatch(m::CustomCall(m::Parameter(0), m::Constant(),
+                                             m::Constant())));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

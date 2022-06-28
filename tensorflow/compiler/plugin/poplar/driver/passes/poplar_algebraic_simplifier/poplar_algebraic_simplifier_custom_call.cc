@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_custom_call.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/normalise_image.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -152,6 +153,20 @@ StatusOr<bool> FoldPaddingIntoMaxPoolGrad(HloMaxPoolGradInstruction* inst) {
     TF_RETURN_IF_ERROR(user->ReplaceAllUsesWith(replacement));
   }
   return true;
+}
+
+StatusOr<std::unique_ptr<HloInstruction>> FoldCastIntoNormaliseImage(
+    HloNormaliseImage* inst) {
+  // NormaliseImage implicitly casts u8 inputs to f16.
+  HloInstruction* operand = inst->mutable_operand(0);
+  if (!IsU8ToF16Convert(operand)) {
+    return {nullptr};
+  }
+
+  HloInstruction* uncasted_operand = operand->mutable_operand(0);
+  return inst->CloneWithNewOperands(
+      inst->shape(),
+      {uncasted_operand, inst->mutable_operand(1), inst->mutable_operand(2)});
 }
 
 }  // namespace poplarplugin::algebraic_simplifier::custom_call

@@ -33,6 +33,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_dot.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_utils.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/arg_min_max.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/normalise_image.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -4190,18 +4191,6 @@ Status AlgebraicSimplifierVisitor::HandleMap(HloInstruction* map) {
 
 Status AlgebraicSimplifierVisitor::HandleCustomCall(
     HloInstruction* custom_call) {
-  if (pp::IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)(
-          custom_call)) {
-    auto* inst = Cast<pp::HloStatefulGradientAccumulate>(custom_call);
-    TF_ASSIGN_OR_RETURN(
-        bool changed,
-        pp::algebraic_simplifier::custom_call::ElideStatefulGradientAccumulate(
-            inst));
-    if (changed) {
-      changed_ = true;
-      return Status::OK();
-    }
-  }
   if (pp::IsPoplarInstruction(PoplarOp::MaxPool)(custom_call)) {
     auto* inst = Cast<pp::HloMaxPoolInstruction>(custom_call);
     TF_ASSIGN_OR_RETURN(
@@ -4216,6 +4205,28 @@ Status AlgebraicSimplifierVisitor::HandleCustomCall(
     TF_ASSIGN_OR_RETURN(
         bool changed,
         pp::algebraic_simplifier::custom_call::FoldPaddingIntoMaxPoolGrad(
+            inst));
+    if (changed) {
+      changed_ = true;
+      return Status::OK();
+    }
+  }
+  if (pp::IsPoplarInstruction(PoplarOp::NormaliseImage)(custom_call)) {
+    auto* inst = Cast<pp::HloNormaliseImage>(custom_call);
+    TF_ASSIGN_OR_RETURN(
+        std::unique_ptr<HloInstruction> replacement,
+        pp::algebraic_simplifier::custom_call::FoldCastIntoNormaliseImage(
+            inst));
+    if (replacement) {
+      return ReplaceWithNewInstruction(inst, std::move(replacement));
+    }
+  }
+  if (pp::IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)(
+          custom_call)) {
+    auto* inst = Cast<pp::HloStatefulGradientAccumulate>(custom_call);
+    TF_ASSIGN_OR_RETURN(
+        bool changed,
+        pp::algebraic_simplifier::custom_call::ElideStatefulGradientAccumulate(
             inst));
     if (changed) {
       changed_ = true;

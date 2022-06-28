@@ -19,6 +19,7 @@ limitations under the License.
 #include <memory>
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/normalise_image.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -29,6 +30,8 @@ StatusOr<bool> ElideStatefulGradientAccumulate(HloStatefulGradientAccumulate*);
 StatusOr<std::unique_ptr<HloInstruction>> FoldPaddingIntoMaxPool(
     HloMaxPoolInstruction*);
 StatusOr<bool> FoldPaddingIntoMaxPoolGrad(HloMaxPoolGradInstruction*);
+StatusOr<std::unique_ptr<HloInstruction>> FoldCastIntoNormaliseImage(
+    HloNormaliseImage*);
 
 }  // namespace xla::poplarplugin::algebraic_simplifier::custom_call
 

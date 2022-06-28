@@ -219,6 +219,10 @@ bool IsF32(const HloInstruction* inst) {
   return inst->shape().element_type() == PrimitiveType::F32;
 }
 
+bool IsU8(const HloInstruction* inst) {
+  return inst->shape().element_type() == PrimitiveType::U8;
+}
+
 bool IsF16OrF32(const HloInstruction* inst) {
   return IsF16(inst) || IsF32(inst);
 }
@@ -229,6 +233,11 @@ bool IsF32ToF16Convert(const HloInstruction* inst) {
 
 bool IsF16ToF32Convert(const HloInstruction* inst) {
   return IsF32(inst) && IsF16(inst->operand(0));
+}
+
+bool IsU8ToF16Convert(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kConvert && IsF16(inst) &&
+         IsU8(inst->operand(0));
 }
 
 bool IsPopOpsConvolution(const HloInstruction* inst) {
