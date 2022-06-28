@@ -1059,12 +1059,80 @@ void Set64BitInitialTensorValueImpl(DriverGraph& graph, DriverTensor& tensor,
 DriverTensor TensorCloneAndRebalanceAliasing(
     DriverGraph& graph, CompilerResources& res, const DriverTensor& tensor,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  uint64 offset = res.linear_mapping_state[&graph];
-  poplar::Tensor dst;
-  std::tie(dst, offset) = poputil::cloneAndExpandAliasing(
-      graph.getPoplarGraph(), tensor, offset, debug_name_and_id);
-  res.linear_mapping_state[&graph] = offset;
-  return {dst, graph};
+  if (tensor.isParallelWriteable()) {
+    return graph.clone(tensor, {debug_name_and_id});
+  }
+
+  DriverTensor tensor_flat = tensor.flatten();
+  // Get all the intervals, and create new intervals for the aliased ones.
+  std::vector<std::size_t> interval_aliases;
+  std::vector<std::vector<poplar::Interval>> sorted_contiguous_intervals =
+      graph.getSortedContiguousRegions(tensor_flat,
+                                       {{0, tensor_flat.numElements()}}, false,
+                                       &interval_aliases);
+
+  // Split the intervals into aliased and unaliased ones.
+  std::vector<bool> is_interval_an_alias;
+  std::vector<poplar::Interval> aliased_intervals;
+  std::vector<poplar::Interval> unaliased_intervals;
+
+  uint64 interval_id = 0;
+  for (auto& intervals : sorted_contiguous_intervals) {
+    for (auto interval : intervals) {
+      const bool is_alias = interval.begin() != interval_aliases[interval_id];
+      is_interval_an_alias.push_back(is_alias);
+      if (is_alias) {
+        aliased_intervals.push_back(interval);
+      } else {
+        unaliased_intervals.push_back(interval);
+      }
+      interval_id++;
+    }
+  }
+  CHECK_EQ(interval_aliases.size(),
+           unaliased_intervals.size() + aliased_intervals.size());
+
+  if (aliased_intervals.empty()) {
+    return graph.clone(tensor, {debug_name_and_id});
+  }
+
+  DriverTensor aliased_clone =
+      graph.clone(ConcatenateTensors(tensor_flat.slices(aliased_intervals)),
+                  {debug_name_and_id});
+  DriverTensor unaliased_clone =
+      graph.clone(ConcatenateTensors(tensor_flat.slices(unaliased_intervals)),
+                  {debug_name_and_id});
+
+  // Remap the aliased intervals clone.
+  MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph,
+                                   aliased_clone);
+
+  // Combine the tensor together from the intervals.
+  auto aliased_intervals_itr = aliased_intervals.begin();
+  uint64 next_idx_aliased_tensor = 0;
+  auto unaliased_intervals_itr = unaliased_intervals.begin();
+  uint64 next_idx_unaliased_tensor = 0;
+
+  std::vector<DriverTensor> output_slices(interval_id);
+  for (uint64 i = 0; i != is_interval_an_alias.size(); ++i) {
+    if (is_interval_an_alias[i]) {
+      const uint64 interval_size = aliased_intervals_itr->size();
+      output_slices[i] = aliased_clone.slice(
+          {next_idx_aliased_tensor, next_idx_aliased_tensor + interval_size});
+      next_idx_aliased_tensor += interval_size;
+      aliased_intervals_itr++;
+    } else {
+      const uint64 interval_size = unaliased_intervals_itr->size();
+      output_slices[i] =
+          unaliased_clone.slice({next_idx_unaliased_tensor,
+                                 next_idx_unaliased_tensor + interval_size});
+      next_idx_unaliased_tensor += interval_size;
+      unaliased_intervals_itr++;
+    }
+  }
+  DriverTensor result =
+      ConcatenateTensors(output_slices).reshape(tensor.shape());
+  return result;
 }
 
 Status SetInitialTensorValue(DriverGraph& graph, DriverTensor& tensor,
