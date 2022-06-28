@@ -9,6 +9,7 @@ package(
 
 load("//tensorflow:tensorflow.bzl", "tf_py_test")
 load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "if_horovod", "poprun_py_test")
+load("//tensorflow/python/ipu:ipu_python.bzl", "popit_py_test")
 
 py_library(
     name = "ipu_ops_lib",
@@ -826,6 +827,23 @@ py_test(
     name = "pop_datastream_test",
     size = "large",
     srcs = ["tests/pop_datastream_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
+    ],
+)
+
+popit_py_test(
+    name = "popit_test",
+    size = "small",
+    srcs = ["tests/popit_test.py"],
     srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
