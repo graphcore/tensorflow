@@ -1710,7 +1710,7 @@ tf_py_test(
     name = "rnn_test",
     size = "large",
     srcs = ["tests/rnn_test.py"],
-    shard_count = 7,
+    shard_count = 11,
     tags = ["disabled_poplar_test"],
     deps = [
         ":ipu_lib",

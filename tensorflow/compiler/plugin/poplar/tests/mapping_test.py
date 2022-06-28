@@ -125,7 +125,7 @@ class MappingTest(xla_test.XLATestCase):
       # The slice contains 4 elements on 256 tiles
       self.assertEqual(len(slice_layout.tiles), 256)
       for tile_idx, tile in enumerate(slice_layout.tiles):
-        self.assertEqual(tile.tile, tile_idx)
+        self.assertEqual(tile.tile, tile_idx + 256)
         self.assertEqual(tile.num_elements, 4)
 
       # The broadcast add will have the same layout as the slice as it
@@ -137,14 +137,14 @@ class MappingTest(xla_test.XLATestCase):
         pad_layout = fusion_1_layout
 
       # The pad contains 512 elements on tile 0,
-      # and one region with 4 elements on tiles 64-192
+      # and one region with 4 elements on tiles 320-448
       self.assertEqual(len(pad_layout.tiles), 129)
       for tile_idx, tile in enumerate(pad_layout.tiles):
         if tile_idx == 0:
           self.assertEqual(tile.tile, tile_idx)
           self.assertEqual(tile.num_elements, 512)
         else:
-          self.assertEqual(tile.tile, 63 + tile_idx)
+          self.assertEqual(tile.tile, 319 + tile_idx)
           self.assertEqual(tile.num_elements, 4)
 
       # The add is done inplace

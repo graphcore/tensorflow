@@ -142,7 +142,7 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
           found = found + 1
         if t.inst == "arg1.2":
           # Allocator leaves input 1 to be linearly mapped
-          self.assertAllEqual(t.tile_ids(), [0, 1, 2, 3])
+          self.assertAllEqual(t.tile_ids(), [4, 5, 6, 7])
           found = found + 1
 
       self.assertAllEqual(found, 2)

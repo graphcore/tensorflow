@@ -638,7 +638,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       self.assertEqual(len(report_json.tensor_map.computation_names()), 2)
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_max_tile_memory(report, 2110, tolerance=0.1)
+    self.assert_max_tile_memory(report, 1868, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testResourceUpdateErrors(self):

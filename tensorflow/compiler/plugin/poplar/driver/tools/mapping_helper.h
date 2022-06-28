@@ -16,12 +16,13 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_MAPPING_HELPER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_MAPPING_HELPER_H_
 
-#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
-#include "tensorflow/core/platform/default/integral_types.h"
-
-#include "absl/container/flat_hash_map.h"
+#include <vector>
 
 #include <poplar/Interval.hpp>
+
+#include "absl/container/flat_hash_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
+#include "tensorflow/core/platform/default/integral_types.h"
 
 using tensorflow::uint32;
 using tensorflow::uint64;
@@ -39,6 +40,13 @@ using LinearMapperState = absl::flat_hash_map<DriverGraph*, uint64>;
 // allocations into account.
 class MappingHelper {
  public:
+  // Gets distance between first and last tile.
+  static uint64 GetMappingWidth(
+      const std::vector<std::vector<poplar::Interval>>& mapping);
+  // Resize mapping to tile number and circularly rotates it.
+  static void RotateMapping(DriverGraph& graph,
+                            std::vector<std::vector<poplar::Interval>>& mapping,
+                            uint64 offset);
   // Maps the tensor linearly, however the starting tile is dependent on
   // previous allocations.
   static void MapTensorLinearly(LinearMapperState& state, DriverGraph& graph,
@@ -56,6 +64,11 @@ class MappingHelper {
   // Useful for e.g. spreading vertex mapping based on previous allocations.
   static const uint64 YieldNextTile(LinearMapperState& state,
                                     DriverGraph& graph);
+
+ private:
+  static void MapTensorLinearlyImpl(
+      LinearMapperState& state, DriverGraph& graph, poplar::Tensor& tensor,
+      std::vector<std::vector<poplar::Interval>>& mapping);
 };
 
 }  // namespace poplarplugin

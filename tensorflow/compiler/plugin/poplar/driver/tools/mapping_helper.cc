@@ -29,25 +29,53 @@ void rotate_right(T& t, std::size_t spaces) {
   std::rotate(t.rbegin(), t.rbegin() + spaces, t.rend());
 }
 
-void MapTensorLinearlyImpl(
-    LinearMapperState& state, DriverGraph& graph, DriverTensor& tensor,
+}  // namespace
+
+void MappingHelper::RotateMapping(
+    DriverGraph& graph, std::vector<std::vector<poplar::Interval>>& mapping,
+    uint64 offset) {
+  auto tile_count = graph.getPoplarGraph().getTarget().getNumTiles();
+
+  // Move the tile mapping cyclically by the offset.
+  mapping.resize(tile_count);
+  offset %= tile_count;
+  rotate_right(mapping, offset);
+}
+
+void MappingHelper::MapTensorLinearlyImpl(
+    LinearMapperState& state, DriverGraph& graph, poplar::Tensor& tensor,
     std::vector<std::vector<poplar::Interval>>& mapping) {
   uint64& next_tile_to_map_from = state[&graph];
 
   // The number of tiles the mapping is across.
-  auto mapping_tile_count = mapping.size();
+  auto mapping_tile_count = GetMappingWidth(mapping);
   auto tile_count = graph.getTarget().getNumTiles();
+  if (mapping_tile_count == tile_count) {
+    // Do not rotate tensors scattered across all tiles
+    graph.getPoplarGraph().setTileMapping(tensor, mapping);
+    return;
+  }
 
-  // Move the tile mapping cyclically by the offset.
-  mapping.resize(tile_count);
-  rotate_right(mapping, next_tile_to_map_from);
-  graph.setTileMapping(tensor, mapping);
+  RotateMapping(graph, mapping, mapping_tile_count);
+  graph.getPoplarGraph().setTileMapping(tensor, mapping);
 
   // Update offset.
   next_tile_to_map_from += mapping_tile_count;
-  next_tile_to_map_from = next_tile_to_map_from % tile_count;
+  next_tile_to_map_from %= tile_count;
 }
-}  // namespace
+
+size_t MappingHelper::GetMappingWidth(
+    const std::vector<std::vector<poplar::Interval>>& mapping) {
+  auto non_empty = [](const std::vector<poplar::Interval>& intervals) {
+    return !intervals.empty();
+  };
+  auto first = std::find_if(mapping.begin(), mapping.end(), non_empty);
+  std::size_t first_idx = std::distance(mapping.begin(), first);
+  auto last = std::find_if(mapping.rbegin(), mapping.rend(), non_empty);
+  std::size_t last_idx = std::distance(last, mapping.rend());
+
+  return last_idx - first_idx;
+}
 
 void MappingHelper::RemapTensor(LinearMapperState& state, DriverGraph& graph,
                                 DriverTensor& tensor) {
