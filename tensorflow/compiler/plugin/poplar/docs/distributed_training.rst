@@ -28,12 +28,7 @@ Refer to the `PopDist and PopRun User Guide
 A distinction should be made between the ``PopDistStrategy`` and
 the ``IPUStrategy`` provided in TensorFlow 2. The ``IPUStrategy`` targets
 a single system with one or more IPUs attached, whereas ``PopDistStrategy``
-targets distributed Pod systems. Also, unlike  ``IPUStrategy``,
-this distribution strategy does not currently support the Keras
-``Model.fit()`` family of APIs, and the use of ``ipu_compiler.compile()``
-is still required to ensure a single XLA graph is compiled, except when
-using ``IPUEstimator`` or ``IPUPipelineEstimator`` which already use it
-internally.
+targets distributed Pod systems. 
 
 PopDistStrategy examples
 ################################
