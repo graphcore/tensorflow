@@ -2,5 +2,5 @@ Keras with IPUs
 ---------------
 
 As of the TensorFlow 2.6 release, Keras has been migrated into a separate
-package built on top of TensorFlow. See :numref:`keras` for details
+package built on top of TensorFlow. See :numref:`keras-with-ipus` for details
 on how to efficiently target IPUs with Keras.
