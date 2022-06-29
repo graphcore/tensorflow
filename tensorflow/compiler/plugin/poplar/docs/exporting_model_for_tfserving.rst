@@ -88,7 +88,7 @@ Exporting Keras models
 There are two ways of exporting Keras models for TensorFlow Serving, independent of whether they're pipelined or not.
 Keras models can be exported using the :py:func:`tensorflow.python.ipu.serving.export_keras` function or the model's :py:func:`export_for_ipu_serving` method.
 
-See the :numref:`keras` section for details and examples on exporting precompiled Keras models for TensorFlow Serving.
+See the :numref:`keras-with-ipus` section for details and examples of exporting precompiled Keras models for TensorFlow Serving.
 
 
 Running the model in TensorFlow Serving
