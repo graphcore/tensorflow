@@ -1,7 +1,7 @@
 load("//tensorflow/compiler/xla/tests:build_defs.bzl", "xla_test")
 load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
-load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test", "poprun_py_test")
+load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "poprun_py_test")
 load("//tensorflow:tensorflow.bzl", "py_binary", "tf_cc_binary", "tf_cc_test")
 load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")
 load("//tensorflow/compiler/plugin/poplar/docs/tf_docs_py_test:tf_docs_py_test.bzl", "tf_docs_py_test")
@@ -3242,31 +3242,6 @@ tf_xla_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/ipu/test_utils",
-    ],
-)
-
-tf_docs_py_test(
-    name = "distributed_training_example",
-    size = "large",
-    srcs = ["docs/distributed_training_example.py"],
-    args = ["--num-steps=10"],
-    main = "docs/distributed_training_example.py",
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-horovod_py_test(
-    name = "distributed_training_horovod_example",
-    size = "large",
-    srcs = ["docs/distributed_training_horovod_example.py"],
-    args = ["--num-steps=10"],
-    main = "docs/distributed_training_horovod_example.py",
-    num_processes = 2,
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 

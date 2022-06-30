@@ -101,7 +101,7 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   the `optimizer.apply_gradients()` call should also be placed on the
   host by using the
   :class:`~tensorflow.python.ipu.ipu_estimator.IPUEstimatorSpec`
-  `host_call` argument. See full example: :any:`distributed_training`.
+  `host_call` argument.
 
   `IPUPipelineEstimator`: Pass the `IPUMultiWorkerStrategy` instance to
   the :class:`~tensorflow.python.ipu.ipu_run_config.RunConfig` as the
@@ -200,8 +200,7 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
           sess.run(train_op, {lr: 0.01})
           global_loss_val = sess.run(global_loss)
   """
-  @deprecation.deprecated(None, """IPUMultiWorkerStrategy will be deprecated in
-      favour of PopDistStrategy""")
+  @deprecation.deprecated(None, """Use PopDistStrategy instead.""")
   def __init__(self,
                cluster_resolver,
                ipu_device="/device:IPU:0",
