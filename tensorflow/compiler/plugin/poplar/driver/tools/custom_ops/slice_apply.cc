@@ -55,7 +55,7 @@ HloPoplarBufferDescriptions HloSliceApplyBase::GetBufferDescriptions() const {
 
 const FindConsumersExtensionResults HloSliceApplyBase::FindConsumers(
     FindConsumersExtensionParams params) const {
-  return FindConsumersExtensionResults::DoNotFindConsumers();
+  return FindConsumersExtensionResults();
 }
 
 bool HloSliceApplyBase::AllowNonInplaceLowering() const { return false; }
