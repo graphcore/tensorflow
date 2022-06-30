@@ -28,6 +28,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/slice_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
@@ -148,7 +149,7 @@ StatusOr<DriverProgramSequence> CreateDynamicUpdateSliceOp(
     popops::dynamicUpdate(graph, sliced_input, update, slice_indices,
                           dynamic_slice_info.sliced_dims,
                           dynamic_slice_info.slice_sizes, seq,
-                          {debug_name_and_id});
+                          {debug_name_and_id}, GetDefaultSlicingOptions());
   } else {
     seq.add(poplar::program::Copy(update, sliced_input, false,
                                   {debug_name_and_id}));
@@ -189,9 +190,11 @@ StatusOr<DriverProgramSequence> CreateDynamicSliceOp(
                                tensor_map, debug_name_and_id));
     const SliceInfo& dynamic_slice_info =
         dynamic_slice_helper.dynamic_slice_info;
-    out = popops::dynamicSlice(
-        graph, sliced_input, slice_indices, dynamic_slice_info.sliced_dims,
-        dynamic_slice_info.slice_sizes, seq, {debug_name_and_id});
+
+    out = popops::dynamicSlice(graph, sliced_input, slice_indices,
+                               dynamic_slice_info.sliced_dims,
+                               dynamic_slice_info.slice_sizes, seq,
+                               {debug_name_and_id}, GetDefaultSlicingOptions());
   } else {
     out = poputil::duplicate(graph, sliced_input, seq, {debug_name_and_id});
   }

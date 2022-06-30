@@ -24,6 +24,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -192,7 +193,8 @@ class ScatterOp : public PoplarOpDef {
                     {inserted_window_dims.begin(), inserted_window_dims.end()},
                     {scatter_dims_to_operand_dims.begin(),
                      scatter_dims_to_operand_dims.end()},
-                    update_computation_func, prog, {debug_info});
+                    update_computation_func, prog, {debug_info},
+                    GetDefaultSlicingOptions());
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
     return prog;

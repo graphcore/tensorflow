@@ -115,7 +115,8 @@ class GatherOp : public PoplarOpDef {
         index_vector_dim, {offset_dims.begin(), offset_dims.end()},
         {slice_sizes.begin(), slice_sizes.end()},
         {collapsed_slice_dims.begin(), collapsed_slice_dims.end()},
-        {start_index_map.begin(), start_index_map.end()}, prog, {debug_info});
+        {start_index_map.begin(), start_index_map.end()}, prog, {debug_info},
+        GetDefaultSlicingOptions());
 
     TF_CHECK_OK(
         AddOutputTensor(tensor_map, inst, 0, DriverTensor(result, graph)));
