@@ -167,8 +167,6 @@ StatusOr<poplar::OptionFlags> GetTriangularSolveOptionsForInst(
 StatusOr<poplar::OptionFlags> GetSliceOptionsForInst(const HloInstruction* inst,
                                                      CompilerResources& res);
 
-poplar::OptionFlags GetDefaultSlicingOptions();
-
 void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t,
                              const poplar::DebugNameAndId& debug_name_and_id);
 

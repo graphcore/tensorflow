@@ -110,13 +110,16 @@ class GatherOp : public PoplarOpDef {
         poplar::Tensor indices,
         FindInstructionInput(tensor_map, res, inst, 1, prog, {debug_info}));
 
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
+                        GetSliceOptionsForInst(inst, res));
+
     auto result = popops::gather(
         graph, operand, indices.reinterpret(poplar::UNSIGNED_INT),
         index_vector_dim, {offset_dims.begin(), offset_dims.end()},
         {slice_sizes.begin(), slice_sizes.end()},
         {collapsed_slice_dims.begin(), collapsed_slice_dims.end()},
         {start_index_map.begin(), start_index_map.end()}, prog, {debug_info},
-        GetDefaultSlicingOptions());
+        opts);
 
     TF_CHECK_OK(
         AddOutputTensor(tensor_map, inst, 0, DriverTensor(result, graph)));
