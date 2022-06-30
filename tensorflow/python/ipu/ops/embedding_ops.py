@@ -35,7 +35,11 @@ from tensorflow.python.eager import context
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 
 
-def embedding_lookup(params, ids, name=None, serialization_factor=1):
+def embedding_lookup(params,
+                     ids,
+                     serialization_factor=1,
+                     indices_are_sorted=False,
+                     name=None):
   """Looks up `ids` in a list of embedding tensors.
 
     This is designed to be a drop-in replacement for the typical use cases with
@@ -45,13 +49,16 @@ def embedding_lookup(params, ids, name=None, serialization_factor=1):
         params: A single tensor representing the complete embedding tensor.
         ids: A `Tensor` with type `int32` containing the slices to be extracted
              from `params`.
-        name: A name for the operation.
         serialization_factor: If greater than 1, the embedding lookup will be
              broken up into `serialization_factor` smaller lookups, serialized
              along the 0th dimension. This option should not be used unless
              `params` is used by another operation, such as matrix
              multiplication. If `params` has multiple users, then serialization
              can reduce the maximum memory at the cost of extra computation.
+        indices_are_sorted: An optional `bool`. Defaults to `False`. Allows
+             Poplar to optimise for the case when indices to look up are in
+             order.
+        name: A name for the operation.
     Returns:
         A `Tensor` with the same type as the tensors in `params`.
     """
@@ -82,7 +89,8 @@ def embedding_lookup(params, ids, name=None, serialization_factor=1):
 
   # Do the lookup.
   if serialization_factor == 1:
-    result = gen_popops_ops.ipu_multi_slice(params_2d, ids_flat, name=name)
+    result = gen_popops_ops.ipu_multi_slice(
+        params_2d, ids_flat, indices_are_sorted=indices_are_sorted, name=name)
   else:
     # Get the scope name so that the function nested operations get the scope
     # name too.
@@ -110,9 +118,11 @@ def embedding_lookup(params, ids, name=None, serialization_factor=1):
             indices_mask = math_ops.cast(mask, adjusted_indices.dtype)
             adjusted_indices = adjusted_indices * indices_mask
 
-            x = gen_popops_ops.ipu_multi_slice(sliced_table,
-                                               adjusted_indices,
-                                               name=name)
+            x = gen_popops_ops.ipu_multi_slice(
+                sliced_table,
+                adjusted_indices,
+                indices_are_sorted=indices_are_sorted,
+                name=name)
 
             # Mask out any values which are not in range.
             mask = array_ops.expand_dims(mask, 1)
@@ -136,11 +146,12 @@ def embedding_lookup(params, ids, name=None, serialization_factor=1):
         # Need to redefine the gradient function.
         def grad(*dy):
           return [
-              gen_popops_ops.ipu_multi_update_add(array_ops.zeros_like(table),
-                                                  indices=indices,
-                                                  updates=dy[0],
-                                                  scale=array_ops.constant(
-                                                      1, table.dtype)), None
+              gen_popops_ops.ipu_multi_update_add(
+                  array_ops.zeros_like(table),
+                  indices=indices,
+                  indices_are_sorted=indices_are_sorted,
+                  updates=dy[0],
+                  scale=array_ops.constant(1, table.dtype)), None
           ]
 
         return output, grad
