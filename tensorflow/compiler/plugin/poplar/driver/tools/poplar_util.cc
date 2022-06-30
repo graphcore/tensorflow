@@ -495,6 +495,12 @@ StatusOr<poplar::OptionFlags> GetSliceOptionsForInst(const HloInstruction* inst,
   return opts;
 }
 
+poplar::OptionFlags GetDefaultSlicingOptions() {
+  poplar::OptionFlags flags;
+  flags.set("remapOutOfBoundIndices", "true");
+  return flags;
+}
+
 Status SetPartialsTypeIfPresent(
     const PoplarBackendConfig& poplar_backend_config,
     poplar::OptionFlags& option_flags) {
