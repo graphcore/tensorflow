@@ -68,7 +68,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
     # Note how there are two convolutions
     ok = [
         '*OnTileCopy*', 'vs/conv2d/Conv2D/convolution.*',
-        'Copy_*vs/conv2d/Conv2D/convolution', 'vs/conv2d_1/Conv2D/convolution'
+        'vs/conv2d_1/Conv2D/convolution'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
