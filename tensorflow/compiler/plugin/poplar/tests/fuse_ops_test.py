@@ -827,7 +827,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     ok = [
         'ExpandDims/input/multi-update-add*/multiUpdateAdd',
-        'ExpandDims/input/multi-update-add*/remapOutOfBoundIndices/remap',
         'vs/Gather*/multi-slice',
         'vs/add/add*/Add',
         'vs/Sum/reduce*/Reduce',
@@ -892,7 +891,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     ok = [
         '/negate/Op/Negate',
         'ExpandDims/input/multi-update-add*/multiUpdateAdd',
-        'ExpandDims/input/multi-update-add*/remapOutOfBoundIndices/remap',
         'vs/Gather*/multi-slice',
         'vs/add/add*/Add',
         'vs/Sum/reduce*/Reduce',
@@ -951,7 +949,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         'GradientDescent/update_vs/w/Neg/negate*/Op/Negate',
         'GradientDescent/update_vs/w/mul/fusion*/Op/Multiply',
         'GradientDescent/update_vs/w/ResourceScatterAdd/multi-update-add*/multiUpdateAdd',
-        'GradientDescent/update_vs/w/ResourceScatterAdd/multi-update-add*/remapOutOfBoundIndices/remap',
         'gradients/vs/absolute_difference/Abs_grad/Sign',
         'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
         'vs/embedding_lookup/multi-slice',
@@ -1021,7 +1018,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
         '/negate/Op/Negate',
         'gradients/vs/Reshape_grad/UnsortedSegmentSum/multi-update-add*/multiUpdateAdd',
-        'gradients/vs/Reshape_grad/UnsortedSegmentSum/multi-update-add*/remapOutOfBoundIndices/remap',
         'vs/embedding_lookup*/multi-slice',
         'vs/absolute_difference/Sub/subtract.*/Subtract',
         'vs/absolute_difference/Abs/abs.*/Op/Absolute',

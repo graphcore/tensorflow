@@ -474,9 +474,13 @@ StatusOr<poplar::OptionFlags> GetSliceOptionsForInst(const HloInstruction* inst,
                                                      CompilerResources& res) {
   poplar::OptionFlags opts = res.default_slice_options;
 
-  // Set remapOutOfBoundIndices to true by default. This will be override below,
-  // if the user has requested it.
-  opts.set("remapOutOfBoundIndices", "true");
+  if (!IsPoplarInstruction(PoplarOp::MultiSlice)(inst) &&
+      !IsPoplarInstruction(PoplarOp::MultiUpdate)(inst) &&
+      !IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst)) {
+    // Set remapOutOfBoundIndices to true by default. This will be override
+    // below, if the user has requested it.
+    opts.set("remapOutOfBoundIndices", "true");
+  }
 
   // Set the options from the backend config.
   TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
