@@ -208,8 +208,8 @@ class MultiIpuTest(xla_test.XLATestCase):
 
       for c in comps:
         tiles = tm.tile_ids(c)
-        if len(tiles) == 5:
-          self.assertEqual(tiles, set((0, 1, 1472, 1473, 1474)))
+        if len(tiles) == 3:
+          self.assertEqual(tiles, set((0, 1, 1472)))
         else:
           self.assertEqual(len(tiles), 0)
 

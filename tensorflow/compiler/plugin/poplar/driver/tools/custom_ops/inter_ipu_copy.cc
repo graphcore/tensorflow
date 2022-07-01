@@ -29,7 +29,7 @@ absl::flat_hash_set<int64_t> HloInterIpuCopy::AllocatingIndices() const {
   return {};
 }
 
-bool HloInterIpuCopy::AllocatingOutput() const { return true; }
+bool HloInterIpuCopy::AllocatingOutput() const { return false; }
 
 absl::flat_hash_map<int64_t, int64_t> HloInterIpuCopy::LayoutDependencies()
     const {
