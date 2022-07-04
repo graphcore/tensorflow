@@ -74,6 +74,8 @@ cc_library(
             "lib*/**/libpopsys.so",
             "lib*/**/libpoputil.so",
             "lib*/**/libpopdist.so",
+            "lib*/**/libipu_arch_info.so",
+            "lib*/**/libiai_ipu*.so",
         ]),
     ),
     deps = [":poplar_headers"],
