@@ -118,6 +118,7 @@ def _poplar_autoconf_impl(repository_ctx):
             repository_ctx.symlink(poplar_base + "/popdist/lib", "poplar/lib/popdist")
             repository_ctx.symlink(poplar_base + "/popdist/python", "poplar/popdist/python")
             repository_ctx.symlink(poplar_base + "/poprun/bin", "poplar/poprun/bin")
+            repository_ctx.symlink(poplar_base + "/ipu_arch_info/lib", "poplar/lib/ipu_arch_info")
             repository_ctx.symlink(poplar_base + "/ipuof_lib/lib", "poplar/ipuof_lib/lib")
             if repository_ctx.path(poplar_base + "/popsec/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/popsec/lib64", "poplar/popsec/lib64")
@@ -129,6 +130,8 @@ def _poplar_autoconf_impl(repository_ctx):
                 repository_ctx.symlink(poplar_base + "/popdist/lib64", "poplar/lib64/popdist")
             if repository_ctx.path(poplar_base + "/libpva/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/libpva/lib64", "poplar/libpva/lib64")
+            if repository_ctx.path(poplar_base + "/ipu_arch_info/lib64").exists:
+                repository_ctx.symlink(poplar_base + "/ipu_arch_info/lib64", "poplar/lib64/ipu_arch_info")
             if repository_ctx.path(poplar_base + "/ipuof_lib/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/ipuof_lib/lib64", "poplar/ipuof_lib/lib64")
             if repository_ctx.path(poplar_base + "/gccs/lib64").exists:
