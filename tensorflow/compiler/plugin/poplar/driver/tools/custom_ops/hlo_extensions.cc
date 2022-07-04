@@ -28,16 +28,18 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-void RegisterSharedExtensions(HloOpcode opcode) {
+void RegisterAllocatingOutputExtension(HloOpcode opcode) {
   auto allocating_output = [](const HloInstruction*) { return true; };
   RegisterHloInstructionExtension<AllocatingOutputExtension>(opcode,
                                                              allocating_output);
 }
-REGISTER_HLO_INST_EXTENSIONS(kConstant, RegisterSharedExtensions);
-REGISTER_HLO_INST_EXTENSIONS(kInfeed, RegisterSharedExtensions);
-REGISTER_HLO_INST_EXTENSIONS(kParameter, RegisterSharedExtensions);
-REGISTER_HLO_INST_EXTENSIONS(kReduceWindow, RegisterSharedExtensions);
-REGISTER_HLO_INST_EXTENSIONS(kRng, RegisterSharedExtensions);
+REGISTER_HLO_INST_EXTENSIONS(kConstant, RegisterAllocatingOutputExtension);
+REGISTER_HLO_INST_EXTENSIONS(kInfeed, RegisterAllocatingOutputExtension);
+REGISTER_HLO_INST_EXTENSIONS(kParameter, RegisterAllocatingOutputExtension);
+REGISTER_HLO_INST_EXTENSIONS(kReduceWindow, RegisterAllocatingOutputExtension);
+REGISTER_HLO_INST_EXTENSIONS(kRng, RegisterAllocatingOutputExtension);
+REGISTER_HLO_INST_EXTENSIONS(kSelectAndScatter,
+                             RegisterAllocatingOutputExtension);
 
 void RegisterReduceExtensions(HloOpcode opcode) {
   auto allocating_output = [](const HloInstruction*) { return true; };
