@@ -122,4 +122,4 @@ std::unique_ptr<HloInstruction> CreateStatelessTruncatedNormal(
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_STATELESS_RANDOM_H_

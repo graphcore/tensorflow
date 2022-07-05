@@ -63,4 +63,4 @@ std::unique_ptr<HloInstruction> CreateFifo(HloInstruction* operand,
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_FIFO_H_

@@ -51,4 +51,4 @@ std::unique_ptr<HloInstruction> CreateTruncatedNormal(const Shape& shape);
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_TRUNCATED_NORMAL_H_

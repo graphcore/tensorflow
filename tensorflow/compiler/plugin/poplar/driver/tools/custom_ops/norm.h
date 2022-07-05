@@ -238,4 +238,4 @@ std::unique_ptr<HloInstruction> CreateBatchNormStats(
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_CUSTOM_HLO_OPS_SIMPLE_GATHER_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_NORM_H_

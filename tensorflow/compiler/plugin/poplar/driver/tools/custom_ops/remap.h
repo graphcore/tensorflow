@@ -54,4 +54,4 @@ std::unique_ptr<HloInstruction> CreateRemap(HloInstruction* operand);
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_REMAP_H_

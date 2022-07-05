@@ -15,8 +15,8 @@ limitations under the License.
 
 // All HloInstruction subclasses are put in this file.
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_HLO_CUSTOM_OP_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_HLO_CUSTOM_OP_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_HLO_POPLAR_INSTRUCTION_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_HLO_POPLAR_INSTRUCTION_H_
 #include <utility>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
@@ -132,4 +132,4 @@ const bool IsPoplibsHloCustomOp(const HloInstruction* inst);
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_HLO_CUSTOM_OP_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_HLO_POPLAR_INSTRUCTION_H_

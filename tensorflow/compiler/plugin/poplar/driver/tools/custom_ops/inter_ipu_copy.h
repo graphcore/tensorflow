@@ -57,4 +57,4 @@ std::unique_ptr<HloInstruction> CreateInterIpuCopy(
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_INTER_IPU_COPY_H_
