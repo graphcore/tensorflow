@@ -36,22 +36,12 @@ namespace {
 
 // Only add a dependency iff `to` was not already reachable from `from`.
 void AddDependency(HloInstruction* from, HloInstruction* to,
-                   HloReachabilityMap* reachability_map,
-                   std::vector<HloInstruction*>& added_dependencies) {
+                   HloReachabilityMap& reachability_map) {
   // If there already wasn't a control dependency then insert it
-  if (!reachability_map->IsReachable(from, to)) {
+  if (!reachability_map.IsReachable(from, to)) {
     TF_CHECK_OK(from->AddControlDependencyTo(to));
-    reachability_map->UpdateReachabilityThroughInstruction(to);
-    added_dependencies.push_back(from);
+    reachability_map.UpdateReachabilityThroughInstruction(to);
   }
-}
-
-void RemoveDependencies(std::vector<HloInstruction*> froms, HloInstruction* to,
-                        HloReachabilityMap* reachability_map) {
-  for (auto* from : froms) {
-    TF_CHECK_OK(from->RemoveControlDependencyTo(to));
-  }
-  reachability_map->UpdateReachabilityThroughInstruction(to);
 }
 
 // Returns true if user is of specific inplace type and uses inst at a inplace
@@ -74,25 +64,31 @@ bool IsUsedAsInplace(const HloInstruction* user, const HloInstruction* inst,
   return intersection.size();
 }
 
-bool IsUniqueOperand(HloInstruction* inplace, HloInstruction* inplace_parent) {
-  return inplace->OperandIndices(inplace_parent).size() == 1;
+bool IsUniqueOperand(HloInstruction* inst, HloInstruction* operand) {
+  return inst->OperandIndices(operand).size() == 1;
 }
 
-bool IsNotDependencyOfPeers(HloInstruction* inplace,
-                            HloInstruction* inplace_parent,
-                            HloReachabilityMap* reachability_map,
-                            std::vector<HloInstruction*>& added_dependencies) {
-  for (auto* peer : inplace_parent->users()) {
-    if (peer == inplace) {
-      continue;
-    }
-    if (reachability_map->IsReachable(inplace, peer)) {
-      return false;
-    } else {
-      AddDependency(peer, inplace, reachability_map, added_dependencies);
+template <class TContainer>
+bool AnyReachable(HloInstruction* from, TContainer to,
+                  HloReachabilityMap& reachability_map) {
+  for (HloInstruction* inst : to) {
+    if (from != inst && reachability_map.IsReachable(from, inst)) {
+      return true;
     }
   }
-  return true;
+  return false;
+}
+
+void AddDependenciesForPeers(HloInstruction* inplace,
+                             HloInstruction* inplace_operand,
+                             HloReachabilityMap& reachability_map) {
+  if (!AnyReachable(inplace, inplace_operand->users(), reachability_map)) {
+    // Add control dependencies such that the op being inplaced is scheduled
+    // after its non-inplace peers.
+    for (auto* peer : inplace_operand->users()) {
+      AddDependency(peer, inplace, reachability_map);
+    }
+  }
 }
 
 // A function which is used to decide whether the instruction is inplace
@@ -127,8 +123,7 @@ bool ConvertToInplaceGetTupleElement(HloInstruction* inst) {
 // A function which is used to decide whether the instruction is inplace
 // read-write type given our backend implementation of these ops in Poplar and
 // the current reachability graph.
-bool ConvertToInplaceReadWrite(HloInstruction* inst,
-                               HloReachabilityMap* reachability_map) {
+bool ConvertToInplaceReadWrite(HloInstruction* inst, InplacingState& state) {
   // An instruction is inplace read/write if:
   // 1. It has an inplace read/write type, and
   // 2. For each inplace operand instruction, instruction is not a dependency
@@ -141,46 +136,43 @@ bool ConvertToInplaceReadWrite(HloInstruction* inst,
     return false;
   }
 
-  // Keep track of all control dependencies we add.
-  std::vector<HloInstruction*> added_dependencies;
-
-  bool is_inplace = true;
-  // Go through all the inplace operands.
+  // Iterate over all the inplace operands to check if this instruction can be
+  // lowered inplace.
   for (auto op_idx : inplace_desc.GetInplaceOperandIndices()) {
     HloInstruction* op = inst->mutable_operand(op_idx);
     // We expect all the inplace operands to be only used once as an operand.
     if (!IsUniqueOperand(inst, op)) {
-      is_inplace = false;
-      break;
+      return false;
     }
-    // Verify that inplace is not a dependency of any of the peers (cond 2).
-    if (!IsNotDependencyOfPeers(inst, op, reachability_map,
-                                added_dependencies)) {
-      is_inplace = false;
-      break;
+
+    // If any peer is reachable from inst, there is no valid ordering without
+    // inserting a copy (cond 2).
+    if (AnyReachable(inst, op->users(), *state.reachability_map)) {
+      return false;
     }
+
     // The ROOT of a computation has an implicit user (the caller of the
     // computation). Therefore, root instructions with other users cannot be
-    // inplace.
+    // inplace (cond 3).
     if (op->parent()->root_instruction() == op) {
-      is_inplace = false;
+      return false;
     }
   }
 
-  if (!is_inplace) {
-    // If we can't make this op inplace, remove all the dependencies which we
-    // have added.
-    RemoveDependencies(added_dependencies, inst, reachability_map);
+  // Add control dependencies to ensure no inplace operand is modified
+  // before being used by a non-inplace peer.
+  for (auto op_idx : inplace_desc.GetInplaceOperandIndices()) {
+    HloInstruction* op = inst->mutable_operand(op_idx);
+    AddDependenciesForPeers(inst, op, *state.reachability_map);
   }
-  return is_inplace;
+
+  return true;
 }
 
 // A function which is used to decide whether the instruction is inplace
 // read-only type given our backend implementation of these ops in Poplar and
 // the current reachability graph.
-bool ConvertToInplaceReadOnly(HloInstruction* inst,
-                              HloReachabilityMap* reachability_map,
-                              InplaceWorkList& worklist) {
+bool ConvertToInplaceReadOnly(HloInstruction* inst, InplacingState& state) {
   // For read only instructions, not only do we need to consider whether `inst`
   // is inplace read/only, but we also need to consider the indirect source of
   // inst and all the indirect consumers of it.
@@ -253,7 +245,7 @@ bool ConvertToInplaceReadOnly(HloInstruction* inst,
     return false;
   }
 
-  while (!worklist.contains(inst)) {
+  while (!state.worklist.contains(inst)) {
     // Build the cluster from inst.
     // Stores all the read only instructions found.
     absl::flat_hash_set<HloInstruction*> read_only_cluster;
@@ -314,7 +306,7 @@ bool ConvertToInplaceReadOnly(HloInstruction* inst,
       // type and it is not in the worklist, otherwise we classify the current
       // node as a cluster source.
       if (node_description.GetType() == HloInstructionType::kInplaceReadOnly &&
-          !worklist.contains(node)) {
+          !state.worklist.contains(node)) {
         // Go through all the inplace operands.
         for (auto op_idx : node_description.GetInplaceOperandIndices()) {
           auto* operand = node->mutable_operand(op_idx);
@@ -334,29 +326,23 @@ bool ConvertToInplaceReadOnly(HloInstruction* inst,
     if (inplace_read_write_users.size() == 1 &&
         std::begin(inplace_read_write_users)->second == 1) {
       auto* inplace_op = std::begin(inplace_read_write_users)->first;
-      std::vector<HloInstruction*> added_dependencies;
-      bool can_execute_before_all_other_users = true;
-      // Check that we can execute all the users before the inplace op.
-      for (auto* user : not_inplace_users) {
-        if (!reachability_map->IsReachable(inplace_op, user)) {
-          AddDependency(user, inplace_op, reachability_map, added_dependencies);
-        } else {
-          can_execute_before_all_other_users = false;
-          break;
-        }
-      }
 
-      if (can_execute_before_all_other_users) {
+      // If the one inplace user is also a non-inplace user we cannot inplace
+      // (AnyReachable doesn't cover this check as it skips when from == to).
+      if (!absl::c_count(not_inplace_users, inplace_op) &&
+          !AnyReachable(inplace_op, not_inplace_users,
+                        *state.reachability_map)) {
+        // If we can execute all the users before the inplace op.
+        for (auto* user : not_inplace_users) {
+          AddDependency(user, inplace_op, *state.reachability_map);
+        }
         cluster_ok_to_inplace = true;
-      } else {
-        // Remove all the dependencies which were added.
-        RemoveDependencies(added_dependencies, inplace_op, reachability_map);
       }
     }
 
     if (cluster_ok_to_inplace) {
       for (auto* op : read_only_cluster) {
-        worklist[op] = true;
+        state.worklist[op] = true;
       }
     } else {
       // Mark all the inplace read-only ops which consume the cluster sources as
@@ -364,13 +350,13 @@ bool ConvertToInplaceReadOnly(HloInstruction* inst,
       for (auto* cluster_source : cluster_sources) {
         for (auto* user : cluster_source->users()) {
           if (read_only_cluster.contains(user)) {
-            worklist[user] = false;
+            state.worklist[user] = false;
           }
         }
       }
     }
   }
-  return worklist.at(inst);
+  return state.worklist.at(inst);
 }
 
 }  // namespace
@@ -449,9 +435,8 @@ const std::string HloPoplarInplaceDescription::ToString() const {
   return str_stream.str();
 }
 
-bool HloPoplarInplaceDescription::ConvertToInplace(
-    HloInstruction* inst, HloReachabilityMap* reachability_map,
-    InplaceWorkList& worklist) {
+bool HloPoplarInplaceDescription::ConvertToInplace(HloInstruction* inst,
+                                                   InplacingState& state) {
   auto inst_description = GetInplaceDescription(inst);
   bool converted;
   switch (inst_description.GetType()) {
@@ -460,11 +445,11 @@ bool HloPoplarInplaceDescription::ConvertToInplace(
       break;
     }
     case HloInstructionType::kInplaceReadWrite: {
-      converted = ConvertToInplaceReadWrite(inst, reachability_map);
+      converted = ConvertToInplaceReadWrite(inst, state);
       break;
     }
     case HloInstructionType::kInplaceReadOnly: {
-      converted = ConvertToInplaceReadOnly(inst, reachability_map, worklist);
+      converted = ConvertToInplaceReadOnly(inst, state);
       break;
     }
     default: {

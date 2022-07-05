@@ -280,6 +280,129 @@ StatusOr<bool> CloneConstantsSharedBetweenInplaceLoops(HloModule* module) {
   return changed;
 }
 
+// If we fail to inplace an instruction with ConvertToInplace but the
+// instruction requires inplacing, we will add copies (see D52050).
+void AddCopiesForFailedInplace(HloInstruction* inst, InplacingState& state) {
+  // Do not add copies for root tuple in entry computation.
+  if (inst == state.comp->root_instruction() &&
+      state.comp->parent()->entry_computation() == state.comp) {
+    return;
+  }
+  const auto inplace_description = GetInplaceDescription(inst);
+  if (!inplace_description.IsInplaceType()) {
+    return;
+  }
+
+  CHECK(!IsLoweredInplace(inst));
+  const bool allow_non_inplace = inplace_description.AllowNonInplaceLowering();
+  VLOG(3) << "Processing " << inst->name()
+          << ", allow non-inplace: " << allow_non_inplace;
+  if (allow_non_inplace) {
+    // No copies required - op will be lowered as non-inplace.
+    return;
+  }
+
+  // Those instructions are inplace only on remote buffers, and we can't
+  // copy them, they should be always inplace.
+  CHECK(!IsPoplarInstruction(PoplarOp::RemoteParameterStore, inst) &&
+        !IsPoplarInstruction(PoplarOp::BufferStoreSlice, inst));
+
+  if (inplace_description.GetType() ==
+      HloInstructionType::kInplaceGetTupleElement) {
+    // Instead of copying inputs, copy output.
+    state.instructions_to_copy.push_back(inst);
+  } else {
+    state.operands_to_copy.emplace_back(inst);
+    for (auto op_index : inplace_description.GetInplaceOperandIndices()) {
+      auto* op = inst->operand(op_index);
+      if (op->user_count() == 1 &&
+          IsPoplarInstruction(PoplarOp::Uninitialised, op)) {
+        VLOG(3) << "Do not copy uninitialised " << op->name();
+        continue;
+      }
+      if (IsWideConstant(op) && op->user_count() == 1) {
+        VLOG(3) << "Do not copy wide copy with unique user " << op->name();
+        continue;
+      }
+      state.operands_to_copy.back().operands.push_back(op_index);
+    }
+    if (state.operands_to_copy.back().operands.empty()) {
+      state.operands_to_copy.pop_back();
+    }
+  }
+}
+
+// Insert the copies accumulated in the inplacing state.
+StatusOr<bool> InsertCopies(InplacingState& state) {
+  bool changed = false;
+
+  for (HloInstruction* inst : state.instructions_to_copy) {
+    auto users = inst->users();
+    HloInstruction* copy = state.comp->AddInstruction(
+        HloInstruction::CreateUnary(inst->shape(), HloOpcode::kCopy, inst));
+    VLOG(3) << "Adding a copy for " << inst->name();
+    for (auto succ : inst->control_successors()) {
+      TF_RETURN_IF_ERROR(copy->AddControlDependencyTo(succ));
+    }
+    inst->SetupDerivedInstruction(copy);
+    for (HloInstruction* user : users) {
+      TF_RETURN_IF_ERROR(inst->ReplaceUseWith(user, copy));
+    }
+    changed = true;
+  }
+
+  for (auto& operand_to_copy : state.operands_to_copy) {
+    HloInstruction* inst = operand_to_copy.inst;
+    auto inplace_description = GetInplaceDescription(inst);
+    for (int64_t op_index : operand_to_copy.operands) {
+      HloInstruction* op = inst->mutable_operand(op_index);
+      HloInstruction* copy;
+      if (op->opcode() == HloOpcode::kCopy && op->user_count() == 1) {
+        // Reuse copy used only for this input.
+        copy = op;
+      } else {
+        VLOG(3) << "Adding a copy of operand " << op_index << " (" << op->name()
+                << ") "
+                << " for " << inst->name();
+        copy = state.comp->AddInstruction(
+            HloInstruction::CreateUnary(op->shape(), HloOpcode::kCopy, op));
+      }
+      if (inplace_description.GetType() ==
+              HloInstructionType::kInplaceReadWrite &&
+          inst->opcode() != HloOpcode::kTuple) {
+        // As we need to add copy anyway, set clone method to
+        // CloneMethod_PreserveOrderUnlessAliases. This will rebalance tensor
+        // and expand aliasing, because read/write inplace ops can't have
+        // tensors with aliases as their inputs. Expand them here to avoid
+        // another copy later.
+        // Tuples should always preserve aliasing.
+        TF_RETURN_IF_ERROR(SetCopyCloneMethod(
+            copy, ShapeTree<CloneMethod>(
+                      copy->shape(), CloneMethod_PreserveOrderUnlessAliases)));
+      }
+
+      // If we copy result of the instruction, we have to guarantee that
+      // result was copied before any control successors (that potentially may
+      // modify this buffer inplace).
+      for (auto succ : op->control_successors()) {
+        TF_RETURN_IF_ERROR(copy->AddControlDependencyTo(succ));
+      }
+      // If the instruction has control predecessors, we have to guarantee
+      // that copies are made after all predecessors.
+      for (HloInstruction* pred : inst->control_predecessors()) {
+        TF_RETURN_IF_ERROR(pred->AddControlDependencyTo(copy));
+      }
+      op->SetupDerivedInstruction(copy);
+      TF_RETURN_IF_ERROR(inst->ReplaceOperandWith(op_index, copy));
+      changed = true;
+    }
+    TF_ASSIGN_OR_RETURN(bool copies_changed, ConvertToReallocatingCopies(inst));
+    changed |= copies_changed;
+  }
+
+  return changed;
+}
+
 }  // namespace
 
 StatusOr<bool> InplaceFinder::Run(HloModule* module) {
@@ -312,145 +435,23 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
       continue;
     }
 
-    InplaceWorkList worklist;
-    // The reachability map is used for adding and finding control dependencies
-    // in order to allow for inplace ops to be executed after other instructions
-    // which are using the inplace input.
-    std::unique_ptr<HloReachabilityMap> reachability_map =
-        HloReachabilityMap::Build(comp);
+    InplacingState state(comp);
     const auto inplace_candidates = FindInplaceCandidates(comp, *dataflow);
 
-    struct OperandToCopy {
-      HloInstruction* inst;
-      std::vector<int64_t> operands;
-      explicit OperandToCopy(HloInstruction* inst) : inst(inst) {}
-    };
-    std::vector<OperandToCopy> operands_to_copy;
-    std::vector<HloInstruction*> instructions_to_copy;
-
     for (auto* inst : inplace_candidates) {
-      if (HloPoplarInplaceDescription::ConvertToInplace(
-              inst, reachability_map.get(), worklist)) {
+      if (HloPoplarInplaceDescription::ConvertToInplace(inst, state)) {
         changed = true;
         TF_RETURN_IF_ERROR(ConvertToReallocatingCopies(inst).status());
         VLOG(3) << "Inplaced " << inst->ToString();
-        continue;
-      }
-      // Do not insert copies for root tuple in entry computation.
-      if (inst == comp->root_instruction() &&
-          comp->parent()->entry_computation() == comp) {
-        continue;
-      }
-      const auto inplace_description = GetInplaceDescription(inst);
-      if (!inplace_description.IsInplaceType()) {
-        continue;
-      }
-
-      CHECK(!IsLoweredInplace(inst));
-      const bool allow_non_inplace =
-          inplace_description.AllowNonInplaceLowering();
-      VLOG(3) << "Processing " << inst->name()
-              << ", allow non-inplace: " << allow_non_inplace;
-      if (allow_non_inplace) {
-        // No copies required - op will be lowered as non-inplace.
-        continue;
-      }
-
-      // Those instructions are inplace only on remote buffers, and we can't
-      // copy them, they should be always inplace.
-      CHECK(!IsPoplarInstruction(PoplarOp::RemoteParameterStore, inst) &&
-            !IsPoplarInstruction(PoplarOp::BufferStoreSlice, inst));
-
-      if (inplace_description.GetType() ==
-          HloInstructionType::kInplaceGetTupleElement) {
-        // Instead of copying inputs, copy output.
-        instructions_to_copy.push_back(inst);
       } else {
-        operands_to_copy.emplace_back(inst);
-        for (auto op_index : inplace_description.GetInplaceOperandIndices()) {
-          auto* op = inst->operand(op_index);
-          if (op->user_count() == 1 &&
-              IsPoplarInstruction(PoplarOp::Uninitialised, op)) {
-            VLOG(3) << "Do not copy uninitialised " << op->name();
-            continue;
-          }
-          if (IsWideConstant(op) && op->user_count() == 1) {
-            VLOG(3) << "Do not copy wide copy with unique user " << op->name();
-            continue;
-          }
-          operands_to_copy.back().operands.push_back(op_index);
-        }
-        if (operands_to_copy.back().operands.empty()) {
-          operands_to_copy.pop_back();
-        }
+        AddCopiesForFailedInplace(inst, state);
       }
     }
 
-    for (HloInstruction* inst : instructions_to_copy) {
-      auto users = inst->users();
-      HloInstruction* copy = comp->AddInstruction(
-          HloInstruction::CreateUnary(inst->shape(), HloOpcode::kCopy, inst));
-      VLOG(3) << "Adding a copy for " << inst->name();
-      for (auto succ : inst->control_successors()) {
-        TF_RETURN_IF_ERROR(copy->AddControlDependencyTo(succ));
-      }
-      inst->SetupDerivedInstruction(copy);
-      for (HloInstruction* user : users) {
-        TF_RETURN_IF_ERROR(inst->ReplaceUseWith(user, copy));
-      }
-      changed = true;
-    }
-
-    for (auto& operand_to_copy : operands_to_copy) {
-      HloInstruction* inst = operand_to_copy.inst;
-      auto inplace_description = GetInplaceDescription(inst);
-      for (int64_t op_index : operand_to_copy.operands) {
-        HloInstruction* op = inst->mutable_operand(op_index);
-        HloInstruction* copy;
-        if (op->opcode() == HloOpcode::kCopy && op->user_count() == 1) {
-          // Reuse copy used only for this input.
-          copy = op;
-        } else {
-          VLOG(3) << "Adding a copy of operand " << op_index << " ("
-                  << op->name() << ") "
-                  << " for " << inst->name();
-          copy = comp->AddInstruction(
-              HloInstruction::CreateUnary(op->shape(), HloOpcode::kCopy, op));
-        }
-        if (inplace_description.GetType() ==
-                HloInstructionType::kInplaceReadWrite &&
-            inst->opcode() != HloOpcode::kTuple) {
-          // As we need to add copy anyway, set clone method to
-          // CloneMethod_PreserveOrderUnlessAliases. This will rebalance tensor
-          // and expand aliasing, because read/write inplace ops can't have
-          // tensors with aliases as their inputs. Expand them here to avoid
-          // another copy later.
-          // Tuples should always preserve aliasing.
-          TF_RETURN_IF_ERROR(SetCopyCloneMethod(
-              copy,
-              ShapeTree<CloneMethod>(copy->shape(),
-                                     CloneMethod_PreserveOrderUnlessAliases)));
-        }
-
-        // If we copy result of the instruction, we have to guarantee that
-        // result was copied before any control successors (that potentially may
-        // modify this buffer inplace).
-        for (auto succ : op->control_successors()) {
-          TF_RETURN_IF_ERROR(copy->AddControlDependencyTo(succ));
-        }
-        // If the instruction has control predecessors, we have to guarantee
-        // that copies are made after all predecessors.
-        for (HloInstruction* pred : inst->control_predecessors()) {
-          TF_RETURN_IF_ERROR(pred->AddControlDependencyTo(copy));
-        }
-        op->SetupDerivedInstruction(copy);
-        TF_RETURN_IF_ERROR(inst->ReplaceOperandWith(op_index, copy));
-        changed = true;
-      }
-      TF_ASSIGN_OR_RETURN(bool copies_changed,
-                          ConvertToReallocatingCopies(inst));
-      changed |= copies_changed;
-    }
+    // Copies are inserted at the end as inserting instructions invalidates the
+    // reachability map (part of the InplacingState).
+    TF_ASSIGN_OR_RETURN(bool changed_, InsertCopies(state));
+    changed |= changed_;
   }
 
   if (changed) {

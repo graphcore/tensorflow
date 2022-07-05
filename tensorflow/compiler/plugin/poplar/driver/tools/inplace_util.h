@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_INPLACE_UTIL_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_INPLACE_UTIL_H_
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -29,7 +30,34 @@ namespace xla {
 namespace poplarplugin {
 struct CompilerAnnotations;
 
-using InplaceWorkList = absl::flat_hash_map<HloInstruction*, bool>;
+// State which is tracked per-computation during the process of inplacing.
+struct InplacingState {
+  struct OperandToCopy {
+    HloInstruction* inst;
+    std::vector<int64_t> operands;
+    explicit OperandToCopy(HloInstruction* inst) : inst(inst) {}
+  };
+
+  explicit InplacingState(HloComputation* comp)
+      : comp(comp), reachability_map(HloReachabilityMap::Build(comp)) {}
+
+  // The computation in which instructions are being inplaced.
+  HloComputation* comp;
+
+  // The reachability map is used for adding and finding control dependencies
+  // in order to allow for inplace ops to be executed after other instructions
+  // which are using the inplace input.
+  std::unique_ptr<HloReachabilityMap> reachability_map;
+
+  // Some copies need to be inserted in the process of inplacing.
+  // The actual creation of the copies is deferred to avoid having to rebuild
+  // the reachability map.
+  std::vector<OperandToCopy> operands_to_copy;
+  std::vector<HloInstruction*> instructions_to_copy;
+
+  // See ConvertToInplaceReadOnly.
+  absl::flat_hash_map<HloInstruction*, bool> worklist;
+};
 
 enum class HloInstructionType {
   // A kGetTupleElement instruction is inplace if and only if it's a unique
@@ -72,9 +100,8 @@ class HloPoplarInplaceDescription {
   // Allows lowering inplace op as non-inplace
   bool AllowNonInplaceLowering() const;
 
-  static bool ConvertToInplace(HloInstruction* inst,
-                               HloReachabilityMap* reachability_map,
-                               InplaceWorkList& worklist);
+  // Attempt to inplace the given instruction.
+  static bool ConvertToInplace(HloInstruction* inst, InplacingState& state);
 
   const std::string ToString() const;
 
