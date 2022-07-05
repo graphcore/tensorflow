@@ -19,6 +19,7 @@ limitations under the License.
 #include <poplar/Target.hpp>
 #include "absl/container/inlined_vector.h"
 #include "absl/types/optional.h"
+#include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_memory.h"
 #include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_stream.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
@@ -153,13 +154,19 @@ Status PopItExecutor::Init(int device_ordinal,
 
 se::DeviceMemoryBase PopItExecutor::Allocate(uint64 size,
                                              int64_t memory_space) {
-  NOT_IMPLEMENTED;
+  popitMem_t* mem = popitMalloc(session_.get(), size);
+  PopItSubBuffer* buffer = new PopItSubBuffer(mem, size);
+  return se::DeviceMemoryBase(buffer, size);
 }
 void* PopItExecutor::GetSubBuffer(se::DeviceMemoryBase* parent, uint64 offset,
                                   uint64 size) {
   NOT_IMPLEMENTED;
 }
-void PopItExecutor::Deallocate(se::DeviceMemoryBase* mem) { NOT_IMPLEMENTED; }
+void PopItExecutor::Deallocate(se::DeviceMemoryBase* mem) {
+  PopItSubBuffer* ptr = static_cast<PopItSubBuffer*>(mem->opaque());
+  ptr->~PopItSubBuffer();
+  delete ptr;
+}
 void* PopItExecutor::HostMemoryAllocate(uint64 size) { NOT_IMPLEMENTED; }
 void PopItExecutor::HostMemoryDeallocate(void* mem) { NOT_IMPLEMENTED; }
 bool PopItExecutor::HostMemoryRegister(void* mem, uint64 size) {

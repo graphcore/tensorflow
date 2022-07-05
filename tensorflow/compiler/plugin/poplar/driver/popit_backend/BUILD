@@ -50,6 +50,7 @@ popit_cc_library(
     ],
     hdrs = [
         "popit_executor.h",
+        "popit_memory.h",
         "popit_platform.h",
     ],
     deps = [
