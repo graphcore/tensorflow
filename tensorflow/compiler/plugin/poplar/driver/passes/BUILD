@@ -66,6 +66,19 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "outline_instructions",
+    srcs = [
+        "outline_instructions.cc",
+    ],
+    hdrs = [
+        "outline_instructions.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_matcher",
+    ],
+)
+
+poplar_cc_library(
     name = "allocation_analysis",
     srcs = [
         "allocation_analysis.cc",
@@ -1783,6 +1796,7 @@ poplar_cc_library(
         ":multi_use_feeds_finder",
         ":not_supported_gather_expander",
         ":not_supported_scatter_expander",
+        ":outline_instructions",
         ":outline_remote_buffers",
         ":parse_poplar_backend_config",
         ":pipeline_batch_serialization_buffer_inserter",

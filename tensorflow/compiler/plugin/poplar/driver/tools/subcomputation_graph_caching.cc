@@ -23,6 +23,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/partitioned_elementwise_cluster_visitor.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/core/platform/human_readable_json.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -70,19 +71,79 @@ ReallocateInputsInfo GetReallocateInputsInfo(const DeferredArgRBVectors& inputs,
   }
   return reallocate_inputs;
 }
+
+bool ContainsOpaque(const Shape& shape) {
+  if (shape.IsOpaque()) {
+    return true;
+  } else if (shape.IsTuple()) {
+    return absl::c_any_of(shape.tuple_shapes(), ContainsOpaque);
+  }
+  return false;
+}
+
+bool CompareCachedInstruction(const HloInstruction* a,
+                              const HloInstruction* b) {
+  auto compare_operands = [](const HloInstruction* operand_a,
+                             const HloInstruction* operand_b) {
+    return operand_a->shape() == operand_b->shape() &&
+           !ContainsOpaque(operand_a->shape()) &&
+           !ContainsOpaque(operand_b->shape());
+  };
+
+  auto compare_comps = [](const HloComputation* comp_a,
+                          const HloComputation* comp_b) {
+    return comp_a->Equal(*comp_b, false, true);
+  };
+  auto compare_backend_configs = [](const std::string& raw_backend_config_a,
+                                    const std::string& raw_backend_config_b) {
+    PoplarBackendConfig backend_config_a;
+    auto parse_a_status = tensorflow::HumanReadableJsonToProto(
+        raw_backend_config_a, &backend_config_a);
+    PoplarBackendConfig backend_config_b;
+    auto parse_b_status = tensorflow::HumanReadableJsonToProto(
+        raw_backend_config_b, &backend_config_b);
+    if (!parse_a_status.ok() || !parse_b_status.ok()) {
+      LOG(FATAL) << "Could not parse PoplarBackendConfig.";
+    }
+    // Ignore inplace field.
+    backend_config_a.set_is_inplace(false);
+    backend_config_b.set_is_inplace(false);
+    // Reset the MLType if only one of the operations doesn't have an MLType
+    // associated with it.
+    if (backend_config_a.ml_type() != backend_config_b.ml_type() &&
+        (backend_config_a.ml_type() == MLType::NONE ||
+         backend_config_b.ml_type() == MLType::NONE)) {
+      backend_config_a.set_ml_type(MLType::NONE);
+      backend_config_b.set_ml_type(MLType::NONE);
+    }
+    return protobuf_util::ProtobufEquals(backend_config_a, backend_config_b);
+  };
+  return a->Identical(*b, compare_operands, compare_comps, false,
+                      compare_backend_configs) &&
+         GetSingleShardingDeviceId(a) == GetSingleShardingDeviceId(b);
+}
+
+bool ComputationContainsCachedInstruction(const HloComputation* comp) {
+  return absl::StrContains(comp->name(), "instruction_cache");
+}
 }  // namespace
 
 size_t SubcomputationGraphCacheKeyHash::operator()(
     const SubcomputationGraphCacheKey& key) const {
-  size_t hash = HloComputationHash()(key.computation);
-  for (auto& operand_handles : key.remote_buffer_handles) {
-    for (auto& operand_handle : operand_handles) {
-      hash = tensorflow::Hash64Combine(
-          hash, std::hash<std::string>()(operand_handle.value_or("no_handle")));
+  if (ComputationContainsCachedInstruction(key.computation)) {
+    return key.computation->root_instruction()->Hash();
+  } else {
+    size_t hash = HloComputationHash()(key.computation);
+    for (auto& operand_handles : key.remote_buffer_handles) {
+      for (auto& operand_handle : operand_handles) {
+        hash = tensorflow::Hash64Combine(
+            hash,
+            std::hash<std::string>()(operand_handle.value_or("no_handle")));
+      }
     }
+    hash = tensorflow::Hash64Combine(hash, key.keep_input_layouts);
+    return tensorflow::Hash64Combine(hash, key.partitioned_elementwise_cluster);
   }
-  hash = tensorflow::Hash64Combine(hash, key.keep_input_layouts);
-  return tensorflow::Hash64Combine(hash, key.partitioned_elementwise_cluster);
 }
 
 bool SubcomputationGraphCacheKeyEquals::operator()(
@@ -100,7 +161,13 @@ bool SubcomputationGraphCacheKeyEquals::operator()(
     return false;
   }
 
-  return HloComputationEquals()(a.computation, b.computation);
+  if (ComputationContainsCachedInstruction(a.computation) &&
+      ComputationContainsCachedInstruction(b.computation)) {
+    return CompareCachedInstruction(a.computation->root_instruction(),
+                                    b.computation->root_instruction());
+  } else {
+    return HloComputationEquals()(a.computation, b.computation);
+  }
 }
 
 StatusOr<std::shared_ptr<DeferredVisitor>>

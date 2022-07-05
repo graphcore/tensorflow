@@ -78,7 +78,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Would fail if there were two batch norms in the graph
     ok = [
-        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+        'vs/conv2d/Conv2D/convolution/Conv_1x1',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
@@ -120,7 +120,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Matches two convolutions
     ok = [
-        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+        'vs/conv2d/Conv2D/convolution/Conv_1x1',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
         'vs/Cast/convert.*/Cast',
         'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
@@ -165,7 +165,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Matches two convolutions
     ok = [
-        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+        'vs/conv2d/Conv2D/convolution/Conv_1x1',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
         'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
         'vs/batch_normalization_1/FusedBatchNorm*/batch-norm-inference.*/'
@@ -235,7 +235,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
         'GradientDescent/update_vs/batch_normalization_2/',
         'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo*',
         'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
-        'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
     ]
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
@@ -294,7 +293,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Would fail if there were two batch norms in the graph
     ok = [
-        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+        'vs/conv2d/Conv2D/convolution/Conv_1x1',
         'vs/PopnnGroupNormInference/group-norm-inference*/'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
@@ -354,7 +353,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Would fail if there were two batch norms in the graph
     ok = [
-        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+        'vs/conv2d/Conv2D/convolution/Conv_1x1',
         'vs/PopnnGroupNormStatistics/group-norm-statistics*/',
         'vs/PopnnGroupNormInference/group-norm-inference*/'
     ]
@@ -407,7 +406,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # Would fail if there were two batch norms in the graph
     ok = [
-        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+        'vs/conv2d/Conv2D/convolution/Conv_1x1',
         'vs/PopnnGroupNormInference/group-norm-inference*/',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
     ]
@@ -488,7 +487,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
         'Sum/reduce.*/*/Reduce',
         'gradients/vs/PopnnGroupNormTraining_2_grad/PopnnGroupNormGrad/group-norm-grad*/',
         'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*',
-        'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y*/WeightsTransposeChansFlipXY/WeightsTranspose',
     ]
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)

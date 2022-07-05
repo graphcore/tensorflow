@@ -96,28 +96,9 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
                               opts, &res.planning_cache),
         graph);
 
-    poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, &res, inst, debug_name_and_id](
-                    std::vector<poplar::Tensor>& args,
-                    poplar::program::Sequence& prog) {
-      poplar::Tensor in_weights_f = args[0];
-      poplar::Tensor out_weights_f = args[1];
-
-      poplin::weightsTransposeChansFlipXY(
-          graph, in_weights_f, out_weights_f, prog,
-          {debug_name_and_id, "WeightsTransposeChansFlipXY"});
-    };
-
-    std::vector<poplar::Tensor> args = {in_weights, out_weights};
-
-    poputil::graphfn::Signature signature = {
-        poputil::graphfn::input(in_weights, "in_weights"),
-        poputil::graphfn::output(out_weights, "out_weights")};
-
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
-        inst, graph, res, seq, func, signature, args,
-        weights_transpose_inst->AllocatingIndices(),
-        weights_transpose_inst->LayoutDependencies()));
+    poplin::weightsTransposeChansFlipXY(
+        graph, in_weights, out_weights, seq,
+        {debug_info, "WeightsTransposeChansFlipXY"});
 
     out_weights = RemoveGroupsDimensionFromWeights(conv_params, out_weights);
 

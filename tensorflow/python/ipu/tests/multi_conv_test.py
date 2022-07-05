@@ -310,7 +310,7 @@ class MultiConvTest(test_util.TensorFlowTestCase):
     conv_classifications = [2, 0, 0, 0]
     # Note how there is only one multiconv instruction.
     compute_sets = [
-        '/multi-conv/MultiConv_',
+        '/multi-conv.*/MultiConv_',
         'ipu/Mean*/fusion*/Reduce',
         'ipu/add',
     ]

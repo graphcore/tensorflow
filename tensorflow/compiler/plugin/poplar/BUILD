@@ -1848,6 +1848,21 @@ xla_test(
 )
 
 xla_test(
+    name = "outline_instructions_test",
+    size = "small",
+    srcs = ["tests/outline_instructions_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "variables_offload_and_partition_test",
     size = "small",
     srcs = ["tests/variables_offload_and_partition_test.cc"],

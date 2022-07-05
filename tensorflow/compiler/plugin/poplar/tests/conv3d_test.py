@@ -81,7 +81,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       self.assertAllClose(result, np.zeros([1, 14, 14, 14, 32]))
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['convolution/convolution.*/Conv_3x3x3', 'BiasAdd/fusion/Op/Add']
+    ok = ['convolution/convolution*/Conv_3x3x3', 'BiasAdd/fusion/Op/Add']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def test3DConv8x8x8_WithBias(self):
@@ -112,7 +112,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        'Conv3D/convolution.*/Conv_8x8x8_stride4x4x4', 'BiasAdd/fusion/Op/Add'
+        'Conv3D/convolution*/Conv_8x8x8_stride4x4x4', 'BiasAdd/fusion/Op/Add'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -143,7 +143,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       self.assertAllClose(result, np.zeros([1, 1, 1, 1, 8]))
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['Conv3D/convolution.*/Conv_1x1', 'add/fusion/Op/Add']
+    ok = ['Conv3D/convolution*/Conv_1x1', 'add/fusion/Op/Add']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def test3DConvBackpropInput(self):
@@ -174,7 +174,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        'Conv3DBackpropInputV2/conv-with-reverse/Conv_2x2x2',
+        'Conv3DBackpropInputV2/conv-with-reverse.*/Conv_2x2x2',
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -205,7 +205,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       self.assertAllClose(result, np.zeros([2, 2, 2, 3, 5]))
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['Conv3DBackpropFilterV2/convolution.*/Conv_8x8x8']
+    ok = ['Conv3DBackpropFilterV2/convolution*/Conv_8x8x8']
     self.assert_all_compute_sets_and_list(report, ok)
 
 

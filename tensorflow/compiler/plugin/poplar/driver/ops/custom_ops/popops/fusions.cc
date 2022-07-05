@@ -121,7 +121,9 @@ class ConvBiasAddOp : public PoplarOpDef {
                         FindInstructionInput(tensor_map, res, inst, 1, prog,
                                              {debug_info}, false));
 
-    const auto* conv_op = LookThroughCopies(inst->operand(0));
+    const auto* conv_comp_op = LookThroughCopies(inst->operand(0));
+    const auto* conv_op = conv_comp_op->to_apply()->root_instruction();
+
     TF_ASSIGN_OR_RETURN(poplar::Tensor shuffled_in,
                         ShuffleConvolutionOutputToPoplar(conv_op, in));
 
@@ -268,35 +270,20 @@ class BiasApplyOp : public PoplarOpDef {
     }
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, reduction_dims, debug_name_and_id](
-                    std::vector<poplar::Tensor>& args,
-                    poplar::program::Sequence& prog) {
-      poplar::Tensor scale_float = args[2];
-      if (scale_float.elementType() != poplar::FLOAT) {
-        scale_float = popops::cast(graph, scale_float, poplar::FLOAT, prog,
-                                   {debug_name_and_id, "ScaleToFloat"});
-      }
-      // Reduce with scale and update in place
-      popops::mapInPlace(graph, popops::expr::UnaryOpType::NEGATE, scale_float,
-                         prog, {debug_name_and_id, "negate"});
-      popops::reduceWithOutput(graph, args[1], args[0], reduction_dims,
-                               {popops::Operation::ADD, true, scale_float},
-                               prog, {debug_name_and_id});
-    };
 
-    // Depending on whether this is performed inplace or not, the output could
-    // be a new tensor or the biases tensor.
-    std::vector<poplar::Tensor> args = {biases, deltas, scale};
-    poputil::graphfn::Signature signature = {
-        poputil::graphfn::inout(biases, "biases"),
-        poputil::graphfn::input(deltas, "deltas"),
-        poputil::graphfn::input(scale, "scale")};
-
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq,
-                                                     func, signature, args));
+    if (scale.elementType() != poplar::FLOAT) {
+      scale = popops::cast(graph, scale, poplar::FLOAT, seq,
+                           {debug_name_and_id, "ScaleToFloat"});
+    }
+    // Reduce with scale and update in place
+    popops::mapInPlace(graph, popops::expr::UnaryOpType::NEGATE, scale, seq,
+                       {debug_name_and_id, "negate"});
+    popops::reduceWithOutput(graph, deltas, biases, reduction_dims,
+                             {popops::Operation::ADD, true, scale}, seq,
+                             {debug_name_and_id});
 
     TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(args[0], graph)));
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(biases, graph)));
 
     return seq;
   }

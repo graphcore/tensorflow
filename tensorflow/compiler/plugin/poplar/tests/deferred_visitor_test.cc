@@ -30,6 +30,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/outline_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
@@ -65,6 +66,7 @@ HloPassPipeline GetMockPipeline(CompilerResources& resources) {
   pipeline.AddPass<ShardingPass>();
   pipeline.AddPass<HloDCE>();
   pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
+  pipeline.AddPass<OutlineInstructions>();
   pipeline.AddPass<AllocationFinder>(resources.annotations);
   pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);
   pipeline.AddPass<HloMemoryScheduler>(

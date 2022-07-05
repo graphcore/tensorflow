@@ -103,6 +103,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_use_feeds_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_gather_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_scatter_expander.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/outline_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/outline_remote_buffers.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_batch_serialization_buffer_inserter.h"
@@ -1406,6 +1407,7 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
     pipeline.AddPass<RemoteBufferMerger>(
         resources.annotations, poplar_executor->RemoteBufferMergingMode());
     pipeline.AddPass<RemoteParameterParallelCombiner>();
+    pipeline.AddPass<OutlineInstructions>();
     pipeline.AddPass<AllocationFinder>(
         resources.annotations, resources.always_rearrange_copies_on_host);
     pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);

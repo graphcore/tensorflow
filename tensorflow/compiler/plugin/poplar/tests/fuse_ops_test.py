@@ -491,9 +491,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         'vs/conv2d/BiasAdd/fusion*/Op/Add',
         'Sum/reduce*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
         'Sum/reduce*/ReduceFinalStage/IntermediateToOutput/Reduce',
-        'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4',
-        'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
-        'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
+        'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4',
+        'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
         'vs/conv2d/Conv2D/convolution*/Conv_1x1'
     ]
     # pylint: enable=line-too-long
@@ -686,7 +685,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-        'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'vs/conv2d/BiasAdd',
+        'vs/conv2d/Conv2D/convolution/Conv_1x1', 'vs/conv2d/BiasAdd',
         'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
         'vs/Relu/relu/Nonlinearity'
     ]
@@ -1324,7 +1323,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion',
         'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_3x3/',
         'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
-        'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
+        'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y.*/WeightsTransposeChansFlipXY/WeightsTranspose',
         'Mean/',
     ]
     # pylint: enable=line-too-long
