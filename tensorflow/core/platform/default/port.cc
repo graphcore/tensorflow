@@ -70,6 +70,21 @@ string JobName() {
 }
 
 int NumSchedulableCPUs() {
+  const int kDefaultCores = 4;  // Semi-conservative guess
+
+  const char* num_schedulable_cpus_str = std::getenv("TF_NUM_SCHEDULABLE_CPUS");
+  if (num_schedulable_cpus_str != nullptr) {
+    int num_num_schedulable_cpus = kDefaultCores;
+    if (!absl::SimpleAtoi(num_schedulable_cpus_str,
+                          &num_num_schedulable_cpus)) {
+      LOG(WARNING) << "Failed to parse env variable TF_NUM_SCHEDULABLE_CPUS="
+                   << num_schedulable_cpus_str
+                   << " as int. Using the default value "
+                   << num_num_schedulable_cpus << ".";
+    }
+    return num_num_schedulable_cpus;
+  }
+
 #if defined(__linux__) && !defined(__ANDROID__)
   cpu_set_t cpuset;
   if (sched_getaffinity(0, sizeof(cpu_set_t), &cpuset) == 0) {
@@ -82,7 +97,6 @@ int NumSchedulableCPUs() {
   unsigned int count = std::thread::hardware_concurrency();
   if (count > 0) return static_cast<int>(count);
 #endif
-  const int kDefaultCores = 4;  // Semi-conservative guess
   fprintf(stderr, "can't determine number of CPU cores: assuming %d\n",
           kDefaultCores);
   return kDefaultCores;
