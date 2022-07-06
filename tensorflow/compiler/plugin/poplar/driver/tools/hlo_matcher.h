@@ -129,8 +129,9 @@ class HloMatcherPattern {
 
   HloMatcherPattern(PatternType type, PatternReplaceFn replace_fn,
                     PatternMetaTarget meta_target, PatternInputs inputs,
+                    PatternOutputs outputs,
                     PatternInplaceDescriptionFn inplace_description_fn,
-                    PatternOutputs outputs, Pattern pattern);
+                    Pattern pattern);
 
   const PatternType& GetType() const;
 

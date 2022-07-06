@@ -384,9 +384,8 @@ HloMatcherPattern::HloMatcherPattern(PatternType type,
                                      PatternInputs inputs,
                                      PatternOutputs outputs,
                                      Pattern pattern_nodes)
-    : HloMatcherPattern(type, PatternReplaceFn(), meta_target, inputs,
-                        PatternInplaceDescriptionFn(), outputs, pattern_nodes) {
-}
+    : HloMatcherPattern(type, PatternReplaceFn(), meta_target, inputs, outputs,
+                        PatternInplaceDescriptionFn(), pattern_nodes) {}
 
 HloMatcherPattern::HloMatcherPattern(PatternType type,
                                      PatternReplaceFn replace_fn,
@@ -394,22 +393,20 @@ HloMatcherPattern::HloMatcherPattern(PatternType type,
                                      PatternInputs inputs,
                                      PatternOutputs outputs,
                                      Pattern pattern_nodes)
-    : HloMatcherPattern(type, replace_fn, meta_target, inputs,
-                        PatternInplaceDescriptionFn(), outputs, pattern_nodes) {
-}
+    : HloMatcherPattern(type, replace_fn, meta_target, inputs, outputs,
+                        PatternInplaceDescriptionFn(), pattern_nodes) {}
 
 HloMatcherPattern::HloMatcherPattern(
     PatternType type, PatternMetaTarget meta_target, PatternInputs inputs,
     PatternOutputs outputs, PatternInplaceDescriptionFn inplace_description_fn,
     Pattern pattern_nodes)
-    : HloMatcherPattern(type, PatternReplaceFn(), meta_target, inputs,
-                        inplace_description_fn, outputs, pattern_nodes) {}
+    : HloMatcherPattern(type, PatternReplaceFn(), meta_target, inputs, outputs,
+                        inplace_description_fn, pattern_nodes) {}
 
 HloMatcherPattern::HloMatcherPattern(
     PatternType type, PatternReplaceFn replace_fn,
-    PatternMetaTarget meta_target, PatternInputs inputs,
-    PatternInplaceDescriptionFn inplace_description_fn, PatternOutputs outputs,
-    Pattern pattern_nodes)
+    PatternMetaTarget meta_target, PatternInputs inputs, PatternOutputs outputs,
+    PatternInplaceDescriptionFn inplace_description_fn, Pattern pattern_nodes)
     : type(type),
       replace_fn(replace_fn),
       meta_target(meta_target),
