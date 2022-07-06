@@ -265,6 +265,12 @@ StatusOr<DriverTensor> FindInstructionInput(
     const poplar::DebugNameAndId& debug_name_and_id,
     bool expand_aliasing = true);
 
+StatusOr<DriverTensor> FindF8InstructionInput(
+    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
+    int64_t input, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id,
+    bool expand_aliasing = true);
+
 /**
  * This returns a vector of the poplar tensors or remote buffers which are the
  * inputs to the instruction at the given index.

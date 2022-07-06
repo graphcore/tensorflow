@@ -79,6 +79,19 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "f8_convert",
+    srcs = [
+        "f8_convert.cc",
+    ],
+    deps = [
+        ":expression_helpers",
+        "//tensorflow/compiler/plugin/poplar/driver:tensor",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:f8_convert",
+    ],
+    alwayslink = True,
+)
+
+poplar_cc_library(
     name = "fusions",
     srcs = [
         "fusions.cc",

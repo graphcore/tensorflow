@@ -128,6 +128,8 @@ enum PoplarOp {
   Softmax = 123;
   StableSoftmax = 124;
   Uninitialised = 125;
+  ConvertToF8 = 126;
+  ConvertFromF8 = 127;
 
   // Supported Fusions.
   Conv_biasadd = 200;

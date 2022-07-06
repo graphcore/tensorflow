@@ -1405,6 +1405,47 @@ StatusOr<DriverTensor> FindInstructionInput(
   return result[0];
 }
 
+StatusOr<DriverTensor> FindF8InstructionInput(
+    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
+    int64_t input, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing) {
+  const HloInstruction* operand = inst->operand(input);
+
+  TensorOrRemoteBufferVector inputs = GetTensorsMaybeExpand(
+      map, res, operand, seq, expand_aliasing, debug_name_and_id, 0, 2);
+
+  if (inputs.size() == 0) {
+    return tensorflow::errors::Unknown(
+        StrCat("[Poplar] Couldn't find input ", input, " for ", inst->name()));
+  }
+
+  CHECK_EQ(inputs.size(), 2);
+  auto& graph =
+      GetGraphWithOutputIndex(res, operand, /*flattened_output_tuple_index=*/0);
+  CHECK(&graph == &GetGraphWithOutputIndex(res, operand,
+                                           /*flattened_output_tuple_index=*/1));
+  poplar::Graph& poplar_graph = graph.getPoplarGraph();
+
+  // We can't reinterpret to neither QUARTER_METADATA nor QUARTER type.
+  // Instead, clone them and copy raw unsigned char data over.
+  // Those copies will be elided by poplar.
+
+  DriverTensor u8_data = inputs[0].AsTensor();
+  DriverTensor u8_metadata = inputs[1].AsTensor();
+  auto f8_metadata = poplar_graph.clone(
+      poplar::QUARTER_METADATA, u8_metadata.reshape({1}), debug_name_and_id,
+      poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+  auto f8_data = poplar_graph.clone(
+      poplar::QUARTER, f8_metadata, u8_data, debug_name_and_id,
+      poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+  seq.add(
+      poplar::program::Copy(u8_metadata.getPoplarTensor(),
+                            f8_metadata.reinterpret(poplar::UNSIGNED_CHAR)));
+  seq.add(poplar::program::Copy(u8_data.getPoplarTensor(),
+                                f8_data.reinterpret(poplar::UNSIGNED_CHAR)));
+  return DriverTensor(f8_data, graph);
+}
+
 TensorOrRemoteBufferVector FindInstructionInputs(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     int64_t input, poplar::program::Sequence& seq,

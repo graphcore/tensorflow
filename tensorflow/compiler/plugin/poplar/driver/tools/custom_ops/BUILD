@@ -237,6 +237,19 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "f8_convert",
+    srcs = [
+        "f8_convert.cc",
+    ],
+    hdrs = [
+        "f8_convert.h",
+    ],
+    deps = [
+        ":custom_ops_dependencies",
+    ],
+)
+
+poplar_cc_library(
     name = "fifo",
     srcs = [
         "fifo.cc",
@@ -854,6 +867,7 @@ poplar_cc_library(
         ":dropout_hlo",
         ":elementwise",
         ":execution_counter",
+        ":f8_convert",
         ":fifo",
         ":gru",
         ":histogram",

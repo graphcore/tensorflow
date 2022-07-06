@@ -50,6 +50,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:conv_ops",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:elementwise",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:expression_helpers",
+        "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:f8_convert",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:fusions",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:gather_ops",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:histogram",

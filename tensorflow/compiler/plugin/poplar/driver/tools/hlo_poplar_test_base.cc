@@ -164,40 +164,55 @@ StatusOr<std::vector<Literal>> HloPoplarTestBase::ExecuteNoHloPasses(
   auto& io_map = resources.annotations.input_output_aliasing_map;
   auto& inputs = io_map.GetEntryInputInfos();
   auto& outputs = io_map.GetEntryOutputInfos();
-  CHECK_EQ(args.size(), inputs.size());
 
-  for (size_t i = 0; i < inputs.size(); ++i) {
-    auto& input = inputs[i];
+  int64_t arg_index = 0;
+  for (auto& input : inputs) {
     auto& handles = input.Handles();
-    CHECK(input.Shape().IsArray()) << "Only array inputs are supported now.";
-    CHECK_EQ(handles.size(), 1);
-    engine.connectStream(handles[0], args[i]->untyped_data());
+    size_t handle_index = 0;
+    for (auto& leaf : ShapeUtil::GetLeafShapes(input.Shape())) {
+      CHECK(leaf.shape.IsArray()) << "Only array inputs are supported now.";
+      CHECK_LT(handle_index, handles.size());
+      CHECK_LT(arg_index, args.size());
+      engine.connectStream(handles[handle_index++],
+                           args[arg_index++]->untyped_data());
+    }
   }
 
-  size_t output_count = outputs.size();
-  std::vector<std::vector<char>> output_buffers(output_count);
-  for (size_t i = 0; i < output_count; ++i) {
-    auto& output = outputs[i];
-    CHECK(output.Shape().IsArray()) << "Only array outputs are supported now.";
-    auto& buffer = output_buffers[i];
+  std::vector<std::vector<char>> output_buffers;
+  size_t output_count = absl::c_accumulate(
+      outputs, size_t(0),
+      [](size_t total, const InputOutputAliasingMap::OutputInfo& output) {
+        return total + ShapeUtil::GetLeafCount(output.Shape());
+      });
+  output_buffers.reserve(output_count);
 
-    const Shape& shape = output.Shape();
-    buffer.resize(ShapeUtil::ByteSizeOf(shape));
+  for (auto& output : outputs) {
+    auto& handles = output.Handles();
+    size_t handle_index = 0;
+    for (auto& leaf : ShapeUtil::GetLeafShapes(output.Shape())) {
+      CHECK(leaf.shape.IsArray()) << "Only array outputs are supported now.";
+      CHECK_LT(handle_index, handles.size());
 
-    auto& handles = outputs[i].Handles();
-    CHECK_EQ(handles.size(), 1);
-    engine.connectStream(handles[0], buffer.data());
+      output_buffers.emplace_back(ShapeUtil::ByteSizeOf(leaf.shape));
+      auto& buffer = output_buffers.back();
+      engine.connectStream(handles[handle_index++], buffer.data());
+    }
   }
 
   engine.run(0);
 
   std::vector<Literal> result;
-  for (size_t i = 0; i < output_count; ++i) {
-    const Shape& shape = outputs[i].Shape();
-    Literal literal(shape);
-    memcpy(literal.untyped_data(), output_buffers[i].data(),
-           output_buffers[i].size());
-    result.push_back(std::move(literal));
+  result.reserve(output_count);
+
+  size_t output_buffer_index = 0;
+  for (auto& output : outputs) {
+    for (auto& leaf : ShapeUtil::GetLeafShapes(output.Shape())) {
+      Literal literal(leaf.shape);
+      memcpy(literal.untyped_data(), output_buffers[output_buffer_index].data(),
+             output_buffers[output_buffer_index].size());
+      result.push_back(std::move(literal));
+      ++output_buffer_index;
+    }
   }
   return result;
 }

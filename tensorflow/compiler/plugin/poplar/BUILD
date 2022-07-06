@@ -681,6 +681,19 @@ xla_test(
 )
 
 xla_test(
+    name = "f8_test",
+    size = "medium",
+    srcs = ["tests/f8_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":poplar_test_base",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "fuse_wide_const_test",
     srcs = ["tests/fuse_wide_const_test.cc"],
     backends = ["poplar"],
