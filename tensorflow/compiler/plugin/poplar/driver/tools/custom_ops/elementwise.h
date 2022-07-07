@@ -53,7 +53,7 @@ class HloElementwiseUnaryBase : public HloPoplarInstruction {
 
   const FindConsumersExtensionResults FindConsumers(
       FindConsumersExtensionParams params) const override {
-    return FindConsumersExtensionResults::DoNotFindConsumers();
+    return FindConsumersExtensionResults();
   }
 
   bool AllowNonInplaceLowering() const override { return true; }
