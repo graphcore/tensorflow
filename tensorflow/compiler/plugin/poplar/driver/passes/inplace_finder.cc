@@ -312,7 +312,6 @@ void AddCopiesForFailedInplace(HloInstruction* inst, InplacingState& state) {
     // Instead of copying inputs, copy output.
     state.instructions_to_copy.push_back(inst);
   } else {
-    state.operands_to_copy.emplace_back(inst);
     for (auto op_index : inplace_description.GetInplaceOperandIndices()) {
       auto* op = inst->operand(op_index);
       if (op->user_count() == 1 &&
@@ -324,10 +323,7 @@ void AddCopiesForFailedInplace(HloInstruction* inst, InplacingState& state) {
         VLOG(3) << "Do not copy wide copy with unique user " << op->name();
         continue;
       }
-      state.operands_to_copy.back().operands.push_back(op_index);
-    }
-    if (state.operands_to_copy.back().operands.empty()) {
-      state.operands_to_copy.pop_back();
+      state.operands_to_copy[inst].push_back(op_index);
     }
   }
 }
@@ -351,10 +347,10 @@ StatusOr<bool> InsertCopies(InplacingState& state) {
     changed = true;
   }
 
-  for (auto& operand_to_copy : state.operands_to_copy) {
-    HloInstruction* inst = operand_to_copy.inst;
+  for (auto& pair : state.operands_to_copy) {
+    HloInstruction* inst = pair.first;
     auto inplace_description = GetInplaceDescription(inst);
-    for (int64_t op_index : operand_to_copy.operands) {
+    for (int64_t op_index : pair.second) {
       HloInstruction* op = inst->mutable_operand(op_index);
       HloInstruction* copy;
       if (op->opcode() == HloOpcode::kCopy && op->user_count() == 1) {

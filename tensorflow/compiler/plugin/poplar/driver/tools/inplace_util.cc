@@ -79,14 +79,20 @@ bool AnyReachable(HloInstruction* from, TContainer to,
   return false;
 }
 
-void AddDependenciesForPeers(HloInstruction* inplace,
-                             HloInstruction* inplace_operand,
-                             HloReachabilityMap& reachability_map) {
-  if (!AnyReachable(inplace, inplace_operand->users(), reachability_map)) {
+void AddCopyOrDependenciesForPeers(HloInstruction* inplace,
+                                   HloInstruction* inplace_operand,
+                                   InplacingState& state) {
+  if (AnyReachable(inplace, inplace_operand->users(),
+                   *state.reachability_map)) {
+    // There is no possible schedule where the op happens after all other users
+    // of the inplace operand. In this case we copy the inplace operand.
+    state.operands_to_copy[inplace].push_back(
+        inplace->operand_index(inplace_operand));
+  } else {
     // Add control dependencies such that the op being inplaced is scheduled
     // after its non-inplace peers.
     for (auto* peer : inplace_operand->users()) {
-      AddDependency(peer, inplace, reachability_map);
+      AddDependency(peer, inplace, *state.reachability_map);
     }
   }
 }
@@ -146,8 +152,11 @@ bool ConvertToInplaceReadWrite(HloInstruction* inst, InplacingState& state) {
     }
 
     // If any peer is reachable from inst, there is no valid ordering without
-    // inserting a copy (cond 2).
-    if (AnyReachable(inst, op->users(), *state.reachability_map)) {
+    // inserting a copy (cond 2). If the instruction supports non-inplace
+    // lowering, that is preferred to inserting a copy as the instruction can
+    // allocate its own output with a potentially better layout.
+    if (AnyReachable(inst, op->users(), *state.reachability_map) &&
+        inplace_desc.AllowNonInplaceLowering()) {
       return false;
     }
 
@@ -163,7 +172,7 @@ bool ConvertToInplaceReadWrite(HloInstruction* inst, InplacingState& state) {
   // before being used by a non-inplace peer.
   for (auto op_idx : inplace_desc.GetInplaceOperandIndices()) {
     HloInstruction* op = inst->mutable_operand(op_idx);
-    AddDependenciesForPeers(inst, op, *state.reachability_map);
+    AddCopyOrDependenciesForPeers(inst, op, state);
   }
 
   return true;

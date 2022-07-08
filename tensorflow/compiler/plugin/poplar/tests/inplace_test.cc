@@ -1389,8 +1389,8 @@ ENTRY entry {
   EXPECT_TRUE(
       InplaceFinder(CompilerAnnotations(module0)).Run(module0).ValueOrDie());
 
-  // Make sure both while and repeat wasn't lowered inplace.
-  EXPECT_TRUE(!IsLoweredInplace(loop));
+  // Make sure both while and repeat were lowered inplace.
+  EXPECT_TRUE(IsLoweredInplace(loop));
   int64_t operand_n;
   if (convert_to_repeat) {
     EXPECT_TRUE(IsRepeatLoop(loop));
@@ -1398,14 +1398,79 @@ ENTRY entry {
     EXPECT_EQ(loop->opcode(), HloOpcode::kWhile);
   }
   for (const HloInstruction* op : loop->operands()) {
-    EXPECT_EQ(op->opcode(), HloOpcode::kCopy);
-    TF_ASSERT_OK_AND_ASSIGN(auto clone_method, GetCopyCloneMethod(op));
-    EXPECT_TRUE(absl::c_all_of(
-        clone_method.leaves(),
-        [](const std::pair<ShapeIndex, CloneMethod>& method) {
-          return method.second == CloneMethod_DeduceNewOrderOrExpandAliases;
-        }));
+    if (op->opcode() == HloOpcode::kCopy) {
+      TF_ASSERT_OK_AND_ASSIGN(auto clone_method, GetCopyCloneMethod(op));
+      EXPECT_TRUE(absl::c_all_of(
+          clone_method.leaves(),
+          [](const std::pair<ShapeIndex, CloneMethod>& method) {
+            return method.second == CloneMethod_DeduceNewOrderOrExpandAliases;
+          }));
+    } else {
+      // Operands may be duplicated constants instead of copies.
+      ASSERT_EQ(op->opcode(), HloOpcode::kConstant);
+    }
   }
+}
+
+TEST_F(HloInplaceDependencyTest, PipelineStage) {
+  const char* const hlo = R"(
+HloModule module
+
+_stage_0 {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  p2 = f32[] parameter(2)
+  mul0 = f32[] multiply(p1, p0)
+  mul1 = f32[] multiply(p2, p0)
+  ROOT t = (f32[], f32[]) tuple(mul0, mul1)
+}
+
+_stage_1 {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  p2 = f32[] parameter(2)
+  add0 = f32[] add(p1, p0)
+  add1 = f32[] add(p2, p0)
+  ROOT t = (f32[], f32[]) tuple(add0, add1)
+}
+
+pipeline {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  zero = f32[] constant(0.5)
+  s0 = (f32[], f32[]) call(p0, p1, zero), to_apply=_stage_0, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  s0_0 = f32[] get-tuple-element(s0), index=0
+  s0_1 = f32[] get-tuple-element(s0), index=1
+  s1 = () call(s0_0, s0_1, zero), to_apply=_stage_1, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  ROOT t = () tuple()
+}
+
+ENTRY e {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT c = () call(p0, p1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+}
+)";
+
+  auto module =
+      HloRunner::CreateModuleFromString(hlo, GetDebugOptionsForTest());
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  EXPECT_TRUE(
+      InplaceFinder(CompilerAnnotations(module0)).Run(module0).ValueOrDie());
+
+  auto* pipeline = module0->entry_computation()->root_instruction()->to_apply();
+  auto inplace_instructions = GetInplaceInstructions(pipeline);
+
+  // Both stages are inplaced.
+  HloInstruction* s0 = FindInstruction(module0, "s0");
+  HloInstruction* s1 = FindInstruction(module0, "s1");
+  EXPECT_TRUE(inplace_instructions.contains(s0));
+  EXPECT_TRUE(inplace_instructions.contains(s1));
+
+  // A copy is inserted to allow stage 0 to be inplaced.
+  EXPECT_TRUE(s0->operand(2)->opcode() == HloOpcode::kCopy);
 }
 
 }  // namespace

@@ -32,12 +32,6 @@ struct CompilerAnnotations;
 
 // State which is tracked per-computation during the process of inplacing.
 struct InplacingState {
-  struct OperandToCopy {
-    HloInstruction* inst;
-    std::vector<int64_t> operands;
-    explicit OperandToCopy(HloInstruction* inst) : inst(inst) {}
-  };
-
   explicit InplacingState(HloComputation* comp)
       : comp(comp), reachability_map(HloReachabilityMap::Build(comp)) {}
 
@@ -52,7 +46,7 @@ struct InplacingState {
   // Some copies need to be inserted in the process of inplacing.
   // The actual creation of the copies is deferred to avoid having to rebuild
   // the reachability map.
-  std::vector<OperandToCopy> operands_to_copy;
+  HloInstructionMap<std::vector<int64_t>> operands_to_copy;
   std::vector<HloInstruction*> instructions_to_copy;
 
   // See ConvertToInplaceReadOnly.
