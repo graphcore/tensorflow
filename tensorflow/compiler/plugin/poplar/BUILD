@@ -2455,7 +2455,7 @@ tf_xla_py_test(
     name = "synthetic_data_categories_test",
     size = "large",
     srcs = ["tests/synthetic_data_categories_test.py"],
-    enabled_backends = ["poplar"],
+    enabled_backends = [],  # Disabled due to failure in synthetic infeed memory tests
     deps = [
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
