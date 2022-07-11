@@ -84,8 +84,6 @@ class PoplarWhileLoopRemapper : public HloModulePass {
   StatusOr<bool> Run(HloModule* module) override;
 };
 
-bool WorthHoistingOnIpu(const HloInstruction& inst);
-
 }  // namespace poplarplugin
 }  // namespace xla
 
