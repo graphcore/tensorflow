@@ -32,11 +32,15 @@ namespace xla {
 namespace poplarplugin {
 
 struct PopItDeleter {
-  void operator()(popitSession_t* session) { popitDestroySession(session); }
+  void operator()(popitSession_t* session) {
+    popitDisconnect(session);
+    popitDestroySession(session);
+  }
 };
 
 class PopItExecutor : public se::internal::StreamExecutorInterface {
   absl::optional<IpuOptions> ipu_options_;
+  poplar::Device device_;
   using SessionType = std::unique_ptr<popitSession_t, PopItDeleter>;
   SessionType session_;
 

@@ -19,7 +19,6 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import constant_op
 
-
 class PopItTests(test_util.TensorFlowTestCase):
   def testSimpleAdd(self):
     with ops.device('/device:POPIT:0'):

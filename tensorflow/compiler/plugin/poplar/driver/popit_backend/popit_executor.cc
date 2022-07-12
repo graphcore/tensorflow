@@ -14,6 +14,8 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/popit_backend/popit_executor.h"
 
+#include <utility>
+
 #include <poplar/DeviceManager.hpp>
 #include <poplar/IPUModel.hpp>
 #include <poplar/Target.hpp>
@@ -77,6 +79,8 @@ poplar::Target CreateTargetWithNIPUs(int num_ipus) {
   return poplar::Target::createIPUTarget(num_ipus, "IPU-POD16");
 }
 
+// Unused currently though keeping around for when I want to support
+// IPU model
 StatusOr<poplar::Target> CreatePoplarTarget(
     const absl::optional<IpuOptions>& ipu_options, int ordinal) {
   if (!ipu_options) {
@@ -139,15 +143,33 @@ absl::InlinedVector<popitMemSpaceDesc, 2> CreateMemSpaces(
   return result;
 }
 
+poplar::Device GetDevice(int device_ordinal,
+                         const absl::optional<IpuOptions>& ipu_options) {
+  CHECK(HasIpuHardware());
+  auto device_manager = poplar::DeviceManager::createDeviceManager();
+  auto device_list = device_manager.getDevices();
+  if (ipu_options && ipu_options->device_config_size() > 0) {
+    auto device_config = ipu_options->device_config(device_ordinal);
+    return std::move(device_list.at(device_config.cfg_index()));
+  }
+  return std::move(device_list.at(device_ordinal));
+}
+
+void ConnectSession(popitSession_t* session, poplar::Device& device) {
+  popitConnect(session, reinterpret_cast<poplarDevice_t*>(&device));
+}
+
 Status PopItExecutor::Init(int device_ordinal,
                            se::DeviceOptions device_options) {
-  TF_ASSIGN_OR_RETURN(const auto target,
-                      CreatePoplarTarget(ipu_options_, device_ordinal));
+  device_ = GetDevice(device_ordinal, ipu_options_);
+  const auto target = device_.getTarget();
   auto mem_spaces = CreateMemSpaces(ipu_options_, target);
   auto session_ptr = popitCreateSession(
       reinterpret_cast<const poplarTarget_t*>(&target),
       GetSessionReplicationFactor(ipu_options_), mem_spaces.data(),
       static_cast<unsigned>(mem_spaces.size()));
+
+  ConnectSession(session_ptr, device_);
   session_ = SessionType(session_ptr);
   return Status::OK();
 }
@@ -206,26 +228,52 @@ Status PopItExecutor::Memset32(se::Stream* stream,
   NOT_IMPLEMENTED;
 }
 bool PopItExecutor::Memcpy(se::Stream* stream, void* host_dst,
-                           const se::DeviceMemoryBase& gpu_src, uint64 size) {
-  NOT_IMPLEMENTED;
+                           const se::DeviceMemoryBase& src, uint64 size) {
+  return RunPoplarFunction([&] {
+           return popitCopyToHost(
+               static_cast<const PopItSubBuffer*>(src.opaque())->GetDevicePtr(),
+               static_cast<char*>(host_dst));
+         })
+      .ok();
 }
-bool PopItExecutor::Memcpy(se::Stream* stream, se::DeviceMemoryBase* gpu_dst,
+bool PopItExecutor::Memcpy(se::Stream* stream, se::DeviceMemoryBase* dst,
                            const void* host_src, uint64 size) {
-  NOT_IMPLEMENTED;
+  return RunPoplarFunction([&] {
+           return popitCopyFromHost(
+               static_cast<const char*>(host_src),
+               static_cast<PopItSubBuffer*>(dst->opaque())->GetDevicePtr());
+         })
+      .ok();
 }
 bool PopItExecutor::MemcpyDeviceToDevice(se::Stream* stream,
-                                         se::DeviceMemoryBase* gpu_dst,
-                                         const se::DeviceMemoryBase& gpu_src,
+                                         se::DeviceMemoryBase* dst,
+                                         const se::DeviceMemoryBase& src,
                                          uint64 size) {
-  NOT_IMPLEMENTED;
+  return RunPoplarFunction([&] {
+           return popitCopy(
+               static_cast<const PopItSubBuffer*>(src.opaque())->GetDevicePtr(),
+               static_cast<PopItSubBuffer*>(dst->opaque())->GetDevicePtr())
+         })
+      .ok();
 }
 bool PopItExecutor::HostCallback(se::Stream* stream,
                                  std::function<void()> callback) {
-  NOT_IMPLEMENTED;
+  // For now sync and then callback, we should aim to make this async
+  // though
+  return RunPoplarFunction([&] {
+           popitSync(session_.get());
+           callback();
+         })
+      .ok();
 }
 bool PopItExecutor::HostCallback(se::Stream* stream,
                                  std::function<Status()> callback) {
-  NOT_IMPLEMENTED;
+  return HostCallback(stream, [callback = std::move(callback)] {
+    Status status = callback();
+    if (!status.ok()) {
+      LOG(WARNING) << "Host callback failed: " << status;
+    }
+  });
 }
 Status PopItExecutor::AllocateEvent(se::Event* event) { NOT_IMPLEMENTED; }
 Status PopItExecutor::DeallocateEvent(se::Event* event) { NOT_IMPLEMENTED; }

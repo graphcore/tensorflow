@@ -860,6 +860,7 @@ popit_py_test(
     size = "small",
     srcs = ["tests/popit_test.py"],
     srcs_version = "PY2AND3",
+    tags = ["hw_poplar_test_1_ipus"],
     deps = [
         "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
         "//tensorflow/compiler/tests:xla_test",
