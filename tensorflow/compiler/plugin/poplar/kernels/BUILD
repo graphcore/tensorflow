@@ -104,6 +104,7 @@ poplar_cc_library(
         "popops/all_reduce.cc",
         "popops/all_to_all.cc",
         "popops/erf.cc",
+        "popops/f8_convert.cc",
         "popops/histogram.cc",
         "popops/multi_slice.cc",
         "popops/normalise_image.cc",

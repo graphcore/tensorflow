@@ -42,11 +42,11 @@ class HloF8ConvertInstruction : public HloPoplarInstruction {
   }
 
   HloPoplarUseDescriptions GetUseDescriptions() const override {
-    return UseDescriptionsSimpleNoTuple0thOperandAliasing(this);
+    return UseDescriptionsNoInputOutputAlias();
   }
 
   HloPoplarBufferDescriptions GetBufferDescriptions() const override {
-    return BufferDescriptionsNoAllocations();
+    return BufferDescriptionsAllocatesAllOutputs(this);
   }
 
   const FindConsumersExtensionResults FindConsumers(

@@ -173,6 +173,7 @@ py_library(
         "ops/custom_ops.py",
         "ops/embedding_ops.py",
         "ops/experimental/popfloat_cast_to_gfloat.py",
+        "ops/f8_ops.py",
         "ops/functional_ops.py",
         "ops/image_ops.py",
         "ops/internal_ops.py",
@@ -546,6 +547,20 @@ py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/keras",
+    ],
+)
+
+tf_py_test(
+    name = "f8_test",
+    size = "medium",
+    srcs = ["tests/f8_test.py"],
+    deps = [
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
     ],
 )
 

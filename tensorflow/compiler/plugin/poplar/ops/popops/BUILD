@@ -27,6 +27,17 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "f8_convert",
+    srcs = [
+        "f8_convert.cc",
+    ],
+    deps = [
+        "//tensorflow/core:framework",
+    ],
+    alwayslink = True,
+)
+
+poplar_cc_library(
     name = "histogram",
     srcs = [
         "histogram.cc",
@@ -98,6 +109,7 @@ poplar_cc_library(
     deps = [
         ":all_to_all",
         ":cross_replica_sum",
+        ":f8_convert",
         ":histogram",
         ":multi_slice",
         ":normalise_image",
