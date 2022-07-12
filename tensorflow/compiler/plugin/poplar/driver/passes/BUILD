@@ -355,6 +355,20 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "elementwise_preapply",
+    srcs = [
+        "elementwise_preapply.cc",
+    ],
+    hdrs = [
+        "elementwise_preapply.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:matcher_predicates",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:util",
+    ],
+)
+
+poplar_cc_library(
     name = "elementwise_simplifier",
     srcs = [
         "elementwise_simplifier.cc",
@@ -1238,6 +1252,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:arg_min_max",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:hlo_remote_buffer_info",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:normalise_image",
+        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:onehot",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:pooling",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:stateful_gradient_accumulate",
     ],
@@ -1755,6 +1770,7 @@ poplar_cc_library(
         ":distributed_batch_norm_decomposer",
         ":dynamic_slice_replacer",
         ":elementwise_broadcast_converter",
+        ":elementwise_preapply",
         ":elementwise_simplifier",
         ":embeddings_gradient_optimizer",
         ":expression_outliner",

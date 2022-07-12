@@ -270,6 +270,20 @@ xla_test(
 )
 
 xla_test(
+    name = "elementwise_preapply_test",
+    srcs = ["tests/elementwise_preapply_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "elementwise_simplifier_test",
     srcs = ["tests/elementwise_simplifier_test.cc"],
     backends = ["poplar"],

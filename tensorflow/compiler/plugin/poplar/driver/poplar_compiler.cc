@@ -63,6 +63,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/distributed_batch_norm_decomposer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dynamic_slice_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_preapply.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/embeddings_gradient_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/expression_outliner.h"
@@ -1024,6 +1025,7 @@ void AddAlgebraicOptimizerPass(HloPassPipeline& pipeline,
           "algebraic-optimiser-wrapper", compilation_stats);
   algebraic_simplifier_pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
       poplar_executor->GetIpuOptions().algebraic_simplifier_config());
+  algebraic_simplifier_pipeline.AddPass<HloPassFix<ElementwisePreapply>>();
   algebraic_simplifier_pipeline.AddPass<HloPassFix<HloConstantFolding>>();
 }
 

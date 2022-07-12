@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_custom_call.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/normalise_image.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/onehot.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
