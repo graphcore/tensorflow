@@ -56,6 +56,8 @@ def dataset_benchmark(dataset,
     Raises:
       TypeError: if `dataset` is not an instance of `tf.data.Dataset`.
       ValueError: if `number_of_epochs` or `elements_per_epochs` is less than 1.
+      InvalidArgumentError: if `dataset` contains a shape with a dimension of
+        size 0.
     """
   if number_of_epochs < 1:
     return ValueError("Expected `number_of_epochs` to be at least 1.")
@@ -116,6 +118,8 @@ def infeed_benchmark(infeed_queue,
       TypeError: if `infeed_queue` is not an instance of
         `ipu.ipu_infeed_queue.IPUInfeedQueue`.
       ValueError: if `number_of_epochs` or `elements_per_epochs` is less than 1.
+      InvalidArgumentError: if `infeed_queue` contains a shape with a dimension
+        of size 0.
     """
   if not isinstance(infeed_queue, ipu_infeed_queue.IPUInfeedQueue):
     return TypeError("Expected `infeed_queue` argument to be of type "

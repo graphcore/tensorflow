@@ -15,6 +15,7 @@
 import json
 
 from tensorflow.python.ipu import test_utils as tu
+from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import googletest
 from tensorflow.python import ipu
@@ -48,6 +49,18 @@ class DatasetBenchmarkTest(test_util.TensorFlowTestCase):
       for x in j["epochs"]:
         for field in x:
           self.assertAllGreater(x[field], 0.0)
+
+  @test_util.deprecated_graph_mode_only
+  def testShape0Dim(self):
+    dataset = tu.create_single_increasing_dataset(10, shape=[4, 0])
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    benchmark_op = ipu.dataset_benchmark.infeed_benchmark(infeed_queue, 5, 256)
+
+    with self.session() as sess:
+      with self.assertRaisesRegex(
+          errors.InvalidArgumentError,
+          'Detected a tensor in the dataset with a dimension of size 0'):
+        sess.run(benchmark_op)
 
 
 if __name__ == "__main__":

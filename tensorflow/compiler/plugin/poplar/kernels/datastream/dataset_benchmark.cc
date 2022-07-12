@@ -69,6 +69,12 @@ void XlaShapesFromAttr(OpKernelConstruction* ctx,
   }
 }
 
+bool AllShapesNonTrivial(const std::vector<xla::Shape>& shapes) {
+  return absl::c_all_of(shapes, [](const xla::Shape& shape) -> bool {
+    return xla::ShapeUtil::ElementsIn(shape);
+  });
+}
+
 xla::poplarplugin::IOFunction ConsumerThread(
     bool print_stats, bool do_memcpy, uint64 number_of_epochs,
     uint64 elements_per_epochs, Notification* finished_notifiation,
@@ -191,6 +197,11 @@ class DatasetBenchmark : public OpKernel {
     OP_REQUIRES_OK(ctx,
                    ctx->GetAttr("elements_per_epochs", &elements_per_epochs_));
     XlaShapesFromAttr(ctx, shapes_);
+
+    OP_REQUIRES(ctx, AllShapesNonTrivial(shapes_),
+                errors::InvalidArgument(
+                    "Detected a tensor in the dataset with a dimension of size "
+                    "0. Please remove it from the inputs."));
   }
 
   ~DatasetBenchmark() override {}
