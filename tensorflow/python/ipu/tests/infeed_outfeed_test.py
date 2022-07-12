@@ -1531,6 +1531,57 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     # run test
     session.run(retinanet_validation_step)
 
+  @test_util.deprecated_graph_mode_only
+  def testDim0Infeed(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    dataset = tu.create_single_increasing_dataset(5, shape=[1, 0])
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+
+    def body(c, _x):
+      return c
+
+    def my_net():
+      c = constant_op.constant(1, dtype=np.int32, shape=[2])
+      return ipu.loops.repeat(5, body, [c], infeed_queue)
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      ipu.ipu_compiler.compile(my_net, inputs=[])
+
+    with session_lib.Session() as sess:
+      with self.assertRaisesRegex(
+          errors.InvalidArgumentError,
+          'Detected an input tensor to an infeed queue with a dimension of '
+          'size 0'):
+        sess.run(infeed_queue.initializer)
+
+  @test_util.deprecated_graph_mode_only
+  def testDim0Outfeed(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def body(c):
+      return c, outfeed_queue.enqueue(c)
+
+    def my_net():
+      c = constant_op.constant(1, dtype=np.int32, shape=[2, 0])
+      return ipu.loops.repeat(5, body, [c])
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
+
+    with session_lib.Session() as sess:
+      with self.assertRaisesRegex(
+          errors.InvalidArgumentError,
+          'Detected an input tensor to an outfeed queue with a dimension of '
+          'size 0'):
+        sess.run(res)
+
 
 if __name__ == "__main__":
   googletest.main()

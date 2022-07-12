@@ -130,6 +130,12 @@ void GetOutfeedMode(OpKernelConstruction* ctx,
                                 ", supported values are 'all' and 'get_last'"));
   }
 }
+
+bool AllShapesNonTrivial(const std::vector<xla::Shape>& shapes) {
+  return absl::c_all_of(shapes, [](const xla::Shape& shape) -> bool {
+    return xla::ShapeUtil::ElementsIn(shape);
+  });
+}
 }  // namespace
 
 class PopDatastreamInfeedDequeueOp : public XlaOpKernel {
@@ -138,6 +144,11 @@ class PopDatastreamInfeedDequeueOp : public XlaOpKernel {
       : XlaOpKernel(ctx) {
     GetFeedConfig(ctx, config_);
     XlaShapesFromAttr(ctx, xla_shapes_);
+
+    OP_REQUIRES(ctx, AllShapesNonTrivial(xla_shapes_),
+                errors::InvalidArgument(
+                    "Detected an input tensor to an infeed queue with a "
+                    "dimension of size 0. Please remove it from the inputs."));
   }
 
   ~PopDatastreamInfeedDequeueOp() override{};
@@ -175,6 +186,10 @@ class IPUCreateDatasetIteratorOp : public OpKernel {
                 errors::InvalidArgument("Need device_ordinal >= 0, got ",
                                         device_ordinal_));
     XlaShapesFromAttr(ctx, xla_shapes_);
+    OP_REQUIRES(ctx, AllShapesNonTrivial(xla_shapes_),
+                errors::InvalidArgument(
+                    "Detected an input tensor to an infeed queue with a "
+                    "dimension of size 0. Please remove it from the inputs."));
   }
 
   ~IPUCreateDatasetIteratorOp() override {}
@@ -272,6 +287,11 @@ class PopDatastreamOutfeedEnqueueOp : public XlaOpKernel {
       xla_shapes[i] = xla_shape;
     }
 
+    OP_REQUIRES(ctx, AllShapesNonTrivial(xla_shapes),
+                errors::InvalidArgument(
+                    "Detected an input tensor to an outfeed queue with a "
+                    "dimension of size 0. Please remove it from the inputs."));
+
     xla::Shape outfeed_shape;
     xla::XlaOp outfeed_input;
     const bool is_tuple = num_inputs > 1;
@@ -321,6 +341,11 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
                 errors::InvalidArgument(
                     "Outfeed num_outputs() != Attribute num outputs: ",
                     ctx->num_outputs(), " != ", xla_shapes_.size()));
+
+    OP_REQUIRES(ctx, AllShapesNonTrivial(xla_shapes_),
+                errors::InvalidArgument(
+                    "Detected an input tensor to an outfeed queue with a "
+                    "dimension of size 0. Please remove it from the inputs."));
   }
 
   ~PopDatastreamOutfeedDequeueOp() override{};
