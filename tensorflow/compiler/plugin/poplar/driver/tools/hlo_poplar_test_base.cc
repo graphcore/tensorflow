@@ -173,6 +173,7 @@ StatusOr<std::vector<Literal>> HloPoplarTestBase::ExecuteNoHloPasses(
       CHECK(leaf.shape.IsArray()) << "Only array inputs are supported now.";
       CHECK_LT(handle_index, handles.size());
       CHECK_LT(arg_index, args.size());
+      CHECK_EQ(leaf.shape, args[arg_index]->shape());
       engine.connectStream(handles[handle_index++],
                            args[arg_index++]->untyped_data());
     }
