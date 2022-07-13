@@ -103,9 +103,11 @@ Status MoveInstructionIntoCacheableComputation(HloInstruction* inst) {
 
   TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
                       inst->backend_config<PoplarBackendConfig>());
-  auto* call_config = poplar_backend_config.mutable_call_config();
-  call_config->set_type(PoplarBackendConfig::CallConfig::Function);
   poplar_backend_config.clear_ml_type();
+  auto* call_config = poplar_backend_config.mutable_call_config();
+  auto* function_config = call_config->mutable_function_config();
+  function_config->set_keep_input_layouts(true);
+  call_config->set_type(PoplarBackendConfig::CallConfig::Function);
   TF_RETURN_IF_ERROR(call->set_backend_config(poplar_backend_config));
 
   TF_RETURN_IF_ERROR(comp->ReplaceInstruction(inst, call));

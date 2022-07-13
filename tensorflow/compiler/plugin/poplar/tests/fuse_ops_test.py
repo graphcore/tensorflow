@@ -493,7 +493,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         'Sum/reduce*/ReduceFinalStage/IntermediateToOutput/Reduce',
         'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4',
         'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
-        'vs/conv2d/Conv2D/convolution*/Conv_1x1'
+        'vs/conv2d/Conv2D/convolution*/Conv_1x1',
+        'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y*/WeightsTransposeChansFlipXY/WeightsTranspose'
     ]
     # pylint: enable=line-too-long
 
