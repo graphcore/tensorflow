@@ -145,6 +145,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/seed_hoisting.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/serialize_gradient_accumulation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/slice_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/slice_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/suggest_recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/variables_offload_and_partition.h"
@@ -1395,17 +1396,12 @@ Status TransformHlo(HloModule* module, PoplarExecutor* poplar_executor,
     pipeline.AddPass<PipelineVerifier>(resources.recomputation_enabled);
     pipeline.AddPass<GradientAccumulationVerifier>(
         resources.replication_factor);
-    if (resources.information.max_all_reduce_buffer_size > 0 ||
-        resources.information.max_inter_ipu_copies_buffer_size > 0 ||
-        resources.information.max_send_recv_cluster_size > 0 ||
-        resources.information.max_reduce_many_buffer_size > 0 ||
-        resources.information.max_all_gather_buffer_size > 0) {
-      pipeline.AddPass<IpuScheduler>(
-          CreateClusteringMemoryScheduler(resources.information),
-          &resources.annotations);
-      pipeline.AddPass<CombineInstructions>();
-      pipeline.AddPass<HloDescheduler>();
-    }
+    pipeline.AddPass<IpuScheduler>(
+        CreateClusteringMemoryScheduler(resources.information),
+        &resources.annotations);
+    pipeline.AddPass<CombineInstructions>();
+    pipeline.AddPass<SliceCopyInserter>(resources.annotations);
+    pipeline.AddPass<HloDescheduler>();
     pipeline.AddPass<RemoteBufferMerger>(
         resources.annotations, poplar_executor->RemoteBufferMergingMode());
     pipeline.AddPass<RemoteParameterParallelCombiner>();
