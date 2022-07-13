@@ -104,7 +104,7 @@ Status MoveInstructionIntoCacheableComputation(HloInstruction* inst) {
   TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
                       inst->backend_config<PoplarBackendConfig>());
   auto* call_config = poplar_backend_config.mutable_call_config();
-  call_config->set_type(PoplarBackendConfig::CallConfig::Call);
+  call_config->set_type(PoplarBackendConfig::CallConfig::Function);
   poplar_backend_config.clear_ml_type();
   TF_RETURN_IF_ERROR(call->set_backend_config(poplar_backend_config));
 
