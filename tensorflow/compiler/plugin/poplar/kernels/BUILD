@@ -88,6 +88,7 @@ poplar_cc_library(
         "functional/functional.cc",
         "functional/functional_util.cc",
         "functional/pipelining.cc",
+        "grad_util_ops.cc",
         "host_compute_kernels.cc",
         "ipu_kernels.cc",
         "popfloat/cast_to_gfloat.cc",

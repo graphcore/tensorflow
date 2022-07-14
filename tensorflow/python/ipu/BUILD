@@ -12,6 +12,15 @@ load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "if_horovod", "poprun
 load("//tensorflow/python/ipu:ipu_python.bzl", "popit_py_test")
 
 py_library(
+    name = "ipu_eager_lib",
+    srcs = [
+        "eager/backprop.py",
+    ],
+    srcs_version = "PY2AND3",
+    deps = [],
+)
+
+py_library(
     name = "ipu_ops_lib",
     srcs = [
         "ops/application_compile_op.py",
@@ -20,6 +29,7 @@ py_library(
         "ops/embedded_runtime.py",
         "ops/embedding_ops.py",
         "ops/functional_ops.py",
+        "ops/grad_util_ops.py",
         "ops/image_ops.py",
         "ops/internal_ops.py",
         "ops/math_ops.py",
@@ -38,6 +48,7 @@ py_library(
         "//tensorflow/compiler/plugin/poplar/ops:application_runtime_py",
         "//tensorflow/compiler/plugin/poplar/ops:dataset_benchmark_py",
         "//tensorflow/compiler/plugin/poplar/ops:functional_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:grad_util_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:popfloat_ops_py",
@@ -58,6 +69,7 @@ py_library(
         "ops/embedding_ops_grad.py",
         "ops/experimental/popfloat_ops_grad.py",
         "ops/functional_ops_grad.py",
+        "ops/grad_util_ops_grad.py",
         "ops/internal_ops_grad.py",
         "ops/nn_ops_grad.py",
         "ops/normalization_ops_grad.py",
@@ -175,6 +187,7 @@ py_library(
         "ops/experimental/popfloat_cast_to_gfloat.py",
         "ops/f8_ops.py",
         "ops/functional_ops.py",
+        "ops/grad_util_ops.py",
         "ops/image_ops.py",
         "ops/internal_ops.py",
         "ops/math_ops.py",
@@ -207,6 +220,7 @@ py_library(
         ":config_lib",
         ":data",
         ":dataset_extractor",
+        ":ipu_eager_lib",
         ":ipu_ops_lib",
         ":ipu_grad_ops_lib",
         "//tensorflow/python/ipu/test_utils:test_utils",
@@ -833,6 +847,19 @@ tf_py_test(
     tags = ["hw_poplar_test_2_ipus"],
     deps = [
         "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
+    ],
+)
+
+tf_py_test(
+    name = "capture_upstream_gradients_test",
+    size = "medium",
+    srcs = ["tests/capture_upstream_gradients_test.py"],
+    deps = [
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:variables",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/ipu/test_utils",
     ],

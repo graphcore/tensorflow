@@ -59,6 +59,16 @@ poplar_cc_library(
     alwayslink = True,
 )
 
+poplar_cc_library(
+    name = "grad_util_ops",
+    srcs = ["grad_util_ops.cc"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/ops:common_shape_fns",
+        "//tensorflow/core:framework",
+    ],
+    alwayslink = True,
+)
+
 tf_gen_op_wrapper_py(
     name = "dataset_ops_wrapper_py",
     out = "gen_dataset_ops.py",
@@ -73,6 +83,19 @@ tf_custom_op_py_library(
     srcs_version = "PY2AND3",
     visibility = ["//visibility:public"],
     deps = [":dataset_ops_wrapper_py"],
+)
+
+tf_gen_op_wrapper_py(
+    name = "grad_util_ops_wrapper_py",
+    out = "gen_grad_util_ops.py",
+    deps = [":grad_util_ops"],
+)
+
+tf_custom_op_py_library(
+    name = "grad_util_ops_py",
+    kernels = [":grad_util_ops"],
+    visibility = ["//visibility:public"],
+    deps = [":grad_util_ops_wrapper_py"],
 )
 
 tf_gen_op_wrapper_py(
@@ -263,6 +286,7 @@ tf_custom_op_py_library(
 poplar_cc_library(
     name = "ops",
     deps = [
+        ":grad_util_ops",
         ":ipu_ops",
         ":sendrecv_ops",
         "//tensorflow/compiler/plugin/poplar/ops/application_runtime",
