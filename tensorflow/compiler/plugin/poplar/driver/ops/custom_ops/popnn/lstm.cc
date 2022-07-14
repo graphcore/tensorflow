@@ -206,17 +206,9 @@ class LstmLayerBaseOp : public PoplarOpDef {
     auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, &res, &inst, this, lstm_params, lstm_opts, input_size,
-                 output_size, debug_name_and_id,
-                 training](std::vector<poplar::Tensor>& args,
-                           poplar::program::Sequence& prog) {
-      LowerToPoplar(graph, res, inst, lstm_params, lstm_opts, input_size,
-                    output_size, training, debug_name_and_id, args, prog);
-    };
 
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
-        inst, graph, res, seq, func, signature, args,
-        lstm_inst->AllocatingIndices(), lstm_inst->LayoutDependencies()));
+    LowerToPoplar(graph, res, inst, lstm_params, lstm_opts, input_size,
+                  output_size, training, debug_name_and_id, args, seq);
 
     SetOutputTensor(graph, args, inst, tensor_map, training);
     return seq;

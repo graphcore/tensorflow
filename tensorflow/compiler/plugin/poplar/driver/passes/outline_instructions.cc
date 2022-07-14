@@ -54,7 +54,20 @@ bool IsInstructionCacheable(HloInstruction* inst) {
              IsPoplarInstruction(PoplarOp::GroupNormTraining, inst) ||
              IsPoplarInstruction(PoplarOp::GroupNormGrad, inst) ||
              IsPoplarInstruction(PoplarOp::GroupNormStatistics, inst) ||
-             IsPoplarInstruction(PoplarOp::BatchNormStatistics, inst);
+             IsPoplarInstruction(PoplarOp::BatchNormStatistics, inst) ||
+
+             IsPoplarInstruction(PoplarOp::GRULayerFwd, inst) ||
+             IsPoplarInstruction(PoplarOp::GRULayerBwd, inst) ||
+             IsPoplarInstruction(PoplarOp::DynamicGRULayerFwd, inst) ||
+             IsPoplarInstruction(PoplarOp::DynamicGRULayerBwd, inst) ||
+             IsPoplarInstruction(PoplarOp::AUGRULayerFwd, inst) ||
+             IsPoplarInstruction(PoplarOp::AUGRULayerBwd, inst) ||
+
+             IsPoplarInstruction(PoplarOp::LstmLayerFwd, inst) ||
+             IsPoplarInstruction(PoplarOp::LstmLayerBwd, inst) ||
+             IsPoplarInstruction(PoplarOp::DynamicLstmLayerFwd, inst) ||
+             IsPoplarInstruction(PoplarOp::DynamicLstmLayerBwd, inst);
+
     default:
       return false;
   }
