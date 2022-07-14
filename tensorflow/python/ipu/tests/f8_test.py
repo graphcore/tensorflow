@@ -32,15 +32,18 @@ def _f8_convert_cases():
   for f in Format:
     for scale in [-1, 0, 1]:
       for dtype in (dtypes.float16, dtypes.float32, dtypes.int32):
-        case = {
-            'testcase_name': f"{f}_{scale}_{dtype.name}",
-            'f8_format': f,
-            'f8_scale': scale,
-            'dtype': dtype,
-            'input_values':
-            float_values if dtype != dtypes.int32 else int_values
-        }
-        cases.append(case)
+        for on_ipu in (False, True):
+          device = "IPU" if on_ipu else "CPU"
+          case = {
+              'testcase_name': f"{device}_{f}_{scale}_{dtype.name}",
+              'f8_format': f,
+              'f8_scale': scale,
+              'dtype': dtype,
+              'input_values':
+              float_values if dtype != dtypes.int32 else int_values,
+              'on_ipu': on_ipu
+          }
+          cases.append(case)
   return cases
 
 
@@ -50,10 +53,11 @@ F8_CONVERT_CASES = _f8_convert_cases()
 class F8Test(test_util.TensorFlowTestCase, parameterized.TestCase):
   @parameterized.named_parameters(*F8_CONVERT_CASES)
   @test_util.deprecated_graph_mode_only
-  def testConvertF8(self, f8_format, f8_scale, dtype, input_values):
-    cfg = ipu.config.IPUConfig()
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
+  def testConvertF8(self, f8_format, f8_scale, dtype, input_values, on_ipu):
+    if on_ipu:
+      cfg = ipu.config.IPUConfig()
+      cfg.ipu_model.compile_ipu_code = False
+      cfg.configure_ipu_system()
 
     with ops.device('cpu'):
       a = array_ops.placeholder(dtype, [4])
@@ -63,8 +67,12 @@ class F8Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       f8 = convert_to_f8(values, meta)
       return convert_from_f8(f8, dtype=dtype)
 
-    with ipu.scopes.ipu_scope('/device:IPU:0'):
-      res = ipu.ipu_compiler.compile(my_net, [a, m])
+    if on_ipu:
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        res = ipu.ipu_compiler.compile(my_net, [a, m])
+    else:
+      with ops.device("/device:CPU:0"):
+        res = [my_net(a, m)]
 
     with tu.ipu_session() as sess:
       result, = sess.run(res, {

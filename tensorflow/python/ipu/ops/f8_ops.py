@@ -22,6 +22,7 @@ from enum import IntEnum
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
+from tensorflow.python.ops.math_ops import cast
 
 
 class Format(IntEnum):
@@ -59,6 +60,8 @@ def convert_to_f8(values, metadata, name=None):
     return values, metadata
 
   metadata = ops.convert_to_tensor(metadata, dtype=dtypes.uint8)
+  if values.dtype != dtypes.float16:
+    values = cast(values, dtype=dtypes.float16)
   return gen_popops_ops.ipu_convert_to_f8(values, metadata, name=name)
 
 
@@ -77,7 +80,7 @@ def convert_from_f8(packed_input, dtype=dtypes.half, name=None):
   """
   values, metadata = packed_input
   metadata = ops.convert_to_tensor(metadata, dtype=dtypes.uint8)
-  return gen_popops_ops.ipu_convert_from_f8(values,
-                                            metadata,
-                                            dtype=dtype,
-                                            name=name)
+  values = gen_popops_ops.ipu_convert_from_f8(values, metadata, name=name)
+  if values.dtype != dtype:
+    values = cast(values, dtype=dtype)
+  return values

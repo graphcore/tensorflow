@@ -22,17 +22,15 @@ limitations under the License.
 namespace tensorflow {
 
 REGISTER_OP("IpuConvertFromF8")
-    .Attr("dtype: type")
     .Input("input: uint8")
     .Input("input_metadata: uint8")
-    .Output("output: dtype")
+    .Output("output: float16")
     .Doc(R"doc(
 Converts input from any type to F8 representation (U8 tensor + U8 metadata).
 )doc");
 
 REGISTER_OP("IpuConvertToF8")
-    .Attr("dtype: type")
-    .Input("input: dtype")
+    .Input("input: float16")
     .Input("input_metadata: uint8")
     .Output("output: uint8")
     .Output("output_metadata: uint8")
