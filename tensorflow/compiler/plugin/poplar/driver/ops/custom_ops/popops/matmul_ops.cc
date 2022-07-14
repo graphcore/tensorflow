@@ -25,9 +25,9 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_conv.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -154,7 +154,6 @@ StatusOr<DriverTensor> AddRightMatMul(
   return result;
 }
 
-
 class MatMulOp : public PoplarOpDef {
   StatusOr<DriverProgramSequence> Creator(
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
@@ -166,14 +165,14 @@ class MatMulOp : public PoplarOpDef {
     // reallocated if required.
     // Find matmul lhs tensor
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_lhs,
+        poplar::Tensor lhs,
         FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info},
-                            /*expand_aliasing*/ false));
+                             /*expand_aliasing*/ false));
     // Find matmul rhs tensor
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_rhs,
+        poplar::Tensor rhs,
         FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info},
-                            /*expand_aliasing*/ false));
+                             /*expand_aliasing*/ false));
 
     const DotDimensionNumbers dot_dims = inst->dot_dimension_numbers();
     TF_ASSIGN_OR_RETURN(const std::string dot_type_s, GetMLTypeAsString(inst));
@@ -182,62 +181,45 @@ class MatMulOp : public PoplarOpDef {
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
 
-    auto func = [&graph, &res, &output_shape, dot_dims, dot_type_s, &opts,
-               debug_name_and_id](std::vector<poplar::Tensor>& args,
-                                  poplar::program::Sequence& prog) {
-      poplar::Tensor lhs = args[0];
-      poplar::Tensor rhs = args[1];
+    auto lhs_reduction_dimensions = dot_dims.lhs_contracting_dimensions();
+    auto rhs_reduction_dimensions = dot_dims.rhs_contracting_dimensions();
+    auto lhs_batch_dimensions = dot_dims.lhs_batch_dimensions();
+    auto rhs_batch_dimensions = dot_dims.rhs_batch_dimensions();
 
-      auto lhs_reduction_dimensions = dot_dims.lhs_contracting_dimensions();
-      auto rhs_reduction_dimensions = dot_dims.rhs_contracting_dimensions();
-      auto lhs_batch_dimensions = dot_dims.lhs_batch_dimensions();
-      auto rhs_batch_dimensions = dot_dims.rhs_batch_dimensions();
+    // DimShuffle the LHS to [Batch..., M..., Contracting...]
+    std::vector<unsigned> lhs_permutation =
+        LeftMatMulPermutations(lhs.shape(), dot_dims);
+    lhs = lhs.dimShuffle(lhs_permutation);
 
-      // DimShuffle the LHS to [Batch..., M..., Contracting...]
-      std::vector<unsigned> lhs_permutation =
-          LeftMatMulPermutations(lhs.shape(), dot_dims);
-      lhs = lhs.dimShuffle(lhs_permutation);
+    // DimShuffle the RHS to [Batch..., Contracting..., N...]
+    std::vector<unsigned> rhs_permutation =
+        RightMatMulPermutations(rhs.shape(), dot_dims);
+    rhs = rhs.dimShuffle(rhs_permutation);
 
-      // DimShuffle the RHS to [Batch..., Contracting..., N...]
-      std::vector<unsigned> rhs_permutation =
-          RightMatMulPermutations(rhs.shape(), dot_dims);
-      rhs = rhs.dimShuffle(rhs_permutation);
+    // Collapse the LHS dimensions down to [Batch, M, Contracting]
+    lhs = lhs.reshape(LeftMatMulPackShape(lhs.shape(), dot_dims));
 
-      // Collapse the LHS dimensions down to [Batch, M, Contracting]
-      lhs = lhs.reshape(LeftMatMulPackShape(lhs.shape(), dot_dims));
+    // Collapse the RHS dimensions down to [Batch, Contracting, N]
+    rhs = rhs.reshape(RightMatMulPackShape(rhs.shape(), dot_dims));
 
-      // Collapse the RHS dimensions down to [Batch, Contracting, N]
-      rhs = rhs.reshape(RightMatMulPackShape(rhs.shape(), dot_dims));
-
-      if (VLOG_IS_ON(2)) {
-        std::stringstream stream;
-        poplin::matMulGroupedReportPlan(stream, graph, lhs.elementType(),
-                                        lhs.elementType(), lhs.shape(),
-                                        rhs.shape(), opts, &res.planning_cache);
-        VLOG(2) << "MatMul " << debug_name_and_id.getPathName() << ". Type "
-                << dot_type_s << (res.clear_matmul_pass_type ? " (cleared)" : "")
-                << ". Plan " << stream.str();
-        for (auto opt : opts) {
-          VLOG(2) << "- option: " << opt.first << " = " << opt.second;
-        }
+    if (VLOG_IS_ON(2)) {
+      std::stringstream stream;
+      poplin::matMulGroupedReportPlan(stream, graph, lhs.elementType(),
+                                      lhs.elementType(), lhs.shape(),
+                                      rhs.shape(), opts, &res.planning_cache);
+      VLOG(2) << "MatMul " << debug_name_and_id.getPathName() << ". Type "
+              << dot_type_s << (res.clear_matmul_pass_type ? " (cleared)" : "")
+              << ". Plan " << stream.str();
+      for (auto opt : opts) {
+        VLOG(2) << "- option: " << opt.first << " = " << opt.second;
       }
+    }
 
-      args[2] =
-          poplin::matMulGrouped(graph, lhs, rhs, prog, lhs.elementType(),
-                                {debug_name_and_id}, opts, &res.planning_cache);
-      // Reshape to XLA shape
-      args[2] = args[2].reshape(PoplarShapeFromXlaShape(output_shape));
-    };
-
-    poplar::Tensor output;
-    std::vector<poplar::Tensor> args = {arg_lhs, arg_rhs, output};
-    poputil::graphfn::Signature sig = {poputil::graphfn::input(arg_lhs, "lhs"),
-                                        poputil::graphfn::input(arg_rhs, "rhs"),
-                                        poputil::graphfn::created("output")};
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq, func,
-                                                      sig, args, {0, 1}));
-
-    output = args[2];
+    auto output =
+        poplin::matMulGrouped(graph, lhs, rhs, seq, lhs.elementType(),
+                              {debug_name_and_id}, opts, &res.planning_cache);
+    // Reshape to XLA shape
+    output = output.reshape(PoplarShapeFromXlaShape(output_shape));
 
     TF_CHECK_OK(
         AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
@@ -257,13 +239,13 @@ class MatMulOp : public PoplarOpDef {
     DriverTensor out;
     switch (input_index) {
       case 0: {
-        TF_ASSIGN_OR_RETURN(out,
-                            AddLeftMatMul(graph, res, debug_info, tensor_target, inst->shape()));
+        TF_ASSIGN_OR_RETURN(out, AddLeftMatMul(graph, res, debug_info,
+                                               tensor_target, inst->shape()));
         break;
       }
       case 1: {
-        TF_ASSIGN_OR_RETURN(
-            out, AddRightMatMul(graph, res, debug_info, tensor_target, inst->shape()));
+        TF_ASSIGN_OR_RETURN(out, AddRightMatMul(graph, res, debug_info,
+                                                tensor_target, inst->shape()));
         break;
       }
       default:

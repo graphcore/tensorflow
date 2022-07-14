@@ -33,6 +33,7 @@ namespace {
 bool IsInstructionCacheable(HloInstruction* inst) {
   switch (inst->opcode()) {
     case HloOpcode::kConvolution:
+    case HloOpcode::kDot:
       return true;
 
     case HloOpcode::kFusion:

@@ -98,8 +98,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result[0], np.broadcast_to(0., [64, 64]))
 
       report_json.parse_log()
-      # Entry computation and outlined one.
-      self.assertEqual(len(report_json.tensor_map.computation_names()), 2)
+      # Entry computation, an outlined computation and an outlined matmul
+      self.assertEqual(len(report_json.tensor_map.computation_names()), 3)
 
     report = pva.openReport(report_helper.find_report())
     # There would be multiple non-linearities if the function was not
@@ -171,8 +171,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
 
       report_json.parse_log()
 
-      # Entry computastion and 2 outlined ones.
-      self.assertEqual(len(report_json.tensor_map.computation_names()), 3)
+      # Entry computation, 2 outlined computations and 3 outlined matmuls
+      self.assertEqual(len(report_json.tensor_map.computation_names()), 6)
 
     report = pva.openReport(report_helper.find_report())
     # There would be multiple non-linearities(grads) if the function was not
@@ -260,8 +260,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
 
       report_json.parse_log()
 
-      # Entry computastion and 4 outlined ones.
-      self.assertEqual(len(report_json.tensor_map.computation_names()), 5)
+      # Entry computation, 4 outlined computations and 3 outlined matmuls.
+      self.assertEqual(len(report_json.tensor_map.computation_names()), 8)
 
     report = pva.openReport(report_helper.find_report())
     # There would be multiple non-linearities(grads) if the function was not
@@ -530,8 +530,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
 
       report_json.parse_log()
 
-      # Entry computastion and 2 outlined ones.
-      self.assertEqual(len(report_json.tensor_map.computation_names()), 3)
+      # Entry computastion, 2 outlined computations and 3 outlined matmuls.
+      self.assertEqual(len(report_json.tensor_map.computation_names()), 6)
 
     report = pva.openReport(report_helper.find_report())
     # There would be multiple non-linearities(grads) if the function was not
@@ -550,7 +550,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         'gradients/AddN/scaled-inplace',
         'gradients/AddN/add*/Op/Add',
         'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/scaled-inplace',
-        'gradients/MatMul_grad/MatMul/dot',
+        'gradients/MatMul_1_grad/MatMul/dot',
     ]
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)

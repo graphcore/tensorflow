@@ -58,6 +58,17 @@ namespace {
 
 using DeferredVisitorTest = HloPoplarTestBase;
 
+HloInstruction* FindInstructionByOpcode(HloComputation* comp,
+                                        HloOpcode opcode) {
+  auto instructions = comp->instructions();
+  auto it = absl::c_find_if(
+      instructions, [&](HloInstruction* i) { return i->opcode() == opcode; });
+  if (it != instructions.end()) {
+    return *it;
+  }
+  return nullptr;
+}
+
 HloPassPipeline GetMockPipeline(CompilerResources& resources) {
   HloPassPipeline pipeline("mock_pipeline");
   pipeline.AddPass<ModuleFlatten>(resources.annotations);
@@ -907,10 +918,11 @@ ENTRY main {
   auto func2_tensor_map =
       resources->tensor_maps.GetTensorMapForComputation("func2");
 
-  HloInstruction* main_dot = FindInstruction(module.get(), "main_dot");
-  TF_ASSERT_OK_AND_ASSIGN(auto main_dot_ts,
-                          FindInstructionOutputTensors(
-                              entry_tensor_map, *resources.get(), main_dot));
+  HloInstruction* main_dot_call =
+      FindInstructionByOpcode(entry_computation, HloOpcode::kCall);
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto main_dot_ts, FindInstructionOutputTensors(
+                            entry_tensor_map, *resources.get(), main_dot_call));
   ASSERT_EQ(main_dot_ts.size(), 1);
 
   HloInstruction* p0 = FindInstruction(module.get(), "p0");
@@ -980,9 +992,14 @@ ENTRY main (arg0.1: f32[2,2], arg1.2: f32[2,2], arg2.3: f32[2,2], arg3.4: pred[]
   std::unique_ptr<HloModule> module =
       ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
   auto resources = GetMockResources(module.get(), false);
+
+  auto entry_computation = module->entry_computation();
+  auto* dot_15_comp = FindInstruction(module.get(), "dot.15")->parent();
+  auto* dot_22_comp = FindInstruction(module.get(), "dot.22")->parent();
+
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  auto entry_computation = module->entry_computation();
+  entry_computation = module->entry_computation();
 
   EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -993,13 +1010,15 @@ ENTRY main (arg0.1: f32[2,2], arg1.2: f32[2,2], arg2.3: f32[2,2], arg3.4: pred[]
   auto false_tensor_map =
       resources->tensor_maps.GetTensorMapForComputation("false_fn");
 
-  HloInstruction* dot_15 = FindInstruction(module.get(), "dot.15");
+  HloInstruction* dot_15 =
+      FindInstructionByOpcode(dot_15_comp, HloOpcode::kCall);
   TF_ASSERT_OK_AND_ASSIGN(
       auto dot_15_ts,
       FindInstructionOutputTensors(true_tensor_map, *resources.get(), dot_15));
   ASSERT_EQ(dot_15_ts.size(), 1);
 
-  HloInstruction* dot_22 = FindInstruction(module.get(), "dot.22");
+  HloInstruction* dot_22 =
+      FindInstructionByOpcode(dot_22_comp, HloOpcode::kCall);
   TF_ASSERT_OK_AND_ASSIGN(
       auto dot_22_ts,
       FindInstructionOutputTensors(false_tensor_map, *resources.get(), dot_22));

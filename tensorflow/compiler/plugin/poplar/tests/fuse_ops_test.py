@@ -632,7 +632,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(np.full([2, 2], 25), out)
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['xw_plus_b/MatMul/dot.*/Conv_1', 'xw_plus_b/fusion/Op/Add']
+    ok = ['xw_plus_b/MatMul/dot/Conv_1', 'xw_plus_b/fusion/Op/Add']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testBatchedMatmulWithBias(self):
