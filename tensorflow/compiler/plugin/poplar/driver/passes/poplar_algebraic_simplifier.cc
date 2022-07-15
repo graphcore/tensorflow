@@ -302,6 +302,25 @@ Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
                  c));
   }
 
+  // Canonicalize (X * A) + X and X + (X * A) into X * (A + 1)
+  // So it can potentially be fused into a scaled_inplace_axby later.
+  HloInstruction* x;
+  if ((Match(lhs, m::Multiply(m::Op(&x), m::Op(&a))) &&
+       Match(rhs, m::Op().Is(x))) ||
+      (Match(lhs, m::Op(&x)) &&
+       Match(rhs, m::Multiply(m::Op().Is(x), m::Op(&a))))) {
+    HloInstruction* one =
+        computation_->AddInstruction(HloInstruction::CreateConstant(
+            LiteralUtil::One(add->shape().element_type())));
+    HloInstruction* ones = computation_->AddInstruction(
+        HloInstruction::CreateBroadcast(add->shape(), one, {}));
+    return ReplaceWithNewInstruction(
+        add, HloInstruction::CreateBinary(
+                 add->shape(), HloOpcode::kMultiply, x,
+                 computation_->AddInstruction(HloInstruction::CreateBinary(
+                     add->shape(), HloOpcode::kAdd, a, ones))));
+  }
+
   return Status::OK();
 }
 
