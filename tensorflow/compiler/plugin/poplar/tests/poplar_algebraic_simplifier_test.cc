@@ -6924,6 +6924,71 @@ ENTRY f {
                                              m::Constant())));
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, MergeSelectsAnd) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  param = f32[8, 8] parameter(0)
+  const0 = f32[] constant(0.001)
+  const1 = f32[] constant(1)
+  const2 = f32[] constant(0)
+  broadcast0 = f32[8, 8] broadcast(const0), dimensions={}
+  broadcast1 = f32[8, 8] broadcast(const1), dimensions={}
+  broadcast2 = f32[8, 8] broadcast(const2), dimensions={}
+  pred0 = compare(param, broadcast0), direction=GE
+  pred1 = compare(param, broadcast1), direction=LE
+  select0 = f32[8, 8] select(pred0, param, broadcast2)
+  ROOT select1 = f32[8, 8] select(pred1, select0, broadcast2)
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module.get()).ValueOrDie());
+  VLOG(2) << "After rewrite \n" << module->ToString();
+
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(
+      root,
+      GmockMatch(m::Select(
+          m::And(m::Compare(m::Parameter(0), m::Broadcast(m::Constant())),
+                 m::Compare(m::Parameter(0), m::Broadcast(m::Constant()))),
+          m::Parameter(0), m::Broadcast(m::Constant()))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, MergeSelectsOr) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  param = f32[8, 8] parameter(0)
+  const0 = f32[] constant(0.001)
+  const1 = f32[] constant(1)
+  const2 = f32[] constant(0)
+  broadcast0 = f32[8, 8] broadcast(const0), dimensions={}
+  broadcast1 = f32[8, 8] broadcast(const1), dimensions={}
+  broadcast2 = f32[8, 8] broadcast(const2), dimensions={}
+  pred0 = compare(param, broadcast0), direction=LT
+  pred1 = compare(param, broadcast1), direction=GT
+  select0 = f32[8, 8] select(pred0, broadcast2, param)
+  ROOT select1 = f32[8, 8] select(pred1, broadcast2, select0)
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  EXPECT_TRUE(PoplarAlgebraicSimplifier().Run(module.get()).ValueOrDie());
+  VLOG(2) << "After rewrite \n" << module->ToString();
+
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(
+      root, GmockMatch(m::Select(
+                m::Or(m::Compare(m::Parameter(0), m::Broadcast(m::Constant())),
+                      m::Compare(m::Parameter(0), m::Broadcast(m::Constant()))),
+                m::Broadcast(m::Constant()), m::Parameter(0))));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

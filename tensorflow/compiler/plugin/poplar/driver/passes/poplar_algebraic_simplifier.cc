@@ -34,6 +34,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier/poplar_algebraic_simplifier_utils.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/arg_min_max.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/normalise_image.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/onehot.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -399,6 +400,7 @@ Status AlgebraicSimplifierVisitor::HandleCopy(HloInstruction* copy) {
         copy->operand(0)->CloneWithNewOperands(
             copy->shape(), {copy->mutable_operand(0)->mutable_operand(0)}));
   }
+
   return Status::OK();
 }
 
@@ -3915,6 +3917,68 @@ Status AlgebraicSimplifierVisitor::HandleReduceWindow(HloInstruction* hlo) {
                          /*reduce_computation=*/function));
 }
 
+namespace {
+
+bool EqualOrEquivalent(const HloInstruction* a, const HloInstruction* b) {
+  // Returns true if a and b are the same instruction, or if they are both
+  // constants with the same value.
+  if (a == b) {
+    return true;
+  }
+  if (a->IsConstant() && b->IsConstant() && a->literal() == b->literal()) {
+    return true;
+  }
+  return false;
+}
+
+StatusOr<std::unique_ptr<HloInstruction>> MergeSelectAnd(
+    HloInstruction* select) {
+  // select(p1, select(p2, x, y), y) => select(and(p1, p2), x, y)
+  if (select->operand(1)->opcode() != HloOpcode::kSelect) {
+    return {nullptr};
+  }
+  HloInstruction* select_2 = select->mutable_operand(1);
+  if (select_2->user_count() > 1) {
+    // If the output of select_2 has other users we cannot eliminate it.
+    return {nullptr};
+  }
+  if (!EqualOrEquivalent(select->operand(2), select_2->operand(2))) {
+    return {nullptr};
+  }
+  HloInstruction* p1 = select->mutable_operand(0);
+  HloInstruction* p2 = select_2->mutable_operand(0);
+  HloInstruction* x = select_2->mutable_operand(1);
+  HloInstruction* y = select_2->mutable_operand(2);
+  HloInstruction* x_and_y = select->parent()->AddInstruction(
+      HloInstruction::CreateBinary(p1->shape(), HloOpcode::kAnd, p1, p2));
+  return select->CloneWithNewOperands(select->shape(), {x_and_y, x, y});
+}
+
+StatusOr<std::unique_ptr<HloInstruction>> MergeSelectOr(
+    HloInstruction* select) {
+  // select(p1, x, select(p2, x, y)) => select(or(p1, p2), x, y)
+  if (select->operand(2)->opcode() != HloOpcode::kSelect) {
+    return {nullptr};
+  }
+  HloInstruction* select_2 = select->mutable_operand(2);
+  if (select_2->user_count() > 1) {
+    // If the output of select_2 has other users we cannot eliminate it.
+    return {nullptr};
+  }
+  if (!EqualOrEquivalent(select->operand(1), select_2->operand(1))) {
+    return {nullptr};
+  }
+  HloInstruction* p1 = select->mutable_operand(0);
+  HloInstruction* p2 = select_2->mutable_operand(0);
+  HloInstruction* x = select_2->mutable_operand(1);
+  HloInstruction* y = select_2->mutable_operand(2);
+  HloInstruction* x_or_y = select->parent()->AddInstruction(
+      HloInstruction::CreateBinary(p1->shape(), HloOpcode::kOr, p1, p2));
+  return select->CloneWithNewOperands(select->shape(), {x_or_y, x, y});
+}
+
+}  // anonymous namespace.
+
 Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
   // select(x, y, y) -> y.
   if (select->operand(1) == select->operand(2)) {
@@ -3927,6 +3991,15 @@ Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
   // select(false, x, y) -> y.
   if (pp::algebraic_simplifier::util::IsAll(select->operand(0), false)) {
     return ReplaceInstruction(select, select->mutable_operand(2));
+  }
+  std::unique_ptr<HloInstruction> replacement;
+  TF_ASSIGN_OR_RETURN(replacement, MergeSelectAnd(select));
+  if (replacement) {
+    return ReplaceWithNewInstruction(select, std::move(replacement));
+  }
+  TF_ASSIGN_OR_RETURN(replacement, MergeSelectOr(select));
+  if (replacement) {
+    return ReplaceWithNewInstruction(select, std::move(replacement));
   }
   return Status::OK();
 }
