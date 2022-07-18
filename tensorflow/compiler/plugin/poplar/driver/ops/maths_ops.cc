@@ -29,7 +29,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/slice_apply.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"

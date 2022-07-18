@@ -52,7 +52,6 @@ poplar_cc_library(
     deps = [
         "//tensorflow/compiler/plugin/poplar/driver:compiler_resources",
         "//tensorflow/compiler/plugin/poplar/driver:vertex_templates",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:generic_graph_caching",
         "//tensorflow/compiler/plugin/poplar/driver/tools:matmul_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:poplar_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools:reduction_util",

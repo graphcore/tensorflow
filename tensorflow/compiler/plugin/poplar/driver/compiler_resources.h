@@ -36,7 +36,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/driver_types.h"
 #include "tensorflow/compiler/plugin/poplar/driver/prng_seed_state.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/progress_bar.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/subcomputation_graph_caching.h"
@@ -175,8 +174,6 @@ struct CompilerResources : public HloResources {
   TensorMaps tensor_maps;
 
   LinearMapperState linear_mapping_state;
-
-  generic_graph_caching::GenericGraphCache graph_cache;
 
   subcomputation_graph_caching::SubcomputationGraphCache subcomputation_cache;
 

@@ -70,7 +70,6 @@ poplar_cc_library(
     hdrs = [
         "debug_info.h",
         "execution_counter_util.h",
-        "generic_graph_caching.h",
         "offloading_util.h",
         "poplar_util.h",
         "spsc_outfeed_queue.h",
@@ -699,47 +698,6 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
-    name = "generic_graph_caching",
-    srcs = [
-        "generic_graph_caching.cc",
-    ],
-    hdrs = [
-        "generic_graph_caching.h",
-        "//tensorflow/compiler/plugin/poplar/driver:tensor.h",
-    ],
-    deps = [
-        ":execution_counter_util",
-        ":feed_info",
-        ":input_output_aliasing_map",
-        ":mapping_helper",
-        ":ml_type_helper",
-        ":poplar_util",
-        ":progress_bar",
-        ":subcomputation_graph_caching",
-        ":tensor_map",
-        "//tensorflow/compiler/plugin/poplar/driver:backend_config_proto_cc_impl",
-        "//tensorflow/compiler/plugin/poplar/driver:compiler_annotations",
-        "//tensorflow/compiler/plugin/poplar/driver:compiler_information",
-        "//tensorflow/compiler/plugin/poplar/driver:compiler_resources",
-        "//tensorflow/compiler/plugin/poplar/driver:config_proto_cc_impl",
-        "//tensorflow/compiler/plugin/poplar/driver:option_flag_proto_cc_impl",
-        "//tensorflow/compiler/plugin/poplar/driver:poplar_feed_config_proto_cc_impl",
-        "//tensorflow/compiler/plugin/poplar/driver:prng_seed_state",
-        "//tensorflow/compiler/plugin/poplar/driver:threestate_proto_cc_impl",
-        "//tensorflow/compiler/plugin/poplar/driver:trace_proto_cc_impl",
-        "//tensorflow/compiler/plugin/poplar/driver/tools:alias_info_proto_cc_impl",
-        "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:host_embedding",
-        "//tensorflow/compiler/plugin/poplar/kernels:ops_proto_cc_impl",
-        "//tensorflow/compiler/xla:status",
-        "//tensorflow/compiler/xla/service:hlo",
-        "//third_party/ipus/tools:poplar_executable_data",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@local_config_poplar//poplar:poplar_libs",
-    ],
-)
-
-poplar_cc_library(
     name = "matmul_util",
     srcs = [
         "matmul_util.cc",
@@ -1265,7 +1223,6 @@ poplar_cc_library(
         ":feed_info",
         ":find_all_users",
         ":flags",
-        ":generic_graph_caching",
         ":hash",
         ":hlo_hash",
         ":hlo_instruction_extensions",
