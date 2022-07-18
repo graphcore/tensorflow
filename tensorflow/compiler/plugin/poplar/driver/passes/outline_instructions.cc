@@ -37,6 +37,8 @@ bool IsInstructionCacheable(HloInstruction* inst) {
     case HloOpcode::kBatchNormInference:
     case HloOpcode::kBatchNormTraining:
     case HloOpcode::kBatchNormGrad:
+    case HloOpcode::kTriangularSolve:
+    case HloOpcode::kCholesky:
       return true;
 
     case HloOpcode::kFusion:

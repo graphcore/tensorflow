@@ -88,9 +88,9 @@ class TriangularSolvePerformanceTest(xla_test.XLATestCase):
   def testUpperAdjoint(self):
     report_helper = self._solveTestImpl(64, 64, 16, False, True)
     report = pva.openReport(report_helper.find_report())
-    self.assert_execution_report_cycles(report, 1155219, tolerance=0.1)
-    self.assert_max_tile_memory(report, 38855, tolerance=0.1)
-    self.assert_total_tile_memory(report, 148162, tolerance=0.1)
+    self.assert_execution_report_cycles(report, 1023198, tolerance=0.1)
+    self.assert_max_tile_memory(report, 34651, tolerance=0.1)
+    self.assert_total_tile_memory(report, 126192, tolerance=0.1)
 
   def testUpperNonAdjoint(self):
     report_helper = self._solveTestImpl(64, 64, 16, False, False)

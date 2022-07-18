@@ -93,32 +93,10 @@ class TriangularSolveOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags poplar_options,
                         GetTriangularSolveOptionsForInst(inst, res));
 
-    auto func = [&graph, &res, options, poplar_options, lower, rank, options,
-                 debug_name_and_id](std::vector<poplar::Tensor>& args,
-                                    poplar::program::Sequence& prog) {
-      poplar::Tensor a_f = args[0];
-      poplar::Tensor b_f = args[1];
-
-      auto x_f = poplin::triangularSolve(graph, a_f, b_f, options.left_side(),
-                                         lower, options.unit_diagonal(), prog,
-                                         {debug_name_and_id, "TriangularSolve"},
-                                         poplar_options, &res.planning_cache);
-      args[2] = x_f;
-    };
-
-    poplar::Tensor x;
-    std::vector<poplar::Tensor> args = {a, b, x};
-    poputil::graphfn::Signature signature = {
-        poputil::graphfn::input(a, "a_in"),
-        poputil::graphfn::input(b, "b_in"),
-        poputil::graphfn::created("out"),
-    };
-
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
-        inst, graph, res, seq, func, signature, args, {0, 1}, {},
-        /*always_allocate=*/true));
-
-    x = args[2];
+    auto x = poplin::triangularSolve(graph, a, b, options.left_side(), lower,
+                                     options.unit_diagonal(), seq,
+                                     {debug_name_and_id, "TriangularSolve"},
+                                     poplar_options, &res.planning_cache);
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(x, graph)));
     return seq;
