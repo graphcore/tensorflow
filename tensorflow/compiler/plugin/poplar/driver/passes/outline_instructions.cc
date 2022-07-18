@@ -34,6 +34,9 @@ bool IsInstructionCacheable(HloInstruction* inst) {
   switch (inst->opcode()) {
     case HloOpcode::kConvolution:
     case HloOpcode::kDot:
+    case HloOpcode::kBatchNormInference:
+    case HloOpcode::kBatchNormTraining:
+    case HloOpcode::kBatchNormGrad:
       return true;
 
     case HloOpcode::kFusion:
@@ -45,7 +48,13 @@ bool IsInstructionCacheable(HloInstruction* inst) {
       return IsPoplarInstruction(PoplarOp::ConvWithReverse, inst) ||
              IsPoplarInstruction(PoplarOp::Conv_scaled_inplace, inst) ||
              IsPoplarInstruction(PoplarOp::MultiConv, inst) ||
-             IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY, inst);
+             IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY, inst) ||
+
+             IsPoplarInstruction(PoplarOp::GroupNormInference, inst) ||
+             IsPoplarInstruction(PoplarOp::GroupNormTraining, inst) ||
+             IsPoplarInstruction(PoplarOp::GroupNormGrad, inst) ||
+             IsPoplarInstruction(PoplarOp::GroupNormStatistics, inst) ||
+             IsPoplarInstruction(PoplarOp::BatchNormStatistics, inst);
     default:
       return false;
   }

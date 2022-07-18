@@ -300,30 +300,30 @@ class NormInferenceOp : public NormInferenceAndTrainingOp {
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_operand,
+        poplar::Tensor operand,
         FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info},
                              /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_scale,
+        poplar::Tensor scale,
         FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info},
                              /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_offset,
+        poplar::Tensor offset,
         FindInstructionInput(tensor_map, res, inst, 2, seq, {debug_info},
                              /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_mean,
+        poplar::Tensor mean,
         FindInstructionInput(tensor_map, res, inst, 3, seq, {debug_info},
                              /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_variance_or_inv_std_dev,
+        poplar::Tensor variance_or_inv_std_dev,
         FindInstructionInput(tensor_map, res, inst, 4, seq, {debug_info},
                              /*expand_aliasing*/ false));
 
     // Special case - zero sized array
     if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
-      auto out = graph.addConstant(arg_operand.elementType(), {1}, 0,
-                                   {debug_info, "out"});
+      auto out =
+          graph.addConstant(operand.elementType(), {1}, 0, {debug_info, "out"});
       graph.setTileMapping(out, 0);
       TF_ASSIGN_OR_RETURN(out,
                           BroadcastTensor(out, inst->operand(0)->shape(), {}));
@@ -332,61 +332,33 @@ class NormInferenceOp : public NormInferenceAndTrainingOp {
     }
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, debug_name_and_id, norm_opts](
-                    std::vector<poplar::Tensor>& args,
-                    poplar::program::Sequence& prog) {
-      poplar::Tensor operand = args[0];
-      poplar::Tensor scale = args[1];
-      poplar::Tensor offset = args[2];
-      poplar::Tensor mean = args[3];
-      poplar::Tensor variance_or_inv_std_dev = args[4];
-      // Move the channels.
-      operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
 
-      switch (norm_opts.type) {
-        case NormType::BatchNorm: {
-          // For batch norm variance_or_inv_std_dev is variance, so we need to
-          // convert it.
-          poplar::Tensor inv_sd = ConvertVarianceToInvStdDev(
-              graph, variance_or_inv_std_dev, norm_opts.epsilon, prog,
-              {debug_name_and_id});
-          args[5] = BatchNormalise(graph, operand, scale, offset, mean, inv_sd,
-                                   prog, {debug_name_and_id});
-          break;
-        }
-        case NormType::GroupNorm: {
-          // For group norm variance_or_inv_std_dev is inv_std_dev, so we
-          // don't need to convert it.
-          args[5] =
-              popnn::gn::groupNormalise(graph, operand, scale, offset, mean,
-                                        variance_or_inv_std_dev, prog,
-                                        {debug_name_and_id}, norm_opts.flags)
-                  .first;
-          break;
-        }
-      }
-      args[5] = ShuffleNormOutputToTensorflow(args[5], norm_opts.feature_index);
-    };
+    // Move the channels.
+    operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
 
     poplar::Tensor output;
-    std::vector<poplar::Tensor> args = {arg_operand,
-                                        arg_scale,
-                                        arg_offset,
-                                        arg_mean,
-                                        arg_variance_or_inv_std_dev,
-                                        output};
-    pg::Signature signature = {
-        pg::input(arg_operand, "operand"),
-        pg::input(arg_scale, "scale"),
-        pg::input(arg_offset, "offset"),
-        pg::input(arg_mean, "mean"),
-        pg::input(arg_variance_or_inv_std_dev, "variance_or_inv_std_dev"),
-        pg::created("output")};
-
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
-        inst, graph, res, seq, func, signature, args, {}, {{1, 0}, {2, 0}}));
-
-    output = args[5];
+    switch (norm_opts.type) {
+      case NormType::BatchNorm: {
+        // For batch norm variance_or_inv_std_dev is variance, so we need to
+        // convert it.
+        poplar::Tensor inv_sd = ConvertVarianceToInvStdDev(
+            graph, variance_or_inv_std_dev, norm_opts.epsilon, seq,
+            {debug_name_and_id});
+        output = BatchNormalise(graph, operand, scale, offset, mean, inv_sd,
+                                seq, {debug_name_and_id});
+        break;
+      }
+      case NormType::GroupNorm: {
+        // For group norm variance_or_inv_std_dev is inv_std_dev, so we
+        // don't need to convert it.
+        output = popnn::gn::groupNormalise(graph, operand, scale, offset, mean,
+                                           variance_or_inv_std_dev, seq,
+                                           {debug_name_and_id}, norm_opts.flags)
+                     .first;
+        break;
+      }
+    }
+    output = ShuffleNormOutputToTensorflow(output, norm_opts.feature_index);
 
     TF_CHECK_OK(
         AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
@@ -409,33 +381,32 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_operand,
+        poplar::Tensor operand,
         FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info},
                              /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_scale,
+        poplar::Tensor scale,
         FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info},
                              /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_offset,
+        poplar::Tensor offset,
         FindInstructionInput(tensor_map, res, inst, 2, seq, {debug_info},
                              /*expand_aliasing*/ false));
 
     // Special case - zero sized array
     if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
-      auto out = graph.addConstant(arg_operand.elementType(), {1}, 0,
-                                   {debug_info, "out"});
+      auto out =
+          graph.addConstant(operand.elementType(), {1}, 0, {debug_info, "out"});
       graph.setTileMapping(out, 0);
       TF_ASSIGN_OR_RETURN(out,
                           BroadcastTensor(out, inst->operand(0)->shape(), {}));
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
-      auto mean = graph.addConstant(arg_operand.elementType(), {1}, NAN,
+      auto mean = graph.addConstant(operand.elementType(), {1}, NAN,
                                     {debug_info, "mean"});
       graph.setTileMapping(mean, 0);
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, mean));
-      auto variance_or_inv_std_dev =
-          graph.addConstant(arg_operand.elementType(), {1}, NAN,
-                            {debug_info, "varianceOrInvStdDev"});
+      auto variance_or_inv_std_dev = graph.addConstant(
+          operand.elementType(), {1}, NAN, {debug_info, "varianceOrInvStdDev"});
       graph.setTileMapping(variance_or_inv_std_dev, 0);
       TF_CHECK_OK(
           AddOutputTensor(tensor_map, inst, 2, variance_or_inv_std_dev));
@@ -444,85 +415,57 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
     auto& main_graph = GetMasterGraph(res);
-    auto func =
-        [&main_graph, &graph, debug_name_and_id, norm_opts,
-         use_stable_statistics = res.use_stable_norm_statistics,
-         replica_group_size =
-             res.experimental_distributed_batch_norm_replica_group_size](
-            std::vector<poplar::Tensor>& args,
-            poplar::program::Sequence& prog) {
-          poplar::Tensor operand = args[0];
-          poplar::Tensor scale = args[1];
-          poplar::Tensor offset = args[2];
-
-          // Move the channels.
-          operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
-
-          switch (norm_opts.type) {
-            case NormType::BatchNorm: {
-              poplar::Tensor inv_sd;
-              if (replica_group_size > 1) {
-                std::tie(args[4], inv_sd) =
-                    popnn::bn::distributedBatchNormStatistics(
-                        main_graph, operand, norm_opts.epsilon, prog,
-                        /*unbiasedVarEstimate=*/false,
-                        GetDistributedNormReduceCallback(
-                            "DistributedBatchNormStatistics"),
-                        CalculateNormBatchSize(operand, replica_group_size),
-                        use_stable_statistics, poplar::FLOAT,
-                        {debug_name_and_id});
-              } else {
-                std::tie(args[4], inv_sd) = popnn::bn::batchNormStatistics(
-                    graph, operand, norm_opts.epsilon, prog,
-                    /*unbiasedVarEstimate=*/false, use_stable_statistics,
-                    poplar::FLOAT, {debug_name_and_id});
-              }
-
-              args[3] = BatchNormalise(graph, operand, scale, offset, args[4],
-                                       inv_sd, prog, {debug_name_and_id});
-              // For batch norm variance_or_inv_std_dev is variance, so we need
-              // to convert it.
-              args[5] = ConvertInvStdDevToVariance(
-                  graph, inv_sd, norm_opts.epsilon, prog, {debug_name_and_id});
-              break;
-            }
-            case NormType::GroupNorm: {
-              // For group norm variance_or_inv_std_dev is inv_std_dev, so we
-              // don't need to convert it.
-              std::tie(args[4], args[5]) = popnn::gn::groupNormStatistics(
-                  graph, operand, norm_opts.epsilon, prog,
-                  *norm_opts.num_groups,
-                  /*unbiasedVarEstimate=*/false, use_stable_statistics,
-                  poplar::FLOAT, {debug_name_and_id}, norm_opts.flags);
-
-              args[3] = popnn::gn::groupNormalise(
-                            graph, operand, scale, offset, args[4], args[5],
-                            prog, {debug_name_and_id}, norm_opts.flags)
-                            .first;
-              break;
-            }
-          }
-          args[3] =
-              ShuffleNormOutputToTensorflow(args[3], norm_opts.feature_index);
-        };
-
     poplar::Tensor output, mean, variance_or_inv_std_dev;
-    std::vector<poplar::Tensor> args = {arg_operand, arg_scale,
-                                        arg_offset,  output,
-                                        mean,        variance_or_inv_std_dev};
-    pg::Signature signature = {pg::input(arg_operand, "operand"),
-                               pg::input(arg_scale, "scale"),
-                               pg::input(arg_offset, "offset"),
-                               pg::created("output"),
-                               pg::created("mean"),
-                               pg::created("variance_or_inv_std_dev")};
+    auto replica_group_size =
+        res.experimental_distributed_batch_norm_replica_group_size;
+    auto use_stable_statistics = res.use_stable_norm_statistics;
 
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
-        inst, graph, res, seq, func, signature, args, {}, {{1, 0}, {2, 0}}));
+    // Move the channels.
+    operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
 
-    output = args[3];
-    mean = args[4];
-    variance_or_inv_std_dev = args[5];
+    switch (norm_opts.type) {
+      case NormType::BatchNorm: {
+        poplar::Tensor inv_sd;
+        if (replica_group_size > 1) {
+          std::tie(mean, inv_sd) = popnn::bn::distributedBatchNormStatistics(
+              main_graph, operand, norm_opts.epsilon, seq,
+              /*unbiasedVarEstimate=*/false,
+              GetDistributedNormReduceCallback(
+                  "DistributedBatchNormStatistics"),
+              CalculateNormBatchSize(operand, replica_group_size),
+              use_stable_statistics, poplar::FLOAT, {debug_name_and_id});
+        } else {
+          std::tie(mean, inv_sd) = popnn::bn::batchNormStatistics(
+              graph, operand, norm_opts.epsilon, seq,
+              /*unbiasedVarEstimate=*/false, use_stable_statistics,
+              poplar::FLOAT, {debug_name_and_id});
+        }
+
+        output = BatchNormalise(graph, operand, scale, offset, mean, inv_sd,
+                                seq, {debug_name_and_id});
+        // For batch norm variance_or_inv_std_dev is variance, so we need
+        // to convert it.
+        variance_or_inv_std_dev = ConvertInvStdDevToVariance(
+            graph, inv_sd, norm_opts.epsilon, seq, {debug_name_and_id});
+        break;
+      }
+      case NormType::GroupNorm: {
+        // For group norm variance_or_inv_std_dev is inv_std_dev, so we
+        // don't need to convert it.
+        std::tie(mean, variance_or_inv_std_dev) =
+            popnn::gn::groupNormStatistics(
+                graph, operand, norm_opts.epsilon, seq, *norm_opts.num_groups,
+                /*unbiasedVarEstimate=*/false, use_stable_statistics,
+                poplar::FLOAT, {debug_name_and_id}, norm_opts.flags);
+
+        output = popnn::gn::groupNormalise(graph, operand, scale, offset, mean,
+                                           variance_or_inv_std_dev, seq,
+                                           {debug_name_and_id}, norm_opts.flags)
+                     .first;
+        break;
+      }
+    }
+    output = ShuffleNormOutputToTensorflow(output, norm_opts.feature_index);
 
     TF_CHECK_OK(
         AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
@@ -549,39 +492,39 @@ class NormGradOp : public PoplarOpDef {
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_operand,
+        poplar::Tensor operand,
         FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info},
                              /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_scale,
+        poplar::Tensor scale,
         FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info},
                              /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_mean,
+        poplar::Tensor mean,
         FindInstructionInput(tensor_map, res, inst, 2, seq, {debug_info},
                              /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_variance_or_inv_std_dev,
+        poplar::Tensor variance_or_inv_std_dev,
         FindInstructionInput(tensor_map, res, inst, 3, seq, {debug_info},
                              /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_grad_output,
+        poplar::Tensor grad_output,
         FindInstructionInput(tensor_map, res, inst, 4, seq, {debug_info},
                              /*expand_aliasing*/ false));
     // Special case - zero sized array
     if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
-      auto operand_grad = graph.addConstant(arg_operand.elementType(), {1}, 0,
+      auto operand_grad = graph.addConstant(operand.elementType(), {1}, 0,
                                             {debug_info, "operandGrad"});
       graph.setTileMapping(operand_grad, 0);
       TF_ASSIGN_OR_RETURN(
           operand_grad,
           BroadcastTensor(operand_grad, inst->operand(0)->shape(), {}));
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand_grad));
-      auto scale_grad = graph.addConstant(arg_operand.elementType(), {1}, 0,
+      auto scale_grad = graph.addConstant(operand.elementType(), {1}, 0,
                                           {debug_info, "scaleGrad"});
       graph.setTileMapping(scale_grad, 0);
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, scale_grad));
-      auto offset_grad = graph.addConstant(arg_operand.elementType(), {1}, 0,
+      auto offset_grad = graph.addConstant(operand.elementType(), {1}, 0,
                                            {debug_info, "offsetGrad"});
       graph.setTileMapping(offset_grad, 0);
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, offset_grad));
@@ -590,97 +533,66 @@ class NormGradOp : public PoplarOpDef {
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
     auto& main_graph = GetMasterGraph(res);
-    auto func =
-        [&main_graph, &graph, debug_name_and_id, norm_opts,
-         replica_group_size =
-             res.experimental_distributed_batch_norm_replica_group_size](
-            std::vector<poplar::Tensor>& args,
-            poplar::program::Sequence& prog) {
-          poplar::Tensor operand = args[0];
-          poplar::Tensor scale = args[1];
-          poplar::Tensor mean = args[2];
-          poplar::Tensor variance_or_inv_std_dev = args[3];
-          poplar::Tensor grad_output = args[4];
-
-          // Move the channels.
-          operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
-          grad_output =
-              ShuffleNormInputToPoplar(grad_output, norm_opts.feature_index);
-
-          switch (norm_opts.type) {
-            case NormType::BatchNorm: {
-              // For batch norm variance_or_inv_std_dev is variance, so we need
-              // to convert it.
-              poplar::Tensor inv_sd = ConvertVarianceToInvStdDev(
-                  graph, variance_or_inv_std_dev, norm_opts.epsilon, prog,
-                  {debug_name_and_id});
-              poplar::Tensor operand_whitened = popnn::bn::batchNormWhiten(
-                  graph, operand, mean, inv_sd, prog,
-                  {debug_name_and_id, "WhitenedActs"});
-
-              // Compute the grad for the operand.
-              if (replica_group_size > 1) {
-                args[5] = popnn::bn::distributedBatchNormGradients(
-                    main_graph, operand_whitened, grad_output, inv_sd, scale,
-                    prog,
-                    GetDistributedNormReduceCallback(
-                        "DistributedBatchNormGradients"),
-                    CalculateNormBatchSize(operand, replica_group_size),
-                    poplar::FLOAT, {debug_name_and_id, "OperandGrad"});
-              } else {
-                args[5] = popnn::bn::batchNormGradients(
-                    graph, operand_whitened, grad_output, inv_sd, scale, prog,
-                    poplar::FLOAT, {debug_name_and_id, "OperandGrad"});
-              }
-              // Compute the grads for the scale and offset.
-              std::tie(args[6], args[7]) = popnn::bn::batchNormParamGradients(
-                  graph, operand_whitened, grad_output, prog, poplar::FLOAT,
-                  {debug_name_and_id, "ScaleOffsetGrads"});
-              break;
-            }
-            case NormType::GroupNorm: {
-              // For group norm variance_or_inv_std_dev is inv_std_dev, so we
-              // don't need to convert it.
-              poplar::Tensor operand_whitened = popnn::gn::groupNormWhiten(
-                  graph, operand, mean, variance_or_inv_std_dev, prog,
-                  {debug_name_and_id, "WhitenedActs"}, norm_opts.flags);
-
-              // Compute the grad for the operand.
-              args[5] = popnn::gn::groupNormGradients(
-                  graph, operand_whitened, grad_output, variance_or_inv_std_dev,
-                  scale, prog, poplar::FLOAT,
-                  {debug_name_and_id, "OperandGrad"}, norm_opts.flags);
-              // Compute the grads for the scale and offset.
-              std::tie(args[6], args[7]) = popnn::gn::groupNormParamGradients(
-                  graph, operand_whitened, grad_output, prog, poplar::FLOAT,
-                  {debug_name_and_id, "ScaleOffsetGrads"}, norm_opts.flags);
-              break;
-            }
-          }
-          args[5] =
-              ShuffleNormOutputToTensorflow(args[5], norm_opts.feature_index);
-        };
-
     poplar::Tensor operand_grad, scale_grad, offset_grad;
-    std::vector<poplar::Tensor> args = {
-        arg_operand,     arg_scale,    arg_mean,   arg_variance_or_inv_std_dev,
-        arg_grad_output, operand_grad, scale_grad, offset_grad};
-    pg::Signature signature = {
-        pg::input(arg_operand, "operand"),
-        pg::input(arg_scale, "scale"),
-        pg::input(arg_mean, "mean"),
-        pg::input(arg_variance_or_inv_std_dev, "variance_or_inv_std_dev"),
-        pg::input(arg_grad_output, "grad_output"),
-        pg::created("operand_grad"),
-        pg::created("scale_grad"),
-        pg::created("offset_grad")};
+    auto replica_group_size =
+        res.experimental_distributed_batch_norm_replica_group_size;
 
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq,
-                                                     func, signature, args));
+    // Move the channels.
+    operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
+    grad_output =
+        ShuffleNormInputToPoplar(grad_output, norm_opts.feature_index);
 
-    operand_grad = args[5];
-    scale_grad = args[6];
-    offset_grad = args[7];
+    switch (norm_opts.type) {
+      case NormType::BatchNorm: {
+        // For batch norm variance_or_inv_std_dev is variance, so we need
+        // to convert it.
+        poplar::Tensor inv_sd = ConvertVarianceToInvStdDev(
+            graph, variance_or_inv_std_dev, norm_opts.epsilon, seq,
+            {debug_name_and_id});
+        poplar::Tensor operand_whitened =
+            popnn::bn::batchNormWhiten(graph, operand, mean, inv_sd, seq,
+                                       {debug_name_and_id, "WhitenedActs"});
+
+        // Compute the grad for the operand.
+        if (replica_group_size > 1) {
+          operand_grad = popnn::bn::distributedBatchNormGradients(
+              main_graph, operand_whitened, grad_output, inv_sd, scale, seq,
+              GetDistributedNormReduceCallback("DistributedBatchNormGradients"),
+              CalculateNormBatchSize(operand, replica_group_size),
+              poplar::FLOAT, {debug_name_and_id, "OperandGrad"});
+        } else {
+          operand_grad = popnn::bn::batchNormGradients(
+              graph, operand_whitened, grad_output, inv_sd, scale, seq,
+              poplar::FLOAT, {debug_name_and_id, "OperandGrad"});
+        }
+        // Compute the grads for the scale and offset.
+        std::tie(scale_grad, offset_grad) = popnn::bn::batchNormParamGradients(
+            graph, operand_whitened, grad_output, seq, poplar::FLOAT,
+            {debug_name_and_id, "ScaleOffsetGrads"});
+        break;
+      }
+      case NormType::GroupNorm: {
+        // For group norm variance_or_inv_std_dev is inv_std_dev, so we
+        // don't need to convert it.
+        poplar::Tensor operand_whitened = popnn::gn::groupNormWhiten(
+            graph, operand, mean, variance_or_inv_std_dev, seq,
+            {debug_name_and_id, "WhitenedActs"}, norm_opts.flags);
+
+        // Compute the grad for the operand.
+        operand_grad = popnn::gn::groupNormGradients(
+            graph, operand_whitened, grad_output, variance_or_inv_std_dev,
+            scale, seq, poplar::FLOAT, {debug_name_and_id, "OperandGrad"},
+            norm_opts.flags);
+        // Compute the grads for the scale and offset.
+        std::tie(scale_grad, offset_grad) = popnn::gn::groupNormParamGradients(
+            graph, operand_whitened, grad_output, seq, poplar::FLOAT,
+            {debug_name_and_id, "ScaleOffsetGrads"}, norm_opts.flags);
+        break;
+      }
+    }
+    operand_grad =
+        ShuffleNormOutputToTensorflow(operand_grad, norm_opts.feature_index);
+
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0,
                                 DriverTensor(operand_grad, graph)));
     TF_CHECK_OK(
@@ -705,21 +617,20 @@ class NormStatisticsOp : public PoplarOpDef {
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
     TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_operand,
+        poplar::Tensor operand,
         FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info},
                              /*expand_aliasing*/ false));
 
     // Special case - zero sized array
     if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
-      auto mean = graph.addConstant(arg_operand.elementType(), {1}, 0,
+      auto mean = graph.addConstant(operand.elementType(), {1}, 0,
                                     {debug_info, "mean"});
       graph.setTileMapping(mean, 0);
       TF_ASSIGN_OR_RETURN(mean,
                           BroadcastTensor(mean, inst->operand(0)->shape(), {}));
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, mean));
-      auto variance_or_inv_std_dev =
-          graph.addConstant(arg_operand.elementType(), {1}, 0,
-                            {debug_info, "varianceOrInvStdDev"});
+      auto variance_or_inv_std_dev = graph.addConstant(
+          operand.elementType(), {1}, 0, {debug_info, "varianceOrInvStdDev"});
       graph.setTileMapping(variance_or_inv_std_dev, 0);
       TF_CHECK_OK(
           AddOutputTensor(tensor_map, inst, 1, variance_or_inv_std_dev));
@@ -728,67 +639,50 @@ class NormStatisticsOp : public PoplarOpDef {
 
     auto& main_graph = GetMasterGraph(res);
     poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func =
-        [&main_graph, &graph, debug_name_and_id, norm_opts,
-         use_stable_statistics = res.use_stable_norm_statistics,
-         replica_group_size =
-             res.experimental_distributed_batch_norm_replica_group_size](
-            std::vector<poplar::Tensor>& args,
-            poplar::program::Sequence& prog) {
-          poplar::Tensor operand = args[0];
-          // Move the channels.
-          operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
-
-          switch (norm_opts.type) {
-            case NormType::BatchNorm: {
-              poplar::Tensor inv_sd;
-
-              if (replica_group_size > 1) {
-                std::tie(args[1], inv_sd) =
-                    popnn::bn::distributedBatchNormStatistics(
-                        main_graph, operand, norm_opts.epsilon, prog,
-                        /*unbiasedVarEstimate=*/false,
-                        GetDistributedNormReduceCallback(
-                            "DistributedBatchNormStatistics"),
-                        CalculateNormBatchSize(operand, replica_group_size),
-                        use_stable_statistics, poplar::FLOAT,
-                        {debug_name_and_id});
-              } else {
-                std::tie(args[1], inv_sd) = popnn::bn::batchNormStatistics(
-                    graph, operand, norm_opts.epsilon, prog,
-                    /*unbiasedVarEstimate=*/false, use_stable_statistics,
-                    poplar::FLOAT, {debug_name_and_id});
-              }
-
-              // For batch norm variance_or_inv_std_dev is variance, so we need
-              // to convert it.
-              args[2] = ConvertInvStdDevToVariance(
-                  graph, inv_sd, norm_opts.epsilon, prog, {debug_name_and_id});
-              break;
-            }
-            case NormType::GroupNorm: {
-              // For group norm variance_or_inv_std_dev is inv_std_dev, so we
-              // don't need to convert it.
-              std::tie(args[1], args[2]) = popnn::gn::groupNormStatistics(
-                  graph, operand, norm_opts.epsilon, prog,
-                  *norm_opts.num_groups,
-                  /*unbiasedVarEstimate=*/false, use_stable_statistics,
-                  poplar::FLOAT, {debug_name_and_id}, norm_opts.flags);
-              break;
-            }
-          }
-        };
     poplar::Tensor mean, variance_or_inv_std_dev;
-    std::vector<poplar::Tensor> args = {arg_operand, mean,
-                                        variance_or_inv_std_dev};
-    pg::Signature signature = {pg::input(arg_operand, "operand"),
-                               pg::created("mean"),
-                               pg::created("variance_or_inv_std_dev")};
+    auto replica_group_size =
+        res.experimental_distributed_batch_norm_replica_group_size;
+    auto use_stable_statistics = res.use_stable_norm_statistics;
 
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq,
-                                                     func, signature, args));
-    mean = args[1];
-    variance_or_inv_std_dev = args[2];
+    // Move the channels.
+    operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
+
+    switch (norm_opts.type) {
+      case NormType::BatchNorm: {
+        poplar::Tensor inv_sd;
+
+        if (replica_group_size > 1) {
+          std::tie(mean, inv_sd) = popnn::bn::distributedBatchNormStatistics(
+              main_graph, operand, norm_opts.epsilon, seq,
+              /*unbiasedVarEstimate=*/false,
+              GetDistributedNormReduceCallback(
+                  "DistributedBatchNormStatistics"),
+              CalculateNormBatchSize(operand, replica_group_size),
+              use_stable_statistics, poplar::FLOAT, {debug_name_and_id});
+        } else {
+          std::tie(mean, inv_sd) = popnn::bn::batchNormStatistics(
+              graph, operand, norm_opts.epsilon, seq,
+              /*unbiasedVarEstimate=*/false, use_stable_statistics,
+              poplar::FLOAT, {debug_name_and_id});
+        }
+
+        // For batch norm variance_or_inv_std_dev is variance, so we need
+        // to convert it.
+        variance_or_inv_std_dev = ConvertInvStdDevToVariance(
+            graph, inv_sd, norm_opts.epsilon, seq, {debug_name_and_id});
+        break;
+      }
+      case NormType::GroupNorm: {
+        // For group norm variance_or_inv_std_dev is inv_std_dev, so we
+        // don't need to convert it.
+        std::tie(mean, variance_or_inv_std_dev) =
+            popnn::gn::groupNormStatistics(
+                graph, operand, norm_opts.epsilon, seq, *norm_opts.num_groups,
+                /*unbiasedVarEstimate=*/false, use_stable_statistics,
+                poplar::FLOAT, {debug_name_and_id}, norm_opts.flags);
+        break;
+      }
+    }
 
     TF_CHECK_OK(
         AddOutputTensor(tensor_map, inst, 0, DriverTensor(mean, graph)));

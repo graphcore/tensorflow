@@ -79,7 +79,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     # Would fail if there were two batch norms in the graph
     ok = [
         'vs/conv2d/Conv2D/convolution/Conv_1x1',
-        'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
+        'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference/'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -121,7 +121,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     # Matches two convolutions
     ok = [
         'vs/conv2d/Conv2D/convolution/Conv_1x1',
-        'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
+        'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference/',
         'vs/Cast/convert.*/Cast',
         'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
         'vs/batch_normalization_1/FusedBatchNorm*/batch-norm-inference.*/',
@@ -166,7 +166,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     # Matches two convolutions
     ok = [
         'vs/conv2d/Conv2D/convolution/Conv_1x1',
-        'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
+        'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference/',
         'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
         'vs/batch_normalization_1/FusedBatchNorm*/batch-norm-inference.*/'
     ]
@@ -226,10 +226,10 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     # pylint: disable=line-too-long
     ok = [
         'vs/conv1/Conv2D/convolution.*/Conv_1x1',
-        'vs/batch_normalization/FusedBatchNorm*/batch-norm-training.*/',
+        'vs/batch_normalization/FusedBatchNorm*/batch-norm-training/',
         'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
         'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
-        'gradients/vs/batch_normalization_2/FusedBatchNorm*_grad/FusedBatchNormGrad*/batch-norm-grad.*/',
+        'gradients/vs/batch_normalization_2/FusedBatchNorm*_grad/FusedBatchNormGrad*/batch-norm-grad/',
         'GradientDescent/update_vs/batch_normalization/',
         'GradientDescent/update_vs/batch_normalization_1/',
         'GradientDescent/update_vs/batch_normalization_2/',
@@ -409,7 +409,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     ok = [
         'vs/conv2d/Conv2D/convolution/Conv_1x1',
         'vs/PopnnGroupNormInference/group-norm-inference*/',
-        'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
+        'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference/'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
@@ -541,8 +541,8 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       self.assertAllClose(r[0], np.full(r[0].shape, 2))
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 1057266, tolerance=0.2)
-    self.assert_max_tile_memory(report, 132230, tolerance=0.2)
+    self.assert_total_tile_memory(report, 1319821, tolerance=0.2)
+    self.assert_max_tile_memory(report, 165007, tolerance=0.2)
     # Would fail if there were two batch norms in the graph
     ok = [
         'moments/SquaredDifference/square',
