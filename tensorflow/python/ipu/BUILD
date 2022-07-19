@@ -1790,7 +1790,8 @@ tf_py_test(
     name = "serving_export_test",
     size = "large",
     srcs = ["tests/serving_export_test.py"],
-    shard_count = 19,
+    # Shard count needs to match the number of tests.
+    shard_count = 20,
     tags = ["hw_poplar_test_1_ipus"],
     deps = [
         "//tensorflow/compiler/tests:xla_test",
