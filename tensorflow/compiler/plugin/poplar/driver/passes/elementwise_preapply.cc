@@ -119,6 +119,46 @@ StatusOr<bool> HandleOneHot(HloInstruction* inst, HloInstruction* elementwise) {
 }
 REGISTER_POPLAR_OP_HANDLER(OneHot, HandleOneHot);
 
+StatusOr<bool> HandleBroadcast(HloInstruction* inst,
+                               HloInstruction* elementwise) {
+  HloComputation* comp = inst->parent();
+  HloInstruction* target_operand = inst->mutable_operand(0);
+  std::vector<HloInstruction*> operands;
+
+  for (HloInstruction* op : elementwise->operands()) {
+    if (op == inst) {
+      operands.push_back(target_operand);
+    } else {
+      CHECK(op->opcode() == HloOpcode::kBroadcast);
+      CHECK(IsScalar(op->operand(0)));
+      auto elementwise_operand = op->mutable_operand(0);
+      if (IsScalar(target_operand)) {
+        // No need to broadcast when all operands are scalars.
+        operands.push_back(elementwise_operand);
+      } else {
+        // Create a new broadcast of op->mutable_operand(0) and push it to
+        // operands.
+        auto broadcast = comp->AddInstruction(HloInstruction::CreateBroadcast(
+            target_operand->shape(), elementwise_operand, {}));
+        operands.push_back(broadcast);
+      }
+    }
+  }
+  Shape new_target_shape(target_operand->shape());
+  // We need to use the element_type of elementwise in case it is a convert.
+  new_target_shape.set_element_type(elementwise->shape().element_type());
+  HloInstruction* operand_transformed = comp->AddInstruction(
+      elementwise->CloneWithNewOperands(new_target_shape, operands));
+  auto new_shape_inst = comp->AddInstruction(
+      inst->CloneWithNewOperands(elementwise->shape(), {operand_transformed}));
+
+  // Remove broadcast and replace it with the new broadcast instruction.
+  TF_RETURN_IF_ERROR(elementwise->ReplaceAllUsesWith(new_shape_inst));
+  TF_RETURN_IF_ERROR(comp->RemoveInstructionAndUnusedOperands(elementwise));
+  return true;
+}
+REGISTER_OP_HANDLER(kBroadcast, HandleBroadcast);
+
 }  // anonymous namespace
 
 StatusOr<bool> ElementwisePreapply::Run(HloModule* module) {

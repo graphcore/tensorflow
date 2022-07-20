@@ -33,8 +33,6 @@ StatusOr<std::unique_ptr<HloInstruction>> FoldPaddingIntoMaxPool(
 StatusOr<bool> FoldPaddingIntoMaxPoolGrad(HloMaxPoolGradInstruction*);
 StatusOr<std::unique_ptr<HloInstruction>> FoldCastIntoNormaliseImage(
     HloNormaliseImage*);
-StatusOr<bool> MoveElementwiseBeforeOneHot(HloOneHotInstruction* inst);
-
 }  // namespace xla::poplarplugin::algebraic_simplifier::custom_call
 
 #endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_POPLAR_ALGEBRAIC_SIMPLIFIER_POPLAR_ALGEBRAIC_SIMPLIFIER_CUSTOM_CALL_H_

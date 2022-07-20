@@ -275,10 +275,10 @@ xla_test(
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:hlo_poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/service:hlo_parser",
         "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
-        "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
     ],
 )
