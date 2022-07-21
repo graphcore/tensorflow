@@ -426,12 +426,37 @@ DriverTensor CreateTensorFromSlice(
   output_slices[0] = TensorCloneAndRebalanceAliasing(
       graph, resources, adjusted_slice, {debug_name_and_id});
 
-  // The remaining slices will just clone the layout of the first slice.
+  auto mapping = graph.getTileMapping(output_slices[0]);
+  auto mappingWidth = MappingHelper::GetMappingWidth(mapping);
+  VLOG(2) << "Slice mapping size " << mappingWidth << " replicated "
+          << number_of_clones << " times.";
+
+  // Calculate how many slices we can distribute across all tiles
+  const auto numTiles = graph.getTarget().getNumTiles();
+  const auto numStacks = numTiles / mappingWidth;
+  CHECK_GE(numStacks, 1);
+  const auto stackSize = (number_of_clones + numStacks - 1) / numStacks;
+  VLOG(2) << "Organise slices in " << numStacks << " stack(s), " << stackSize
+          << " slice(s) per stack.";
+
+  // Organise clones in "stacks":
+  // Each stack rotated for stackIdx * mappingWidth
+  //  Stack 0    Stack 1    Stack 2
+  // [Output 0] [Output 2] [Output 4]
+  // [Output 1] [Output 3] [Output 5]
   for (int64_t i = 1; i != number_of_clones; ++i) {
+    uint64_t stackIdx = i / stackSize;
+    VLOG(3) << "Slice " << i << " is in stack " << stackIdx;
     output_slices[i] = graph.clone(output_slices[0], {debug_name_and_id});
+    if (stackIdx > 0) {
+      auto mapping = graph.getTileMapping(output_slices[i]);
+      MappingHelper::RotateMapping(graph, mapping, stackIdx * mappingWidth);
+      graph.getPoplarGraph().setTileMapping(output_slices[i].getPoplarTensor(),
+                                            mapping);
+    }
   }
 
-  // Concatentate all the slices into a single tensor.
+  // Concatenate all the slices into a single tensor.
   return ConcatenateTensors(output_slices, slice_dimension);
 }
 

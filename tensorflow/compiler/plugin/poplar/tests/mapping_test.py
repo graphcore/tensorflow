@@ -24,6 +24,7 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
 
 
@@ -67,6 +68,46 @@ class MappingTest(xla_test.XLATestCase):
             bad_maps += [tensor.inst]
 
       self.assertFalse(bad_maps)
+
+  def testSlice(self):
+    cfg = ipu.utils.IPUConfig()
+    tu.enable_ipu_events(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
+    with self.session() as sess:
+
+      def my_net(a, b):
+        a = array_ops.slice(a, [2028], [4])
+        c = math_ops.tensordot(a, b, axes=0)
+        return [c]
+
+      with ops.device('cpu'):
+        a = array_ops.placeholder(np.float32, [2048])
+        b = array_ops.placeholder(np.float32, [4])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        r = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
+
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
+
+      a_v = np.arange(2048)
+      b_v = np.arange(4)
+
+      _ = sess.run(r, {a: a_v, b: b_v})
+
+      report_json.parse_log()
+      tm = report_json.get_tensor_map()
+
+      elements = {}
+      for tensor in tm.all_tensors():
+        for tile in tensor.tiles:
+          n = elements.get(tile.tile, 0)
+          elements[tile.tile] = n + tile.num_elements
+
+      for n in elements.values():
+        self.assertTrue(n >= 260 and n <= 270)
 
   def testMappingJson(self):
     cfg = ipu.utils.IPUConfig()
