@@ -83,9 +83,13 @@ strategy = ipu_strategy.IPUStrategy()
 with strategy.scope():
   print(
       runtime_func(
-          tf.constant(["graphcore", "is", "the", "best", "AI", "company"],
-                      dtype=tf.string)))
+          tf.constant(
+              ["graphcore", "red", "blue", "yellow", "graphcore", "purple"],
+              dtype=tf.string)))
   print(
       runtime_func(
-          tf.constant(["make", "new", "AI", "breakthroughs", "with", "IPUS"],
+          tf.constant([
+              "apple", "banana", "graphcore", "orange", "pineapple",
+              "graphcore"
+          ],
                       dtype=tf.string)))

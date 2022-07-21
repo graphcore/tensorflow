@@ -70,14 +70,18 @@ runtime_func = serving.export_single_step(
     postprocessing_step_signature=postprocessing_step_signature)
 print(f"SavedModel written to {saved_model_directory}")
 
-# # You can test the exported executable using returned `runtime_func`.
+# You can test the exported executable using returned `runtime_func`.
 strategy = ipu_strategy.IPUStrategy()
 with strategy.scope():
   print(
       runtime_func(
-          tf.constant(["graphcore", "is", "the", "best", "AI", "company"],
-                      dtype=tf.string)))
+          tf.constant(
+              ["graphcore", "red", "blue", "yellow", "graphcore", "purple"],
+              dtype=tf.string)))
   print(
       runtime_func(
-          tf.constant(["make", "new", "AI", "breakthroughs", "with", "IPUS"],
+          tf.constant([
+              "apple", "banana", "graphcore", "orange", "pineapple",
+              "graphcore"
+          ],
                       dtype=tf.string)))

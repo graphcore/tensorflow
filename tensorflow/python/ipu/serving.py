@@ -94,8 +94,6 @@ def _validate_signatures(predict_step,
       `postprocessing_step`. If `postprocessing_step` is a `tf.function` and
       `input_signature` was specified during `tf.function` creation then this
       argument can be None.
-    non_feed_inputs (list, optional): List of inputs that will be provided
-      to the graph without usage of infeed queue.
 
   Raises:
     TypeError: If `input_dataset` is not a `tf.Dataset` or `NoneType`.
@@ -810,7 +808,15 @@ def export_pipeline(computational_stages,
                              postprocessing_step)
 
 
-def export_keras(model, export_dir, batch_size=None, output_names=None):
+def export_keras(model,
+                 export_dir,
+                 batch_size=None,
+                 output_names=None,
+                 preprocessing_step=None,
+                 preprocessing_step_signature=None,
+                 postprocessing_step=None,
+                 postprocessing_step_signature=None,
+                 purge_export_dir=False):
   """Export Keras model using the SavedModel format for TensorFlow serving.
 
   Wrap model's ``call`` function inside a ``while`` loop, add an infeed for the
@@ -830,20 +836,58 @@ def export_keras(model, export_dir, batch_size=None, output_names=None):
     output_names (str or list, optional): Output name or list of output names
       for the outputs in the SavedModel's SignatureDef. If not provided, outputs
       will be named: ``output_0``, ``output_1`` and so on.
-
+     preprocessing_step (Callable or tf.function, optional): Function that runs
+      the preprocessing step on the CPU device. This function is called just
+      before the Keras model. `preprocessing_step` and the Keras model are
+      exported together.
+      The `preprocessing_step` output is passed directly to the Keras modelel
+      input queue.
+    preprocessing_step_signature (list or tuple, optional): A sequence of
+      `tf.TensorSpec` objects that describe the input arguments of the
+      `preprocessing_step` function.
+      If `preprocessing_step` is a `tf.function` and `input_signature` was
+      specified during `tf.function` creation then this argument can be None
+      and the signature will be captured directly from `preprocessing_step`.
+    postprocessing_step (Callable or tf.function, optional): Function that
+      runs the postprocessing step on the CPU. This function is called after
+      the Keras model. `postprocessing_step` and the Keras model are exported
+      together.
+      Tensors from the Keras model output queue are inputs to
+      `postprocessing_step`.
+    postprocessing_step_signature (list or tuple, optional): A sequence of
+      `tf.TensorSpec` objects that describe the input arguments of the
+      `postprocessing_step` function.
+      If `postprocessing_step` is a `tf.function` and `input_signature` was
+      specified during `tf.function` creation then this argument can be None
+      and the signature will be captured directly from `postprocessing_step`.
+    purge_export_dir (Boolean, optional): If True, before starting the export,
+      the target directory is emptied. Otherwise no cleaning is performed and
+      if the target directory is not empty, the function fails with an error.
   Returns:
     tf.function: A reference to the same predict function that was exported
-    using the SavedModel format. This function uses the embedded runtime op to
-    run the executable that was included in the SavedModel's ``assets``
-    subfolder.
+      using the SavedModel format. This function uses the embedded runtime op
+      to run the executable that was included in the SavedModel's ``assets``
+      subfolder.
 
   Raises:
-    ValueError: If model was not created inside IPU strategy.
-    ValueError: If ``export_dir`` is not an empty directory.
+    ValueError: If `model` does not have the `export_for_ipu_serving` method.
+    ValueError: If `export_dir` is not an empty directory and
+      `purge_export_dir` is not set to True.
+    TypeError: If `preprocessing_step_signature` is neither a tuple, a list of
+      `tf.TensorSpec` objects nor a `NoneType`.
+    TypeError: If `postprocessing_step_signature` is neither a tuple, a list of
+      `tf.TensorSpec` objects nor a `NoneType`.
+    ValueError: If `preprocessing_step_signature` is an empty tuple or a list.
+    ValueError: If `postprocessing_step_signature` is an empty tuple or a list.
+    ValueError: If `preprocessing_step` is provided and
+      `preprocessing_step_signature` is not provided and `preprocessing_step`
+      is not a `tf.function` or is a `tf.function` but no `input_signature` is
+      provided.
+    ValueError: If `postprocessing_step` is provided and
+      `postprocessing_step_signature` is not provided and
+      `postprocessing_step` is not a `tf.function` or is a `tf.function` but
+      no `input_signature` is provided.
   """
-  if os.path.isdir(export_dir) and os.listdir(export_dir):
-    raise ValueError(
-        "Directory is not empty. Please specify an empty directory.")
 
   if not hasattr(model, 'export_for_ipu_serving'):
     raise ValueError(
@@ -851,4 +895,9 @@ def export_keras(model, export_dir, batch_size=None, output_names=None):
         "does not contain IPU-specific functions. Please wrap its "
         "creation inside an IPU strategy.")
 
-  return model.export_for_ipu_serving(export_dir, batch_size, output_names)
+  return model.export_for_ipu_serving(export_dir, batch_size, output_names,
+                                      preprocessing_step,
+                                      preprocessing_step_signature,
+                                      postprocessing_step,
+                                      postprocessing_step_signature,
+                                      purge_export_dir)
