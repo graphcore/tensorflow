@@ -104,16 +104,20 @@ StatusOr<bool> HandleOneHot(HloInstruction* inst, HloInstruction* elementwise) {
       off_operands.push_back(op->mutable_operand(0));
     }
   }
+  auto new_on_shape(on->shape());
+  new_on_shape.set_element_type(elementwise->shape().element_type());
   HloInstruction* on_transformed = comp->AddInstruction(
-      elementwise->CloneWithNewOperands(on->shape(), on_operands));
+      elementwise->CloneWithNewOperands(new_on_shape, on_operands));
+  auto new_off_shape(off->shape());
+  new_off_shape.set_element_type(elementwise->shape().element_type());
   HloInstruction* off_transformed = comp->AddInstruction(
-      elementwise->CloneWithNewOperands(off->shape(), off_operands));
-  TF_RETURN_IF_ERROR(inst->ReplaceOperandWith(1, on_transformed));
-  TF_RETURN_IF_ERROR(inst->ReplaceOperandWith(2, off_transformed));
+      elementwise->CloneWithNewOperands(new_off_shape, off_operands));
+  auto new_shape_inst = comp->AddInstruction(inst->CloneWithNewOperands(
+      elementwise->shape(),
+      {inst->mutable_operand(0), on_transformed, off_transformed}));
 
-  // Remove elementwise and use one-hot directly.
-  TF_RETURN_IF_ERROR(inst->CopyAllControlDepsFrom(elementwise));
-  TF_RETURN_IF_ERROR(elementwise->ReplaceAllUsesWith(inst));
+  // Remove elementwise and replace it with the new one-hot instruction.
+  TF_RETURN_IF_ERROR(elementwise->ReplaceAllUsesWith(new_shape_inst));
   TF_RETURN_IF_ERROR(comp->RemoveInstructionAndUnusedOperands(elementwise));
   return true;
 }

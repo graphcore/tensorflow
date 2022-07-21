@@ -59,6 +59,46 @@ ENTRY f {
                                         m::ConstantScalar(0))));
 }
 
+// Check that there are no issues when the elementwise op is a convert,
+// since the one-hot shape needs to change.
+TEST_F(ElementwisePreapplyTest, TestOneHotConvert) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  param = s32[2] constant({1, 2})
+  on = f32[] constant(1)
+  off = f32[] constant(0)
+  one-hot = f32[2, 3] custom-call(param, on, off), custom_call_target="OneHot", backend_config="{\"depth\": 3, \"axis\": 1}"
+  ROOT convert = s32[2, 3] convert(f32[2, 3] one-hot)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+
+  // Compute initial numeric result.
+  TF_ASSERT_OK_AND_ASSIGN(auto expected,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  // Need to clear schedule between passes when using increased logging level.
+  EXPECT_TRUE(HloDescheduler().Run(module.get()).ValueOrDie());
+
+  // Run the pass and check that we get the correct structure.
+  EXPECT_TRUE(ElementwisePreapply().Run(module.get()).ValueOrDie());
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::OneHot)(root));
+  EXPECT_TRUE(
+      Match(root, m::CustomCall(m::Constant(), m::Convert(m::ConstantScalar(1)),
+                                m::Convert(m::ConstantScalar(0)))));
+
+  // Recompute numeric result and check for equality.
+  TF_ASSERT_OK_AND_ASSIGN(auto result,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  EXPECT_EQ(expected.size(), 1);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_TRUE(LiteralTestUtil::Equal(result[0], expected[0]));
+}
+
 TEST_F(ElementwisePreapplyTest, TestOneHotBinary) {
   const char* hlo_string = R"(
 HloModule module
