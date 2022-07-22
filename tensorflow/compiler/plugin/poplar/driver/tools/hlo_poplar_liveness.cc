@@ -116,7 +116,7 @@ bool IsFinalResult(const HloInstruction* inst) {
 
 void UpdateLivenessBackwards(
     const HloInstruction* inst, const HloPoplarBuffer* buffer,
-    const absl::flat_hash_map<const HloPoplarBuffer*, const HloInstruction*>
+    const absl::flat_hash_map<const HloPoplarBuffer*, const HloInstruction*>&
         buffer_creators,
     HloPoplarBufferIdSet& live_set) {
   // Since we're going backwards we kill a buffer when it's defined. The only
@@ -231,7 +231,7 @@ int64_t MemoryUsageOfBufferSet(
 }
 
 int64_t MemoryUsageOfComputations(
-    const std::vector<HloComputation*> computations,
+    const std::vector<HloComputation*>& computations,
     const absl::flat_hash_map<const HloComputation*, int64_t>&
         computation_costs_in_bytes) {
   const int64_t memory_usage = absl::c_accumulate(
