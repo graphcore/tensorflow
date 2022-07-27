@@ -15,6 +15,7 @@ if os.path.exists(saved_model_directory):
            "before running the example.")
 
 
+# The preprocessing step is performed fully on the CPU.
 def preprocessing_step(x):
   def transform_fn(inp):
     is_gc = lambda: tf.constant(1.0)
@@ -25,10 +26,13 @@ def preprocessing_step(x):
   return tf.stack([transform_fn(elem) for elem in tf.unstack(x)])
 
 
+# The postprocessing step is performed fully on the CPU.
+def postprocessing_step(x):
+  return tf.abs(x)
+
+
 # The function to export.
 def predict_step(x):
-  # Preprocessing will be compiled and exported together with
-  # the application body.
   # Double the input - replace this with your application body.
   return x * 2
 
@@ -48,6 +52,9 @@ predict_step_signature = (tf.TensorSpec(shape=input_shape, dtype=np.float32),)
 preprocessing_step_signature = (tf.TensorSpec(shape=input_shape,
                                               dtype=tf.string),)
 
+# Prepare the `postprocessing_step` function signature.
+postprocessing_step_signature = (tf.TensorSpec(shape=input_shape,
+                                               dtype=np.float32),)
 # Export as a SavedModel.
 iters = 10
 runtime_func = serving.export_single_step(
@@ -56,7 +63,9 @@ runtime_func = serving.export_single_step(
     iterations=iters,
     predict_step_signature=predict_step_signature,
     preprocessing_step=preprocessing_step,
-    preprocessing_step_signature=preprocessing_step_signature)
+    preprocessing_step_signature=preprocessing_step_signature,
+    postprocessing_step=postprocessing_step,
+    postprocessing_step_signature=postprocessing_step_signature)
 print(f"SavedModel written to {saved_model_directory}")
 
 # You can test the exported executable using returned `runtime_func`.

@@ -1732,7 +1732,8 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//third_party/py/numpy",
     ],
-    shard_count = 15,
+    # Shard count needs to match the number of tests.
+    shard_count = 21,
     tags = ["hw_poplar_test_1_ipus"],
 )
 
