@@ -141,7 +141,8 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
-  def test_export_simple_model_no_var_preprocessing_transform_strings(self):
+  def test_export_simple_model_no_var_pre_post_processing_transform_strings(
+      self):
     element_count = 2
     input_shape = (element_count,)
 
@@ -154,7 +155,7 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
                                         name="input string"),)
 
     @def_function.function(input_signature=input_sig)
-    def preprocessing(input_tensor):
+    def preprocessing_step(input_tensor):
       def transform_fn(inp):
         is_gc = lambda: constant_op.constant(1.0)
         is_oth = lambda: constant_op.constant(2.0)
@@ -164,6 +165,11 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
 
       return array_ops.stack(
           [transform_fn(elem) for elem in array_ops.unstack(input_tensor)])
+
+    @def_function.function(input_signature=(tensor_spec.TensorSpec(
+        shape=(2,), dtype=dtypes.float32, name="input"),))
+    def postprocessing_step(x):
+      return x - 1.0
 
     def model_fn(x):
       return x * x
@@ -175,11 +181,12 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
                                  tmp_folder,
                                  iterations,
                                  predict_step_signature,
-                                 preprocessing_step=preprocessing,
+                                 preprocessing_step=preprocessing_step,
+                                 postprocessing_step=postprocessing_step,
                                  output_names="out0")
 
       result = self._load_and_run(tmp_folder, input_data, ["out0"])
-      self.assertEqual(list(result), [1.0, 4.0])
+      self.assertEqual(list(result), [0.0, 3.0])
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
@@ -258,13 +265,58 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
-  def test_export_simple_model_two_inputs_preprocessing(self):
+  def test_export_simple_model_no_var_postprocessing(self):
+
+    element_count = 15
+    input_shape = (element_count,)
+    predict_step_signature = (tensor_spec.TensorSpec(shape=input_shape,
+                                                     dtype=np.float32,
+                                                     name='x'),)
+
+    postprocessing_step_signature = predict_step_signature
+
+    @def_function.function
+    def my_net(x):
+      return x * x
+
+    @def_function.function
+    def postprocessing_step(x):
+      return x - 1.0
+
+    def expected_value(x):
+      return list(np.subtract(np.square(x), 1.0))
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      iterations = 4
+      serving.export_single_step(
+          my_net,
+          tmp_folder,
+          iterations,
+          predict_step_signature,
+          postprocessing_step=postprocessing_step,
+          postprocessing_step_signature=postprocessing_step_signature,
+          output_names="out0")
+
+      input_data = np.arange(element_count, dtype=np.float32)
+
+      # load and run
+      result = self._load_and_run(tmp_folder, input_data)
+      self.assertEqual(list(result), expected_value(input_data))
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.deprecated_graph_mode_only
+  def test_export_simple_model_two_inputs_pre_post_processing(self):
     element_count = 3
     input_shape = (element_count,)
     predict_step_signature = (tensor_spec.TensorSpec(shape=input_shape,
                                                      dtype=np.float32),
                               tensor_spec.TensorSpec(shape=(),
                                                      dtype=np.float32))
+
+    postprocessing_step_signature = (tensor_spec.TensorSpec(shape=input_shape,
+                                                            dtype=np.float32),
+                                     tensor_spec.TensorSpec(shape=input_shape,
+                                                            dtype=np.float32))
 
     @def_function.function(input_signature=predict_step_signature)
     def preprocessing(x1, x2):
@@ -274,12 +326,17 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
     def model_fn(x1, x2):
       return x1 * x2, x1 + x2
 
+    @def_function.function(input_signature=postprocessing_step_signature)
+    def postprocessing_step(x1, x2):
+      return math_ops.reduce_sum(x1), math_ops.abs(x2)
+
     with tempfile.TemporaryDirectory() as tmp_folder:
       iterations = 16
       serving.export_single_step(model_fn,
                                  tmp_folder,
                                  iterations,
                                  preprocessing_step=preprocessing,
+                                 postprocessing_step=postprocessing_step,
                                  output_names=["result0", "result1"])
 
       x1_data = np.arange(element_count, dtype=np.float32)
@@ -291,8 +348,8 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       x1_data -= 2
       x2_data += 5
 
-      self.assertEqual(list(result0), list(x1_data * x2_data))
-      self.assertEqual(list(result1), list(x1_data + x2_data))
+      self.assertEqual(float(result0), np.sum(x1_data * x2_data))
+      self.assertEqual(list(result1), list(np.absolute(x1_data + x2_data)))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
@@ -327,7 +384,7 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
-  def test_export_simple_model_with_variable_preprocessing(self):
+  def test_export_simple_model_with_variable_pre_post_processing(self):
     element_count = 17
     input_shape = (element_count,)
     input_tensor = array_ops.zeros(shape=input_shape, dtype=np.float16)
@@ -339,7 +396,7 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
     preproc_value = np.float16(2.)
     var_value = np.float16(4.)
 
-    def preprocessing(x):
+    def preprocessing_step(x):
       p = variables.Variable(preproc_value)
       return x * p
 
@@ -347,24 +404,30 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       w = variables.Variable(var_value)
       return x * w
 
+    def postprocessing_step(x):
+      p = variables.Variable(preproc_value)
+      return x / p
+
     def init_variables(sess):
       init = variables.global_variables_initializer()
       sess.run(init)
 
     with tempfile.TemporaryDirectory() as tmp_folder:
       iterations = 16
-      serving.export_single_step(model_fn,
-                                 tmp_folder,
-                                 iterations,
-                                 predict_step_signature=predict_step_signature,
-                                 input_dataset=dataset,
-                                 variable_initializer=init_variables,
-                                 preprocessing_step=preprocessing)
+      serving.export_single_step(
+          model_fn,
+          tmp_folder,
+          iterations,
+          predict_step_signature=predict_step_signature,
+          input_dataset=dataset,
+          variable_initializer=init_variables,
+          preprocessing_step=preprocessing_step,
+          postprocessing_step_signature=predict_step_signature,
+          postprocessing_step=postprocessing_step)
 
       input_data = np.arange(element_count, dtype=np.float16)
       result = self._load_and_run(tmp_folder, input_data)
-      self.assertEqual(list(result),
-                       list(input_data * var_value * preproc_value))
+      self.assertEqual(list(result), list(input_data * var_value))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
@@ -439,6 +502,65 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       ref_result = (x1_data + x2_data) * var_value
       self.assertEqual(list(result), list(ref_result))
 
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.deprecated_graph_mode_only
+  def test_export_simple_model_run_post_pre_post_processing_locally(self):
+    element_count = 3
+    input_shape = (element_count,)
+
+    inputs = (array_ops.zeros(input_shape, np.float32),
+              array_ops.zeros(input_shape, np.float32))
+    dataset = dataset_ops.Dataset.from_tensors(inputs)
+    predict_step_signature = (tensor_spec.TensorSpec(shape=input_shape,
+                                                     dtype=np.float32),
+                              tensor_spec.TensorSpec(shape=input_shape,
+                                                     dtype=np.float32))
+    postprocessing_signature = (tensor_spec.TensorSpec(shape=input_shape,
+                                                       dtype=np.float32),)
+    var_value = np.float32(4.)
+
+    @def_function.function
+    def preprocessing_step(x1, x2):
+      return x1 - 2, x2 + 5
+
+    def model_fn(x1, x2):
+      w = variables.Variable(var_value)
+      return (x1 + x2) * w
+
+    @def_function.function(input_signature=postprocessing_signature)
+    def postprocessing_step(x):
+      return x * 10
+
+    def init_variables(sess):
+      init = variables.global_variables_initializer()
+      sess.run(init)
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      iterations = 16
+      runtime_func = serving.export_single_step(
+          model_fn,
+          tmp_folder,
+          iterations,
+          input_dataset=dataset,
+          predict_step_signature=predict_step_signature,
+          preprocessing_step=preprocessing_step,
+          postprocessing_step=postprocessing_step,
+          variable_initializer=init_variables)
+
+      x1_ph = array_ops.placeholder(dtype=np.float32, shape=input_shape)
+      x2_ph = array_ops.placeholder(dtype=np.float32, shape=input_shape)
+
+      result_op = runtime_func(x1_ph, x2_ph)
+      x1_data = np.arange(element_count, dtype=np.float32)
+      x2_data = x1_data * 2
+
+      with session_lib.Session() as sess:
+        result = sess.run(result_op, {x1_ph: x1_data, x2_ph: x2_data})
+
+      result = result[0]
+      ref_result = ((x1_data - 2) + (x2_data + 5)) * var_value * 10
+      self.assertEqual(list(result), list(ref_result))
+
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_export_single_step_fails_for_non_empty_dir(self):
@@ -501,7 +623,7 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
-  def test_export_pipeline_preprocessing(self):
+  def test_export_pipeline_pre_post_processing(self):
 
     element_count = 4
     input_shape = (element_count,)
@@ -509,10 +631,11 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
                                                      dtype=np.float32),
                               tensor_spec.TensorSpec(shape=input_shape,
                                                      dtype=np.float32))
-
+    postprocessing_step_signature = (tensor_spec.TensorSpec(shape=input_shape,
+                                                            dtype=np.float32),)
     var_value = np.float32(4.)
 
-    def preprocessing(x1, x2):
+    def preprocessing_step(x1, x2):
       return x1 * 10, x2 * x2
 
     def stage1(x1, x2):
@@ -527,6 +650,9 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       init = variables.global_variables_initializer()
       sess.run(init)
 
+    def postprocessing_step(x):
+      return math_ops.reduce_sum(x)
+
     with tempfile.TemporaryDirectory() as tmp_folder:
       serving.export_pipeline(
           [stage1, stage2],
@@ -535,15 +661,17 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
           device_mapping=[0, 0],
           variable_initializer=init_variables,
           predict_step_signature=predict_step_signature,
-          preprocessing_step=preprocessing,
-          preprocessing_step_signature=predict_step_signature)
+          preprocessing_step_signature=predict_step_signature,
+          preprocessing_step=preprocessing_step,
+          postprocessing_step=postprocessing_step,
+          postprocessing_step_signature=postprocessing_step_signature)
 
       x1_data = np.arange(element_count, dtype=np.float32)
       x2_data = x1_data * 2
 
       result = self._load_and_run(tmp_folder, {'x1': x1_data, 'x2': x2_data})
-      ref_result = (x1_data * 10) * np.square(x2_data) - var_value + 2
-      self.assertEqual(list(result), list(ref_result))
+      ref_result = np.sum((x1_data * 10) * np.square(x2_data) - var_value + 2)
+      self.assertEqual(float(result), float(ref_result))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
@@ -572,6 +700,57 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       result = self._load_and_run(tmp_folder, x2_data)
       ref_result = 42.0 * x2_data + 2
       self.assertEqual(list(result), list(ref_result))
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.deprecated_graph_mode_only
+  def test_export_pipeline_tffunction_pre_post_processing_signature(self):
+    element_count = 4
+    input_shape = (element_count,)
+    predict_step_signature = (tensor_spec.TensorSpec(shape=(),
+                                                     dtype=np.float16),
+                              tensor_spec.TensorSpec(shape=input_shape,
+                                                     dtype=np.float16))
+    preprocessing_step_signature = (tensor_spec.TensorSpec(shape=input_shape,
+                                                           dtype=np.float16),)
+
+    postprocessing_step_signature = (tensor_spec.TensorSpec(shape=input_shape,
+                                                            dtype=np.float16),
+                                     tensor_spec.TensorSpec(shape=input_shape,
+                                                            dtype=np.float16))
+
+    @def_function.function(input_signature=preprocessing_step_signature)
+    def preprocessing_step(x2):
+      return x2 * x2
+
+    @def_function.function(input_signature=predict_step_signature)
+    def stage1(x1, x2):
+      return x1 * x2
+
+    def stage2(x):
+      return x + 2, x * 3
+
+    @def_function.function(input_signature=postprocessing_step_signature)
+    def postprocessing_step(x1, x2):
+      return math_ops.cast(x1,
+                           dtypes.float32), math_ops.cast(x2, dtypes.float32)
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      serving.export_pipeline([stage1, stage2],
+                              tmp_folder,
+                              iterations=16,
+                              inputs=[np.float16(42.0)],
+                              predict_step_signature=predict_step_signature,
+                              preprocessing_step=preprocessing_step,
+                              postprocessing_step=postprocessing_step,
+                              device_mapping=[0, 0])
+
+      x2_data = np.arange(element_count, dtype=np.float16)
+      ref_out0 = 42.0 * np.square(x2_data) + 2
+      ref_out1 = 42.0 * np.square(x2_data) * 3
+
+      result0, result1 = self._load_and_run(tmp_folder, x2_data)
+      self.assertEqual(list(result0), list(ref_out0.astype(np.float32)))
+      self.assertEqual(list(result1), list(ref_out1.astype(np.float32)))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
@@ -620,6 +799,56 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
                                 iterations=16,
                                 device_mapping=[0, 0],
                                 predict_step_signature=input_signature)
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.deprecated_graph_mode_only
+  def test_export_pipeline_dataset_pre_post_processing_signature(self):
+
+    element_count = 4
+    input_shape = (element_count,)
+
+    inputs = (array_ops.zeros(shape=input_shape, dtype=np.float32),
+              array_ops.zeros(shape=(), dtype=np.float32))
+    dataset = dataset_ops.Dataset.from_tensors(inputs)
+    predict_step_signature = (tensor_spec.TensorSpec(shape=(),
+                                                     dtype=np.float32),
+                              tensor_spec.TensorSpec(shape=input_shape,
+                                                     dtype=np.float32),
+                              tensor_spec.TensorSpec(shape=(),
+                                                     dtype=np.float32))
+    postprocessing_step_signature = (tensor_spec.TensorSpec(shape=input_shape,
+                                                            dtype=np.float32),)
+
+    def preprocessing_step(x2, x3):
+      return x2 * x3, x3 + 5
+
+    @def_function.function(input_signature=predict_step_signature)
+    def stage1(x1, x2, x3):
+      return x1 * x2 + x3
+
+    def stage2(x):
+      return x + 2
+
+    def postprocessing_step(x):
+      return x - 20
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      serving.export_pipeline(
+          [stage1, stage2],
+          tmp_folder,
+          iterations=16,
+          inputs=[42.0],
+          device_mapping=[0, 0],
+          input_dataset=dataset,
+          preprocessing_step=preprocessing_step,
+          postprocessing_step=postprocessing_step,
+          postprocessing_step_signature=postprocessing_step_signature)
+
+      x2_data = np.arange(element_count, dtype=np.float32)
+      x3_data = np.float32(5.0)
+      ref_result = (42.0 * (x2_data * x3_data) + (x3_data + 5) + 2) - 20
+      result = self._load_and_run(tmp_folder, {'x2': x2_data, 'x3': x3_data})
+      self.assertEqual(list(result), list(ref_result))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
