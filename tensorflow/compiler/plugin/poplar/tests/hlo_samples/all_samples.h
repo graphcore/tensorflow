@@ -17,7 +17,6 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_TESTS_HLO_SAMPLES_ALL_SAMPLES_H_
 
 #include "tensorflow/compiler/plugin/poplar/tests/hlo_samples/T44634_hlo.h"
-#include "tensorflow/compiler/plugin/poplar/tests/hlo_samples/als_simple_training_adam_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/tests/hlo_samples/linear_regression_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/tests/hlo_samples/pipeline_grouped_recomputation_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/tests/hlo_samples/rnn_hlo.h"

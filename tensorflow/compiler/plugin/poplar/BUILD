@@ -186,7 +186,6 @@ poplar_cc_library(
     hdrs = [
         "tests/hlo_samples/T44634_hlo.h",
         "tests/hlo_samples/all_samples.h",
-        "tests/hlo_samples/als_simple_training_adam_hlo.h",
         "tests/hlo_samples/linear_regression_hlo.h",
         "tests/hlo_samples/pipeline_grouped_recomputation_hlo.h",
         "tests/hlo_samples/rnn_hlo.h",

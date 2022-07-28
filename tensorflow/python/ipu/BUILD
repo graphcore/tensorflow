@@ -173,7 +173,6 @@ py_library(
         "keras/losses/__init__.py",
         "keras/losses/ctc.py",
         "keras/optimizers/__init__.py",
-        "keras/optimizers/automatic_loss_scaling_optimizer.py",
         "keras/optimizers/cross_replica_optimizer.py",
         "keras/optimizers/gradient_accumulation_optimizer.py",
         "keras/optimizers/ipu_wrappers.py",
@@ -203,7 +202,6 @@ py_library(
         "ops/statistics_ops.py",
         "ops/within_replica_ops.py",
         "optimizers/__init__.py",
-        "optimizers/automatic_loss_scaling_optimizer.py",
         "optimizers/cross_replica_optimizer.py",
         "optimizers/gradient_accumulation_optimizer.py",
         "optimizers/ipu_optimizer.py",
@@ -259,20 +257,6 @@ tf_py_test(
     size = "small",
     srcs = ["tests/reduce_scatter_test.py"],
     tags = ["hw_poplar_test_4_ipus"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/ipu/test_utils",
-    ],
-)
-
-tf_py_test(
-    name = "automatic_loss_scaling_optimizer_test",
-    size = "large",
-    srcs = ["tests/automatic_loss_scaling_optimizer_test.py"],
-    shard_count = 8,
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python:framework",
@@ -513,20 +497,6 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/ipu/test_utils",
         "//tensorflow/python/keras",
-    ],
-)
-
-tf_py_test(
-    name = "keras_automatic_loss_scaling_optimizer_test",
-    size = "large",
-    srcs = ["tests/keras/keras_automatic_loss_scaling_optimizer_test.py"],
-    shard_count = 8,
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/ipu/test_utils",
     ],
 )
 

@@ -114,7 +114,6 @@ INSTANTIATE_TEST_SUITE_P(
                           MAKE_HLO_TEST_CASE(pipeline_grouped_recomputation_hlo,
                                              4),
                           MAKE_HLO_TEST_CASE(serialized_matmul_hlo),
-                          MAKE_HLO_TEST_CASE(als_simple_training_adam_hlo),
                           MAKE_HLO_TEST_CASE(rnn_hlo)),
         ::testing::Values(IpuSchedulingAlgorithm::CLUSTERING,
                           IpuSchedulingAlgorithm::POST_ORDER,
