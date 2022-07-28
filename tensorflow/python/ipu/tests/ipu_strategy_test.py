@@ -644,6 +644,17 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       # The dataset cardinality should be unchanged.
       self.assertEqual(len(dataset), 4)
 
+  @test_util.run_v2_only
+  def test_int32_only_output(self):
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+
+      @def_function.function(jit_compile=False)
+      def fn(x):
+        return math_ops.cast(x, np.int32)
+
+      self.assertAllClose(strategy.run(fn, args=([1.0, 2.0],)), [1, 2])
+
 
 if __name__ == "__main__":
   test.main()

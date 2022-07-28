@@ -125,7 +125,7 @@ Status UpdateArgAndRetvalMetadata(
       AllocatorAttributes alloc_attr;
       DataType type = attr_value->type();
       MemoryType mtype = (device_type == "TPU" || device_type == "XLA_CPU" ||
-                          device_type == "XLA_GPU")
+                          device_type == "XLA_GPU" || device_type == "IPU")
                              ? MTypeFromDTypeIntsOnDevice(type)
                              : MTypeFromDType(type);
       if (mtype == HOST_MEMORY) {
@@ -142,7 +142,7 @@ Status UpdateArgAndRetvalMetadata(
       AllocatorAttributes alloc_attr;
       DataType type = attr_value->type();
       MemoryType mtype = (device_type == "TPU" || device_type == "XLA_CPU" ||
-                          device_type == "XLA_GPU")
+                          device_type == "XLA_GPU" || device_type == "IPU")
                              ? MTypeFromDTypeIntsOnDevice(type)
                              : MTypeFromDType(type);
       if (mtype == HOST_MEMORY) {
