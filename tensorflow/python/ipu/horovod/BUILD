@@ -15,7 +15,7 @@ required dependency for all our users, only for those that actually use Horovod.
 package(default_visibility = ["//tensorflow:internal"])
 
 load("//tensorflow:tensorflow.bzl", "tf_cc_shared_object", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
-load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test")
+load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test", "poprun_py_test")
 
 cc_library(
     name = "lbfgspp_headers",
@@ -106,12 +106,13 @@ horovod_py_test(
     ],
 )
 
-horovod_py_test(
+poprun_py_test(
     name = "popdist_strategy_test",
     size = "medium",
     srcs = ["popdist_strategy_test.py"],
     main = "popdist_strategy_test.py",
-    num_processes = 2,
+    num_instances = 2,
+    num_replicas = 2,
     deps = [
         "//tensorflow/python/ipu:ipu_lib",
     ],

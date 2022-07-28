@@ -283,6 +283,20 @@ tf_custom_op_py_library(
     deps = [":dataset_exporters_wrapper_py"],
 )
 
+tf_gen_op_wrapper_py(
+    name = "popdist_ops_wrapper_py",
+    out = "gen_popdist_ops.py",
+    deps = ["//tensorflow/compiler/plugin/poplar/ops/popdist:ops"],
+)
+
+tf_custom_op_py_library(
+    name = "popdist_ops_py",
+    kernels = [":popdist_ops"],
+    srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
+    deps = [":popdist_ops_wrapper_py"],
+)
+
 poplar_cc_library(
     name = "ops",
     deps = [
@@ -298,6 +312,8 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/ops/datastream:host_embedding",
         "//tensorflow/compiler/plugin/poplar/ops/functional",
         "//tensorflow/compiler/plugin/poplar/ops/functional:pipelining",
+        "//tensorflow/compiler/plugin/poplar/ops/popdist:all_reduce",
+        "//tensorflow/compiler/plugin/poplar/ops/popdist:broadcast",
         "//tensorflow/compiler/plugin/poplar/ops/popfloat:cast_to_gfloat",
         "//tensorflow/compiler/plugin/poplar/ops/popnn:ctc_loss",
         "//tensorflow/compiler/plugin/poplar/ops/popnn:gelu",

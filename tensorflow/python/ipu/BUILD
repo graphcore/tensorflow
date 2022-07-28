@@ -51,6 +51,7 @@ py_library(
         "//tensorflow/compiler/plugin/poplar/ops:grad_util_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:popdist_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:popfloat_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:popnn_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:popops_ops_py",

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import popdist
 import numpy as np
 
 from tensorflow import debugging
@@ -57,6 +58,7 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
   @classmethod
   def setUpClass(cls):
     hvd.init()
+    popdist.init()
 
   @classmethod
   def tearDownClass(cls):

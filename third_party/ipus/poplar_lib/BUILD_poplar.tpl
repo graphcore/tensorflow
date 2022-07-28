@@ -25,6 +25,7 @@ cc_library(
         "popir/include",
         "popit/include",
         "poprithms/include",
+        "popdist/include",
         "graphcore_target_access/include",
     ],
 )
