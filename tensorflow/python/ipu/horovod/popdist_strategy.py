@@ -12,28 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
+import popdist
+
 from tensorflow.python.distribute import device_util
 from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import reduce_util
 from tensorflow.python.distribute import values
 from tensorflow.python.distribute.cluster_resolver import cluster_resolver as cluster_resolver_lib
 from tensorflow.python.framework import device as tf_device
-from tensorflow.python.ipu import utils as ipu_utils
-from tensorflow.python.ipu.horovod import Sum, Average, size, rank, allreduce as hvd_allreduce, broadcast as hvd_broadcast
-from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerExtended
+from tensorflow.python.ipu.ipu_multi_worker_strategy import \
+    IPUMultiWorkerExtended
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.training import server_lib
-from tensorflow.python.util import deprecation
-
-
-def _to_horovod_op(reduce_op):
-  if reduce_op == reduce_util.ReduceOp.SUM:
-    return Sum
-  if reduce_op == reduce_util.ReduceOp.MEAN:
-    return Average
-
-  raise ValueError("Unsupported reduce op: {}".format(reduce_op))
+from tensorflow.compiler.plugin.poplar.ops import gen_popdist_ops
+from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 
 
 def _is_current_device_ipu():
@@ -74,8 +66,10 @@ class PopDistStrategy(distribute_lib.StrategyV1):
     Returns:
       The IPUConfig instance.
     """
-    config.experimental.multi_replica_distribution.process_count = size()
-    config.experimental.multi_replica_distribution.process_index = rank()
+    config.experimental.multi_replica_distribution.process_count = \
+      popdist.getNumInstances()
+    config.experimental.multi_replica_distribution.process_index = \
+      popdist.getInstanceIndex()
 
 
 class PopDistExtendedV1(IPUMultiWorkerExtended):
@@ -85,7 +79,7 @@ class PopDistExtendedV1(IPUMultiWorkerExtended):
                      cluster_resolver,
                      ipu_device,
                      variables_on_host=False)
-    self._num_workers = size()
+    self._num_workers = popdist.getNumInstances()
     self._add_ipu_cross_replica_reductions = add_ipu_cross_replica_reductions
 
   def _reduce_to(self, reduce_op, value, destinations):
@@ -96,8 +90,9 @@ class PopDistExtendedV1(IPUMultiWorkerExtended):
       value = value.values[0]
 
     if not _is_current_device_ipu():
-      # If not on IPU, use Horovod for the reduction.
-      return hvd_allreduce(value, op=_to_horovod_op(reduce_op))
+      # If not on IPU, use PopDist for a host side reduction.
+      return gen_popdist_ops.popdist_all_reduce(value,
+                                                reduce_op=reduce_op.value)
 
     # On the IPU, do reduction with GCL if requested.
     if not self._add_ipu_cross_replica_reductions:
@@ -124,4 +119,4 @@ class PopDistExtendedV1(IPUMultiWorkerExtended):
       raise RuntimeError(
           "Can only broadcast on CPU, but got device {}".format(device))
 
-    return hvd_broadcast(initial_value, root_rank=0)
+    return gen_popdist_ops.popdist_broadcast(initial_value)

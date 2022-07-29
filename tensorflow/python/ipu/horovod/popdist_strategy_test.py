@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import popdist
 import numpy as np
 
 from tensorflow.python import ipu
@@ -33,6 +34,7 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
   @classmethod
   def setUpClass(cls):
     hvd.init()
+    popdist.init()
 
   @classmethod
   def tearDownClass(cls):
@@ -127,17 +129,20 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
       def per_replica_fn(x):
         w0 = variable_scope.get_variable(
             name="w0",
-            initializer=hvd.rank() + 1,
+            initializer=float(hvd.rank() + 1),
             synchronization=variable_scope.VariableSynchronization.ON_READ,
             aggregation=variable_scope.VariableAggregation.MEAN)
         self.assertIsInstance(w0, IPUSyncOnReadVariable)
         return w0.assign_add(x)
 
-      inputs = array_ops.placeholder(dtype=np.int32, shape=())
+      inputs = array_ops.placeholder(dtype=np.float32, shape=())
       assign_add_op = strategy.experimental_run_v2(per_replica_fn,
                                                    args=[inputs])
 
       with session.Session() as sess:
+        config = ipu.config.IPUConfig()
+        strategy.update_ipu_config(config)
+        config.configure_ipu_system()
         sess.run(variables.global_variables_initializer())
         # Both should have initial value from first worker
         self.assertEqual([1.0], sess.run(variables.global_variables()))

@@ -113,6 +113,7 @@ def _poplar_autoconf_impl(repository_ctx):
             repository_ctx.symlink(poplar_base + "/libpva/python", "poplar/libpva/python")
             repository_ctx.symlink(poplar_base + "/popdist/lib", "poplar/lib/popdist")
             repository_ctx.symlink(poplar_base + "/popdist/python", "poplar/popdist/python")
+            repository_ctx.symlink(poplar_base + "/popdist/include", "poplar/popdist/include")
             repository_ctx.symlink(poplar_base + "/poprun/bin", "poplar/poprun/bin")
             repository_ctx.symlink(poplar_base + "/ipu_arch_info/lib", "poplar/lib/ipu_arch_info")
             repository_ctx.symlink(poplar_base + "/ipuof_lib/lib", "poplar/ipuof_lib/lib")
