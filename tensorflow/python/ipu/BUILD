@@ -234,7 +234,10 @@ py_library(
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/distribute:values",
         "//tensorflow/python/estimator:estimator_py",
-    ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_lib"]),
+    ] + if_horovod([
+        "//tensorflow/python/ipu/distributed:horovod_lib",
+        "//tensorflow/python/ipu/horovod:horovod_lib",
+    ]),
 )
 
 tf_py_test(
@@ -1829,5 +1832,5 @@ test_suite(
         ":all_tests",
         "//tensorflow/compiler/plugin/poplar:poplar_ci_test_suite",
         "//tensorflow/python/ipu/tests/keras/extensions:extensions_test_suite",
-    ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_test_suite"]),
+    ] + if_horovod(["//tensorflow/python/ipu/distributed:horovod_test_suite"]),
 )

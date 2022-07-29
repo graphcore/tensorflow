@@ -1,6 +1,17 @@
 TensorFlow API changes
 ----------------------
 
+Release 3.0
+~~~~~~~~~~~
+
+Non-breaking changes
+____________________
+
+Deprecated modules
+'''''''''''''''''
+
+  - The `tensorflow.python.ipu.horovod` module has been moved to `tensorflow.python.ipu.distributed` and will be removed in the next release. Using `tensorflow.python.ipu.horovod` will still work in release 3.0, but trigger a deprecation warning.
+
 Release 2.6
 ~~~~~~~~~~~
 
