@@ -26,6 +26,12 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
+bool HasSize1(const HloInstruction* inst) {
+  return std::all_of(inst->shape().dimensions().begin(),
+                     inst->shape().dimensions().end(),
+                     [](auto dim) { return dim == 1; });
+}
+
 using HandlerFunc =
     std::function<StatusOr<bool>(HloInstruction*, HloInstruction*)>;
 static absl::flat_hash_map<HloOpcode, HandlerFunc> op_handlers;
@@ -75,10 +81,10 @@ StatusOr<bool> TryHandle(HloInstruction* inst) {
   }
   for (const HloInstruction* operand : user->operands()) {
     // An elementwise op is uniform on inst if all of its operands are one of
-    // inst, a scalar or a broadcast scalar.
-    if (!(operand == inst || IsScalar(operand) ||
+    // inst, have size 1, or are a broadcast of a variable with size 1.
+    if (!(operand == inst || HasSize1(operand) ||
           (operand->opcode() == HloOpcode::kBroadcast &&
-           IsScalar(operand->operand(0))))) {
+           HasSize1(operand->operand(0))))) {
       return false;
     }
   }
@@ -99,20 +105,40 @@ StatusOr<bool> HandleOneHot(HloInstruction* inst, HloInstruction* elementwise) {
       on_operands.push_back(on);
       off_operands.push_back(off);
     } else {
-      CHECK(op->opcode() == HloOpcode::kBroadcast);
-      CHECK(IsScalar(op->operand(0)));
-      on_operands.push_back(op->mutable_operand(0));
-      off_operands.push_back(op->mutable_operand(0));
+      CHECK(HasSize1(op) || (op->opcode() == HloOpcode::kBroadcast &&
+                             HasSize1(op->operand(0))));
+      HloInstruction* new_elementwise_operand;
+      if (op->opcode() == HloOpcode::kBroadcast) {
+        new_elementwise_operand = op->mutable_operand(0);
+      } else {
+        new_elementwise_operand = op;
+      }
+
+      CHECK(HasSize1(new_elementwise_operand));
+      if (!IsScalar(new_elementwise_operand)) {
+        // Reshape operand to be a scalar.
+        auto new_shape = ShapeUtil::DropDegenerateDimensions(
+            new_elementwise_operand->shape());
+        new_elementwise_operand = comp->AddInstruction(
+            HloInstruction::CreateReshape(new_shape, new_elementwise_operand));
+      }
+      on_operands.push_back(new_elementwise_operand);
+      off_operands.push_back(new_elementwise_operand);
     }
   }
-  auto new_on_shape(on->shape());
-  new_on_shape.set_element_type(elementwise->shape().element_type());
+  // Create replacements for `on`, `off` and `inst`.
+  // We need to use the element_type of elementwise in case it is a convert.
+  auto new_on_shape = ShapeUtil::ChangeElementType(
+      on->shape(), elementwise->shape().element_type());
   HloInstruction* on_transformed = comp->AddInstruction(
       elementwise->CloneWithNewOperands(new_on_shape, on_operands));
-  auto new_off_shape(off->shape());
-  new_off_shape.set_element_type(elementwise->shape().element_type());
+
+  // We need to use the element_type of elementwise in case it is a convert.
+  auto new_off_shape = ShapeUtil::ChangeElementType(
+      off->shape(), elementwise->shape().element_type());
   HloInstruction* off_transformed = comp->AddInstruction(
       elementwise->CloneWithNewOperands(new_off_shape, off_operands));
+
   auto new_shape_inst = comp->AddInstruction(inst->CloneWithNewOperands(
       elementwise->shape(),
       {inst->mutable_operand(0), on_transformed, off_transformed}));
@@ -134,37 +160,55 @@ StatusOr<bool> HandleBroadcast(HloInstruction* inst,
     if (op == inst) {
       operands.push_back(target_operand);
     } else {
-      HloInstruction* elementwise_operand;
-      if (IsScalar(op)) {
-        elementwise_operand = op;
+      HloInstruction* new_elementwise_operand;
+      if (op->opcode() == HloOpcode::kBroadcast) {
+        new_elementwise_operand = op->mutable_operand(0);
       } else {
-        CHECK(op->opcode() == HloOpcode::kBroadcast);
-        CHECK(IsScalar(op->operand(0)));
-        elementwise_operand = op->mutable_operand(0);
+        new_elementwise_operand = op;
       }
-      if (IsScalar(target_operand)) {
-        // No need to broadcast when all operands are scalars.
-        operands.push_back(elementwise_operand);
-      } else {
-        // Create a new broadcast of op->mutable_operand(0) and push it to
-        // operands.
-        auto broadcast = comp->AddInstruction(HloInstruction::CreateBroadcast(
-            target_operand->shape(), elementwise_operand, {}));
-        operands.push_back(broadcast);
+      CHECK(HasSize1(new_elementwise_operand));
+      // Check if we need to adjust the shape of new_elementwise_operand
+      if (!ShapeUtil::SameDimensions(target_operand->shape(),
+                                     new_elementwise_operand->shape())) {
+        if (HasSize1(target_operand)) {
+          // Simply reshape new_elementwise_operand to have same shape as
+          // target_operand, while keeping op's type.
+          auto new_shape = ShapeUtil::ChangeElementType(
+              target_operand->shape(), op->shape().element_type());
+          new_elementwise_operand =
+              comp->AddInstruction(HloInstruction::CreateReshape(
+                  new_shape, new_elementwise_operand));
+        } else {
+          // Make sure new_elementwise_operand is a scalar.
+          if (!IsScalar(new_elementwise_operand)) {
+            auto new_shape = ShapeUtil::DropDegenerateDimensions(
+                new_elementwise_operand->shape());
+            new_elementwise_operand =
+                comp->AddInstruction(HloInstruction::CreateReshape(
+                    new_shape, new_elementwise_operand));
+          }
+          // Broadcast new_elementwise_operand to size of target_operand.
+          auto new_shape = ShapeUtil::ChangeElementType(
+              target_operand->shape(), op->shape().element_type());
+          new_elementwise_operand =
+              comp->AddInstruction(HloInstruction::CreateBroadcast(
+                  new_shape, new_elementwise_operand, {}));
+        }
       }
+      operands.push_back(new_elementwise_operand);
     }
   }
-  Shape new_target_shape(target_operand->shape());
   // We need to use the element_type of elementwise in case it is a convert.
-  new_target_shape.set_element_type(elementwise->shape().element_type());
+  Shape new_target_shape = ShapeUtil::ChangeElementType(
+      target_operand->shape(), elementwise->shape().element_type());
   HloInstruction* operand_transformed = comp->AddInstruction(
       elementwise->CloneWithNewOperands(new_target_shape, operands));
-  // Check if we're dealing with a degenerate broadcast.
-  if (IsScalar(inst)) {
-    // Can remove the broadcast entirely
+  // Check if we're dealing with an unneccessary broadcast.
+  if (target_operand->shape() == inst->shape()) {
+    // Can remove the broadcast entirely.
     TF_RETURN_IF_ERROR(elementwise->ReplaceAllUsesWith(operand_transformed));
   } else {
-    // Need to keep the broadcast
+    // Need to keep the broadcast.
     auto new_shape_inst = comp->AddInstruction(inst->CloneWithNewOperands(
         elementwise->shape(), {operand_transformed}));
     TF_RETURN_IF_ERROR(elementwise->ReplaceAllUsesWith(new_shape_inst));

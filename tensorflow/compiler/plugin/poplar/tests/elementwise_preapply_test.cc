@@ -160,6 +160,84 @@ ENTRY f {
                                         m::ConstantScalar(2))));
 }
 
+// Test that pass works correctly when size of elementwise operands is 1.
+TEST_F(ElementwisePreapplyTest, TestOneHotSize1) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  param = s32[1] constant({0})
+  on = f16[] constant(1)
+  off = f16[] constant(0)
+  one-hot = f16[1, 1] custom-call(param, on, off), custom_call_target="OneHot", backend_config="{\"depth\": 1, \"axis\": 0}"
+  a = f16[1, 1] constant({{0.5}})
+  ROOT add = f16[1, 1] add(one-hot, a)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+  TF_ASSERT_OK_AND_ASSIGN(auto expected,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+
+  // Need to clear schedule between passes when using increased logging level.
+  EXPECT_TRUE(HloDescheduler().Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(ElementwisePreapply().Run(module.get()).ValueOrDie());
+
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(Match(
+      root,
+      m::CustomCall(m::Constant(),
+                    m::AddAnyOrder(m::Reshape(m::Constant()), m::Constant()),
+                    m::AddAnyOrder(m::Reshape(m::Constant()), m::Constant()))));
+  TF_ASSERT_OK_AND_ASSIGN(auto result,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  EXPECT_EQ(expected.size(), 1);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_TRUE(LiteralTestUtil::Equal(result[0], expected[0]));
+}
+
+// Test that pass preserves types of elementwise operands.
+// For this we use a select, since it has 2 different element types.
+TEST_F(ElementwisePreapplyTest, TestOneHotOperandTypesPreserved) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  on = f16[] constant(5)
+  off = f16[] constant(6)
+  a = s32[2] constant({0, 1})
+  a_onehot = f16[2, 2] custom-call(a, on, off), custom_call_target="OneHot", backend_config="{\"depth\": 2, \"axis\": 0}"
+  b = f16[] constant(3)
+  b_broadcast = f16[2, 2] broadcast(b), dimensions={}
+  p = pred[] constant(true)
+  p_broadcast = pred[2, 2] broadcast(p), dimensions={}
+  ROOT select = f16[2, 2] select(p_broadcast, a_onehot, b_broadcast)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+  TF_ASSERT_OK_AND_ASSIGN(auto expected,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+
+  // Need to clear schedule between passes when using increased logging level.
+  EXPECT_TRUE(HloDescheduler().Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(ElementwisePreapply().Run(module.get()).ValueOrDie());
+
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(Match(
+      root,
+      m::CustomCall(m::Constant(),
+                    m::Select(m::Constant(), m::Constant(), m::Constant()),
+                    m::Select(m::Constant(), m::Constant(), m::Constant()))));
+  TF_ASSERT_OK_AND_ASSIGN(auto result,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  EXPECT_EQ(expected.size(), 1);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_TRUE(LiteralTestUtil::Equal(result[0], expected[0]));
+}
+
 TEST_F(ElementwisePreapplyTest, TestOneHotMultipleUsers) {
   const char* hlo_string = R"(
 HloModule module
@@ -357,40 +435,6 @@ ENTRY f {
   EXPECT_TRUE(LiteralTestUtil::Equal(result[0], expected[0]));
 }
 
-// Check that the case of a degenerate broadcast is handled correctly.
-TEST_F(ElementwisePreapplyTest, TestUselessBroadcast) {
-  const char* hlo_string = R"(
-HloModule module
-
-ENTRY f {
-  c1 = s32[] constant(1)
-  c2 = s32[] constant(3)
-  c3 = s32[] broadcast(c2), dimensions={}
-  ROOT add = s32[] add(c1, c3)
-}
-)";
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo_string));
-
-  // Compute initial numeric result.
-  TF_ASSERT_OK_AND_ASSIGN(auto expected,
-                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
-  // Need to clear schedule between passes when using increased logging level.
-  EXPECT_TRUE(HloDescheduler().Run(module.get()).ValueOrDie());
-
-  // Run the pass and check that we get the correct structure.
-  EXPECT_TRUE(ElementwisePreapply().Run(module.get()).ValueOrDie());
-  HloInstruction* root = module->entry_computation()->root_instruction();
-  EXPECT_TRUE(Match(root, m::AddAnyOrder(m::Constant(), m::Constant())));
-
-  // Recompute numeric result and check for equality.
-  TF_ASSERT_OK_AND_ASSIGN(auto result,
-                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
-  EXPECT_EQ(expected.size(), 1);
-  EXPECT_EQ(result.size(), 1);
-  EXPECT_TRUE(LiteralTestUtil::Equal(result[0], expected[0]));
-}
-
 TEST_F(ElementwisePreapplyTest, TestBroadcastSubsequent) {
   const char* hlo_string = R"(
 HloModule module
@@ -431,6 +475,132 @@ ENTRY f {
                 m::AddAnyOrder(m::Constant(), m::Broadcast(m::Constant()))))));
 
   // Recompute numeric result and check for equality.
+  TF_ASSERT_OK_AND_ASSIGN(auto result,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  EXPECT_EQ(expected.size(), 1);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_TRUE(LiteralTestUtil::Equal(result[0], expected[0]));
+}
+
+// Test that pass preserves types of elementwise operands.
+// For this we use a select, since it has 2 different element types.
+TEST_F(ElementwisePreapplyTest, TestBroadcastOperandTypesPreserved) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  a = f16[] constant(2)
+  a_broadcast = f16[2] broadcast(a), dimensions={}
+  b = f16[] constant(3)
+  b_broadcast = f16[2] broadcast(b), dimensions={}
+  p = pred[] constant(true)
+  p_broadcast = pred[2] broadcast(p), dimensions={}
+  ROOT select = f16[2] select(p_broadcast, a_broadcast, b_broadcast)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto expected,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+
+  // Need to clear schedule between passes when using increased logging level.
+  EXPECT_TRUE(HloDescheduler().Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(ElementwisePreapply().Run(module.get()).ValueOrDie());
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(Match(root, m::Broadcast(m::Select(m::Constant(), m::Constant(),
+                                                 m::Constant()))));
+  TF_ASSERT_OK_AND_ASSIGN(auto result,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  EXPECT_EQ(expected.size(), 1);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_TRUE(LiteralTestUtil::Equal(result[0], expected[0]));
+}
+
+// Test that broadcast gets removed if it doesn't change the shape
+TEST_F(ElementwisePreapplyTest, TestUnnecessaryBroadcast) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  a = f16[1, 2] constant({{2, 3}})
+  broadcast_a = f16[1, 2] broadcast(a), dimensions={0, 1}
+  ROOT add = f32[1, 2] convert(broadcast_a)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto expected,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+
+  // Need to clear schedule between passes when using increased logging level.
+  EXPECT_TRUE(HloDescheduler().Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(ElementwisePreapply().Run(module.get()).ValueOrDie());
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(Match(root, m::Convert(m::Constant())));
+  TF_ASSERT_OK_AND_ASSIGN(auto result,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  EXPECT_EQ(expected.size(), 1);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_TRUE(LiteralTestUtil::Equal(result[0], expected[0]));
+}
+
+// Test that pass works correctly for broadcasts when output size is 1
+TEST_F(ElementwisePreapplyTest, TestBroadcastSize1) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  a = f32[1] constant({2})
+  b = f32[1, 1] constant({{3}})
+  broadcast_a = f32[1, 1] broadcast(a), dimensions={0}
+  ROOT add = f32[1, 1] add(broadcast_a, b)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto expected,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+
+  // Need to clear schedule between passes when using increased logging level.
+  EXPECT_TRUE(HloDescheduler().Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(ElementwisePreapply().Run(module.get()).ValueOrDie());
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(Match(root, m::Broadcast(m::AddAnyOrder(m::Reshape(m::Constant()),
+                                                      m::Constant()))));
+  TF_ASSERT_OK_AND_ASSIGN(auto result,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  EXPECT_EQ(expected.size(), 1);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_TRUE(LiteralTestUtil::Equal(result[0], expected[0]));
+}
+
+// Test that pass works correctly when broadcast takes a non-scalar value.
+TEST_F(ElementwisePreapplyTest, TestIntermediateBroadcast) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  preds = pred[] constant(true)
+  broadcast_preds = pred[2, 2] broadcast(preds), dimensions={}
+  a = f32[2] constant({1, 5})
+  broadcast_a = f32[2, 2] broadcast(a), dimensions={0}
+  b = f32[] constant(3)
+  broadcast_b = f32[2, 2] broadcast(b), dimensions={}
+  ROOT select = f32[2, 2] select(broadcast_preds, broadcast_a, broadcast_b)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto expected,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+
+  // Need to clear schedule between passes when using increased logging level.
+  EXPECT_TRUE(HloDescheduler().Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(ElementwisePreapply().Run(module.get()).ValueOrDie());
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(Match(
+      root, m::Broadcast(m::Select(m::Broadcast(m::Constant()), m::Constant(),
+                                   m::Broadcast(m::Constant())))));
   TF_ASSERT_OK_AND_ASSIGN(auto result,
                           ExecuteNoHloPassesOnIpuModel(module.get(), {}));
   EXPECT_EQ(expected.size(), 1);
