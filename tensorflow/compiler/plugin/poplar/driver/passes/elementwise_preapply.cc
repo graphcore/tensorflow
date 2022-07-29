@@ -15,18 +15,21 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_preapply.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_instructions.h"
 
 namespace xla {
 namespace poplarplugin {
 namespace {
 
-bool HasSize1(const HloInstruction* inst) {
+bool IsSize1(const HloInstruction* inst) {
   return std::all_of(inst->shape().dimensions().begin(),
                      inst->shape().dimensions().end(),
                      [](auto dim) { return dim == 1; });
@@ -82,9 +85,9 @@ StatusOr<bool> TryHandle(HloInstruction* inst) {
   for (const HloInstruction* operand : user->operands()) {
     // An elementwise op is uniform on inst if all of its operands are one of
     // inst, have size 1, or are a broadcast of a variable with size 1.
-    if (!(operand == inst || HasSize1(operand) ||
+    if (!(operand == inst || IsSize1(operand) ||
           (operand->opcode() == HloOpcode::kBroadcast &&
-           HasSize1(operand->operand(0))))) {
+           IsSize1(operand->operand(0))))) {
       return false;
     }
   }
@@ -105,8 +108,8 @@ StatusOr<bool> HandleOneHot(HloInstruction* inst, HloInstruction* elementwise) {
       on_operands.push_back(on);
       off_operands.push_back(off);
     } else {
-      CHECK(HasSize1(op) || (op->opcode() == HloOpcode::kBroadcast &&
-                             HasSize1(op->operand(0))));
+      CHECK(IsSize1(op) ||
+            (op->opcode() == HloOpcode::kBroadcast && IsSize1(op->operand(0))));
       HloInstruction* new_elementwise_operand;
       if (op->opcode() == HloOpcode::kBroadcast) {
         new_elementwise_operand = op->mutable_operand(0);
@@ -114,7 +117,7 @@ StatusOr<bool> HandleOneHot(HloInstruction* inst, HloInstruction* elementwise) {
         new_elementwise_operand = op;
       }
 
-      CHECK(HasSize1(new_elementwise_operand));
+      CHECK(IsSize1(new_elementwise_operand));
       if (!IsScalar(new_elementwise_operand)) {
         // Reshape operand to be a scalar.
         auto new_shape = ShapeUtil::DropDegenerateDimensions(
@@ -166,11 +169,11 @@ StatusOr<bool> HandleBroadcast(HloInstruction* inst,
       } else {
         new_elementwise_operand = op;
       }
-      CHECK(HasSize1(new_elementwise_operand));
+      CHECK(IsSize1(new_elementwise_operand));
       // Check if we need to adjust the shape of new_elementwise_operand
       if (!ShapeUtil::SameDimensions(target_operand->shape(),
                                      new_elementwise_operand->shape())) {
-        if (HasSize1(target_operand)) {
+        if (IsSize1(target_operand)) {
           // Simply reshape new_elementwise_operand to have same shape as
           // target_operand, while keeping op's type.
           auto new_shape = ShapeUtil::ChangeElementType(
@@ -217,6 +220,109 @@ StatusOr<bool> HandleBroadcast(HloInstruction* inst,
   return true;
 }
 REGISTER_OP_HANDLER(kBroadcast, HandleBroadcast);
+
+// Elementwise(Reduce(initial, list)) -> Reduce(Elementwise(initial), list)
+// Only valid for certain combinations of inst, elementwise.
+StatusOr<bool> HandleReduce(HloInstruction* inst, HloInstruction* elementwise) {
+  int num_usages = std::count_if(
+      elementwise->operands().begin(), elementwise->operands().end(),
+      [&inst](auto operand) { return operand == inst; });
+  // We need to be careful to avoid a situation as follows:
+  //   initial = constant(0)
+  //   a = reduce(reducable, initial) # reduce over all dimensions to get a
+  //                                    constant here
+  //   b = add(a, a) # note that the 2 operands here are the same
+  // Our implementation would turn this into:
+  //   initial = constant(0)
+  //   b = add(initial, initial)
+  //   a = reduce(reducable, b)
+  // which is incorrect. So need to make sure inst only apprears in elementwise
+  // once.
+  if (num_usages != 1) {
+    return false;
+  }
+
+  HloComputation* comp = inst->parent();
+
+  HloReduceInstruction* reduce_inst = Cast<HloReduceInstruction>(inst);
+  HloComputation* reduce_comp = reduce_inst->to_apply();
+  auto reduce_type = reduce_comp->root_instruction()->opcode();
+
+  // Check that this is a valid application of ElementwisePreapply.
+  switch (reduce_type) {
+    case HloOpcode::kAdd:
+      if (elementwise->opcode() != HloOpcode::kAdd &&
+          elementwise->opcode() != HloOpcode::kSubtract)
+        return false;
+      break;
+    case HloOpcode::kMultiply:
+      if (elementwise->opcode() != HloOpcode::kMultiply &&
+          elementwise->opcode() != HloOpcode::kDivide)
+        return false;
+      break;
+    case HloOpcode::kMaximum:
+    case HloOpcode::kMinimum:
+    case HloOpcode::kAnd:
+    case HloOpcode::kOr:
+      if (elementwise->opcode() != reduce_type) return false;
+      break;
+    default:
+      return false;
+  }
+
+  // Build up new operands for elementwise.
+  auto init_values = reduce_inst->init_values();
+  std::vector<std::vector<HloInstruction*>> new_elementwise_operands(
+      init_values.size());
+  for (HloInstruction* op : elementwise->operands()) {
+    for (int i = 0; i < init_values.size(); i++) {
+      HloInstruction* new_elementwise_operand;
+      if (op == inst) {
+        new_elementwise_operand = init_values[i];
+      } else {
+        if (IsSize1(op)) {
+          new_elementwise_operand = op;
+        } else {
+          CHECK(op->opcode() == HloOpcode::kBroadcast);
+          CHECK(IsSize1(op->operand(0)));
+          new_elementwise_operand = op->mutable_operand(0);
+        }
+        if (!IsScalar(new_elementwise_operand)) {
+          // Make new_elementwise_operand a scalar as that's the shape of
+          // init_values
+          auto new_shape = new_elementwise_operand->shape();
+          new_shape.clear_dimensions();
+          new_shape.clear_dynamic_dimensions();
+          new_elementwise_operand =
+              comp->AddInstruction(HloInstruction::CreateReshape(
+                  new_shape, new_elementwise_operand));
+        }
+      }
+      new_elementwise_operands[i].push_back(new_elementwise_operand);
+    }
+  }
+
+  // Create new init values for the reduce instruction.
+  std::vector<HloInstruction*> new_init_values(init_values.size());
+  for (int i = 0; i < init_values.size(); i++) {
+    new_init_values[i] = comp->AddInstruction(elementwise->CloneWithNewOperands(
+        new_elementwise_operands[i][0]->shape(), new_elementwise_operands[i]));
+  }
+  std::vector<HloInstruction*> new_inst_operands(reduce_inst->inputs().begin(),
+                                                 reduce_inst->inputs().end());
+  new_inst_operands.insert(new_inst_operands.end(), new_init_values.begin(),
+                           new_init_values.end());
+
+  // Elementwise op cannot be a convert, so we can reuse shape of inst.
+  auto new_reduce_inst = comp->AddInstruction(
+      inst->CloneWithNewOperands(inst->shape(), new_inst_operands));
+
+  // Replace elementwise with the new reduce instruction.
+  TF_RETURN_IF_ERROR(elementwise->ReplaceAllUsesWith(new_reduce_inst));
+  TF_RETURN_IF_ERROR(comp->RemoveInstructionAndUnusedOperands(elementwise));
+  return true;
+}
+REGISTER_OP_HANDLER(kReduce, HandleReduce);
 
 }  // anonymous namespace
 

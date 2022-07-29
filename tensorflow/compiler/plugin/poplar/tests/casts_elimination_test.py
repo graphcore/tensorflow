@@ -115,14 +115,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         b = math_ops.cast(pb, np.float32)
         b = math_ops.reduce_sum(b)
         b = math_ops.cast(b, np.float16)
-        c = a + b
+        c = a * b
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 1.0, 2.0]}
       result = sess.run(c, fd)
-      self.assertAllClose(result, 7.5)
+      self.assertAllClose(result, 14)
 
     report = pva.openReport(report_helper.find_report())
-    ok = ['Sum/reduce*/Reduce', 'Sum_1/reduce*/Reduce', 'add/add']
+    ok = ['Sum/reduce*/Reduce', 'Sum_1/reduce*/Reduce', 'mul/multiply']
     self.assert_all_compute_sets_and_list(report, ok)
 
   def testNoCastsF16ToF32ToF16(self):

@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_preapply.h"
+#include <stdexcept>
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
@@ -663,6 +664,217 @@ ENTRY f {
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo_string));
   EXPECT_FALSE(ElementwisePreapply().Run(module.get()).ValueOrDie());
+}
+
+struct ElementwisePreapplyReduceTestSpec {
+  std::string hlo;
+  std::string name;
+  std::string elementwise_func;
+  bool CheckMatch(HloInstruction* root) const {
+    auto operation_to_elementwise_pattern = [this]() {
+      if (elementwise_func == "minimum")
+        return m::Minimum(m::Constant(), m::Constant());
+      if (elementwise_func == "maximum")
+        return m::Maximum(m::Constant(), m::Constant());
+      if (elementwise_func == "multiply")
+        return m::Multiply(m::Constant(), m::Constant());
+      if (elementwise_func == "divide")
+        return m::Divide(m::Constant(), m::Constant());
+      if (elementwise_func == "add")
+        return m::Add(m::Constant(), m::Constant());
+      if (elementwise_func == "subtract")
+        return m::Subtract(m::Constant(), m::Constant());
+      if (elementwise_func == "or") return m::Or(m::Constant(), m::Constant());
+      if (elementwise_func == "and")
+        return m::And(m::Constant(), m::Constant());
+      throw std::invalid_argument(
+          "Unexpected elementwise_func=" + elementwise_func +
+          " in ElementwisePreapplyReduceTestSpec::CheckMatch");
+    };
+    return Match(root,
+                 m::Reduce(m::Constant(), operation_to_elementwise_pattern()));
+  }
+  ElementwisePreapplyReduceTestSpec(std::string func1, std::string func2,
+                                    std::string hlo_template) {
+    name = func1 + "_" + func2;
+    elementwise_func = func2;
+    hlo = absl::StrReplaceAll(hlo_template,
+                              {{"$FUNC1", func1}, {"$FUNC2", func2}});
+  }
+};
+
+std::ostream& operator<<(std::ostream& os,
+                         const ElementwisePreapplyReduceTestSpec& spec) {
+  return os << "{ name: " << spec.name << "}";
+}
+
+class ElementwisePreapplyReduceMatchTest
+    : public ElementwisePreapplyTest,
+      public ::testing::WithParamInterface<ElementwisePreapplyReduceTestSpec> {
+};
+
+static std::string hlo_scalar_result() {
+  return R"(
+    HloModule module
+
+    function_to_apply {
+      p0 = f32[] parameter(0)
+      p1 = f32[] parameter(1)
+      ROOT output = f32[] $FUNC1(p0, p1)
+    }
+
+    ENTRY f {
+      reduce_param = f32[2, 3] constant({{1, 2, 3}, {4, 5, 6}})
+      reduce_init = f32[] constant(5)
+      reduce = f32[] reduce(reduce_param, reduce_init), dimensions={0, 1}, to_apply=function_to_apply  
+      second_elementwise_arg = f32[] constant(2)
+      ROOT output = f32[] $FUNC2(reduce, second_elementwise_arg)
+    }
+    )";
+}
+
+static std::string hlo_binary_float() {
+  return R"(
+    HloModule module
+
+    function_to_apply {
+      p0 = f32[] parameter(0)
+      p1 = f32[] parameter(1)
+      ROOT output = f32[] $FUNC1(p0, p1)
+    }
+
+    ENTRY f {
+      reduce_param = f32[2, 3] constant({{1, 2, 3}, {4, 5, 6}})
+      reduce_init = f32[] constant(5)
+      reduce = f32[3] reduce(reduce_param, reduce_init), dimensions={0}, to_apply=function_to_apply  
+      c = f32[] constant(2)
+      second_elementwise_arg = f32[3] broadcast(c), dimensions={}
+      ROOT output = f32[3] $FUNC2(reduce, second_elementwise_arg)
+    }
+    )";
+}
+
+static std::string hlo_binary_bool() {
+  return absl::StrReplaceAll(
+      hlo_binary_float(),
+      {{"f32", "pred"},
+       {"constant(5)", "constant(true)"},
+       {"constant(2)", "constant(false)"},
+       {"constant({{1, 2, 3}, {4, 5, 6}})",
+        "constant({{true, false, true}, {false, true, false}})"}});
+}
+
+static std::string hlo_unary_float() {
+  return absl::StrReplaceAll(
+      hlo_binary_float(),
+      {{"$FUNC2(reduce, second_elementwise_arg)", "$FUNC2(reduce)"}});
+}
+INSTANTIATE_TEST_SUITE_P(
+    ElementwisePreapplyReduceTestCases, ElementwisePreapplyReduceMatchTest,
+    ::testing::ValuesIn(std::vector<ElementwisePreapplyReduceTestSpec>({
+        {"minimum", "minimum", hlo_binary_float()},
+        {"maximum", "maximum", hlo_binary_float()},
+        {"add", "add", hlo_binary_float()},
+        {"add", "subtract", hlo_binary_float()},
+        {"multiply", "multiply", hlo_binary_float()},
+        {"multiply", "divide", hlo_binary_float()},
+        {"and", "and", hlo_binary_bool()},
+        {"or", "or", hlo_binary_bool()},
+        // scalar result (no broadcast for constant)
+        {"minimum", "minimum", hlo_scalar_result()},
+        {"maximum", "maximum", hlo_scalar_result()},
+        {"add", "add", hlo_scalar_result()},
+        {"add", "subtract", hlo_scalar_result()},
+        {"multiply", "multiply", hlo_scalar_result()},
+        {"multiply", "divide", hlo_scalar_result()},
+    })));
+
+TEST_P(ElementwisePreapplyReduceMatchTest, TestReduce) {
+  std::string hlo_string = GetParam().hlo;
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto expected,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  // Need to clear schedule between passes when using increased logging level.
+  EXPECT_TRUE(HloDescheduler().Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(ElementwisePreapply().Run(module.get()).ValueOrDie());
+
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(GetParam().CheckMatch(root));
+  TF_ASSERT_OK_AND_ASSIGN(auto result,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  EXPECT_EQ(expected.size(), 1);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_TRUE(LiteralTestUtil::NearOrEqual(result[0], expected[0],
+                                           ErrorSpec{1e-6, 1e-6}));
+}
+
+class ElementwisePreapplyReduceNoMatchTest
+    : public ElementwisePreapplyTest,
+      public ::testing::WithParamInterface<ElementwisePreapplyReduceTestSpec> {
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ElementwisePreapplyReduceTestCases2, ElementwisePreapplyReduceNoMatchTest,
+    ::testing::ValuesIn(std::vector<ElementwisePreapplyReduceTestSpec>{
+        {"minimum", "maximum", hlo_binary_float()},
+        {"add", "multiply", hlo_binary_float()},
+        {"divide", "multiply", hlo_binary_float()},
+        {"xor", "xor", hlo_binary_bool()},
+        {"minimum", "copy", hlo_unary_float()},
+        // scalar result (no broadcast for constant)
+        {"minimum", "maximum", hlo_scalar_result()},
+        {"add", "multiply", hlo_scalar_result()},
+        {"divide", "multiply", hlo_scalar_result()},
+    }));
+
+TEST_P(ElementwisePreapplyReduceNoMatchTest, TestReduce) {
+  std::string hlo_string = GetParam().hlo;
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  // Check that the pass does not match our hlo.
+  EXPECT_FALSE(ElementwisePreapply().Run(module.get()).ValueOrDie());
+}
+
+// Test that a reshape is used when elementwise operands have size 1 but aren't
+// scalars
+TEST_F(ElementwisePreapplyTest, TestReduceReshape) {
+  const char* hlo_string = R"(
+HloModule module
+
+function_to_apply {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT output = f32[] add(p0, p1)
+}
+
+ENTRY f {
+  reduce_param = f32[1, 2] constant({{4, 5}})
+  reduce_init = f32[] constant(5)
+  a = f32[1] reduce(reduce_param, reduce_init), dimensions={1}, to_apply=function_to_apply  
+  b = f32[1] constant({2})
+  ROOT output = f32[1] add(a, b)
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto expected,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+
+  // Need to clear schedule between passes when using increased logging level.
+  EXPECT_TRUE(HloDescheduler().Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(ElementwisePreapply().Run(module.get()).ValueOrDie());
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(Match(
+      root,
+      m::Reduce(m::Constant(),
+                m::AddAnyOrder(m::Constant(), m::Reshape(m::Constant())))));
+  TF_ASSERT_OK_AND_ASSIGN(auto result,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  EXPECT_EQ(expected.size(), 1);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_TRUE(LiteralTestUtil::Equal(result[0], expected[0]));
 }
 
 }  // namespace
