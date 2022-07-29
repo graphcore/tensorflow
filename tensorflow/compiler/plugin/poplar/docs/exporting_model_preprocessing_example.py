@@ -8,21 +8,15 @@ from tensorflow.python.ipu import config
 from tensorflow.python.ipu import serving
 
 # Directory where SavedModel will be written.
-saved_model_directory = './my_saved_model_ipu/005'
+saved_model_directory = './my_saved_model_ipu/004'
 
 if os.path.exists(saved_model_directory):
   sys.exit(f"Directory '{saved_model_directory}' exists! Please delete it "
            "before running the example.")
 
 
-# The preprocessing step is performed fully on the IPU.
 def preprocessing_step(x):
   return tf.abs(x)
-
-
-# The postprocessing step is performed fully on the IPU.
-def postprocessing_step(x):
-  return tf.reduce_sum(x)
 
 
 def application_body(x):
@@ -32,11 +26,9 @@ def application_body(x):
 
 # The function to export.
 def predict_step(x):
-  # preprocessing and postprocessing will be compiled and exported together
-  # with application body.
+  # The preprocessing step is performed fully on the IPU.
   x = preprocessing_step(x)
-  x = application_body(x)
-  return postprocessing_step(x)
+  return application_body(x)
 
 
 # Configure the IPU for compilation.

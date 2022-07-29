@@ -86,9 +86,7 @@ def _validate_signatures(predict_step,
                          predict_step_signature,
                          input_dataset=None,
                          preprocessing_step=None,
-                         preprocessing_step_signature=None,
-                         postprocessing_step=None,
-                         postprocessing_step_signature=None):
+                         preprocessing_step_signature=None):
   """Verify that input signatures can be deduced from the given arguments of the
      exported model for preprocessing and inference parts.
 
@@ -109,31 +107,23 @@ def _validate_signatures(predict_step,
       `preprocessing_step`. If `preprocessing_step` is a `tf.function` and
       `input_signature` was specified during `tf.function` creation then
       this argument can be None as it is derived from the tf.function directly.
-    postprocessing_step (Callable or tf.function, optional): Function that runs
-      the postprocessing step.
-    postprocessing_step_signature (list or tuple, optional): A sequence of
-      `tf.TensorSpec` objects that describe the input arguments of
-      `postprocessing_step`. If `postprocessing_step` is a `tf.function` and
-      `input_signature` was specified during `tf.function` creation then this
-      argument can be None.
+    non_feed_inputs (list, optional): List of inputs that will be provided
+      to the graph without usage of infeed queue.
 
   Raises:
     TypeError: If `input_dataset` is not a `tf.Dataset` nor `NoneType`.
-    TypeError: If `predict_step_signature` is neither a tuple, list of
-      `tf.TensorSpec` objects nor a `NoneType`.
-    TypeError: If `preprocessing_step_signature` is neither a tuple, list of
-      `tf.TensorSpec` objects nor a `NoneType`.
-    TypeError: If `postprocessing_step_signature` is neither a tuple, list of
-      `tf.TensorSpec` objects nor a `NoneType`.
+    TypeError: If `predict_step_signature` is not a tuple, list of
+      `tf.TensorSpec` objects or `NoneType`.
+    TypeError: If `preprocessing_step_signature` is not a tuple, list of
+      `tf.TensorSpec` objects or `NoneType`.
     ValueError: If `predict_step_signature` is an empty tuple or list.
     ValueError: If `preprocessing_step_signature` is an empty tuple or list.
-    ValueError: If `postprocessing_step_signature` is an empty tuple or list.
     ValueError: If `preprocessing_step` is not provided and both
       `predict_step_signature` and `input_dataset` are provided.
     ValueError: If `preprocessing_step`, `predict_step_signature`,
       `input_dataset` are not provided and `predict_step` is not a
-      `tf.function` or `predict_step` is a `tf.function` but `input_signature`
-      is not provided.
+      `tf.function` or `predict_step` is a `tf.function` but no
+      `predict_step_signature` is provided.
     ValueError: If `preprocessing_step`, `preprocessing_step_signature`,
       `input_dataset` are provided at the same time.
     ValueError: If `preprocessing_step` is provided and both
@@ -143,19 +133,12 @@ def _validate_signatures(predict_step,
     ValueError: If `preprocessing_step`, `predict_step_signature` are not
       provided and `predict_step` is not a `tf.function` or `predict_step` is a
       `tf.function` but with no `input_signature` provided.
-    ValueError: If `postprocessing_step` is provided and
-      `postprocessing_step_signature` is not provided and
-      `postprocessing_step` is not a `tf.function` or is a `tf.function` but no
-      `input_signature` is provided.
   """
 
   is_predict_step_signature_set = predict_step_signature is not None
   is_input_dataset_set = input_dataset is not None
   is_preprocessing_step_signature_set = preprocessing_step_signature is not None
   is_preprocessing_step_set = preprocessing_step is not None
-  is_postprocessing_set = postprocessing_step is not None
-  is_postprocessing_step_signature_set = postprocessing_step_signature \
-                                         is not None
 
   def validate_tf_function(fn, fn_name, deduction_from_datset_possible=True):
     if not isinstance(fn, def_function.Function):
@@ -208,18 +191,9 @@ def _validate_signatures(predict_step,
         'If `input_dataset` is provided, it should be an instance of '
         'tf.Dataset.')
 
-  if is_postprocessing_set and not is_postprocessing_step_signature_set:
-    validate_tf_function(postprocessing_step,
-                         "postprocessing_step",
-                         deduction_from_datset_possible=False)
-
   if is_preprocessing_step_signature_set:
     validate_single_signature('preprocessing_step_signature',
                               preprocessing_step_signature)
-
-  if is_postprocessing_step_signature_set:
-    validate_single_signature('postprocessing_step_signature',
-                              postprocessing_step_signature)
 
   if is_predict_step_signature_set:
     validate_single_signature('predict_step_signature', predict_step_signature)
@@ -323,8 +297,6 @@ def _export_saved_model(predict_step,
                         output_names=None,
                         predict_step_signature=None,
                         preprocessing_step=None,
-                        postprocessing_step_signature=None,
-                        postprocessing_step=None,
                         checkpoint_restore_dir=None):
   """Compile Poplar executable and export saved model.
 
@@ -350,13 +322,6 @@ def _export_saved_model(predict_step,
       outputs will be named: `output_0`, `output_1` and so on.
     preprocessing_step (Callable or tf.function, optional): Function that runs
       preprocessing step on the CPU device.
-    postprocessing_step_signature (list or tuple, optional): A sequence of
-      `tf.TensorSpec` objects that describe the input arguments of
-      `postprocessing_step`. If `postprocessing_step` is a `tf.function` and
-      `input_signature` was specified during `tf.function` creation then this
-      argument can be None.
-    postprocessing_step (Callable or tf.function, optional): Function that runs
-      the postprocessing step on the CPU device.
     checkpoint_restore_dir (str): Path to saved checkpoint, where the model
       Variables are to be restored. To be used with preprocessing only.
 
@@ -378,33 +343,6 @@ def _export_saved_model(predict_step,
     if not isinstance(output_names, list):
       raise TypeError('output_names must be either a string or a '
                       'list, received ' + str(type(output_names)))
-
-  with_preprocessing = preprocessing_step is not None
-  with_postprocessing = postprocessing_step is not None
-
-  def validate_io_matching(src_return_tensors, dst_input_signature,
-                           src_step_name, dst_step_name):
-    if len(src_return_tensors) != len(dst_input_signature):
-      raise ValueError(f'The number of the `{src_step_name}` outputs does '
-                       'not match the number of `tf.TensorSpec` '
-                       f'objects in the signature of `{dst_step_name}`.')
-
-    for idx, (tensor, dst_tensor_spec) in enumerate(
-        zip(src_return_tensors, dst_input_signature)):
-      if not isinstance(tensor, Tensor):
-        raise ValueError(f'`{src_step_name}` returned value at '
-                         f'position {idx} it is not an instance of '
-                         'tf.Tensor')
-      if tensor.shape != dst_tensor_spec.shape or \
-        tensor.dtype != dst_tensor_spec.dtype:
-        raise ValueError(f'`{src_step_name}` returned Tensor at '
-                         f'postion {idx} does not match required '
-                         f'`{dst_step_name}` TensorSpec.\n'
-                         f'Tensor shape{str(tensor.shape)}, dtype '
-                         f'{str(tensor.dtype)}\n'
-                         f'Expected TensorSpec shape '
-                         f'{str(dst_tensor_spec.shape)}, dtype '
-                         f'{str(dst_tensor_spec.dtype)}\n')
 
   with tempfile.TemporaryDirectory() as tmp_folder:
     unique_name = str(uuid.uuid4())
@@ -442,40 +380,42 @@ def _export_saved_model(predict_step,
           final_path = asset_path
 
         # Execute user provided preprocessing_step function (if it exists).
-        if with_preprocessing:
+        if preprocessing_step:
           args = preprocessing_step(*args)
           args = args if isinstance(args, (tuple, list)) else (args,)
-          if predict_step_signature is not None:
-            validate_io_matching(args, predict_step_signature,
-                                 "preprocessing_step", "predict_step")
+
+          if len(args) != len(predict_step_signature):
+            raise ValueError('Length of preprocessing_step output does not '
+                             'match the number of TensorSpec in the embedded '
+                             'runtime call predict_step signature.')
+
+          for idx, (tensor, tensor_specification) in enumerate(
+              zip(args, predict_step_signature)):
+            if not isinstance(tensor, Tensor):
+              raise ValueError('`preprocessing_step` returned value at '
+                               f'position {idx} it is not an instance '
+                               'tf.Tensor')
+            if tensor.shape != tensor_specification.shape or \
+                tensor.dtype != tensor_specification.dtype:
+              raise ValueError(
+                  '`preprocessing_step` returned Tensor at position '
+                  f'{idx} does not match required TensorSpec.\n'
+                  f'Tensor shape{str(tensor.shape)}, dtype '
+                  f'{str(tensor.dtype)}\n'
+                  f'Expected TensorSpec shape '
+                  f'{str(tensor_specification.shape)}, dtype '
+                  f'{str(tensor_specification.dtype)}\n')
 
         ctx = embedded_runtime.embedded_runtime_start(final_path, [],
                                                       engine_name)
-        ret = embedded_runtime.embedded_runtime_call(args, ctx)
-
-        if with_postprocessing:
-          ret = ret if isinstance(ret, (tuple, list)) else (ret,)
-          if postprocessing_step_signature is not None:
-            # application_compile_op always returns tensors with
-            # shape=<unknown>
-            ret = [
-                array_ops.ensure_shape(tensor, tensor_spec.shape) for tensor,
-                tensor_spec in zip(ret, postprocessing_step_signature)
-                if postprocessing_step_signature is not None
-            ]
-
-            validate_io_matching(ret, postprocessing_step_signature,
-                                 "predict_step",
-                                 "postprocessing_step_signature")
-          ret = postprocessing_step(*ret)
-          ret = ret if isinstance(ret, (tuple, list)) else (ret,)
-        return ret
+        return embedded_runtime.embedded_runtime_call(args, ctx)
 
       input_phs = collections.OrderedDict()
       for s in input_signature:
         input_phs[s.name] = array_ops.placeholder(dtype=s.dtype,
                                                   shape=s.shape,
                                                   name=s.name)
+
       outputs = predict_func(*tuple(input_phs.values()))
 
       if output_names:
@@ -494,6 +434,7 @@ def _export_saved_model(predict_step,
         output_names = [f"output_{i}" for i, _ in enumerate(outputs)]
 
       outputs = dict(zip(output_names, outputs))
+
       saved_model_builder = builder.SavedModelBuilder(export_dir)
       sig_def = signature_def_utils.predict_signature_def(inputs=input_phs,
                                                           outputs=outputs)
@@ -564,8 +505,6 @@ def export_single_step(predict_step,
                        output_names=None,
                        preprocessing_step=None,
                        preprocessing_step_signature=None,
-                       postprocessing_step=None,
-                       postprocessing_step_signature=None,
                        purge_export_dir=False,
                        checkpoint_restore_dir=None):
   """Create a SavedModel in `export_dir` for TensorFlow Serving.
@@ -573,10 +512,6 @@ def export_single_step(predict_step,
   Wrap `predict_step` inside a while loop, add an infeed for the inputs and
   an outfeed for the outputs, freeze any variables into constants and write
   a SavedModel containing an IPU runtime function and Poplar executable.
-
-  SavedModel flow:
-  `preprocessing_step` (optional, CPU) -> `predict_step` (IPU) ->
-  `postprocessing_step` (optional, CPU) -> result
 
   Args:
     predict_step (Callable or tf.function): Function to compile for the IPU
@@ -629,21 +564,6 @@ def export_single_step(predict_step,
       and `preprocessing_step` is a `tf.function` and `input_signature` was
       specified during `tf.function` creation then this argument can be None and
       the signature will be captured directly from `preprocessing_step`.
-    postprocessing_step (Callable or tf.function, optional): Function that runs
-      the postprocessing step on the CPU. Function is called after
-      `predict_step`. `postprocessing_step` and `predict_step` are exported
-      together.
-      Tensors from the `predict_step` output queue are `postprocessing_step`
-      inputs.
-    postprocessing_step_signature (list or tuple, optional): A sequence of
-      `tf.TensorSpec` objects that describe the input arguments of the
-      `postprocessing_step` function.
-      If `postprocessing_step` is a `tf.function` and `input_signature` was
-      specified during `tf.function` creation then this argument can be None and
-      the signature will be captured directly from `postprocessing_step`.
-    purge_export_dir (Boolean, optional): If True, before starting the export,
-      the target directory is emptied. Otherwise no cleaning is performed and if
-      the target directory is not empty, the function fails with an error.
     checkpoint_restore_dir (str): Path to saved checkpoint, for which the model
       Variables are to be restored.
 
@@ -653,40 +573,14 @@ def export_single_step(predict_step,
     the executable that was included in the SavedModel's `assets` subfolder.
 
   Raises:
-    ValueError: If ``export_dir`` is not an empty directory.
-    TypeError: If `input_dataset` is not a `tf.Dataset` or `NoneType`.
-    TypeError: If `predict_step_signature` is neither a tuple, a list of
-      `tf.TensorSpec` objects nor a `NoneType`.
-    TypeError: If `preprocessing_step_signature` is neither a tuple, a list of
-      `tf.TensorSpec` objects nor a `NoneType`.
-    TypeError: If `postprocessing_step_signature` is neither a tuple, a list of
-      `tf.TensorSpec` objects nor a `NoneType`.
-    ValueError: If `predict_step_signature` is an empty tuple or a list.
-    ValueError: If `preprocessing_step_signature` is an empty tuple or a list.
-    ValueError: If `postprocessing_step_signature` is an empty tuple or a list.
-    ValueError: If `preprocessing_step` is not provided and both
-      `predict_step_signature` and `input_dataset` are provided.
-    ValueError: If `preprocessing_step`, `predict_step_signature`,
-      `input_dataset` are not provided and `predict_step` is not a `tf.function`
-      or is a `tf.function` with not provided `input_signature`.
-    ValueError:  If `preprocessing_step`, `preprocessing_step_signature`,
-      `input_dataset` are provided.
-    ValueError: If `preprocessing_step` is provided and both
-      `preprocessing_step_signature`, `input_dataset` are not provided and
-      `preprocessing_step` is not a `tf.function` or is a `tf.function` but no
-      `input_signature` is provided.
-    ValueError: If `preprocessing_step`, `predict_step_signature` are not
-      provided and `predict_step` is not a `tf.function` or is a `tf.function`
-      but no `input_signature` is provided.
-    ValueError: If `postprocessing_step` is provided and
-      `postprocessing_step_signature` is not provided and
-      `postprocessing_step` is not a `tf.function` or is a `tf.function` but no
-      `input_signature` is provided.
+    ValueError: If both `input_signature` and `input_dataset` are provided.
+    ValueError: If `export_dir` is not an empty directory.
+    TypeError: If `input_dataset` was provided and is not an instance of
+      `tf.Dataset`
   """
   _validate_export_dir(export_dir, purge_export_dir)
   _validate_signatures(predict_step, predict_step_signature, input_dataset,
-                       preprocessing_step, preprocessing_step_signature,
-                       postprocessing_step, postprocessing_step_signature)
+                       preprocessing_step, preprocessing_step_signature)
   if preprocessing_step and checkpoint_restore_dir:
     _validate_dir(checkpoint_restore_dir, "checkpoint_restore_dir")
 
@@ -702,17 +596,12 @@ def export_single_step(predict_step,
                                                input_dataset)
     predict_step_signature = input_signature
 
-  if postprocessing_step is not None:
-    postprocessing_step_signature = _prepare_input_signature(
-        postprocessing_step, postprocessing_step_signature)
-
   predict_loop = _loop_wrapper(predict_step, predict_step_signature,
                                input_dataset, iterations)
   return _export_saved_model(predict_loop, export_dir, variable_initializer,
                              input_signature, output_names,
                              predict_step_signature, preprocessing_step,
-                             postprocessing_step_signature,
-                             postprocessing_step, checkpoint_restore_dir)
+                             checkpoint_restore_dir)
 
 
 def export_pipeline(computational_stages,
@@ -729,8 +618,6 @@ def export_pipeline(computational_stages,
                     output_names=None,
                     preprocessing_step=None,
                     preprocessing_step_signature=None,
-                    postprocessing_step=None,
-                    postprocessing_step_signature=None,
                     purge_export_dir=False,
                     checkpoint_restore_dir=None):
   """Create a pipelined SavedModel in `export_dir` for TensorFlow Serving.
@@ -742,8 +629,7 @@ def export_pipeline(computational_stages,
 
   SavedModel flow:
   predict_step = computational_stages[0]
-  `preprocessing_step` (optional, CPU) -> predict_step (IPU) ->
-  `postprocessing_step` (optional, CPU) -> result
+  `preprocessing_step` (optional, CPU) -> predict_step (IPU) -> result
 
   Args:
     computational_stages (list): A list of python functions, where each function
@@ -811,21 +697,6 @@ def export_pipeline(computational_stages,
       and `preprocessing_step` is a `tf.function` and `input_signature` was
       specified during `tf.function` creation then this argument can be None and
       the signature will be captured directly from `preprocessing_step`.
-    postprocessing_step (Callable or tf.function, optional): Function that runs
-      the postprocessing step on the CPU. Function is called after
-      `predict_step`. `postprocessing_step` and `predict_step` are exported
-      together.
-      Tensors from the `predict_step` output queue are `postprocessing_step`
-      inputs.
-    postprocessing_step_signature (list or tuple, optional): A sequence of
-      `tf.TensorSpec` objects that describe the input arguments of the
-      `postprocessing_step` function.
-      If `postprocessing_step` is a `tf.function` and `input_signature` was
-      specified during `tf.function` creation then this argument can be None and
-      the signature will be captured directly from `postprocessing_step`.
-    purge_export_dir (Boolean, optional): If True, before starting the export,
-      the target directory is emptied. Otherwise no cleaning is performed and if
-      the target directory is not empty, the function fails with an error.
     checkpoint_restore_dir (str): Path to saved checkpoint, where the model
       Variables are to be restored. To be used with preprocessing only.
 
@@ -835,51 +706,25 @@ def export_pipeline(computational_stages,
     the executable that was included in the SavedModel's `assets` subfolder.
 
   Raises:
-    ValueError: If ``export_dir`` is not an empty directory.
-    TypeError: If `input_dataset` is not a `tf.Dataset` or `NoneType`.
-    TypeError: If `predict_step_signature` is neither a tuple, a list of
-      `tf.TensorSpec` objects nor a `NoneType`.
-    TypeError: If `preprocessing_step_signature` is neither a tuple, a list of
-      `tf.TensorSpec` objects nor a `NoneType`.
-    TypeError: If `postprocessing_step_signature` is neither a tuple, a list of
-      `tf.TensorSpec` objects nor a `NoneType`.
-    ValueError: If `predict_step_signature` is an empty tuple or list.
-    ValueError: If `preprocessing_step_signature` is an empty tuple or a list.
-    ValueError: If `postprocessing_step_signature` is an empty tuple or a list.
-    ValueError: If `preprocessing_step` is not provided and both
-      `predict_step_signature` and `input_dataset` are provided.
-    ValueError: If `preprocessing_step`, `predict_step_signature`,
-      `input_dataset` are not provided and `predict_step` is not a `tf.function`
-      or is a `tf.function` with not provided `input_signature`.
-    ValueError:  If `preprocessing_step`, `preprocessing_step_signature`,
-      `input_dataset` are provided.
-    ValueError: If `preprocessing_step` is provided and both
-      `preprocessing_step_signature`, `input_dataset` are not provided and
-      `preprocessing_step` is not a `tf.function` or is a `tf.function` but no
-      `input_signature` is provided.
-    ValueError: If `preprocessing_step`, `predict_step_signature` are not
-      provided and `predict_step` is not a `tf.function` or is a `tf.function`
-      but no `input_signature` is provided.
-    ValueError: If `postprocessing_step` is provided and
-      `postprocessing_step_signature` is not provided and
-      `postprocessing_step` is not a `tf.function` or is a `tf.function` but no
-      `input_signature` is provided.
+    ValueError: If both `input_signature` and `input_dataset` are provided.
+    ValueError: If `export_dir` is not an empty directory.
+    TypeError: If `input_dataset` was provided and is not an instance of
+      `tf.Dataset`.
   """
   _validate_export_dir(export_dir, purge_export_dir)
 
   predict_step = computational_stages[0]
 
   _validate_signatures(predict_step, predict_step_signature, input_dataset,
-                       preprocessing_step, preprocessing_step_signature,
-                       postprocessing_step, postprocessing_step_signature)
-
+                       preprocessing_step, preprocessing_step_signature)
   if preprocessing_step and checkpoint_restore_dir:
     _validate_dir(checkpoint_restore_dir, "checkpoint_restore_dir")
 
   if preprocessing_step is not None:
     input_signature = _prepare_input_signature(preprocessing_step,
                                                preprocessing_step_signature,
-                                               input_dataset)
+                                               input_dataset,
+                                               non_feed_inputs=inputs)
     predict_step_signature = _prepare_input_signature(predict_step,
                                                       predict_step_signature,
                                                       non_feed_inputs=inputs)
@@ -889,10 +734,6 @@ def export_pipeline(computational_stages,
                                                input_dataset,
                                                non_feed_inputs=inputs)
     predict_step_signature = input_signature
-
-  if postprocessing_step is not None:
-    postprocessing_step_signature = _prepare_input_signature(
-        postprocessing_step, postprocessing_step_signature)
 
   infeed, outfeed = _create_feeds(predict_step_signature, input_dataset)
 
@@ -911,5 +752,4 @@ def export_pipeline(computational_stages,
   return _export_saved_model(defunc, export_dir, variable_initializer,
                              input_signature, output_names,
                              predict_step_signature, preprocessing_step,
-                             postprocessing_step_signature,
-                             postprocessing_step, checkpoint_restore_dir)
+                             checkpoint_restore_dir)

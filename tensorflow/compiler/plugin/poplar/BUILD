@@ -3514,10 +3514,10 @@ tf_docs_py_test(
 )
 
 tf_docs_py_test(
-    name = "exporting_model_preprocessing_postprocessing_example",
+    name = "exporting_model_preprocessing_example",
     size = "large",
-    srcs = ["docs/exporting_model_preprocessing_postprocessing_example.py"],
-    main = "docs/exporting_model_preprocessing_postprocessing_example.py",
+    srcs = ["docs/exporting_model_preprocessing_example.py"],
+    main = "docs/exporting_model_preprocessing_example.py",
     num_ipus = 1,
     deps = [
         "//tensorflow:tensorflow_py",
@@ -3526,10 +3526,10 @@ tf_docs_py_test(
 )
 
 tf_docs_py_test(
-    name = "exporting_model_preprocessing_postprocessing_cpu_example",
+    name = "exporting_model_preprocessing_cpu_example",
     size = "large",
-    srcs = ["docs/exporting_model_preprocessing_postprocessing_cpu_example.py"],
-    main = "docs/exporting_model_preprocessing_postprocessing_cpu_example.py",
+    srcs = ["docs/exporting_model_preprocessing_cpu_example.py"],
+    main = "docs/exporting_model_preprocessing_cpu_example.py",
     num_ipus = 1,
     deps = [
         "//tensorflow:tensorflow_py",
@@ -3550,10 +3550,10 @@ tf_docs_py_test(
 )
 
 tf_docs_py_test(
-    name = "exporting_pipelined_model_preprocessing_postprocessing_example",
+    name = "exporting_pipelined_model_preprocessing_example",
     size = "large",
-    srcs = ["docs/exporting_pipelined_model_preprocessing_postprocessing_example.py"],
-    main = "docs/exporting_pipelined_model_preprocessing_postprocessing_example.py",
+    srcs = ["docs/exporting_pipelined_model_preprocessing_example.py"],
+    main = "docs/exporting_pipelined_model_preprocessing_example.py",
     num_ipus = 4,
     deps = [
         "//tensorflow:tensorflow_py",
@@ -3562,10 +3562,10 @@ tf_docs_py_test(
 )
 
 tf_docs_py_test(
-    name = "exporting_pipelined_model_preprocessing_postprocessing_cpu_example",
+    name = "exporting_pipelined_model_preprocessing_cpu_example",
     size = "large",
-    srcs = ["docs/exporting_pipelined_model_preprocessing_postprocessing_cpu_example.py"],
-    main = "docs/exporting_pipelined_model_preprocessing_postprocessing_cpu_example.py",
+    srcs = ["docs/exporting_pipelined_model_preprocessing_cpu_example.py"],
+    main = "docs/exporting_pipelined_model_preprocessing_cpu_example.py",
     num_ipus = 2,
     deps = [
         "//tensorflow:tensorflow_py",
