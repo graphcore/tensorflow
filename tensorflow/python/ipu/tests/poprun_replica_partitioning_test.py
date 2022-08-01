@@ -71,6 +71,10 @@ class CrossReplicaOptimizerWithCrossReplicaMean(BaseTestCrossReplicaOptimizer):
 
 
 class PoprunReplicaPartitioningTest(test.TestCase):
+  @classmethod
+  def setUpClass(cls):
+    popdist.init()
+
   def _compare_partitioned_to_non_partitioned(self, stages, repeat_count,
                                               gradient_accumulation_count,
                                               dataset_fn, optimizer_fn):
