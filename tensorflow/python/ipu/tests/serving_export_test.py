@@ -120,11 +120,10 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(init)
 
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 16
       serving.export_single_step(model_fn,
                                  tmp_folder,
-                                 iterations,
-                                 input_signatures,
+                                 iterations=16,
+                                 predict_step_signature=input_signatures,
                                  variable_initializer=init_variables,
                                  output_names="out_z")
 
@@ -183,11 +182,10 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     input_data = ["graphcore", "other"]
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 4
       serving.export_single_step(model_fn,
                                  tmp_folder,
-                                 iterations,
-                                 predict_step_signature,
+                                 iterations=4,
+                                 predict_step_signature=predict_step_signature,
                                  preprocessing_step=preprocessing_step,
                                  postprocessing_step=postprocessing_step,
                                  output_names="out0")
@@ -218,11 +216,10 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       return x, x * 10
 
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 16
       serving.export_single_step(
           model_fn,
           tmp_folder,
-          iterations,
+          iterations=16,
           predict_step_signature=predict_step_signature,
           preprocessing_step=preprocessing,
           preprocessing_step_signature=preprocessing_signature,
@@ -254,12 +251,11 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       return list(np.square(np.subtract(x, 1.0)))
 
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 4
       serving.export_single_step(
           model_fn,
           tmp_folder,
-          iterations,
-          predict_step_signature,
+          iterations=4,
+          predict_step_signature=predict_step_signature,
           preprocessing_step=preprocessing,
           preprocessing_step_signature=predict_step_signature,
           output_names="out0")
@@ -326,7 +322,7 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
                                                             dtype=np.float32))
 
     @def_function.function(input_signature=predict_step_signature)
-    def preprocessing(x1, x2):
+    def preprocessing_step(x1, x2):
       return x1 - 2, x2 + 5
 
     @def_function.function(input_signature=predict_step_signature)
@@ -338,11 +334,10 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       return math_ops.reduce_sum(x1), math_ops.abs(x2)
 
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 16
       serving.export_single_step(model_fn,
                                  tmp_folder,
-                                 iterations,
-                                 preprocessing_step=preprocessing,
+                                 iterations=16,
+                                 preprocessing_step=preprocessing_step,
                                  postprocessing_step=postprocessing_step,
                                  output_names=["result0", "result1"])
 
@@ -377,10 +372,9 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(init)
 
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 16
       serving.export_single_step(model_fn,
                                  tmp_folder,
-                                 iterations,
+                                 iterations=16,
                                  input_dataset=dataset,
                                  variable_initializer=init_variables,
                                  output_names="output_0")
@@ -420,11 +414,10 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(init)
 
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 16
       serving.export_single_step(
           model_fn,
           tmp_folder,
-          iterations,
+          iterations=16,
           predict_step_signature=predict_step_signature,
           input_dataset=dataset,
           variable_initializer=init_variables,
@@ -451,10 +444,9 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       return x1 * x2, x1 + x2
 
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 16
       serving.export_single_step(model_fn,
                                  tmp_folder,
-                                 iterations,
+                                 iterations=16,
                                  output_names=["result0", "result1"])
 
       x1_data = np.arange(element_count, dtype=np.float32)
@@ -466,6 +458,56 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
 
       self.assertEqual(list(result0), list(x1_data * x2_data))
       self.assertEqual(list(result1), list(x1_data + x2_data))
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.deprecated_graph_mode_only
+  def test_purge_model_dir(self):
+    input_signature = (tensor_spec.TensorSpec(shape=[], dtype=np.float32),)
+
+    @def_function.function(input_signature=input_signature)
+    def model_fn(x1):
+      return x1 * 2.0
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      serving.export_single_step(model_fn,
+                                 tmp_folder,
+                                 iterations=16,
+                                 output_names=["result0"])
+
+      # Export to the same dir with purge_export_dir=True and check if no exception is raised
+      serving.export_single_step(model_fn,
+                                 tmp_folder,
+                                 iterations=16,
+                                 output_names=["result0"],
+                                 purge_export_dir=True)
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.deprecated_graph_mode_only
+  def test_pipeline_purge_model_dir(self):
+    input_signature = (tensor_spec.TensorSpec(shape=[], dtype=np.float32),)
+
+    def stage1(x1):
+      return x1 * 2.0
+
+    def stage2(x1):
+      return x1 * 3.0
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      serving.export_pipeline([stage1, stage2],
+                              tmp_folder,
+                              iterations=16,
+                              device_mapping=[0, 0],
+                              predict_step_signature=input_signature,
+                              output_names=["out0"])
+
+      # Export to the same dir with purge_export_dir=True and check if no exception is raised
+      serving.export_pipeline([stage1, stage2],
+                              tmp_folder,
+                              iterations=16,
+                              device_mapping=[0, 0],
+                              predict_step_signature=input_signature,
+                              output_names=["out0"],
+                              purge_export_dir=True)
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.deprecated_graph_mode_only
@@ -487,11 +529,10 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(init)
 
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 16
       runtime_func = serving.export_single_step(
           model_fn,
           tmp_folder,
-          iterations,
+          iterations=16,
           input_dataset=dataset,
           variable_initializer=init_variables)
 
@@ -881,10 +922,9 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(init)
 
     with tempfile.TemporaryDirectory() as tmp_folder:
-      iterations = 16
       serving.export_single_step(model_fn,
                                  tmp_folder,
-                                 iterations,
+                                 iterations=16,
                                  predict_step_signature=input_signature,
                                  variable_initializer=init_variables,
                                  output_names=output_names)
@@ -940,11 +980,10 @@ class TestServingExport(test_util.TensorFlowTestCase, parameterized.TestCase):
         saver_op = saver.Saver()
         saver_op.save(sess, chkpnt_full_path)
 
-      iterations = 16
       output_name = "output_0"
       serving.export_single_step(model_fn,
                                  saved_model_dir,
-                                 iterations,
+                                 iterations=16,
                                  predict_step_signature=input_signature,
                                  variable_initializer=init_variables,
                                  output_names=output_name,
