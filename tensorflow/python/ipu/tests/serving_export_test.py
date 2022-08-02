@@ -448,6 +448,56 @@ class TestServingExport(TestServingExportBase):
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
   @test_util.run_v2_only
+  def test_purge_model_dir(self):
+    input_signature = (tensor_spec.TensorSpec(shape=[], dtype=np.float32),)
+
+    @def_function.function(input_signature=input_signature)
+    def model_fn(x1):
+      return x1 * 2.0
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      serving.export_single_step(model_fn,
+                                 tmp_folder,
+                                 iterations=16,
+                                 output_names=["result0"])
+
+      # Export to the same dir with purge_export_dir=True and check if no exception is raised
+      serving.export_single_step(model_fn,
+                                 tmp_folder,
+                                 iterations=16,
+                                 output_names=["result0"],
+                                 purge_export_dir=True)
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.run_v2_only
+  def test_pipeline_purge_model_dir(self):
+    input_signature = (tensor_spec.TensorSpec(shape=[], dtype=np.float32),)
+
+    def stage1(x1):
+      return x1 * 2.0
+
+    def stage2(x1):
+      return x1 * 3.0
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      serving.export_pipeline([stage1, stage2],
+                              tmp_folder,
+                              iterations=16,
+                              device_mapping=[0, 0],
+                              predict_step_signature=input_signature,
+                              output_names=["out0"])
+
+      # Export to the same dir with purge_export_dir=True and check if no exception is raised
+      serving.export_pipeline([stage1, stage2],
+                              tmp_folder,
+                              iterations=16,
+                              device_mapping=[0, 0],
+                              predict_step_signature=input_signature,
+                              output_names=["out0"],
+                              purge_export_dir=True)
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.run_v2_only
   def test_export_simple_model_run_locally(self):
     element_count = 3
     input_shape = (element_count,)
