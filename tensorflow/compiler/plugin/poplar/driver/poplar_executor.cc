@@ -25,7 +25,6 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include <popdist/backend.hpp>
 #include <poplar/DeviceManager.hpp>
 #include <poplar/IPUModel.hpp>
 #include <poplar/StreamCallback.hpp>
@@ -2891,7 +2890,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
     // perform device -> host read
     if (total_count > 0) {
       current_engine_->disableExecutionProfiling();
-      popdist::run(*current_engine_, PoplarProgramType::DEVICE_TO_HOST);
+      current_engine_->run(PoplarProgramType::DEVICE_TO_HOST);
     }
 
     if (current_config_.profiling().enable_ipu_trace_events() &&
@@ -3061,7 +3060,7 @@ Status PoplarExecutor::MoveHostToDevice() {
     std::string json_msg = Json::writeString(json_builder, root);
 
     current_engine_->disableExecutionProfiling();
-    popdist::run(*current_engine_, PoplarProgramType::HOST_TO_DEVICE);
+    current_engine_->run(PoplarProgramType::HOST_TO_DEVICE);
 
     if (current_config_.profiling().enable_ipu_trace_events() &&
         current_config_.profiling().enable_io_trace()) {
@@ -3798,7 +3797,7 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
 
       // Run the main engine
       current_engine_->enableExecutionProfiling();
-      popdist::run(*current_engine_, PoplarProgramType::MAIN_SEQUENCE);
+      current_engine_->run(PoplarProgramType::MAIN_SEQUENCE);
 
       StopIOThreads();
 
