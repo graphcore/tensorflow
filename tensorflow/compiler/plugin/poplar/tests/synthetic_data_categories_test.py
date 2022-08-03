@@ -79,8 +79,8 @@ def hostembedding_test_graph(flags):
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.optimizations.minimum_remote_tensor_size = 1
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 32
     cfg.configure_ipu_system()
 
     embedding = embedding_ops.create_host_embedding("test",
@@ -140,8 +140,8 @@ def memory_test_graph(flags=""):
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.optimizations.minimum_remote_tensor_size = 1
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 32
     cfg.configure_ipu_system()
 
     def dataset_fn():
