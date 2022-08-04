@@ -1927,15 +1927,10 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         // If we have the lock, serialize the result to the executable cache.
         if (executable_cache_lock) {
           Tracepoint tracepoint("PoplarEngineSerialisation");
-          // Serialize some additional options that Poplar does not serialize
-          // on its own.
-          const poplar::OptionFlags& options_to_serialize =
-              poplar_executor->GetReportExecutionFlags();
-
           auto& annotations = resources.annotations;
 
           TF_RETURN_IF_ERROR(PoplarExecutableCore::Serialize(
-              filenames, exec, options_to_serialize,
+              filenames, exec, opt_flags,
               PoplarExecutableInfo{
                   target.getNumIPUs(),
                   poplar::toString(target.getTargetType()),

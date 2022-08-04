@@ -1889,10 +1889,6 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     graph_options_.set(opt.option(), opt.value());
   }
 
-  for (const auto& opt : current_config_.profiling().execution_options()) {
-    execution_options_.set(opt.option(), opt.value());
-  }
-
   for (const auto& opt : current_config_.gcl_options()) {
     gcl_options_.set(opt.option(), opt.value());
   }
@@ -1927,10 +1923,6 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
 
   for (const auto& opt : graph_options_) {
     VLOG(1) << "Graph report option: " << opt.first << " = " << opt.second;
-  }
-
-  for (const auto& opt : execution_options_) {
-    VLOG(1) << "Execution report option: " << opt.first << " = " << opt.second;
   }
 
   for (const auto& opt : gcl_options_) {
@@ -3164,7 +3156,6 @@ void PoplarExecutor::ResetOptionFlags() {
   matmul_options_.clear();
   pooling_options_.clear();
   graph_options_.clear();
-  execution_options_.clear();
   gcl_options_.clear();
 }
 
