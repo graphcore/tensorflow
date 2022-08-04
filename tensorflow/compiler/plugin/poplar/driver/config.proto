@@ -121,8 +121,7 @@ message IpuOptions {
     // Options for controlling graph profile report generation.
     repeated PoplarOptionFlag graph_options = 11;
 
-    // Options for controlling execution profile report generation.
-    repeated PoplarOptionFlag execution_options = 12;
+    // retired = 12;
 
     // Set to have the Poplar serialized graph to be included with the
     // compiler report.

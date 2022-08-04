@@ -377,11 +377,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return graph_options_;
   }
 
-  const poplar::OptionFlags& GetReportExecutionFlags() const {
-    return execution_options_;
-  }
-
-  int64 GetMultiReplicaProcessIndex() const {
+  int64_t GetMultiReplicaProcessIndex() const {
     return current_config_.multi_replica_process_index();
   }
 
@@ -1047,8 +1043,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   poplar::OptionFlags slice_options_;
 
   poplar::OptionFlags graph_options_;
-
-  poplar::OptionFlags execution_options_;
 
   poplar::OptionFlags gcl_options_;
 
