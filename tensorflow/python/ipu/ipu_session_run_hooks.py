@@ -34,7 +34,13 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
   from inside a function compiled for the IPU. The implementation uses an IPU
   outfeed in order to send the tensors from the compiled function to the host.
 
-  The tensors will be printed to the log, with `INFO` severity.
+  Note that the key difference when porting `tf.estimator.LoggingTensorHook` to
+  this function for tensors on the IPU is that it does not take a dictionary of
+  tensors to log. It simply initialises the hook. Tensors to log must be added
+  to the object after it is declared using the `.log(...)` method described
+  below.
+
+  The tensors will be printed to the log with `INFO` severity.
   """
 
   LoggingMode = ipu_outfeed_queue.IPUOutfeedMode
@@ -57,8 +63,10 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
       formatter: function that takes a dict with tensor names and values and
         returns a string. If None, uses default formatting.
       logging_mode: `IPULoggingTensorHook.LoggingMode` that determines the
-        behaviour when enqueuing multiple tensor values between dequeues
-        (e.g. print all of them or only the last one).
+        behaviour when enqueuing multiple tensor values between dequeues.
+        To store and print all values accrued between logs, use
+        `LoggingMode.ALL`, for only the last accrued value, use
+        `LoggingMode.LAST`.
     """
     if (every_n_iter is not None) and (every_n_secs is not None):
       raise ValueError("Cannot provide both every_n_iter and every_n_secs")
@@ -85,14 +93,16 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
   def log(self, tensors):
     """Logs the given `tensors`.
 
+    To ensure the logging targets are not removed from the graph, it may
+    be necessary to add a control dependency on this operation, or include
+    it in the training operation using `tf.group()`.
+
     Args:
       tensors: either a dict from string to `tf.Tensor`, a list/tuple of
         `tf.Tensor` objects, or a `tf.Tensor`.
 
     Returns:
-      The logging operation. It might be necessary to add a control dependency
-      on this operation, or include it in the training operation using
-      `tf.group()`, to avoid it from being pruned from the graph.
+      The logging operation.
     """
     if self._outfeed.enqueued:
       raise RuntimeError(
