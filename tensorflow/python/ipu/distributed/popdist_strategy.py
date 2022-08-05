@@ -14,7 +14,6 @@
 # ==============================================================================
 import popdist
 
-from tensorflow.compiler.plugin.poplar.ops import gen_popdist_ops
 from tensorflow.python.distribute import device_util
 from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import reduce_util
@@ -27,6 +26,18 @@ from tensorflow.python.ipu.ipu_multi_worker_strategy import \
     IPUMultiWorkerExtendedV1
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.training import server_lib
+from tensorflow.python.ipu.horovod import Sum, Average, \
+    allreduce as hvd_allreduce, \
+    broadcast as hvd_broadcast
+
+
+def _to_horovod_op(reduce_op):
+  if reduce_op == reduce_util.ReduceOp.SUM:
+    return Sum
+  if reduce_op == reduce_util.ReduceOp.MEAN:
+    return Average
+
+  raise ValueError("Unsupported reduce op: {}".format(reduce_op))
 
 
 def _is_current_device_ipu():
@@ -111,9 +122,7 @@ class PopDistExtendedV1(IPUMultiWorkerExtendedV1):
       value = value.values[0]
 
     if not _is_current_device_ipu():
-      # If not on IPU, use PopDist for a host side reduction.
-      return gen_popdist_ops.popdist_all_reduce(value,
-                                                reduce_op=reduce_op.value)
+      return hvd_allreduce(value, op=_to_horovod_op(reduce_op))
 
     # On the IPU, do reduction with GCL if requested.
     if not self._add_ipu_cross_replica_reductions:
@@ -140,4 +149,4 @@ class PopDistExtendedV1(IPUMultiWorkerExtendedV1):
       raise RuntimeError(
           "Can only broadcast on CPU, but got device {}".format(device))
 
-    return gen_popdist_ops.popdist_broadcast(initial_value)
+    return hvd_broadcast(initial_value, root_rank=0)
