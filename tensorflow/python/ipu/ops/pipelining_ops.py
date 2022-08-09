@@ -1178,7 +1178,9 @@ def pipeline(computational_stages,
           # keyword argument.
           kwargs = dict(apply_gradients_kwargs)
           _, _, kw, _ = inspect.getargspec(opt.__class__.apply_gradients)
-          if accumulated_captured_grads and kw and 'captured_grads' in kw:
+          if accumulated_captured_grads and (kw and 'captured_grads' in kw) or\
+            (hasattr(opt, 'supports_captured_grads') and \
+              opt.supports_captured_grads):
             kwargs['captured_grads'] = accumulated_captured_grads
 
           apply_grads = opt.apply_gradients(accumulated_grads_and_vars,

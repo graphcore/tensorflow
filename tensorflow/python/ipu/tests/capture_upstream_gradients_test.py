@@ -42,18 +42,19 @@ class CaptureUpstreamGradientsTest(test_util.TensorFlowTestCase):
 
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():
+      x = variables.Variable(3.0)
 
       @def_function.function(jit_compile=True)
-      def f(x):
-        with GradientTape() as _:
+      def f():
+        with GradientTape() as tape:
           y = capture_upstream_gradients(x, tag="tanh_grad")
           z = math_ops.tanh(y)
-        return z
+        g = tape.gradient(z, x)
+        return z, g
 
     with self.assertRaisesRegex(RuntimeError,
                                 "may only be used within the context of "):
-      x = np.ones(4, dtype=np.float16)
-      _ = strategy.run(f, [x])
+      _ = strategy.run(f, [])
 
   def testForwardPassTape(self):
     cfg = config.IPUConfig()
@@ -117,7 +118,7 @@ class CaptureUpstreamGradientsTest(test_util.TensorFlowTestCase):
         return dfdx, dfda, dfda_manual
 
       dfdx, dfda, dfda_manual = strategy.run(f)
-      self.assertAllEqual(dfda['tanh_grad'], dfda_manual)
+      self.assertAllEqual(np.squeeze(dfda['tanh_grad']), dfda_manual)
 
       # Now verify the grads w.r.t variables match.
       @def_function.function(jit_compile=True)
@@ -156,7 +157,7 @@ class CaptureUpstreamGradientsTest(test_util.TensorFlowTestCase):
         return dfdx, dfda, dfda_manual
 
       dfdx, dfda, dfda_manual = strategy.run(f)
-      self.assertAllEqual(dfda['tanh_grad'], dfda_manual)
+      self.assertAllEqual(np.squeeze(dfda['tanh_grad']), dfda_manual)
 
       # Now verify the grads w.r.t variables match.
       @def_function.function(jit_compile=True)
@@ -197,7 +198,7 @@ class CaptureUpstreamGradientsTest(test_util.TensorFlowTestCase):
         return dfdx, dfda, dfda_manual
 
       dfdx, dfda, dfda_manual = strategy.run(f)
-      self.assertAllEqual(dfda['tanh_grad'], dfda_manual)
+      self.assertAllEqual(np.squeeze(dfda['tanh_grad']), dfda_manual)
 
       # Now verify the grads w.r.t variables match.
       @def_function.function(jit_compile=True)
@@ -238,7 +239,7 @@ class CaptureUpstreamGradientsTest(test_util.TensorFlowTestCase):
         return dfdx, dfda, dfda_manual
 
       dfdx, dfda, dfda_manual = strategy.run(f)
-      self.assertAllEqual(dfda['tanh_grad'], dfda_manual)
+      self.assertAllEqual(np.squeeze(dfda['tanh_grad']), dfda_manual)
 
       # Now verify the grads w.r.t variables match.
       @def_function.function(jit_compile=True)

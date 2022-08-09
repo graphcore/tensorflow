@@ -19,9 +19,10 @@ Gradient utility operations
 
 from tensorflow.compiler.plugin.poplar.ops import gen_grad_util_ops
 from tensorflow.python.ipu.eager import backprop as ipu_backprop
+from tensorflow.python.util import nest
 
 
-def capture_upstream_gradients(*args, tag=""):
+def capture_upstream_gradients(args, tag=""):
   """A function that wraps an operation for the purpose of
   capturing and storing upstream gradients in the model.
   Performs a no-op on a forward pass and is equivelant to the Identity
@@ -54,12 +55,9 @@ def capture_upstream_gradients(*args, tag=""):
   Raises:
     RuntimeError: If used outside of a
     `tensorflow.python.ipu.eager.backprop.GradientCaptureContext` or
-    `tensorflow.python.ipu.eager.backprop.GradientCaptureTape` context.
+    `tensorflow.python.ipu.eager.backprop.GradientCaptureTape` context
+    if its gradient is taken.
   """
-  if ipu_backprop.num_gradient_collection_tapes() == 0:
-    raise RuntimeError(
-        "tensorflow.python.ipu.ops.grad_util_ops.capture_upstream_gradients "
-        "may only be used within the context of "
-        "tensorflow.python.ipu.eager.GradientCaptureTape or "
-        "GradientCaptureContext.")
-  return gen_grad_util_ops.capture_upstream_gradients_fwd_no_op(args, tag=tag)
+  out = gen_grad_util_ops.capture_upstream_gradients_fwd_no_op(
+      nest.flatten(args), tag=tag)
+  return nest.pack_sequence_as(args, out)

@@ -21,6 +21,13 @@ from tensorflow.python.ipu.eager import backprop as ipu_backprop
 
 @ops.RegisterGradient("CaptureUpstreamGradientsFwdNoOp")
 def _capture_upstream_gradients_grad(op, *grads):
+  if ipu_backprop.num_gradient_collection_tapes() == 0:
+    raise RuntimeError(
+        "tensorflow.python.ipu.ops.grad_util_ops.capture_upstream_gradients "
+        "may only be used within the context of "
+        "tensorflow.python.ipu.eager.GradientCaptureTape or "
+        "GradientCaptureContext.")
+
   def tag():
     if isinstance(op, _MockOp):
       return op.attrs[-1]
