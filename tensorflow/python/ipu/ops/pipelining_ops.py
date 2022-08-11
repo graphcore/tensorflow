@@ -18,6 +18,7 @@ Pipelining operators
 """
 # Function captures are based on /tensorflow/python/ops/cond_v2.py
 
+import inspect
 from enum import Enum, IntEnum
 from functools import reduce
 from google.protobuf import json_format
@@ -37,6 +38,7 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.ipu import gradient_accumulation as ga
+from tensorflow.python.ipu.eager import backprop as ipu_backprop
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
@@ -127,7 +129,9 @@ class OptimizerFunctionOutput:
                apply_gradients_args=None,
                apply_gradients_kwargs=None,
                variables=None,
-               tape=None):
+               tape=None,
+               gradient_capture_context=None,
+               captured_gradient_outfeed=None):
     """Creates an OptimizerFunctionOutput object.
 
     Args:
@@ -147,6 +151,11 @@ class OptimizerFunctionOutput:
          to when `opt` is an instance of `OptimizerV2`.
        tape: A `GradientTape` for gradient computation when `opt` is an instance
          of `OptimizerV2`.
+       gradient_capture_context: An 
+       `ipu.eager.backprop.GradientCaptureContext` for accessing gradients
+       captured by `ipu.ops.grad_util_ops.capture_upstream_gradients`.
+       captured_gradient_outfeed: An `ipu.IPUOutfeedQueue` to which any captured
+         gradients are pushed.
     """
     self.opt = opt
     self.loss = loss
@@ -160,6 +169,8 @@ class OptimizerFunctionOutput:
       apply_gradients_kwargs if apply_gradients_kwargs else dict()
     self.variables = variables if variables else tuple()
     self.tape = tape
+    self.gradient_capture_context = gradient_capture_context
+    self.captured_gradient_outfeed = captured_gradient_outfeed
 
   @property
   def opt(self):
@@ -274,11 +285,62 @@ class OptimizerFunctionOutput:
       raise ValueError(
           "OptimizerFunctionOutput.tape may only be used with OptimizerV2.")
 
-    if hasattr(self, '_variables') and self.variables:
+    if value and hasattr(self, '_variables') and self.variables:
       raise ValueError("OptimizerFunctionOutput.tape may not be used when "
                        "OptimizerFunctionOutput.variables is nonempty.")
 
+    if value and hasattr(self, '_gcc') and self.gradient_capture_context:
+      raise ValueError("OptimizerFunctionOutput.tape may not be used when "
+                       "OptimizerFunctionOutput.gradient_capture_context "
+                       "is nonempty.")
+
     self._tape = value
+
+  @property
+  def gradient_capture_context(self):
+    return self._gcc
+
+  @gradient_capture_context.setter
+  def gradient_capture_context(self, value):
+    if value and not isinstance(value, ipu_backprop.GradientCaptureContext):
+      raise TypeError(
+          "OptimizerFunctionOutput.gradient_capture_context must be an "
+          "ipu.eager.backprop.GradientCollectionContext.")
+
+    if value and hasattr(self, '_tape') and self.tape:
+      raise ValueError("OptimizerFunctionOutput.gradient_capture_context "
+                       "may not be used when OptimizerFunctionOutput.tape "
+                       "is nonempty.")
+
+    self._gcc = value
+
+  @property
+  def captured_gradient_outfeed(self):
+    return self._cg_outfeed
+
+  @captured_gradient_outfeed.setter
+  def captured_gradient_outfeed(self, value):
+    if value and not isinstance(value, ipu_outfeed_queue.IPUOutfeedQueue):
+      raise TypeError("OptimizerFunctionOutput.captured_gradient_outfeed must "
+                      "be an instance of IPUOutfeedQueue.")
+
+    valid_grad_src = False
+
+    if value and self.tape and isinstance(self.tape,
+                                          ipu_backprop.GradientCaptureTape):
+      valid_grad_src = True
+
+    if value and self.gradient_capture_context:
+      valid_grad_src = True
+
+    if value and not valid_grad_src:
+      raise ValueError(
+          "OptimizerFunctionOutput.captured_gradient_outfeed "
+          "may not be used when neither an "
+          "ipu.eager.backprop.GradientCollectionContext, nor an "
+          "ipu.eager.backprop.GradientCollectionTape is also used.")
+
+    self._cg_outfeed = value
 
 
 class PipelineStageOptions:
@@ -962,6 +1024,35 @@ def pipeline(computational_stages,
 
           outfeed_sinks.append(nest.map_structure(create_accumulate, tensor))
 
+    def _accumulate_captured_grads(opt_fn,
+                                   gradient_accumulation_dtype,
+                                   accum_scale=1.0,
+                                   grad_scale=None):
+      if not opt_fn:
+        return None
+
+      captured_grad_src = opt_fn.tape if opt_fn.tape and isinstance(
+          opt_fn.tape, ipu_backprop.GradientCaptureTape) else None
+
+      if not captured_grad_src:
+        captured_grad_src = opt_fn.gradient_capture_context if \
+          opt_fn.gradient_capture_context else None
+
+      if not captured_grad_src:
+        return None
+
+      # Pull out any grads that have been captured by
+      # ipu.ops.grad_util_ops.capture_upstream_gradients.
+      captured_grads = captured_grad_src.captured_gradients
+      if not captured_grads:
+        return None
+
+      # Accumulate the captured grads.
+      return op_util.accumulate_tagged_gradients(captured_grads,
+                                                 gradient_accumulation_dtype,
+                                                 accum_scale=accum_scale,
+                                                 grad_scale=grad_scale)
+
     # Build all of the forward stage computations.
     for stage_id, stage in enumerate(computational_stages):
       stage_name = name + "_stage_" + str(stage_id)
@@ -1059,6 +1150,12 @@ def pipeline(computational_stages,
       accumulated_grads_and_vars = op_util.accumulate_gradients(
           grads_and_vars, gradient_accumulation_dtype, accum_scale, grad_scale)
 
+      accumulated_captured_grads = _accumulate_captured_grads(
+          opt_fn,
+          gradient_accumulation_dtype,
+          accum_scale=accum_scale,
+          grad_scale=grad_scale)
+
     elif not isinstance(outputs, ops.Operation) and accumulate_outfeed:
       # In inference, we never expect tensor outputs from the final stage,
       # because they would've been enqueued already inside the stage if we were
@@ -1074,11 +1171,25 @@ def pipeline(computational_stages,
       def resource_update_(accumulation_count):
         gen_poputil_ops.gradient_accumulation_count(accumulation_count)
         if training:
+          # If we have captured gradients, insert them into the
+          # optimiser apply_gradients kwargs. Any optimiser that makes
+          # use of these gradients can then retrieve them from kwargs.
+          # The optimiser must explicitly take 'captured_grads' as a
+          # keyword argument.
+          kwargs = dict(apply_gradients_kwargs)
+          _, _, kw, _ = inspect.getargspec(opt.__class__.apply_gradients)
+          if accumulated_captured_grads and kw and 'captured_grads' in kw:
+            kwargs['captured_grads'] = accumulated_captured_grads
+
           apply_grads = opt.apply_gradients(accumulated_grads_and_vars,
-                                            *apply_gradients_args,
-                                            **apply_gradients_kwargs)
+                                            *apply_gradients_args, **kwargs)
+
           if apply_grads is not None:
             resource_update_ops.append(apply_grads)
+
+          if accumulated_captured_grads and opt_fn.captured_gradient_outfeed:
+            opt_fn.captured_gradient_outfeed.enqueue(
+                accumulated_captured_grads)
 
         # Enqueue any accumulated outfeed data
         if outfeed_sinks:

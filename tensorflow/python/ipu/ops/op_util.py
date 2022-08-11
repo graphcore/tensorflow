@@ -298,7 +298,8 @@ def bool_to_three_state(value, default=None):
 def accumulate_gradients(grads_and_vars,
                          gradient_accumulation_dtype,
                          accum_scale=1.0,
-                         grad_scale=None):
+                         grad_scale=None,
+                         create_accumulator_from_shape=False):
   """
   Create ops that accumulate the gradients in `grads_and_vars`.
   Returns gradient accumulation ops which, when executed, accumulate gradients
@@ -310,6 +311,8 @@ def accumulate_gradients(grads_and_vars,
     gradient_accumulation_dtype: The data type used for the gradient
       accumulation buffer. One of:
     grad_scale: Value to scale gradients with.
+    create_accumulator_from_shape: Use the shape of the variables rather
+      than layout to create the accumulator. Default is False.
 
       - `None`: Use an accumulator of the same type as the variable type.
       - A `DType`: Use this type for all the accumulators.
@@ -324,8 +327,12 @@ def accumulate_gradients(grads_and_vars,
         dtype = get_accumulator_dtype(var, gradient_accumulation_dtype)
 
         # Create an accumulator - variable is used as reference for shape/layout.
-        accumulator = gen_poputil_ops.gradient_accumulator_create(
-            var, output_type=dtype)
+        if create_accumulator_from_shape:
+          accumulator = gen_poputil_ops.gradient_accumulator_create_from_shape(
+              shape=var.shape, output_type=dtype)
+        else:
+          accumulator = gen_poputil_ops.gradient_accumulator_create(
+              var, output_type=dtype)
 
         # Add the gradients to the accumulator.
         if grad_scale is not None:
@@ -367,6 +374,54 @@ def accumulate_gradients(grads_and_vars,
     # Use the accumulated gradients.
     accumulated_grads_and_vars.append((grad, var))
   return accumulated_grads_and_vars
+
+
+def accumulate_tagged_gradients(tagged_grads,
+                                gradient_accumulation_dtype,
+                                accum_scale=1.0,
+                                grad_scale=None):
+  """
+  Create ops that accumulate the gradients in `tagged_grads`.
+  Returns gradient accumulation ops which, when executed, accumulate gradients
+  onto their gradient accumulation buffers.
+
+  Args:
+    tagged_grads: Dictionary of gradients captured by
+    `tensorflow.python.ipu.ops.gradient_util_ops.capture_upstream_gradients`,
+    indexed by their tags (as provided to the aforementioned operation).
+    gradient_accumulation_dtype: The data type used for the gradient
+      accumulation buffer. One of:
+    grad_scale: Value to scale gradients with.
+
+      - `None`: Use an accumulator of the same type as the variable type.
+      - A `DType`: Use this type for all the accumulators.
+      - A callable that takes the variable and returns a `DType`: Allows
+        specifying the accumulator type on a per-variable basis.
+  """
+  # accumulate_gradients does everything we need to do, but in our case we
+  # don't have any variables. In accumulate_gradients, the variables are
+  # only used for the accumulator creation; dtype and layout. So, rather
+  # than passing in (grad, var) pairs, we can just pass (grad, grad) pairs
+  # and reuse the function.
+  grad_counts = [len(tagged_grads[tag]) for tag in tagged_grads]
+  grads = []
+  for tag in tagged_grads:
+    grads.extend([(g, g) for g in tagged_grads[tag]])
+
+  grads_accumulated = accumulate_gradients(grads,
+                                           gradient_accumulation_dtype,
+                                           accum_scale=accum_scale,
+                                           grad_scale=grad_scale,
+                                           create_accumulator_from_shape=True)
+
+  # Re-associate the accumulated grads with their respective tags.
+  tagged_grads_accumulated = dict()
+  idx = 0
+  for tag, n in zip(tagged_grads.keys(), grad_counts):
+    gs = [g[0] for g in grads_accumulated[idx:(idx + n)]]
+    tagged_grads_accumulated[tag] = gs
+    idx += n
+  return tagged_grads_accumulated
 
 
 def create_resource_update(fn, name, control_outputs,
