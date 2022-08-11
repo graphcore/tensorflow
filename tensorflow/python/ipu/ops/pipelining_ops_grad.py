@@ -25,7 +25,7 @@ from tensorflow.python.ops import control_flow_util_v2 as util
 @ops.RegisterGradient("PipelineStage")
 def _pipeline_stage_grad(op, *grads):
   """The gradient of a PipelineStage op."""
-  func_grad_graph, func_grad_inputs, constant_outputs = \
+  func_grad_graph, func_grad_inputs, constant_outputs, _ = \
       functional_ops_grad._get_gradients_for_function(op, *grads)  # pylint: disable=protected-access
   stage_op = op.outputs[0].op
   stage_id = stage_op.get_attr('stage_id')

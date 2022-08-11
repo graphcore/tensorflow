@@ -16,12 +16,14 @@
 
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.python.eager import backprop_util
+from tensorflow.python.eager.backprop import _MockOp
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_util
 from tensorflow.python.framework.func_graph import FuncGraph
 from tensorflow.python.ipu import functional_ops
+from tensorflow.python.ipu.eager import backprop as ipu_backprop
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import cond_v2
 from tensorflow.python.ops import control_flow_util
@@ -175,6 +177,40 @@ def _build_evaluate_as_constants_mask(op, grad_graph):  #pylint: disable=missing
   return bwd_evaluate_as_constants
 
 
+def _write_captured_grads_as_outputs(func_graph):
+  if not ipu_backprop.num_gradient_collection_tapes:
+    return []
+
+  # Write the additional outputs into the graph.
+  grads_written_as_outputs = []
+  for op in func_graph.get_operations():
+    captured = ipu_backprop._get_all_captured_grads_with_src_op(op)
+    if not captured:
+      continue
+
+    for gdq in captured:
+      g = gdq.grad
+      func_graph.output_shapes.append(g.shape)
+      func_graph.output_types.append(g.dtype)
+      func_graph.outputs.append(g)
+      grads_written_as_outputs.append((gdq, len(func_graph.outputs) - 1))
+
+  if grads_written_as_outputs:
+    func_graph.name += "_captured_grads_output"
+
+  return grads_written_as_outputs
+
+
+def _extract_and_replace_captured_grads(grads_written_as_outputs, outputs):
+  for gdq, n in grads_written_as_outputs:
+    ipu_backprop._replace_grads(
+        ipu_backprop._GradientDataQuery(gdq.stack_index, gdq.gd_index, gdq.tag,
+                                        gdq.grad_index, outputs[n]))
+
+  num_original = len(outputs) - len(grads_written_as_outputs)
+  return outputs[:num_original]
+
+
 def _get_gradients_for_function(op, *grads):
   # Note that this function assumes that the op has function graph at attribute `to_apply` which has only single user (this op).
   assert control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph())
@@ -220,10 +256,13 @@ def _get_gradients_for_function(op, *grads):
                         [t.shape for t in extra_func_outputs])
     # pylint: enable=protected-access
 
+  grads_written_as_outputs = _write_captured_grads_as_outputs(func_grad_graph)
+
   func_grad_inputs = _resolve_grad_inputs(func_graph, func_grad_graph, op)
   constant_outputs = functional_ops._get_constant_outputs(  # pylint: disable=protected-access
       func_grad_graph, func_grad_inputs)
-  return func_grad_graph, func_grad_inputs, constant_outputs
+  return func_grad_graph, func_grad_inputs, constant_outputs, \
+    grads_written_as_outputs
 
 
 def _get_func_graph(op):
@@ -235,8 +274,11 @@ def _get_func_graph(op):
 @ops.RegisterGradient("Function")
 def _function_grad(op, *grads):
   """The gradient of a Function op."""
-  func_grad_graph, func_grad_inputs, constant_outputs = \
-   _get_gradients_for_function(op, *grads)
+  if isinstance(op, _MockOp):
+    op = op.outputs[0].op
+
+  func_grad_graph, func_grad_inputs, constant_outputs, \
+    grads_written_as_outputs = _get_gradients_for_function(op, *grads)
 
   func_grad_evaluate_as_constants = \
       _build_evaluate_as_constants_mask(op, func_grad_graph)
@@ -251,6 +293,10 @@ def _function_grad(op, *grads):
       evaluate_as_constants=func_grad_evaluate_as_constants)
 
   outputs = functional_ops._replace_outputs(outputs, constant_outputs)  # pylint: disable=protected-access
+
+  outputs = _extract_and_replace_captured_grads(grads_written_as_outputs,
+                                                outputs)
+
   return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
       func_grad_graph.structured_outputs, outputs)
 

@@ -19,7 +19,10 @@ from threading import Lock
 from tensorflow.python.eager.backprop import GradientTape
 from tensorflow.python.ops.unconnected_gradients import UnconnectedGradients
 
-_CapturedGradientStackFrame = namedtuple("StackFrame", "tape_id gradients")
+_GradientDataQuery = namedtuple("GradientDataQuery",
+                                "stack_index gd_index tag grad_index grad")
+_GradientData = namedtuple("GradientData", "tag gradients")
+_CapturedGradientStackFrame = namedtuple("StackFrame", "tape_id gradient_data")
 
 
 class _CapturedGradientStack:
@@ -48,7 +51,7 @@ class _CapturedGradientStack:
   def push_grad_frame(self, tape):
     self.__mutex.acquire()
     try:
-      self.__grad_stack.append(_CapturedGradientStackFrame(id(tape), dict()))
+      self.__grad_stack.append(_CapturedGradientStackFrame(id(tape), []))
     finally:
       self.__mutex.release()
 
@@ -60,19 +63,80 @@ class _CapturedGradientStack:
     finally:
       self.__mutex.release()
 
-    return frame.gradients
+    return {gd.tag: gd.gradients for gd in frame.gradient_data}
 
   def push_captured_grad(self, tag, grad):
-    self.__mutex.acquire()
-    try:
-      self.__check_stack_access()
-      frame = self.__grad_stack[-1]
-      if tag in frame:
-        raise ValueError("Gradient exists in the captured grads frame.")
+    self.__check_stack_access()
+    frame = self.__grad_stack[-1]
 
-      frame.gradients[tag] = grad
-    finally:
-      self.__mutex.release()
+    if tag in [gd.tag for gd in frame.gradient_data]:
+      raise ValueError("Gradient exists in the captured grads frame.")
+
+    frame.gradient_data.append(_GradientData(tag, grad))
+
+  def get_all_grads_with_src_op(self, op):
+    if not self.tape_count:
+      return None
+
+    grad_queries = []
+    for stack_idx, stack_element in enumerate(self.__grad_stack):
+      for gd_idx, gd in enumerate(stack_element.gradient_data):
+        for o in op.outputs:
+          match_idx = [n for n, g in enumerate(gd.gradients) \
+            if id(g) == id(o)]
+
+          for n in match_idx:
+            grad_queries.append(
+                _GradientDataQuery(stack_idx, gd_idx, gd.tag, n,
+                                   gd.gradients[n]))
+
+    return grad_queries
+
+  def replace_grads(self, query):
+    if not isinstance(query, _GradientDataQuery):
+      raise ValueError(
+          "Can only update captured gradient with a _GradientDataQuery "
+          "instance, as returned by get_all_grads_with_src_op.")
+
+    stack_idx = query.stack_index
+    if stack_idx >= self.tape_count:
+      raise ValueError(
+          f"Stack index {stack_idx} is out of bounds for stack of "
+          f"size {self.tape_count}.")
+
+    grad_data = self.__grad_stack[stack_idx].gradient_data
+
+    gd_idx = query.gd_index
+    if gd_idx >= len(grad_data):
+      raise ValueError(
+          f"_CapturedGradientStackFrame #{stack_idx}, has {len(grad_data)} "
+          f"_GradientData elements. Index {gd_idx} is out of bounds.")
+
+    gd = grad_data[gd_idx]
+    tag = query.tag
+    if tag != gd.tag:
+      raise ValueError(
+          f"_CapturedGradientStackFrame #{stack_idx}, with _GradientData "
+          f"at index {gd_idx} has tag {tag}, whilst the query update tag "
+          f"is {gd.tag}.")
+
+    grad_idx = query.grad_index
+    if grad_idx >= len(gd.gradients):
+      raise ValueError(
+          f"_CapturedGradientStackFrame #{stack_idx}, with _GradientData "
+          f"at index {gd_idx} has {len(gd.gradients)} gradients, whilst "
+          f"the query update has a gradient index of {grad_idx}.")
+
+    grad = query.grad
+    original_grad = gd.gradients[grad_idx]
+    if grad.shape != original_grad.shape:
+      raise ValueError(
+          f"_CapturedGradientStackFrame #{stack_idx}, with _GradientData "
+          f"at index {gd_idx} and gradient index {grad_idx} has gradient "
+          f"with shape {original_grad.shape}, whilst the query update gradient "
+          f"has shape {grad.shape}.")
+
+    gd.gradients[grad_idx] = grad
 
   @property
   def tape_count(self):
@@ -95,12 +159,33 @@ class _CapturedGradientStack:
 
     return frame.tape_id
 
+  @property
+  def top_frame_gradient_data(self):
+    if self.tape_count == 0:
+      return None
+
+    self.__mutex.acquire()
+    try:
+      gd = self.__grad_stack[-1].gradient_data
+    finally:
+      self.__mutex.release()
+
+    return gd
+
 
 _captured_grad_stack = _CapturedGradientStack()
 
 
 def _push_captured_grad(op_tag, grad):
   _captured_grad_stack.push_captured_grad(str(op_tag, 'utf-8'), grad)
+
+
+def _get_all_captured_grads_with_src_op(src_op_name):
+  return _captured_grad_stack.get_all_grads_with_src_op(src_op_name)
+
+
+def _replace_grads(gdq):
+  _captured_grad_stack.replace_grads(gdq)
 
 
 def num_gradient_collection_tapes():

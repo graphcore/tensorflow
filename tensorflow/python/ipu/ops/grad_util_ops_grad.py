@@ -26,5 +26,6 @@ def _capture_upstream_gradients_grad(op, *grads):
       return op.attrs[-1]
     return op.get_attr('tag')
 
-  ipu_backprop._push_captured_grad(tag(), grads)
+  ipu_backprop._push_captured_grad(tag(), list(grads))
+
   return grads

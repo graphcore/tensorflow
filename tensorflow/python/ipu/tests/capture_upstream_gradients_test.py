@@ -22,6 +22,7 @@ from tensorflow.python.ipu import config
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu.eager.backprop import GradientCaptureContext
 from tensorflow.python.ipu.eager.backprop import GradientCaptureTape
+from tensorflow.python.ipu.ops import functional_ops
 from tensorflow.python.ipu.ops.grad_util_ops import capture_upstream_gradients
 from tensorflow.python.keras.optimizer_v2 import gradient_descent
 from tensorflow.python.ops import array_ops
@@ -148,6 +149,88 @@ class CaptureUpstreamGradientsTest(test_util.TensorFlowTestCase):
           dfdx = opt.get_gradients(y, x)
 
         dfda = gcc.captured_gradients
+        dfda_manual = gen_math_ops.tanh_grad(y, array_ops.ones_like(y))
+
+        return dfdx, dfda, dfda_manual
+
+      dfdx, dfda, dfda_manual = strategy.run(f)
+      self.assertAllEqual(dfda['tanh_grad'], dfda_manual)
+
+      # Now verify the grads w.r.t variables match.
+      @def_function.function(jit_compile=True)
+      def g():
+        o = x**2
+        y = math_ops.tanh(o)
+        return opt.get_gradients(y, x)
+
+      dfdx_vanilla_grad_tape = strategy.run(g)
+      self.assertAllEqual(dfdx, dfdx_vanilla_grad_tape)
+
+  def testVariableAndActivationOutlinedFunctionContext(self):
+    cfg = config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
+    strategy = ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      opt = gradient_descent.SGD()
+      x = variables.Variable(3.0)
+
+      @functional_ops.outlined_function
+      def h(v):
+        o = v**2
+        p = capture_upstream_gradients(o, tag="tanh_grad")
+        return math_ops.tanh(p)
+
+      # Verify the captured grads.
+      @def_function.function(jit_compile=True)
+      def f():
+        with GradientCaptureContext() as gcc:
+          y = h(x)
+          dfdx = opt.get_gradients(y, x)
+
+        dfda = gcc.captured_gradients
+        dfda_manual = gen_math_ops.tanh_grad(y, array_ops.ones_like(y))
+
+        return dfdx, dfda, dfda_manual
+
+      dfdx, dfda, dfda_manual = strategy.run(f)
+      self.assertAllEqual(dfda['tanh_grad'], dfda_manual)
+
+      # Now verify the grads w.r.t variables match.
+      @def_function.function(jit_compile=True)
+      def g():
+        o = x**2
+        y = math_ops.tanh(o)
+        return opt.get_gradients(y, x)
+
+      dfdx_vanilla_grad_tape = strategy.run(g)
+      self.assertAllEqual(dfdx, dfdx_vanilla_grad_tape)
+
+  def testVariableAndActivationOutlinedFunctionTape(self):
+    cfg = config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
+    strategy = ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      opt = gradient_descent.SGD()
+      x = variables.Variable(3.0)
+
+      @functional_ops.outlined_function
+      def h(v):
+        o = v**2
+        p = capture_upstream_gradients(o, tag="tanh_grad")
+        return math_ops.tanh(p)
+
+      # Verify the captured grads.
+      @def_function.function(jit_compile=True)
+      def f():
+        with GradientCaptureTape() as tape:
+          y = h(x)
+          dfdx = opt.get_gradients(y, x)
+
+        dfda = tape.captured_gradients
         dfda_manual = gen_math_ops.tanh_grad(y, array_ops.ones_like(y))
 
         return dfdx, dfda, dfda_manual

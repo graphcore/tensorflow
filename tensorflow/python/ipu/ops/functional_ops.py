@@ -128,15 +128,6 @@ def outlined_function(func=None,
 
             return _pack_sequence_as(func_graph.structured_outputs, outputs)
 
-    # Without wrapping in a tf.function, ipu.outlined_function gets the
-    # default function gradient in tf.eager, which returns a _MockOp.
-    # _MockOp is an internal (to tf.eager) class. By wrapping in tf.function,
-    # it gets the Function gradient registered in functional_ops_grad.py
-    if distribution_strategy_context.has_strategy() or \
-      eager_context.executing_eagerly():
-      return def_function.function(func_wrapper)
-
-    # If we are executing with a session.
     return func_wrapper
 
   if func is not None:

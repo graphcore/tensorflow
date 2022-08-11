@@ -59,6 +59,7 @@ from tensorflow.python.ipu.ops.experimental import popfloat_cast_to_gfloat
 from tensorflow.python.ipu import data
 from tensorflow.python.ipu import config
 from tensorflow.python.ipu import dataset_benchmark
+from tensorflow.python.ipu import eager
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_multi_worker_strategy
