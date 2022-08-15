@@ -74,10 +74,11 @@ StatusOr<bool> TryHandle(HloInstruction* inst) {
     return false;
   }
   for (const HloInstruction* operand : user->operands()) {
-    // An elementwise op is uniform on inst if all of its operands are either
-    // inst, or broadcast scalars.
-    if (!(operand == inst || (operand->opcode() == HloOpcode::kBroadcast &&
-                              IsScalar(operand->operand(0))))) {
+    // An elementwise op is uniform on inst if all of its operands are one of
+    // inst, a scalar or a broadcast scalar.
+    if (!(operand == inst || IsScalar(operand) ||
+          (operand->opcode() == HloOpcode::kBroadcast &&
+           IsScalar(operand->operand(0))))) {
       return false;
     }
   }
@@ -133,9 +134,14 @@ StatusOr<bool> HandleBroadcast(HloInstruction* inst,
     if (op == inst) {
       operands.push_back(target_operand);
     } else {
-      CHECK(op->opcode() == HloOpcode::kBroadcast);
-      CHECK(IsScalar(op->operand(0)));
-      auto elementwise_operand = op->mutable_operand(0);
+      HloInstruction* elementwise_operand;
+      if (IsScalar(op)) {
+        elementwise_operand = op;
+      } else {
+        CHECK(op->opcode() == HloOpcode::kBroadcast);
+        CHECK(IsScalar(op->operand(0)));
+        elementwise_operand = op->mutable_operand(0);
+      }
       if (IsScalar(target_operand)) {
         // No need to broadcast when all operands are scalars.
         operands.push_back(elementwise_operand);
@@ -153,11 +159,16 @@ StatusOr<bool> HandleBroadcast(HloInstruction* inst,
   new_target_shape.set_element_type(elementwise->shape().element_type());
   HloInstruction* operand_transformed = comp->AddInstruction(
       elementwise->CloneWithNewOperands(new_target_shape, operands));
-  auto new_shape_inst = comp->AddInstruction(
-      inst->CloneWithNewOperands(elementwise->shape(), {operand_transformed}));
-
-  // Remove broadcast and replace it with the new broadcast instruction.
-  TF_RETURN_IF_ERROR(elementwise->ReplaceAllUsesWith(new_shape_inst));
+  // Check if we're dealing with a degenerate broadcast.
+  if (IsScalar(inst)) {
+    // Can remove the broadcast entirely
+    TF_RETURN_IF_ERROR(elementwise->ReplaceAllUsesWith(operand_transformed));
+  } else {
+    // Need to keep the broadcast
+    auto new_shape_inst = comp->AddInstruction(inst->CloneWithNewOperands(
+        elementwise->shape(), {operand_transformed}));
+    TF_RETURN_IF_ERROR(elementwise->ReplaceAllUsesWith(new_shape_inst));
+  }
   TF_RETURN_IF_ERROR(comp->RemoveInstructionAndUnusedOperands(elementwise));
   return true;
 }

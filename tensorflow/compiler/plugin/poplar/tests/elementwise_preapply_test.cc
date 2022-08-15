@@ -357,6 +357,40 @@ ENTRY f {
   EXPECT_TRUE(LiteralTestUtil::Equal(result[0], expected[0]));
 }
 
+// Check that the case of a degenerate broadcast is handled correctly.
+TEST_F(ElementwisePreapplyTest, TestUselessBroadcast) {
+  const char* hlo_string = R"(
+HloModule module
+
+ENTRY f {
+  c1 = s32[] constant(1)
+  c2 = s32[] constant(3)
+  c3 = s32[] broadcast(c2), dimensions={}
+  ROOT add = s32[] add(c1, c3)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  // Compute initial numeric result.
+  TF_ASSERT_OK_AND_ASSIGN(auto expected,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  // Need to clear schedule between passes when using increased logging level.
+  EXPECT_TRUE(HloDescheduler().Run(module.get()).ValueOrDie());
+
+  // Run the pass and check that we get the correct structure.
+  EXPECT_TRUE(ElementwisePreapply().Run(module.get()).ValueOrDie());
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(Match(root, m::AddAnyOrder(m::Constant(), m::Constant())));
+
+  // Recompute numeric result and check for equality.
+  TF_ASSERT_OK_AND_ASSIGN(auto result,
+                          ExecuteNoHloPassesOnIpuModel(module.get(), {}));
+  EXPECT_EQ(expected.size(), 1);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_TRUE(LiteralTestUtil::Equal(result[0], expected[0]));
+}
+
 TEST_F(ElementwisePreapplyTest, TestBroadcastSubsequent) {
   const char* hlo_string = R"(
 HloModule module
