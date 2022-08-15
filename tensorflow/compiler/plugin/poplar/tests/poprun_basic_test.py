@@ -28,6 +28,10 @@ from tensorflow.python.platform import test
 
 
 class PoprunBasicTest(test_util.TensorFlowTestCase):  # pylint: disable=abstract-method
+  @classmethod
+  def setUpClass(cls):
+    popdist.init()
+
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
   def test_cross_replica_sum(self):
