@@ -1628,12 +1628,22 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
   const auto num_local_ipus = poplar_executor->GetNumIpusInLocalProcess(target);
   const auto local_replication_factor = num_local_ipus / num_shards;
+  const auto replica_group_size =
+      poplar_executor->ExperimentalDistributedBatchNormReplicaGroupSize();
 
   if (num_local_ipus % num_shards) {
     return xla::InternalErrorStrCat(
         "With multi-replica distribution, the current local process has ",
         num_local_ipus, " IPUs, while the graph has ", num_shards, " shards.",
         " The number of shards needs to divide the number of local IPUs.");
+  }
+
+  if (replica_group_size && replication_factor % replica_group_size) {
+    return xla::InternalErrorStrCat(
+        "The number of replicas (", replication_factor,
+        ") must be divisible by",
+        " distributed_batch_norm_replica_group_size (", replica_group_size,
+        ").");
   }
 
   // Currently we only support performing replica partitioning across the local
