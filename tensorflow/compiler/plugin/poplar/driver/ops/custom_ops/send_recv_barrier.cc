@@ -32,8 +32,8 @@ class SendRecvBarrierOp : public PoplarOpDef {
     // barrier that avoids merging of host syncs and then reordering
     // of the Send/Recv stream copies (which would cause a deadlock).
     return DriverProgramSequence(
-        {snap::program::Sync(graph, poplar::SyncType::INTERNAL)}, graph,
-        debug_context);
+        {poplar::program::Sync(poplar::SyncType::INTERNAL, debug_context)},
+        graph, debug_context);
   }
 };
 

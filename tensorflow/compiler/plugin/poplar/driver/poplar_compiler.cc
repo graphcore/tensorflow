@@ -33,8 +33,6 @@ limitations under the License.
 #include <random>
 #include <string>
 
-#include <snap/CompileGraph.hpp>
-
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/numbers.h"
@@ -1867,8 +1865,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
     // Decide whether to synchronise all the replica's starting points.
     if (PoplarXlaFlags::Get().sync_replica_start && replication_factor > 1) {
-      main_program.add(
-          DriverProgramSync(*resources.main_graph, poplar::SyncType::GLOBAL));
+      main_program.add(DriverProgramSync(poplar::SyncType::GLOBAL));
     }
 
     main_program.add(fp_setup);
@@ -1923,9 +1920,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       std::string executable_debug_name =
           poplar_executor->GetModuleReportDirectory(module->name());
 
-      auto exec = snap::compileGraph(main_graph, progs, opt_flags,
-                                     progress_logging, executable_debug_name)
-                      .releaseExecutable();
+      auto exec = poplar::compileGraph(main_graph, progs, opt_flags,
+                                       progress_logging, executable_debug_name);
 
       if (is_cacheable) {
         // If we have the lock, serialize the result to the executable cache.

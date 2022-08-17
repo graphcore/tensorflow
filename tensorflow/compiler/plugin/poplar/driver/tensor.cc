@@ -189,9 +189,9 @@ std::vector<size_t> PoplarShapeFromXlaShape(const xla::Shape& xla_shape) {
 // Concatenate all tensors into a single tensor.
 DriverTensor ConcatenateTensors(const std::vector<DriverTensor>& tensors,
                                 int64 dimension) {
-  std::vector<snap::Tensor> snap_tensors(tensors.size());
-  absl::c_copy(tensors, snap_tensors.begin());
-  auto ret = snap::concat(snap_tensors, dimension);
+  std::vector<poplar::Tensor> poplar_tensors(tensors.size());
+  absl::c_copy(tensors, poplar_tensors.begin());
+  auto ret = poplar::concat(poplar_tensors, dimension);
   return ret;
 }
 

@@ -49,8 +49,8 @@ DriverProgramSequence PipelineStageVisitor::GetCachedSequence(
     function_ = GetMasterGraph(resources_).addFunction(seq);
     has_function_ = true;
   }
-  return DriverProgramSequence({DriverProgramCall(graph, function_, {dnai_})},
-                               graph, dnai_);
+  return DriverProgramSequence({DriverProgramCall(function_, {dnai_})}, graph,
+                               dnai_);
 }
 
 ShapeTree<bool> PipelineStageVisitor::GetOutputCopies(

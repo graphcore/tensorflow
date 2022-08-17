@@ -22,7 +22,7 @@ limitations under the License.
 #include <string>
 #include <utility>
 
-#include <snap/popops/ElementWise.hpp>
+#include <popops/ElementWise.hpp>
 
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
@@ -185,8 +185,8 @@ Status ArithmeticExprVisitor::FinishScopedVisit(HloInstruction* inst) {
   // get the expression
   TF_ASSIGN_OR_RETURN(auto expr, FindExpressionInput(inst));
   // map expression with the tensors
-  DriverTensor out = snap::popops::map(graph, *expr, GetSnapTensors(ts_), seq,
-                                       {debug_name_and_id, "expression"});
+  DriverTensor out = popops::map(graph, *expr, GetPoplarTensors(ts_), seq,
+                                 {debug_name_and_id, "expression"});
   outputs_.push_back(out);
 
   resources_.tensor_maps.AddTensorMapForComputation(inst->parent()->name(),

@@ -1259,9 +1259,8 @@ Status PipelineVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
       [&graph, debug_name_and_id](
           const DriverProgramSequence& seq) mutable -> DriverProgramSequence {
     auto f = graph.addFunction(seq);
-    return DriverProgramSequence(
-        {DriverProgramCall(graph, f, {debug_name_and_id})}, graph,
-        {debug_name_and_id});
+    return DriverProgramSequence({DriverProgramCall(f, {debug_name_and_id})},
+                                 graph, {debug_name_and_id});
   };
 
   // Transform all of the pipeline stage sequences into poplar function calls.

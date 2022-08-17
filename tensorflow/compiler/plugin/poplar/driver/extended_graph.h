@@ -20,29 +20,26 @@ limitations under the License.
 #include <vector>
 
 #include <popfloat/experimental/codelets.hpp>
+#include <poplar/Graph.hpp>
 #include <poplin/codelets.hpp>
 #include <popnn/codelets.hpp>
 #include <popops/codelets.hpp>
 #include <poprand/codelets.hpp>
 #include <popsparse/codelets.hpp>
-#include <snap/Graph.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/extended_tensor.h"
 
 namespace xla {
 namespace poplarplugin {
 
-using ExtendedFunction = snap::Function;
+using ExtendedFunction = poplar::Function;
 
-// Wrapper class to abstract migration from poplar to snap
-class ExtendedGraph : public snap::Graph {
+// Wrapper class for poplar (will be removed in T67791)
+class ExtendedGraph : public poplar::Graph {
  public:
   ExtendedGraph(const poplar::Target& target,
                 poplar::replication_factor replication_factor);
-  ExtendedGraph(snap::Graph&& graph);  // NOLINT
-
-  operator poplar::Graph&() { return getPoplarGraph(); }
-  operator const poplar::Graph&() const { return getPoplarGraph(); }
+  ExtendedGraph(poplar::Graph&& graph);  // NOLINT
 
   ExtendedGraph createVirtualGraph(unsigned lowerTile, unsigned upperTile);
 
@@ -96,7 +93,7 @@ class ExtendedGraph : public snap::Graph {
                              poplar::ArrayRef<T> values,
                              const poplar::DebugContext& debugContext = {
                                  "<const>"}) {
-    auto tensor = snap::Graph::addConstant(type, shape, values, debugContext);
+    auto tensor = poplar::Graph::addConstant(type, shape, values, debugContext);
     return {std::move(tensor)};
   }
 
@@ -104,8 +101,7 @@ class ExtendedGraph : public snap::Graph {
   ExtendedTensor addConstant(
       const poplar::Type& type, poplar::ArrayRef<std::size_t> shape,
       const T* values, const poplar::DebugContext& debugContext = {"<const>"}) {
-    auto tensor =
-        getPoplarGraph().addConstant(type, shape, values, debugContext);
+    auto tensor = poplar::Graph::addConstant(type, shape, values, debugContext);
     return {std::move(tensor), *this};
   }
 
@@ -114,7 +110,7 @@ class ExtendedGraph : public snap::Graph {
                              poplar::ArrayRef<std::size_t> shape, T val,
                              const poplar::DebugContext& debugContext = {
                                  "<const>"}) {
-    auto tensor = getPoplarGraph().addConstant(type, shape, val, debugContext);
+    auto tensor = poplar::Graph::addConstant(type, shape, val, debugContext);
     return {tensor, *this};
   }
 
@@ -144,7 +140,7 @@ class ExtendedGraph : public snap::Graph {
       const ExtendedTensor& t, poplar::ArrayRef<poplar::Interval> regions,
       bool removeAliasedIntervals = false,
       std::vector<std::size_t>* aliases = nullptr) const {
-    return getPoplarGraph().getSortedContiguousRegions(
+    return poplar::Graph::getSortedContiguousRegions(
         t, regions, removeAliasedIntervals, aliases);
   }
 
@@ -172,12 +168,12 @@ class ExtendedGraph : public snap::Graph {
 
   template <typename T>
   void setInitialValue(const ExtendedTensor& t, poplar::ArrayRef<T> values) {
-    getPoplarGraph().setInitialValue<T>(t, values);
+    poplar::Graph::setInitialValue<T>(t, values);
   }
 
   template <typename T>
   void setInitialValue(const poplar::FieldRef field, T value) {
-    getPoplarGraph().setInitialValue<T>(field, value);
+    poplar::Graph::setInitialValue<T>(field, value);
   }
 
   void setInitialValueHalf(const poplar::Tensor& t,
@@ -201,7 +197,7 @@ class ExtendedGraph : public snap::Graph {
 
   poplar::ComputeSet addComputeSet(
       const poplar::DebugContext& debugContext = {}) {
-    return getPoplarGraph().addComputeSet(debugContext);
+    return poplar::Graph::addComputeSet(debugContext);
   }
 
   poplar::VertexRef addVertex(poplar::ComputeSet cs,
