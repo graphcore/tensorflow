@@ -189,9 +189,9 @@ std::vector<size_t> PoplarShapeFromXlaShape(const xla::Shape& xla_shape) {
 // Concatenate all tensors into a single tensor.
 DriverTensor ConcatenateTensors(const std::vector<DriverTensor>& tensors,
                                 int64_t dimension) {
-  std::vector<snap::Tensor> snap_tensors(tensors.size());
-  absl::c_copy(tensors, snap_tensors.begin());
-  auto ret = snap::concat(snap_tensors, dimension);
+  std::vector<poplar::Tensor> poplar_tensors(tensors.size());
+  absl::c_copy(tensors, poplar_tensors.begin());
+  auto ret = poplar::concat(poplar_tensors, dimension);
   return ret;
 }
 
@@ -451,8 +451,7 @@ DriverTensor CreateTensorFromSlice(
     if (stackIdx > 0) {
       auto mapping = graph.getTileMapping(output_slices[i]);
       MappingHelper::RotateMapping(graph, mapping, stackIdx * mappingWidth);
-      graph.getPoplarGraph().setTileMapping(output_slices[i].getPoplarTensor(),
-                                            mapping);
+      graph.setTileMapping(output_slices[i], mapping);
     }
   }
 
@@ -950,8 +949,8 @@ DriverTensor TensorCloneAndRebalanceAliasing(
     const poplar::DebugNameAndId& debug_name_and_id) {
   uint64 offset = res.linear_mapping_state[&graph];
   poplar::Tensor dst;
-  std::tie(dst, offset) = poputil::cloneAndExpandAliasing(
-      graph.getPoplarGraph(), tensor, offset, debug_name_and_id);
+  std::tie(dst, offset) =
+      poputil::cloneAndExpandAliasing(graph, tensor, offset, debug_name_and_id);
   res.linear_mapping_state[&graph] = offset;
   return {dst, graph};
 }
@@ -1441,7 +1440,7 @@ StatusOr<DriverTensor> FindF8InstructionInput(
       GetGraphWithOutputIndex(res, operand, /*flattened_output_tuple_index=*/0);
   CHECK(&graph == &GetGraphWithOutputIndex(res, operand,
                                            /*flattened_output_tuple_index=*/1));
-  poplar::Graph& poplar_graph = graph.getPoplarGraph();
+  poplar::Graph& poplar_graph = graph;
 
   // We can't reinterpret to neither QUARTER_METADATA nor QUARTER type.
   // Instead, clone them and copy raw unsigned char data over.
@@ -1455,10 +1454,9 @@ StatusOr<DriverTensor> FindF8InstructionInput(
   auto f8_data = poplar_graph.clone(
       poplar::QUARTER, f8_metadata, u8_data, debug_name_and_id,
       poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-  seq.add(
-      poplar::program::Copy(u8_metadata.getPoplarTensor(),
-                            f8_metadata.reinterpret(poplar::UNSIGNED_CHAR)));
-  seq.add(poplar::program::Copy(u8_data.getPoplarTensor(),
+  seq.add(poplar::program::Copy(
+      u8_metadata, f8_metadata.reinterpret(poplar::UNSIGNED_CHAR)));
+  seq.add(poplar::program::Copy(u8_data,
                                 f8_data.reinterpret(poplar::UNSIGNED_CHAR)));
   return DriverTensor(f8_data, graph);
 }

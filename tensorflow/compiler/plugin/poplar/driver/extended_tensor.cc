@@ -25,56 +25,52 @@ namespace poplarplugin {
 
 ExtendedTensor ExtendedTensor::reshape(
     poplar::ArrayRef<std::size_t> shape) const {
-  auto t = snap::Tensor::reshape(shape);
+  auto t = poplar::Tensor::reshape(shape);
   return {std::move(t)};
 }
 
 ExtendedTensor ExtendedTensor::reshapePartial(
     unsigned beginIndex, unsigned endIndex,
     poplar::ArrayRef<std::size_t> newDims) const {
-  auto t = snap::Tensor::reshapePartial(beginIndex, endIndex, newDims);
+  auto t = poplar::Tensor::reshapePartial(beginIndex, endIndex, newDims);
   return {std::move(t)};
 }
 
 ExtendedTensor ExtendedTensor::flatten() const {
-  auto t = snap::Tensor::flatten();
+  auto t = poplar::Tensor::flatten();
   return {std::move(t)};
 }
 
 ExtendedTensor ExtendedTensor::flatten(unsigned dimBegin,
                                        unsigned dimEnd) const {
-  auto t = snap::Tensor::flatten(dimBegin, dimEnd);
+  auto t = poplar::Tensor::flatten(dimBegin, dimEnd);
   return {std::move(t)};
 }
 
 ExtendedTensor ExtendedTensor::slice(const poplar::Interval& region,
                                      unsigned dimension) const {
-  // TODO(T60306) - Remove calls to poplar::Tensor::{slice/slices}
-  auto t = getPoplarTensor().slice(region, dimension);
-  return {std::move(ExtendedTensor(t, *this))};
+  auto t = poplar::Tensor::slice(region, dimension);
+  return {std::move(t)};
 }
 
 ExtendedTensor ExtendedTensor::slice(std::size_t begin, std::size_t end,
                                      unsigned dimension) const& {
-  // TODO(T60306) - Remove calls to poplar::Tensor::{slice/slices}
-  auto t = getPoplarTensor().slice(begin, end, dimension);
-  return {std::move(ExtendedTensor(t, *this))};
+  auto t = poplar::Tensor::slice(begin, end, dimension);
+  return {std::move(t)};
 }
 
 ExtendedTensor ExtendedTensor::slice(poplar::ArrayRef<std::size_t> begin,
                                      poplar::ArrayRef<std::size_t> end) const {
-  // TODO(T60306) - Remove calls to poplar::Tensor::{slice/slices}
-  auto t = getPoplarTensor().slice(begin, end);
-  return {std::move(ExtendedTensor(t, *this))};
+  auto t = poplar::Tensor::slice(begin, end);
+  return {std::move(t)};
 }
 
 std::vector<ExtendedTensor> ExtendedTensor::slices(
     poplar::ArrayRef<poplar::Interval> intervals, unsigned dimension) const {
-  // TODO(T60306) - Remove calls to poplar::Tensor::{slice/slices}
-  auto ts = getPoplarTensor().slices(intervals, dimension);
+  auto ts = poplar::Tensor::slices(intervals, dimension);
   std::vector<ExtendedTensor> ets(ts.size());
-  absl::c_transform(ts, ets.begin(), [this](poplar::Tensor t) {
-    return ExtendedTensor(t, *this);
+  absl::c_transform(ts, ets.begin(), [this](const poplar::Tensor& t) {
+    return ExtendedTensor(t);
   });
   return ets;
 }
@@ -82,56 +78,54 @@ std::vector<ExtendedTensor> ExtendedTensor::slices(
 std::vector<ExtendedTensor> ExtendedTensor::slices(
     const std::vector<std::vector<poplar::Interval>>& intervals,
     unsigned dimension) const {
-  // TODO(T60306) - Remove calls to poplar::Tensor::{slice/slices}
-  auto ts = getPoplarTensor().slices(intervals, dimension);
+  auto ts = poplar::Tensor::slices(intervals, dimension);
   std::vector<ExtendedTensor> ets(ts.size());
-  absl::c_transform(ts, ets.begin(), [this](poplar::Tensor t) {
-    return ExtendedTensor(t, *this);
+  absl::c_transform(ts, ets.begin(), [this](const poplar::Tensor& t) {
+    return ExtendedTensor(t);
   });
   return ets;
 }
 
 std::vector<ExtendedTensor> ExtendedTensor::slices(
     const poplar::ArrayRef<unsigned>& indices, unsigned dimension) const {
-  // TODO(T60306) - Remove calls to poplar::Tensor::{slice/slices}
-  auto ts = getPoplarTensor().slices(indices, dimension);
+  auto ts = poplar::Tensor::slices(indices, dimension);
   std::vector<ExtendedTensor> ets(ts.size());
-  absl::c_transform(ts, ets.begin(), [this](poplar::Tensor t) {
-    return ExtendedTensor(t, *this);
+  absl::c_transform(ts, ets.begin(), [this](const poplar::Tensor& t) {
+    return ExtendedTensor(t);
   });
   return ets;
 }
 
 ExtendedTensor ExtendedTensor::dimShuffle(
     poplar::ArrayRef<unsigned> permutation) const {
-  auto t = snap::Tensor::dimShuffle(permutation);
+  auto t = poplar::Tensor::dimShuffle(permutation);
   return {std::move(t)};
 }
 
 ExtendedTensor ExtendedTensor::dimShufflePartial(
     poplar::ArrayRef<unsigned> source,
     poplar::ArrayRef<unsigned> destination) const {
-  auto t = snap::Tensor::dimShufflePartial(source, destination);
+  auto t = poplar::Tensor::dimShufflePartial(source, destination);
   return {std::move(t)};
 }
 
 ExtendedTensor ExtendedTensor::dimRoll(unsigned dimIdx, unsigned newIdx) const {
-  auto t = snap::Tensor::dimRoll(dimIdx, newIdx);
+  auto t = poplar::Tensor::dimRoll(dimIdx, newIdx);
   return {std::move(t)};
 }
 
 ExtendedTensor ExtendedTensor::reinterpret(const poplar::Type& type) const {
-  auto t = snap::Tensor::reinterpret(type);
+  auto t = poplar::Tensor::reinterpret(type);
   return {std::move(t)};
 }
 
 std::ostream& operator<<(std::ostream& os, const ExtendedTensor& tensor) {
-  os << tensor.getPoplarTensor();
+  os << tensor;
   return os;
 }
 
-std::vector<snap::Tensor> GetSnapTensors(std::vector<ExtendedTensor>& ets) {
-  std::vector<snap::Tensor> ts(ets.size());
+std::vector<poplar::Tensor> GetPoplarTensors(std::vector<ExtendedTensor>& ets) {
+  std::vector<poplar::Tensor> ts(ets.size());
   absl::c_copy(ets, ts.begin());
   return ts;
 }

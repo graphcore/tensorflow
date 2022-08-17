@@ -18,38 +18,34 @@ limitations under the License.
 
 #include <utility>
 
-#include <snap/Graph.hpp>
-#include <snap/Program.hpp>
-#include <snap/Tensor.hpp>
+#include <poplar/Graph.hpp>
+#include <poplar/Program.hpp>
+#include <poplar/Tensor.hpp>
 
 namespace xla {
 namespace poplarplugin {
 
-using ExtendedProgram = snap::program::Program;
-using ExtendedProgramCopy = snap::program::Copy;
-using ExtendedProgramSync = snap::program::Sync;
-using ExtendedProgramRepeat = snap::program::Repeat;
-using ExtendedProgramCall = snap::program::Call;
-using ExtendedProgramWriteUndef = snap::program::WriteUndef;
+using ExtendedProgram = poplar::program::Program;
+using ExtendedProgramCopy = poplar::program::Copy;
+using ExtendedProgramSync = poplar::program::Sync;
+using ExtendedProgramRepeat = poplar::program::Repeat;
+using ExtendedProgramCall = poplar::program::Call;
+using ExtendedProgramWriteUndef = poplar::program::WriteUndef;
 
-// Wrapper class to abstract migration from poplar to snap
-class ExtendedProgramSequence : public snap::program::Sequence {
+// Wrapper class for poplar (will be removed in T67791)
+class ExtendedProgramSequence : public poplar::program::Sequence {
  public:
-  ExtendedProgramSequence(snap::Graph& graph,
+  ExtendedProgramSequence(poplar::Graph& graph,
                           const poplar::DebugContext& debugContext = {})
-      : snap::program::Sequence(debugContext, graph) {}
-  ExtendedProgramSequence(poplar::ArrayRef<snap::program::Program> programs,
-                          snap::Graph& graph,
-                          const poplar::DebugContext& debugContext = {})
-      : snap::program::Sequence(programs, debugContext, graph) {}
+      : poplar::program::Sequence(debugContext) {}
+  ExtendedProgramSequence(
+      std::initializer_list<poplar::program::Program> programs,
+      poplar::Graph& graph, const poplar::DebugContext& debugContext = {})
+      : poplar::program::Sequence(programs, debugContext) {}
 
-  operator poplar::program::Sequence&() { return getPoplarSequence(); }
-  operator const poplar::program::Sequence&() const {
-    return getPoplarSequence();
+  void add(const poplar::program::Program& p) {
+    poplar::program::Sequence::add(p);
   }
-
-  void add(const snap::program::Program& p) { snap::program::Sequence::add(p); }
-  void add(const poplar::program::Program& p) { getPoplarSequence().add(p); }
 };
 
 }  // namespace poplarplugin

@@ -201,7 +201,7 @@ PartitionedElementwiseClusterVisitor::MakeParameterAllocationFunction(
       auto element_count = ShapeUtil::ElementsIn(shape);
       auto& host_rearrangement = cbr->getHostRearrangement();
       if (host_rearrangement.totalElementsPerReplica == element_count) {
-        tensor_like = cbr->createReplicaSlice(type);
+        tensor_like = DriverTensor(cbr->createReplicaSlice(type));
       }
     }
     TF_ASSIGN_OR_RETURN(auto tensor,

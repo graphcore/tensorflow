@@ -544,9 +544,6 @@ struct PrngSeedConsistencyTest
 
   void TearDown() override {
     if (resources_ && resources_->main_graph) {
-      // Snap tensors have an internal dependency on the graph backend.
-      // This is to ensure that the graph only gets destroyed after the
-      // tensors.
       graph_ = std::move(resources_->main_graph);
     }
     setenv(poplar_flag_name, original_poplar_flags_.c_str(),

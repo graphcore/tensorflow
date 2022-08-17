@@ -36,16 +36,14 @@ Status RangeSampler::Sample(DriverGraph& graph, DriverTensor& samples,
   switch (distribution_) {
     case DistributionType::UNIFORM:
       out = DriverTensor(
-          poprand::uniform(graph, &seed_.getPoplarTensor(), 0, samples,
-                           poplar::INT, 0.0, range_max_ - 1, seq,
-                           {debug_name_and_id}),
+          poprand::uniform(graph, &seed_, 0, samples, poplar::INT, 0.0,
+                           range_max_ - 1, seq, {debug_name_and_id}),
           graph);
       break;
     case DistributionType::LOG_UNIFORM:
       out = DriverTensor(
-          poprand::logUniform(graph, &seed_.getPoplarTensor(), 0, samples,
-                              poplar::INT, 1.0, range_max_, seq, M_E,
-                              {debug_name_and_id}),
+          poprand::logUniform(graph, &seed_, 0, samples, poplar::INT, 1.0,
+                              range_max_, seq, M_E, {debug_name_and_id}),
           graph);
       popops::mapInPlace(graph, pe::Sub(pe::_1, pe::Const(1)), {out}, seq,
                          {debug_name_and_id, "Minus1"});

@@ -993,7 +993,7 @@ ENTRY cluster_1  {
 
   poplar::program::Sequence main_program;
   if (resources->preamble_sequence) {
-    main_program.add(resources->preamble_sequence->getPoplarSequence());
+    main_program.add(*(resources->preamble_sequence));
   }
 
   main_program.add(
@@ -1077,7 +1077,7 @@ ENTRY cluster_1  {
 
   poplar::program::Sequence main_program;
   if (resources->preamble_sequence) {
-    main_program.add(resources->preamble_sequence->getPoplarSequence());
+    main_program.add(*(resources->preamble_sequence));
   }
 
   main_program.add(

@@ -34,7 +34,7 @@ void rotate_right(T& t, std::size_t spaces) {
 void MappingHelper::RotateMapping(
     DriverGraph& graph, std::vector<std::vector<poplar::Interval>>& mapping,
     uint64 offset) {
-  auto tile_count = graph.getPoplarGraph().getTarget().getNumTiles();
+  auto tile_count = graph.getTarget().getNumTiles();
 
   // Move the tile mapping cyclically by the offset.
   mapping.resize(tile_count);
@@ -52,12 +52,12 @@ void MappingHelper::MapTensorLinearlyImpl(
   auto tile_count = graph.getTarget().getNumTiles();
   if (mapping_tile_count == tile_count) {
     // Do not rotate tensors scattered across all tiles
-    graph.getPoplarGraph().setTileMapping(tensor, mapping);
+    graph.setTileMapping(tensor, mapping);
     return;
   }
 
   RotateMapping(graph, mapping, mapping_tile_count);
-  graph.getPoplarGraph().setTileMapping(tensor, mapping);
+  graph.setTileMapping(tensor, mapping);
 
   // Update offset.
   next_tile_to_map_from += mapping_tile_count;
