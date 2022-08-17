@@ -29,6 +29,27 @@ from tensorflow.python.ipu.gradient_accumulation import GradientAccumulationRedu
 from tensorflow.python.ops import math_ops
 
 
+def _compute_scales(reduction_method, num_mini_batches):
+  if reduction_method == GradientAccumulationReductionMethod.SUM:
+    accum_scale = 1.0
+    grad_scale = None
+  elif reduction_method == GradientAccumulationReductionMethod.MEAN:
+    accum_scale = 1.0
+    grad_scale = 1.0 / num_mini_batches
+  elif reduction_method == \
+      GradientAccumulationReductionMethod.RUNNING_MEAN:
+    n = internal_ops.get_current_iteration_counter()
+    n = n % num_mini_batches
+    n = math_ops.cast(n, np.float32)
+    accum_scale = n / (n + 1)
+    grad_scale = 1.0 / (n + 1)
+  else:
+    raise ValueError(
+        'reduction_method must be set to SUM, MEAN or RUNNING_MEAN')
+
+  return accum_scale, grad_scale
+
+
 class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract-method
   """An optimizer where instead of performing the weight update for every batch,
   gradients across multiple batches are accumulated. After multiple batches
@@ -137,22 +158,8 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
     Raises:
       ValueError: If the grads_and_vars is malformed.
     """
-    if self._reduction_method == GradientAccumulationReductionMethod.SUM:
-      accum_scale = 1.0
-      grad_scale = None
-    elif self._reduction_method == GradientAccumulationReductionMethod.MEAN:
-      accum_scale = 1.0
-      grad_scale = 1.0 / self._num_mini_batches
-    elif self._reduction_method == \
-        GradientAccumulationReductionMethod.RUNNING_MEAN:
-      n = internal_ops.get_current_iteration_counter()
-      n = n % self._num_mini_batches
-      n = math_ops.cast(n, np.float32)
-      accum_scale = n / (n + 1)
-      grad_scale = 1.0 / (n + 1)
-    else:
-      raise ValueError(
-          'reduction_method must be set to SUM, MEAN or RUNNING_MEAN')
+    accum_scale, grad_scale = _compute_scales(self._reduction_method,
+                                              self._num_mini_batches)
 
     accumulated_grads_and_vars = op_util.accumulate_gradients(
         grads_and_vars, self._dtype, accum_scale, grad_scale)
