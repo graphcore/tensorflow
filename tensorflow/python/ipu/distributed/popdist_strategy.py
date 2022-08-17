@@ -62,6 +62,8 @@ class PopDistStrategy(distribute_lib.StrategyV1):
   def __init__(self,
                ipu_device="/device:IPU:0",
                add_ipu_cross_replica_reductions=True):
+    popdist.init()
+
     # We create an empty cluster here since we will not be using gRPC for communication.
     # All the communication is delegated to either GCL or Horovod (MPI) below.
     cluster_resolver = cluster_resolver_lib.SimpleClusterResolver(
