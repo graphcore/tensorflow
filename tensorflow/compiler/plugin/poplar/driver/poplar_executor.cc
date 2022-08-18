@@ -25,7 +25,6 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include <popdist/backend.hpp>
 #include <poplar/DeviceManager.hpp>
 #include <poplar/IPUModel.hpp>
 #include <poplar/StreamCallback.hpp>
@@ -3789,7 +3788,7 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
 
       // Run the main engine
       current_engine_->enableExecutionProfiling();
-      popdist::run(*current_engine_, PoplarProgramType::MAIN_SEQUENCE);
+      current_engine_->run(PoplarProgramType::MAIN_SEQUENCE);
 
       StopIOThreads();
 
