@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/embedding_plans_preplanning.h"
 
+#include <utility>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
@@ -107,11 +108,6 @@ const std::vector<std::size_t> GetLookUps(
   return lookups;
 }
 
-// Given the lookups, get the total number of slices.
-std::size_t GetNumLookUps(const std::vector<std::size_t>& lookups) {
-  return absl::c_accumulate(lookups, std::size_t(0), std::plus<std::size_t>());
-}
-
 poplar::OptionFlags PopulateWithOptionsForPlan(
     const PlanType& plan_type, const poplar::OptionFlags& opts) {
   poplar::OptionFlags new_opts = opts;
@@ -151,12 +147,10 @@ poplar::OptionFlags PopulateWithOptionsForPlan(
   return new_opts;
 }
 
-Status AddPlan(const PlanType& plan_type,
-               const std::vector<std::size_t>& lookups,
-               const HloInstruction* operand,
-               const std::vector<const HloInstruction*>& insts,
-               CompilerResources& res) {
-  // Get the type information for the plan.
+StatusOr<popops::embedding::SlicePlanningParameters> GetPlanningParameters(
+    const PlanType& plan_type, const std::vector<std::size_t>& lookups,
+    const HloInstruction* operand,
+    const std::vector<const HloInstruction*>& insts, CompilerResources& res) {
   const Shape operand_shape = operand->shape();
   TF_ASSIGN_OR_RETURN(poplar::Type data_type, PoplarDataType(operand_shape));
   const int64_t input_size = operand_shape.dimensions(0);
@@ -185,21 +179,33 @@ Status AddPlan(const PlanType& plan_type,
       shards.size() > 1 ? GetMasterGraph(res) : GetGraph(res, operand);
 
   // Add the plan.
-  res.slice_plans.push_back(popops::embedding::plan(
-      graph, data_type, input_size, output_size, lookups, opts));
+  return popops::embedding::SlicePlanningParameters(
+      graph, data_type, input_size, output_size, lookups, opts);
+}
 
-  for (const HloInstruction* inst : insts) {
-    // Map the plan to the instruction in the original module.
-    const HloInstruction* original_inst =
-        res.annotations.flattened_inst_map_bwd.at(inst);
-    res.slice_plan_mappings[original_inst] = &res.slice_plans.back();
+Status AddPlans(std::vector<popops::embedding::SlicePlanningParameters> spps,
+                std::vector<std::vector<const HloInstruction*>> insts,
+                CompilerResources& res) {
+  auto slice_plans = popops::embedding::planMultiple(spps);
+  for (int i = 0; i < spps.size(); i++) {
+    auto& slice_plan = slice_plans[i];
+    res.slice_plans.push_back(slice_plan);
+    for (const HloInstruction* inst : insts[i]) {
+      // Map the plan to the instruction in the original module.
+      const HloInstruction* original_inst =
+          res.annotations.flattened_inst_map_bwd.at(inst);
+      res.slice_plan_mappings[original_inst] = &res.slice_plans.back();
+    }
   }
-
   return Status::OK();
 }
 
 Status PopulatePlans(const InputToSliceUsersMap& user_map,
                      CompilerResources& res) {
+  // Store SlicePlanningParameters for each element of user_map.
+  std::vector<popops::embedding::SlicePlanningParameters> spps;
+  // Keep slice instructions used to compute each element of spps.
+  std::vector<std::vector<const HloInstruction*>> slice_instructions;
   for (auto& pair : user_map) {
     const HloInstruction* operand = pair.first;
     const std::vector<const HloInstruction*> slice_ops = pair.second;
@@ -207,22 +213,29 @@ Status PopulatePlans(const InputToSliceUsersMap& user_map,
     // Only share a plan if the options match.
     TF_ASSIGN_OR_RETURN(const bool options_match,
                         AllOptionsMatch(slice_ops, res));
-
+    auto add_spp =
+        [&slice_instructions, &spps, &operand, &res](
+            PlanType plan_type, const std::vector<std::size_t>& lookups,
+            const std::vector<const HloInstruction*>& slice_ops) -> Status {
+      slice_instructions.push_back(slice_ops);
+      TF_ASSIGN_OR_RETURN(
+          auto planning_parameters,
+          GetPlanningParameters(plan_type, lookups, operand, slice_ops, res));
+      spps.push_back(planning_parameters);
+      return Status::OK();
+    };
     if (IsSliceOnlyPlan(slice_ops) && options_match) {
-      TF_RETURN_IF_ERROR(AddPlan(/*plan_type=*/PlanType::kSliceOnly, lookups,
-                                 operand, slice_ops, res));
+      TF_RETURN_IF_ERROR(add_spp(PlanType::kSliceOnly, lookups, slice_ops));
     } else if (IsUpdateOnlyPlan(slice_ops) && options_match) {
-      TF_RETURN_IF_ERROR(AddPlan(/*plan_type=*/PlanType::kUpdateOnly, lookups,
-                                 operand, slice_ops, res));
+      TF_RETURN_IF_ERROR(add_spp(PlanType::kUpdateOnly, lookups, slice_ops));
     } else if (IsUpdateAddOnlyPlan(slice_ops) && options_match) {
-      TF_RETURN_IF_ERROR(AddPlan(/*plan_type=*/PlanType::kUpdateAddOnly,
-                                 lookups, operand, slice_ops, res));
+      TF_RETURN_IF_ERROR(add_spp(PlanType::kUpdateAddOnly, lookups, slice_ops));
     } else if (IsSliceAndUpdatePlan(slice_ops) && options_match) {
-      TF_RETURN_IF_ERROR(AddPlan(/*plan_type=*/PlanType::kSliceAndUpdate,
-                                 lookups, operand, slice_ops, res));
+      TF_RETURN_IF_ERROR(
+          add_spp(PlanType::kSliceAndUpdate, lookups, slice_ops));
     } else if (IsSliceAndUpdateAddPlan(slice_ops) && options_match) {
-      TF_RETURN_IF_ERROR(AddPlan(/*plan_type=*/PlanType::kSliceAndUpdateAdd,
-                                 lookups, operand, slice_ops, res));
+      TF_RETURN_IF_ERROR(
+          add_spp(PlanType::kSliceAndUpdateAdd, lookups, slice_ops));
     } else {
       // Unsupported mix - make a plan for each instruction.
       for (int64_t i = 0; i != slice_ops.size(); ++i) {
@@ -238,12 +251,11 @@ Status PopulatePlans(const InputToSliceUsersMap& user_map,
           CHECK(IsMultiUpdateAdd(inst));
           plan_type = PlanType::kUpdateAddOnly;
         }
-        TF_RETURN_IF_ERROR(AddPlan(plan_type, /*lookups=*/{lookup}, operand,
-                                   /*insts=*/{inst}, res));
+        TF_RETURN_IF_ERROR(add_spp(plan_type, {lookup}, {inst}));
       }
     }
   }
-  return Status::OK();
+  return AddPlans(spps, slice_instructions, res);
 }
 }  // namespace
 
