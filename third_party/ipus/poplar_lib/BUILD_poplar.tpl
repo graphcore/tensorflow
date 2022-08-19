@@ -22,7 +22,6 @@ cc_library(
         "popef/include",
         "libpva/include",
         "gccs/include",
-        "popir/include",
         "popit/include",
         "poprithms/include",
         "popdist/include",
@@ -37,7 +36,6 @@ cc_library(
             "lib*/poplar/libpoplar.so",
             "lib*/poplar/libpoplar_test.so",
             "lib*/**/libpopsolver.so",
-            "lib*/popir/libpopir.so",
             "lib*/popit/libpopit.so",
             "lib*/poprithms/libpoprithms.so",
         ] + if_custom_poplibs([
