@@ -58,27 +58,23 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
   @classmethod
   def setUpClass(cls):
     hvd.init()
-    popdist.init()
+    # Instantiate here to call popdist.init() and popdist.finalizeBackend() once
+    cls.strategy = PopDistStrategy()
 
   @classmethod
   def tearDownClass(cls):
     hvd.shutdown()
 
-  def _create_test_objects(self,
-                           auto_select_ipus=1,
-                           add_ipu_cross_replica_reductions=True):
+  def _create_test_objects(self, auto_select_ipus=1):
     config = IPUConfig()
     config.auto_select_ipus = auto_select_ipus
     config.configure_ipu_system()
 
-    strategy = PopDistStrategy(
-        add_ipu_cross_replica_reductions=add_ipu_cross_replica_reductions)
-
-    return config, strategy
+    return config
 
   def test_update_ipu_config(self):
-    config, strategy = self._create_test_objects()
-    strategy.update_ipu_config(config)
+    config = self._create_test_objects()
+    self.strategy.update_ipu_config(config)
     self.assertEqual(
         config.experimental.multi_replica_distribution.process_count,
         popdist.getNumInstances())
@@ -87,9 +83,10 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
         popdist.getInstanceIndex())
 
   def test_strategy(self):
-    config, strategy = self._create_test_objects()
+    config = self._create_test_objects()
+    self.strategy.update_ipu_config(config)
 
-    with strategy.scope():
+    with self.strategy.scope():
       v = variables.Variable(initial_value=popdist.getInstanceIndex() + 1,
                              dtype=np.float32)
       self.assertEndsWith(v.device, "/device:IPU:0")
@@ -108,11 +105,11 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
 
         return y_all_reduced
 
-      per_replica_value = strategy.run(per_replica_fn,
-                                       args=[constant_op.constant(2.0)])
+      per_replica_value = self.strategy.run(per_replica_fn,
+                                            args=[constant_op.constant(2.0)])
 
       # This reduction is performed on CPU, and hence uses Horovod.
-      value_all_reduced = strategy.reduce(ReduceOp.SUM, per_replica_value)
+      value_all_reduced = self.strategy.reduce(ReduceOp.SUM, per_replica_value)
 
       # The initial value should be broadcast from rank 0.
       self.assertEqual(v, 1.0)
@@ -121,10 +118,13 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
       self.assertEqual(value_all_reduced, popdist.getNumInstances() * 2.0)
 
   def test_strategy_without_ipu_reduction(self):
-    config, strategy = self._create_test_objects(
-        add_ipu_cross_replica_reductions=False)
+    config = self._create_test_objects()
+    self.strategy.update_ipu_config(config)
 
-    with strategy.scope():
+    # Modify to keep one instance of the strategy
+    self.strategy._extended._add_ipu_cross_replica_reductions = False  # pylint: disable=protected-access
+
+    with self.strategy.scope():
       v = variables.Variable(initial_value=1.0, dtype=np.float32)
 
       @def_function.function
@@ -139,12 +139,16 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
         return y_out
 
       # It is sufficient to test the TF graph construction.
-      strategy.run(per_replica_fn, args=[constant_op.constant(2.0)])
+      self.strategy.run(per_replica_fn, args=[constant_op.constant(2.0)])
+
+    # Set back to default value
+    self.strategy._extended._add_ipu_cross_replica_reductions = True  # pylint: disable=protected-access
 
   def test_strategy_with_sync_on_read_variable(self):
-    config, strategy = self._create_test_objects()
+    config = self._create_test_objects()
+    self.strategy.update_ipu_config(config)
 
-    with strategy.scope():
+    with self.strategy.scope():
       w = variables.Variable(initial_value=float(popdist.getInstanceIndex() +
                                                  1),
                              dtype=np.float32,
@@ -160,15 +164,16 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
 
       # Both should have initial value from first worker
       debugging.assert_equal([1.0], w)
-      strategy.run(
+      self.strategy.run(
           per_replica_fn,
           args=[constant_op.constant(popdist.getInstanceIndex() + 1.0)])
       debugging.assert_equal([2.5], w.read_value())
 
   def test_strategy_with_mirrored_variable(self):
-    config, strategy = self._create_test_objects()
+    config = self._create_test_objects()
+    self.strategy.update_ipu_config(config)
 
-    with strategy.scope():
+    with self.strategy.scope():
       w = variables.Variable(initial_value=float(popdist.getInstanceIndex() +
                                                  1),
                              dtype=np.float32,
@@ -180,19 +185,20 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
         self.assertIsInstance(w, IPUMirroredVariable)
         return w * w
 
-      per_replica_ret = strategy.run(per_replica_fn, args=[])
-      sum_ret = strategy.reduce(ReduceOp.SUM, per_replica_ret, axis=None)
+      per_replica_ret = self.strategy.run(per_replica_fn, args=[])
+      sum_ret = self.strategy.reduce(ReduceOp.SUM, per_replica_ret, axis=None)
       self.assertEqual([1.0], per_replica_ret)
       self.assertEqual(2.0, sum_ret)
 
   def test_distribute_dataset(self):
-    config, strategy = self._create_test_objects()
+    config = self._create_test_objects()
+    self.strategy.update_ipu_config(config)
 
     dataset = dataset_ops.Dataset.range(10, output_type=np.float32)
     dataset = dataset.shard(num_shards=popdist.getNumInstances(),
                             index=popdist.getInstanceIndex())
 
-    with strategy.scope():
+    with self.strategy.scope():
 
       @def_function.function
       def step_fn(iterator):
@@ -203,31 +209,33 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
       dist_iterator = ipu_infeed_queue.IPUIterator(dataset=dataset)
 
       def run_fn(iterator):
-        per_replica_y = strategy.run(step_fn, args=[iterator])
-        return strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
+        per_replica_y = self.strategy.run(step_fn, args=[iterator])
+        return self.strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
 
       self.assertEqual(1.0, run_fn(dist_iterator))
       self.assertEqual(13.0, run_fn(dist_iterator))
       self.assertEqual(41.0, run_fn(dist_iterator))
 
   def test_all_reduce(self):
-    config, strategy = self._create_test_objects()
+    config = self._create_test_objects()
+    self.strategy.update_ipu_config(config)
 
-    with strategy.scope():
+    with self.strategy.scope():
 
       @def_function.function
       def per_replica_fn(x):
         return x * x
 
-      per_replica_y = strategy.run(per_replica_fn,
-                                   args=[popdist.getInstanceIndex() + 1])
-      sum_y = strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
+      per_replica_y = self.strategy.run(per_replica_fn,
+                                        args=[popdist.getInstanceIndex() + 1])
+      sum_y = self.strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
       self.assertEqual(5, sum_y)  # 1*1 + 2*2
 
   def test_batch_normalization(self):
-    config, strategy = self._create_test_objects()
+    config = self._create_test_objects()
+    self.strategy.update_ipu_config(config)
 
-    with strategy.scope():
+    with self.strategy.scope():
       batch_norm = layers.BatchNormalization(momentum=0.0)
 
       @def_function.function
@@ -245,8 +253,8 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
 
       x = constant_op.constant([[2.0 * (popdist.getInstanceIndex() + 1)],
                                 [0.0]])
-      per_replica_y = strategy.run(per_replica_fn, args=(x,))
-      sum_y = strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
+      per_replica_y = self.strategy.run(per_replica_fn, args=(x,))
+      sum_y = self.strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
 
       # mean(mean(2, 0), mean(4, 0)) = mean(1, 3) = 1.5
       self.assertAllEqual([1.5], batch_norm.moving_mean)
@@ -254,7 +262,8 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
       self.assertAllEqual([2.5], batch_norm.moving_variance)
 
   def test_dataset_infeed(self):
-    config, strategy = self._create_test_objects()
+    config = self._create_test_objects()
+    self.strategy.update_ipu_config(config)
 
     dataset = dataset_ops.Dataset.from_tensor_slices([0.0]).repeat()
     # Test with a dataset host op.
@@ -262,18 +271,14 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
     infeed_queue = iter(dataset)
 
     @def_function.function
-    def body(x):
-      return 2 * x
-
-    @def_function.function
     def net(iterator):
       s = 0.0
       for _ in math_ops.range(10):
-        s += body(next(iterator))
+        s += 2 * next(iterator)
       return s
 
-    with strategy.scope():
-      res = strategy.run(net, args=(infeed_queue,))
+    with self.strategy.scope():
+      res = self.strategy.run(net, args=(infeed_queue,))
       self.assertEqual(popdist.getInstanceIndex() * 20, res)
 
 
