@@ -21,6 +21,7 @@ from tensorflow.python.distribute import cross_device_ops as cross_device_ops_li
 from tensorflow.python.distribute import device_util
 from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import distribute_utils
+from tensorflow.python.distribute import numpy_dataset
 from tensorflow.python.distribute import reduce_util
 from tensorflow.python.distribute import values
 from tensorflow.python.framework import device as device_lib
@@ -34,7 +35,6 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import server_lib
 from tensorflow.python.training.tracking import base as trackable
-from tensorflow.python.util import tf_contextlib
 from tensorflow.python.ipu.horovod import Sum, Average, \
     allreduce as hvd_allreduce, \
     broadcast as hvd_broadcast
@@ -106,25 +106,6 @@ class PopDistStrategy(distribute_lib.StrategyV1,
     return True
 
 
-def _is_inside_compilation():
-  graph = ops.get_default_graph()
-  attrs = graph._attr_scope_map  # pylint: disable=protected-access
-
-  is_in_xla_context = control_flow_util.GraphOrParentsInXlaContext(graph)
-  is_outside_compilation = scopes.OUTSIDE_COMPILATION_NAME in attrs
-
-  return is_in_xla_context and not is_outside_compilation
-
-
-@tf_contextlib.contextmanager
-def _outside_compilation_scope_if_needed(name):
-  if _is_inside_compilation():
-    with scopes.outside_compilation_scope(name):
-      yield
-  else:
-    yield
-
-
 def _ipu_device_for_host(ipu_device_string, host_device_string):
   ipu_device = device_lib.DeviceSpec.from_string(ipu_device_string)
   host_device = device_lib.DeviceSpec.from_string(host_device_string)
@@ -137,11 +118,6 @@ def _ipu_device_for_host(ipu_device_string, host_device_string):
                                        device_index=ipu_device.device_index)
 
   return ipu_for_host.to_string()
-
-
-def _make_identity_op(v):
-  name = v.name.replace(":", "_")
-  return array_ops.identity(v, name=name)
 
 
 class IPUDistributedVariable(values.DistributedVariable):  # pylint: disable=abstract-method
