@@ -55,9 +55,7 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
   // Get clusters inside of the call, where the call has to be a repeat loop or
   // a pipeline.
   StatusOr<std::vector<ElementwiseCluster>> GetClustersIn(
-      HloInstruction* const call,
-      const absl::flat_hash_set<const HloComputation*>& elementwise_comps)
-      const;
+      HloInstruction* const call) const;
 
   // Outline the provided cluster - returns the call instruction to the cluster.
   StatusOr<HloInstruction*> OutlineCluster(ElementwiseCluster& cluster) const;
@@ -103,9 +101,7 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
       const HloInstruction* ru, std::vector<ElementwiseCluster> clusters) const;
 
  private:
-  StatusOr<bool> RewriteCall(HloModule* module, HloInstruction* call,
-                             const absl::flat_hash_set<const HloComputation*>&
-                                 elementwise_comps) const;
+  StatusOr<bool> RewriteCall(HloModule* module, HloInstruction* call) const;
 
   StatusOr<HloInstruction*> AddClusterInputToOutlinedComputation(
       int64_t param_idx, const ElementwiseCluster& cluster,

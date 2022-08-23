@@ -119,58 +119,6 @@ class ReplicatedResourceUpdateElementwiseClusteringBasicTest
       public ::testing::WithParamInterface<bool> {};
 
 TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
-       TestElementwiseComputations) {
-  const string& hlo_string = R"(
-HloModule main
-
-_comp0 {
-  p0 = f32[10] parameter(0)
-  p1 = f32[10] parameter(1)
-  a0 = f32[10] add(p0, p1)
-  p2 = f32[10] parameter(2)
-  a1 = f32[10] add(a0, p2)
-  p3 = f32[10] parameter(3)
-  ROOT a2 = f32[10] add(a1, p3)
-}
-
-_comp1 {
-  arg_0.1 = f16[1024,3000] parameter(0)
-  arg_1.1 = f16[3000] parameter(1)
-  broadcast.18.clone = f16[1024,3000] broadcast(arg_1.1), dimensions={1}
-  ROOT add.19.clone = f16[1024,3000] add(arg_0.1, broadcast.18.clone)
-}
-
-_comp2 {
-  arg_0.2 = f32[128,3000] parameter(0)
-  arg_1.2 = f32[128,3000] parameter(1)
-  constant.103.clone = f32[] constant(0.001)
-  broadcast.138.clone = f32[128,3000] broadcast(constant.103.clone), dimensions={}
-  multiply.175.clone = f32[128,3000] multiply(arg_1.2, broadcast.138.clone)
-  ROOT subtract.176.clone = f32[128,3000] subtract(arg_0.2, multiply.175.clone)
-}
-
-ENTRY main {
-  ROOT t = () tuple()
-}
-)";
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo_string, config));
-  CompilerAnnotations annotations(module.get());
-  ReplicatedResourceUpdateElementwiseClustering pass(annotations, 1);
-  auto elementwise_comps =
-      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
-  TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
-  CHECK_EQ(elementwise_comps.size(), 2);
-  absl::flat_hash_set<std::string> elementwise_comp_names = {"_comp0",
-                                                             "_comp2"};
-  for (auto comp : elementwise_comps) {
-    EXPECT_TRUE(elementwise_comp_names.contains(comp->name()));
-  }
-}
-
-TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
        TestMultipleClustersSharedScalar) {
   const bool replica_partition = GetParam();
   const std::string hlo = R"(
@@ -291,11 +239,8 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
           ? new ReplicatedResourceUpdateElementwiseClustering(annotations, 2)
           : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
-  auto elementwise_comps =
-      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
-  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
-                          pass.GetClustersIn(loop, elementwise_comps));
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters, pass.GetClustersIn(loop));
   ASSERT_THAT(clusters.size(), 2);
 
   for (int64_t i = 0; i != 2; i++) {
@@ -403,11 +348,8 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
           ? new ReplicatedResourceUpdateElementwiseClustering(annotations, 2)
           : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
-  auto elementwise_comps =
-      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
-  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
-                          pass.GetClustersIn(loop, elementwise_comps));
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters, pass.GetClustersIn(loop));
   ASSERT_THAT(clusters.size(), 1);
 
   const int64_t shard_size = replica_partition ? 64 : 128;
@@ -603,11 +545,8 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
           ? new ReplicatedResourceUpdateElementwiseClustering(annotations, 2)
           : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
-  auto elementwise_comps =
-      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
-  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
-                          pass.GetClustersIn(loop, elementwise_comps));
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters, pass.GetClustersIn(loop));
   ASSERT_THAT(clusters.size(), 1);
 
   auto& cluster = *std::begin(clusters);
@@ -796,11 +735,8 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
           ? new ReplicatedResourceUpdateElementwiseClustering(annotations, 2)
           : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
-  auto elementwise_comps =
-      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
-  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
-                          pass.GetClustersIn(loop, elementwise_comps));
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters, pass.GetClustersIn(loop));
   ASSERT_THAT(clusters.size(), 1);
 
   const int64_t shard_size = replica_partition ? 64 : 128;
@@ -1064,11 +1000,8 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringShapeTest, DoTest) {
           ? new ReplicatedResourceUpdateElementwiseClustering(annotations, 2)
           : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
-  auto elementwise_comps =
-      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
-  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
-                          pass.GetClustersIn(loop, elementwise_comps));
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters, pass.GetClustersIn(loop));
   ASSERT_THAT(clusters.size(), 1);
   auto& cluster = *std::begin(clusters);
   EXPECT_THAT(cluster.GetClusterSize(), param.cluster_size);
@@ -1444,11 +1377,8 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
   ReplicatedResourceUpdateElementwiseClustering pass(
       annotations, partition_replication_factor, global_replication_factor,
       global_replication_factor);
-  auto elementwise_comps =
-      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
-  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
-                          pass.GetClustersIn(loop, elementwise_comps));
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters, pass.GetClustersIn(loop));
   ASSERT_THAT(clusters.size(), 1);
 
   const int64_t shard_size = 128 / partition_replication_factor;
@@ -1581,11 +1511,8 @@ TEST_F(TestPartitionReplicationFactor, TestUnsupportedPartitioning) {
   ReplicatedResourceUpdateElementwiseClustering pass(
       annotations, partition_replication_factor, global_replication_factor,
       ipu_link_domain_replication_factor);
-  auto elementwise_comps =
-      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
-  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
-                          pass.GetClustersIn(loop, elementwise_comps));
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters, pass.GetClustersIn(loop));
   ASSERT_THAT(clusters.size(), 1);
   auto& cluster = clusters.front();
   const auto status = pass.OutlineCluster(cluster).status();
@@ -1670,11 +1597,8 @@ TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
   ReplicatedResourceUpdateElementwiseClustering pass(
       annotations, partition_replication_factor, global_replication_factor,
       global_replication_factor);
-  auto elementwise_comps =
-      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
-  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
-                          pass.GetClustersIn(loop, elementwise_comps));
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters, pass.GetClustersIn(loop));
   // No clusters because the all-reduce is not global.
   ASSERT_THAT(clusters.size(), 0);
 }
@@ -1711,6 +1635,125 @@ TEST_F(TestPartitionReplicationFactor, IgnoreImplicit2ScalarBroadcast) {
 
   // Fusion should not be in the cluster, but it could be one of the inputs.
   EXPECT_EQ(resource_update, fusion->parent());
+}
+
+TEST_F(TestPartitionReplicationFactor, TestScalarIntermediates) {
+  const std::string hlo = R"(
+  HloModule main
+
+  sum {
+    y = f16[] parameter(1)
+    x = f16[] parameter(0), control-predecessors={y}
+    ROOT add = f16[] add(x, y), backend_config="{\"isInplace\":true}"
+  }
+
+  sum.1 {
+    y = f32[] parameter(1)
+    x = f32[] parameter(0)
+    ROOT add = f32[] add(x, y)
+  }
+
+  _pop_op_reduction_square_add  {
+    arg0.1 = f16[128] parameter(0)
+    multiply = f16[128] multiply(arg0.1, arg0.1)
+    arg1.1 = f32[] parameter(1)
+    ROOT reduce.1 = f32[] reduce(multiply, f32[] arg1.1), dimensions={0}, to_apply=sum.1
+  }
+
+  resource_update {
+    arg0 = f16[128] parameter(0)
+    arg1 = f16[128] parameter(1)
+    arg2 = f16[128] parameter(2)
+    constant0 = f32[] constant(0)
+    constant1 = f32[] constant(0.25)
+    constant2 = f32[] constant(0.75)
+
+    arg0_r = f16[128] all-reduce(arg0), to_apply=sum
+    arg2_new = f16[128] add(arg0_r, arg2)
+    arg1_new = f16[128] add(arg1, arg2_new)
+
+    tuple = (f32[], f32[]) tuple(constant1, constant2)
+    get-tuple-element0 = f32[] get-tuple-element(tuple), index=0
+    get-tuple-element1 = f32[] get-tuple-element(tuple), index=1
+    maximum = f32[] maximum(get-tuple-element0, get-tuple-element1)
+
+    reduce = f32[] fusion(arg1_new, constant0), kind=kCustom, calls=_pop_op_reduction_square_add
+    sqrt = f32[] sqrt(reduce)
+    add.2 = f32[] add(sqrt, maximum)
+    scaled-inplace-xb-y = f16[128] custom-call(arg2_new, arg1_new, add.2), custom_call_target="ScaledInplaceXbY", backend_config="{\"operation\":\"subtract\"}"
+
+    ROOT t = (f16[128],f16[128]) tuple(scaled-inplace-xb-y, arg2_new)
+  }
+
+  loop {
+    after-all = token[] after-all()
+    infeed = (f16[128], token[]) infeed(after-all), infeed_config="140121807314576"
+    input = f16[128] get-tuple-element(infeed), index=0
+
+    arg0 = f16[128] parameter(0)
+    arg1 = f16[128] parameter(1)
+
+    add.1 = f16[128] add(input, arg0)
+    call = (f16[128],f16[128]) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
+    gte0 = f16[128] get-tuple-element(call), index=0
+    gte1 = f16[128] get-tuple-element(call), index=1
+    ROOT r = (f16[128],f16[128]) tuple(gte0, gte1)
+  }
+
+  ENTRY e {
+    e.in0 = f16[128] parameter(0)
+    e.in1 = f16[128] parameter(1)
+    loop_call = (f16[128],f16[128]) call(e.in0, e.in1), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+    gte0 = f16[128] get-tuple-element(loop_call), index=0
+    gte1 = f16[128] get-tuple-element(loop_call), index=1
+    ROOT r = (f16[128],f16[128]) tuple(gte0, gte1)
+  }
+  )";
+
+  auto config = GetModuleConfigForTest();
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1});
+  config.set_resource_input_initialized({true, true});
+  config.set_resource_update_to_input_index({0, 1});
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+  TF_ASSERT_OK_AND_ASSIGN(bool custom_op_replaced,
+                          CustomOpReplacer().Run(module.get()));
+
+  HloInstruction* loop =
+      CHECK_NOTNULL(FindInstruction(module.get(), "loop_call"));
+  HloInstruction* arg0 = CHECK_NOTNULL(FindInstruction(module.get(), "arg0"));
+
+  const uint64 partition_replication_factor = 2;
+  const uint64 global_replication_factor = 8;
+
+  CompilerAnnotations annotations(module.get());
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool offloaded,
+      VariablesOffloadAndPartition(
+          annotations, /*remote_memory_supported=*/true,
+          /*minimum_remote_tensor_size=*/4, partition_replication_factor)
+          .Run(module.get()));
+  EXPECT_TRUE(offloaded);
+
+  ReplicatedResourceUpdateElementwiseClustering pass(
+      annotations, partition_replication_factor, global_replication_factor,
+      global_replication_factor);
+  TF_ASSERT_OK(pass.RunDataflowAnalysis(module.get()));
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters, pass.GetClustersIn(loop));
+
+  // Check that the cluster is valid.
+  ASSERT_THAT(clusters.size(), 1);
+
+  // Check that the differently shaped intermediates are included in the
+  // cluster.
+  HloInstruction* reduce =
+      CHECK_NOTNULL(FindInstruction(module.get(), "reduce"));
+  HloInstruction* sqrt = CHECK_NOTNULL(FindInstruction(module.get(), "sqrt"));
+  HloInstruction* add = CHECK_NOTNULL(FindInstruction(module.get(), "add.2"));
+  EXPECT_TRUE(clusters[0].Contains(reduce));
+  EXPECT_TRUE(clusters[0].Contains(sqrt));
+  EXPECT_TRUE(clusters[0].Contains(add));
 }
 
 }  // namespace

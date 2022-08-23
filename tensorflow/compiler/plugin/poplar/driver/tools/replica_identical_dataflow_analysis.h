@@ -146,6 +146,9 @@ class ReplicaIdenticalDataflowAnalysis {
   // Run the analysis. Requires that `module` be flattened.
   Status Run(const HloModule* module);
 
+  // Run the analysis on a single computation.
+  Status AnalyseComputation(const HloComputation* comp);
+
   // Check whether or not the given comp, and as a result its
   // instructions, have been analysed.
   bool Analysed(const HloComputation* comp) const;

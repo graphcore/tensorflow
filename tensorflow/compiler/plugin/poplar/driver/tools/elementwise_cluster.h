@@ -22,6 +22,7 @@ limitations under the License.
 
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/replica_identical_dataflow_analysis.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/statusor.h"
 
@@ -47,23 +48,19 @@ struct ElementwiseClusterValidator {
   virtual bool IsValidInput(const HloInstruction* inst) const = 0;
 };
 
-using ElementwiseComputationSet = absl::flat_hash_set<const HloComputation*>;
-
 enum struct ElementwiseClusterClass { Invalid, Partitioned, NonPartitioned };
 
 class ElementwiseCluster {
  public:
   explicit ElementwiseCluster(HloInstruction* top) noexcept;
-  bool In(HloInstruction* inst) const;
-  bool AnyUserIn(HloInstruction* inst) const;
-  bool AllUsersIn(HloInstruction* inst) const;
+  bool Contains(HloInstruction* inst) const;
+  bool ContainsAnyUsersOf(HloInstruction* inst) const;
+  bool ContainsAllUsersOf(HloInstruction* inst) const;
   void Add(HloInstruction* inst);
-  bool MaybeAdd(HloInstruction* inst,
-                const ElementwiseComputationSet& elementwise_comps,
-                const HloReachabilityMap& reachability_map);
   ElementwiseClusterClass Classify(
       const ElementwiseClusterValidator& validator) const;
-  bool CanMerge(const ElementwiseCluster& other) const;
+  bool CanMerge(const ElementwiseCluster& other,
+                const HloReachabilityMap& reachability_map) const;
   void Merge(const ElementwiseCluster& other);
   const HloInstruction* GetTop() const;
   HloComputation* GetComputation() const;
@@ -97,25 +94,17 @@ class ElementwiseCluster {
   bool IsReplicaPartitioned() const;
   // Returns original shape of the top-level instruction.
   Shape GetClusterShape(PrimitiveType type) const;
-
-  static bool IsElementwise(const HloInstruction* inst,
-                            const ElementwiseComputationSet& elementwise_comps);
-  static bool CanCluster(const HloInstruction* inst,
-                         const ElementwiseComputationSet& elementwise_comps);
+  static StatusOr<bool> IsClusterable(
+      const HloInstruction* inst, ReplicaIdenticalDataflowAnalysis& analysis,
+      bool in_fusion = false);
 
   static StatusOr<std::vector<ElementwiseCluster>> GetClustersIn(
       HloInstruction* const resource_update,
-      ElementwiseComputationSet elementwise_comps,
       ElementwiseClusterValidator& validator);
-
-  // Returns all computations in the module which are elementwise and can be
-  // clustered.
-  static absl::flat_hash_set<const HloComputation*>
-  GetElementwiseClusterableComputations(const HloModule* module);
 
  private:
   // Finds if there's any cycles between input/outputs.
-  bool HasCycles(const HloReachabilityMap& reachability_map);
+  bool HasCycles(const HloReachabilityMap& reachability_map) const;
 
   HloInstruction* top_;
   Shape cluster_shape_;

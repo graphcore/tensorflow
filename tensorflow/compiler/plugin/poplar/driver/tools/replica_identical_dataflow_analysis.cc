@@ -661,13 +661,8 @@ Status ReplicaIdenticalDataflowAnalysis::Run(const HloModule* module) {
 
     // Make sure all relevant subcomputations are visited.
     for (auto* comp : module->computations()) {
-      const bool is_visitable =
-          !Analysed(comp) && IsVisitable(*call_graph, comp);
-      if (is_visitable) {
-        VLOG(3) << "Running replica dataflow analysis on '" << comp->name()
-                << "' computation.";
-
-        TF_RETURN_IF_ERROR(comp->Accept(&value_category_visitor_));
+      if (IsVisitable(*call_graph, comp)) {
+        TF_RETURN_IF_ERROR(AnalyseComputation(comp));
       }
     }
 
@@ -676,6 +671,16 @@ Status ReplicaIdenticalDataflowAnalysis::Run(const HloModule* module) {
 
   return FailedPrecondition(
       "Expected the call graph of the module to be flat.");
+}
+
+Status ReplicaIdenticalDataflowAnalysis::AnalyseComputation(
+    const HloComputation* comp) {
+  if (Analysed(comp)) {
+    return Status::OK();
+  }
+  VLOG(3) << "Running replica dataflow analysis on '" << comp->name()
+          << "' computation.";
+  return comp->Accept(&value_category_visitor_);
 }
 
 bool ReplicaIdenticalDataflowAnalysis::Analysed(

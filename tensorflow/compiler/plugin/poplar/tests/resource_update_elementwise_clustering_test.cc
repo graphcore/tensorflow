@@ -220,10 +220,7 @@ TEST_P(ResourceUpdateElementwiseClusteringShapeTest, DoTest) {
   EXPECT_TRUE(offloaded);
 
   ResourceUpdateElementwiseClustering pass;
-  auto elementwise_comps =
-      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
-  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
-                          pass.GetClustersIn(loop, elementwise_comps));
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters, pass.GetClustersIn(loop));
   ASSERT_THAT(clusters.size(), 1);
   auto& cluster = *std::begin(clusters);
   EXPECT_THAT(cluster.GetClusterSize(), param.cluster_size);

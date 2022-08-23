@@ -219,7 +219,7 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
   // Lower the all reduce into the cluster if all its users will be in the
   // cluster too.
   const bool lower_all_reduce = IsGlobalAllReduce(cluster_input) &&
-                                cluster.AllUsersIn(cluster_input) &&
+                                cluster.ContainsAllUsersOf(cluster_input) &&
                                 status_or_collective_op.ok();
 
   if (lower_all_reduce) {

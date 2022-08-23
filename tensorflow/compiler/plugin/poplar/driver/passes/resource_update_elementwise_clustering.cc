@@ -110,8 +110,7 @@ ResourceUpdateElementwiseClustering::CreateValidator(
 
 StatusOr<std::vector<ElementwiseCluster>>
 ResourceUpdateElementwiseClustering::GetClustersIn(
-    HloInstruction* const call,
-    const absl::flat_hash_set<const HloComputation*>& elementwise_comps) const {
+    HloInstruction* const call) const {
   CHECK(IsRepeatLoop(call) || IsPipelineOp(call));
   HloComputation* call_comp = call->to_apply();
   // Make sure that the root of the call op is a tuple instruction.
@@ -149,9 +148,9 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
   }
 
   auto validator = CreateValidator(resource_update_comp);
-  TF_ASSIGN_OR_RETURN(std::vector<ElementwiseCluster> clusters,
-                      ElementwiseCluster::GetClustersIn(
-                          resource_update, elementwise_comps, *validator));
+  TF_ASSIGN_OR_RETURN(
+      std::vector<ElementwiseCluster> clusters,
+      ElementwiseCluster::GetClustersIn(resource_update, *validator));
   // Try to print some helpful warnings if things don't look right.
   TF_RETURN_IF_ERROR(
       ValidateResourceUpdateAndClusters(resource_update, clusters));
@@ -239,7 +238,7 @@ StatusOr<HloInstruction*> ResourceUpdateElementwiseClustering::AddClusterInput(
   // Lower the all reduce into the cluster if all its users will be in the
   // cluster too.
   const bool lower_all_reduce =
-      IsAllReduce(cluster_input) && cluster.AllUsersIn(cluster_input);
+      IsAllReduce(cluster_input) && cluster.ContainsAllUsersOf(cluster_input);
 
   if (lower_all_reduce) {
     HloInstruction* input = cluster_input->mutable_operand(0);
@@ -398,10 +397,9 @@ Status ResourceUpdateElementwiseClustering::UpdateClusterBackendConfig(
 }
 
 StatusOr<bool> ResourceUpdateElementwiseClustering::RewriteCall(
-    HloModule* module, HloInstruction* call,
-    const absl::flat_hash_set<const HloComputation*>& elementwise_comps) const {
+    HloModule* module, HloInstruction* call) const {
   TF_ASSIGN_OR_RETURN(std::vector<ElementwiseCluster> clusters,
-                      GetClustersIn(call, elementwise_comps));
+                      GetClustersIn(call));
 
   if (clusters.empty()) {
     VLOG(3) << "No clusters found.";
@@ -466,13 +464,9 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
 
   TF_RETURN_IF_ERROR(RunDataflowAnalysis(module));
 
-  const absl::flat_hash_set<const HloComputation*> elementwise_comps =
-      ElementwiseCluster::GetElementwiseClusterableComputations(module);
-
   bool module_changed = false;
   for (auto call : to_optimize) {
-    TF_ASSIGN_OR_RETURN(auto changed,
-                        RewriteCall(module, call, elementwise_comps));
+    TF_ASSIGN_OR_RETURN(auto changed, RewriteCall(module, call));
     if (changed) {
       module_changed = true;
     }

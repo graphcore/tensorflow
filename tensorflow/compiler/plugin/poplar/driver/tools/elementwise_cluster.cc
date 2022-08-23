@@ -29,6 +29,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/replica_identical_dataflow_analysis.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/call_inliner.h"
@@ -124,18 +125,18 @@ Shape ElementwiseCluster::GetClusterShape(PrimitiveType type) const {
   return ShapeUtil::MakeShape(type, GetClusterDimensions());
 }
 
-bool ElementwiseCluster::In(HloInstruction* inst) const {
+bool ElementwiseCluster::Contains(HloInstruction* inst) const {
   return ContainsKey(insts_, inst);
 }
 
-bool ElementwiseCluster::AnyUserIn(HloInstruction* inst) const {
-  return absl::c_any_of(inst->users(),
-                        [this](HloInstruction* user) { return In(user); });
+bool ElementwiseCluster::ContainsAnyUsersOf(HloInstruction* inst) const {
+  return absl::c_any_of(
+      inst->users(), [this](HloInstruction* user) { return Contains(user); });
 }
 
-bool ElementwiseCluster::AllUsersIn(HloInstruction* inst) const {
-  return absl::c_all_of(inst->users(),
-                        [this](HloInstruction* user) { return In(user); });
+bool ElementwiseCluster::ContainsAllUsersOf(HloInstruction* inst) const {
+  return absl::c_all_of(
+      inst->users(), [this](HloInstruction* user) { return Contains(user); });
 }
 
 void ElementwiseCluster::Add(HloInstruction* inst) {
@@ -144,69 +145,47 @@ void ElementwiseCluster::Add(HloInstruction* inst) {
   inputs_.erase(inst);
   insts_.insert(inst);
   for (auto op : inst->operands()) {
-    if (!ContainsKey(insts_, op)) {
+    if (!Contains(op)) {
       inputs_.insert(op);
     }
   }
 }
 
-bool ElementwiseCluster::MaybeAdd(
-    HloInstruction* inst, const ElementwiseComputationSet& elementwise_comps,
-    const HloReachabilityMap& reachability_map) {
-  if (!CanCluster(inst, elementwise_comps)) {
-    if (!IsScalar(inst)) {
-      return false;
-    }
-
-    if (!AnyUserIn(inst)) {
-      return false;
-    }
-
-    for (HloInstruction* allowed_scalar : allowed_scalars_) {
-      if (reachability_map.IsReachable(allowed_scalar, inst)) {
-        VLOG(2) << "Allowing scalar " << inst->ToString()
-                << " because it's reachable from allowed instructions.";
-        Add(inst);
-        return true;
-      }
-    }
-
-    auto inputs = GetNonScalarInputs(inst);
-    if (inputs.empty()) {
-      return false;
-    }
-    if (absl::c_all_of(inputs, [this](const HloInstruction* input) {
-          return ShapeUtil::CompatibleIgnoringElementType(input->shape(),
-                                                          GetTop()->shape());
-        })) {
-      VLOG(2) << "Found scalar instruction that depends on clusterable inputs: "
-              << inst->ToString();
-      Add(inst);
-      allowed_scalars_.insert(inputs.begin(), inputs.end());
-      return true;
-    }
-    return false;
-  }
-
-  if (!AnyUserIn(inst)) {
-    return false;
-  }
-  Add(inst);
-  return true;
-}
-
-bool ElementwiseCluster::CanMerge(const ElementwiseCluster& other) const {
-  // Allow to merge clusters if we use any of other cluster instruction
-  for (auto inst : insts_) {
-    if (IsScalar(inst)) {
-      continue;
-    }
+bool ElementwiseCluster::CanMerge(
+    const ElementwiseCluster& other,
+    const HloReachabilityMap& reachability_map) const {
+  bool uses_other = false;
+  for (auto inst : other.insts_) {
     for (auto user : inst->users()) {
-      if (other.In(user)) {
+      if (Contains(user)) {
+        uses_other = true;
         VLOG(3) << "Cluster with top in " << GetTop()->name()
                 << " could be merged with cluster " << other.GetTop()->name()
                 << " via instruction " << inst->ToString() << ", user "
                 << user->ToString();
+        break;
+      }
+    }
+  }
+  if (!uses_other) {
+    // If this cluster is not a user of other then other cannot be merged into
+    // this cluster (clusters are contiguous and are built up in post-order).
+    return false;
+  }
+
+  if (ShapeUtil::CompatibleIgnoringElementType(GetTop()->shape(),
+                                               other.GetTop()->shape())) {
+    // If the shapes of the clusters match, we can merge them.
+
+    return true;
+  }
+
+  // If shapes are not compatible, only merge if the two clusters are cyclic.
+  // This is the case if an input of other is reachable from this cluster
+  // (we have already confirmed that this cluster is a user of other).
+  for (auto inst : insts_) {
+    for (auto input : other.inputs_) {
+      if (reachability_map.IsReachable(inst, input)) {
         return true;
       }
     }
@@ -225,33 +204,17 @@ HloComputation* ElementwiseCluster::GetComputation() const {
   return top_->parent();
 }
 
-bool ElementwiseCluster::IsElementwise(
-    const HloInstruction* inst,
-    const ElementwiseComputationSet& elementwise_comps) {
-  switch (inst->opcode()) {
-    case HloOpcode::kBroadcast:
-      return IsScalar(inst->operand(0));
-    case HloOpcode::kFusion:
-      return elementwise_comps.contains(inst->fused_instructions_computation());
-    default:
-      return IsPopOpsElementwise(inst);
-  }
-}
-
-bool ElementwiseCluster::CanCluster(
-    const HloInstruction* inst,
-    const ElementwiseComputationSet& elementwise_comps) {
-  if (inst->HasSideEffect()) {
+StatusOr<bool> ElementwiseCluster::IsClusterable(
+    const HloInstruction* inst, ReplicaIdenticalDataflowAnalysis& analysis,
+    bool in_fusion) {
+  if (!in_fusion && inst->operand_count() == 0) {
+    // Only allow ops with 0 inputs (e.g. parameters) if we are in a fusion
+    // computation. Otherwise, these ops should be inputs to the cluster.
     return false;
   }
-
-  if (IsScalar(inst)) {
-    return false;
-  }
-
-  // This is explicit because constants are reported as elementwise.
-  // Constant scalars are allowed as inputs though.
-  if (inst->IsConstant()) {
+  TF_ASSIGN_OR_RETURN(bool is_replica_identical,
+                      analysis.IsValueIdenticalAcrossReplicas(inst));
+  if (!is_replica_identical) {
     return false;
   }
 
@@ -260,40 +223,50 @@ bool ElementwiseCluster::CanCluster(
   }
 
   switch (inst->opcode()) {
-    case HloOpcode::kFusion:
-      return IsPopOpsFusion(inst, "") && !IsWideConstant(inst) &&
-             elementwise_comps.contains(inst->fused_instructions_computation());
+    case HloOpcode::kFusion: {
+      if (IsReductionFusion(inst)) {
+        return true;
+      }
+      if (IsWideConstant(inst)) {
+        return false;
+      }
+      if (IsPopOpsFusion(inst, "")) {
+        // Default behavior for fusions.
+        HloComputation* fused_comp = inst->fused_instructions_computation();
+        analysis.AnalyseComputation(fused_comp);
+        if (!analysis.Analysed(fused_comp)) {
+          // If replica identical dataflow analysis failed for this computation
+          // we cannot be sure it is replica identical.
+          return false;
+        }
+        for (HloInstruction* fused_inst : fused_comp->instructions()) {
+          if (fused_inst->opcode() == HloOpcode::kParameter) {
+            continue;
+          }
+          TF_ASSIGN_OR_RETURN(bool is_clusterable,
+                              IsClusterable(fused_inst, analysis,
+                                            /*in_fusion=*/true));
+          if (!is_clusterable) {
+            return false;
+          }
+        }
+        return true;
+      }
+      return false;
+    }
+    case HloOpcode::kBroadcast:
+      // Broadcasts are only clusterable within fused computations, and only
+      // when the input is a scalar.
+      return in_fusion && IsScalar(inst->operand(0));
+    case HloOpcode::kReduce:
+      return true;
     default:
       return IsPopOpsElementwise(inst);
   }
 }
 
-absl::flat_hash_set<const HloComputation*>
-ElementwiseCluster::GetElementwiseClusterableComputations(
-    const HloModule* module) {
-  // This is primarily for the fusions, but could be useful for other
-  // computations as well. Go through all computations and populate the
-  // elementwise set. Elementwise computation defined as a set of instructions
-  // which are either
-  // - elementwise instruction
-  // - fusion uses elementwise computation from this set.
-  absl::flat_hash_set<const HloComputation*> elementwise_comps;
-  for (auto comp : module->computations()) {
-    if (absl::c_all_of(comp->instructions(), [&elementwise_comps](
-                                                 const HloInstruction* inst) {
-          return inst->opcode() == HloOpcode::kParameter ||
-                 ElementwiseCluster::IsElementwise(inst, elementwise_comps);
-        })) {
-      VLOG(2) << "Found elementwise computation " << comp->name();
-      elementwise_comps.insert(comp);
-    }
-  }
-  return elementwise_comps;
-}
-
 StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
     HloInstruction* const resource_update,
-    ElementwiseComputationSet elementwise_comps,
     ElementwiseClusterValidator& validator) {
   HloComputation* resource_update_comp = resource_update->to_apply();
   auto offload_variables =
@@ -302,6 +275,13 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
   auto reachability_map = HloReachabilityMap::Build(resource_update_comp);
 
   std::vector<ElementwiseCluster> clusters;
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_RETURN_IF_ERROR(analysis.AnalyseComputation(resource_update_comp));
+  if (!analysis.Analysed(resource_update_comp)) {
+    // No clusters can be found if replica identical dataflow analysis failed.
+    return clusters;
+  }
 
   // Going back post-order growing a tree of elementwise instruction.
   // For each new elementwise instruction, check if any of its users are already
@@ -334,14 +314,22 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
   auto comp_insts = resource_update_comp->MakeInstructionPostOrder();
   absl::c_reverse(comp_insts);
   for (auto inst : comp_insts) {
+    TF_ASSIGN_OR_RETURN(bool is_clusterable, IsClusterable(inst, analysis));
+    if (!is_clusterable) {
+      continue;
+    }
+
     bool added = false;
     for (auto& cluster : clusters) {
-      if (cluster.MaybeAdd(inst, elementwise_comps, *reachability_map)) {
+      if (ShapeUtil::CompatibleIgnoringElementType(cluster.GetTop()->shape(),
+                                                   inst->shape()) &&
+          cluster.ContainsAnyUsersOf(inst)) {
+        cluster.Add(inst);
         added = true;
         break;
       }
     }
-    if (!added && CanCluster(inst, elementwise_comps)) {
+    if (!added) {
       VLOG(2) << "Creating cluster with top " << inst->ToString();
       clusters.emplace_back(inst);
     }
@@ -359,7 +347,7 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
       for (auto j = std::next(i); j != clusters.end(); ++j) {
         ElementwiseCluster& b = *j;
 
-        if (a.CanMerge(b)) {
+        if (a.CanMerge(b, *reachability_map)) {
           VLOG(2) << "Cluster " << b.GetTop()->name()
                   << " could be merged in cluster " << a.GetTop()->name();
           a.Merge(b);
@@ -367,7 +355,7 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
           clusters_merged = true;
           num_merged++;
           break;
-        } else if (b.CanMerge(a)) {
+        } else if (b.CanMerge(a, *reachability_map)) {
           VLOG(2) << "Cluster " << a.GetTop()->name()
                   << " could be merged in cluster " << b.GetTop()->name();
           b.Merge(a);
@@ -458,15 +446,15 @@ ElementwiseClusterClass ElementwiseCluster::Classify(
   }
 }
 
-bool ElementwiseCluster::HasCycles(const HloReachabilityMap& reachability_map) {
+bool ElementwiseCluster::HasCycles(
+    const HloReachabilityMap& reachability_map) const {
   for (HloInstruction* input : inputs_vec_) {
     for (HloInstruction* output : outputs_) {
       for (auto& user : outputs_to_users_.at(output)) {
-        auto reachable = reachability_map.IsReachable(user.instruction, input);
-        if (reachable) {
-          VLOG(3) << "Found graph cycle, output user: "
-                  << user.instruction->name() << " is reachable from "
-                  << input->name();
+        if (reachability_map.IsReachable(user.instruction, input)) {
+          VLOG(3) << "Found graph cycle: input " << input->name()
+                  << " is reachable from output user "
+                  << user.instruction->name();
           return true;
         }
       }
@@ -507,7 +495,7 @@ bool ElementwiseCluster::Finalize(const HloReachabilityMap& reachability_map,
                                    this](HloInstruction* inst) {
     // Find any users in the cluster ready for processing.
     for (auto user : inst->users()) {
-      if (!ContainsKey(insts_, user)) {
+      if (!Contains(user)) {
         continue;
       }
       // Instruction is ready to process when all operands have been
@@ -522,7 +510,7 @@ bool ElementwiseCluster::Finalize(const HloReachabilityMap& reachability_map,
 
   auto add_outputs = [this](HloInstruction* inst) {
     for (auto user : inst->users()) {
-      if (!ContainsKey(insts_, user)) {
+      if (!Contains(user)) {
         auto indices = user->OperandIndices(inst);
         outputs_to_users_[inst].push_back(
             UserPositions{user, {indices.begin(), indices.end()}});

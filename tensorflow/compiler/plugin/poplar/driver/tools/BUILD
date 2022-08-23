@@ -1015,6 +1015,7 @@ poplar_cc_library(
         ":matcher_predicates",
         ":offloading_util",
         ":pipeline_util",
+        ":replica_identical_dataflow_analysis",
         ":util",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:all_gather",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:reduce_scatter",
