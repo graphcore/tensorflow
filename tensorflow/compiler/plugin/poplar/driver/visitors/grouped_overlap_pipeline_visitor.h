@@ -50,13 +50,12 @@ class GroupedOverlapPipelineVisitor : public ParallelPipelineVisitor {
 
  protected:
   RepeatBlock GetPipelineRampUpSequence(
-      DriverGraph& graph,
       const poplar::DebugNameAndId& debug_name_and_id) const override;
   DriverProgramSequence GetPipelineRampDownSequence(
-      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+      const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& additional_iterations = 0) const override;
   DriverProgramSequence GetPipelineRepeatBlockSequence(
-      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+      const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& iterations) const override;
 };
 

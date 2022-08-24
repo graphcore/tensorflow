@@ -88,7 +88,7 @@ class RemoteParameterStoreOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "RemoteParameterStoreOp");
     VLOG(1) << "Processing " << GetDebugName(inst);
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     const auto* store_inst = Cast<HloRemoteParameterStore>(inst);
     const int64_t num_outputs = store_inst->RemoteBuffers().size();
@@ -165,7 +165,7 @@ class BufferStoreSliceOp : public PoplarOpDef {
     const auto shapes = FlattenedXlaShape(output_shape);
     CHECK_EQ(shapes.size(), num_outputs);
 
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     TF_ASSIGN_OR_RETURN(
         TensorOrRemoteBufferVectors outputs,
         FindInplaceOutputs(tensor_map, res, inst, seq, debug_info));

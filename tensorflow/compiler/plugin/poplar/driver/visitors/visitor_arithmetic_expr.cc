@@ -185,7 +185,7 @@ Status ArithmeticExprVisitor::HandleParameter(HloInstruction* inst) {
 Status ArithmeticExprVisitor::FinishScopedVisit(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   auto& graph = GetGraph(resources_, caller_);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   // get the expression
   TF_ASSIGN_OR_RETURN(auto expr, FindExpressionInput(inst));

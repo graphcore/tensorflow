@@ -42,7 +42,7 @@ class NonLinearityOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "NonLinearityOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     poplar::Tensor t;
     const bool is_inplace =
         AreInplaceOutputTensorsWritable(tensor_map, res, inst);
@@ -84,7 +84,7 @@ class NonLinearityGradOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "NonLinearityGradOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     TF_ASSIGN_OR_RETURN(poplar::Tensor out,
                         FindInstructionInput(tensor_map, res, inst, 0, seq,
@@ -97,7 +97,7 @@ class NonLinearityGradOp : public PoplarOpDef {
     poplar::Tensor t = popnn::nonLinearityInputGradient(
         graph, NLType, out, outgrad, seq, {debug_info});
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(t, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(t)));
 
     return seq;
   }

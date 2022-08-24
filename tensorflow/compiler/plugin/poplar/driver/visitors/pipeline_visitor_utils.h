@@ -746,8 +746,7 @@ MaskOutPastAdditional<DriverProgramSequence>(
     auto start = std::next(input[i].begin(), offsets[i]);
     std::transform(
         start, input[i].end(), start, [&](const DriverProgramSequence& seq) {
-          DriverProgramSequence result(additional_iterations.graph,
-                                       debug_context);
+          DriverProgramSequence result(debug_context);
           auto predicate =
               popops::map(additional_iterations.graph,
                           popops::expr::Const(i) < popops::expr::_1,
@@ -1041,13 +1040,12 @@ struct DefaultScheduler {
 
   template <typename ElementType>
   DriverProgramSequence CreateRepeatBlock(
-      DriverGraph& graph,
       std::vector<std::vector<ElementType>>& infeed_sequences,
       const poplar::DebugNameAndId& debug_name_and_id,
       std::size_t offset_size) const {
     // Flatten the schedule to a linear sequence.
     auto repeat_block_sequences = FlattenSchedule(infeed_sequences);
-    DriverProgramSequence repeat_block(graph, debug_name_and_id);
+    DriverProgramSequence repeat_block(debug_name_and_id);
     for (const auto& seq : repeat_block_sequences) {
       repeat_block.add(seq);
     }
@@ -1072,18 +1070,17 @@ struct GroupedScheduler : public DefaultScheduler {
 
   template <typename ElementType>
   DriverProgramSequence CreateRepeatBlock(
-      DriverGraph& graph,
       std::vector<std::vector<ElementType>>& infeed_sequences,
       const poplar::DebugNameAndId& debug_name_and_id,
       std::size_t offset_size) const {
     for (auto& seq : infeed_sequences) {
-      seq.resize(1, {graph});
+      seq.resize(1, {});
     }
     auto repeat_block = DefaultScheduler().CreateRepeatBlock(
-        graph, infeed_sequences, debug_name_and_id, offset_size);
+        infeed_sequences, debug_name_and_id, offset_size);
     return DriverProgramSequence(
         {DriverProgramRepeat(offset_size, repeat_block, {debug_name_and_id})},
-        graph, {debug_name_and_id});
+        {debug_name_and_id});
   }
 };
 
@@ -1150,21 +1147,20 @@ struct PipelineSchedulerUtil {
 
   template <typename ElementType>
   DriverProgramSequence CreateRepeatBlock(
-      DriverGraph& graph,
       std::vector<std::vector<ElementType>>& infeed_sequences,
       const poplar::DebugNameAndId& debug_name_and_id,
       std::size_t offset_size) const {
     auto vis = make_visitor<DriverProgramSequence>(
         [&](const DefaultScheduler& scheduler) {
-          return scheduler.CreateRepeatBlock(graph, infeed_sequences,
+          return scheduler.CreateRepeatBlock(infeed_sequences,
                                              debug_name_and_id, offset_size);
         },
         [&](const GroupedScheduler& scheduler) {
-          return scheduler.CreateRepeatBlock(graph, infeed_sequences,
+          return scheduler.CreateRepeatBlock(infeed_sequences,
                                              debug_name_and_id, offset_size);
         },
         [&](const InterleavedScheduler& scheduler) {
-          return scheduler.CreateRepeatBlock(graph, infeed_sequences,
+          return scheduler.CreateRepeatBlock(infeed_sequences,
                                              debug_name_and_id, offset_size);
         });
     return absl::visit(vis, type);
@@ -1172,7 +1168,6 @@ struct PipelineSchedulerUtil {
 };
 
 inline DriverProgramSequence ForProgram(
-    DriverGraph& graph,
     const absl::variant<int64_t, PipelineVisitor::CountAndGraph>& count,
     const DriverProgramSequence& body,
     const poplar::DebugContext& debug_context) {
@@ -1189,7 +1184,7 @@ inline DriverProgramSequence ForProgram(
                       }),
                   count);
 
-  DriverProgramSequence for_loop_container(graph, debug_context);
+  DriverProgramSequence for_loop_container(debug_context);
   for_loop_container.add(for_loop);
   return for_loop_container;
 }

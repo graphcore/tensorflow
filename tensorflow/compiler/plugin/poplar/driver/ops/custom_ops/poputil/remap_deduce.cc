@@ -40,7 +40,7 @@ class RemapDeduceOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "RemapDeduceOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     // Get the original tensor which is to be remapped.
     TF_ASSIGN_OR_RETURN(auto input,

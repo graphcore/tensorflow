@@ -159,8 +159,8 @@ Status CheckNoOpaqueTypes(const HloInstruction* root) {
 EntryVisitor::EntryVisitor(CompilerResources& resources,
                            const HloComputation* comp)
     : DeferredVisitor(resources, MakeArgRBVector(comp), "Entry"),
-      host_to_device(*resources.main_graph, dnai_),
-      device_to_host(*resources.main_graph, dnai_) {}
+      host_to_device(dnai_),
+      device_to_host(dnai_) {}
 
 Status EntryVisitor::AddSequenceForInstruction(
     const HloInstruction* inst, const DriverProgramSequence& seq) {
@@ -282,17 +282,15 @@ StatusOr<DriverTensor> EntryVisitor::PostProcessParameterAllocation(
         inst, DriverProgramSequence(
                   {DriverProgramCopy(non_modified_tensor, tensor, false,
                                      {debug_name_and_id})},
-                  graph, {debug_name_and_id, "resource_not_modified_copy"})));
+                  {debug_name_and_id, "resource_not_modified_copy"})));
   }
   return tensor;
 }
 
-const DriverProgramSequence EntryVisitor::GetSequenceAndInitializeCounters(
-    DriverGraph& graph) {
-  DriverProgramSequence seq(graph, "InitializeCounters");
-  seq.add(execution_counters_.SetInitialValuesToZero(graph));
-  seq.add(
-      DeferredVisitor::GetSequence(graph, /*copy_execution_counters*/ false));
+const DriverProgramSequence EntryVisitor::GetSequenceAndInitializeCounters() {
+  DriverProgramSequence seq("InitializeCounters");
+  seq.add(execution_counters_.SetInitialValuesToZero());
+  seq.add(DeferredVisitor::GetSequence(/*copy_execution_counters*/ false));
   return seq;
 }
 
@@ -323,7 +321,7 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
        ++idx) {
     auto& out_info = entry_outputs[idx];
 
-    DriverProgramSequence seq(graph, debug_name_and_id);
+    DriverProgramSequence seq(debug_name_and_id);
 
     // Flatten the tuple tensor (if required) and iterate over all of them
     const Shape layout_sub_shape =
@@ -379,7 +377,7 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
                         {DriverProgramCopy(out_tensors[tuple_index],
                                            in_tensors[tuple_index], false,
                                            debug_name_and_id)},
-                        graph, debug_name_and_id)));
+                        debug_name_and_id)));
         }
       }
     }

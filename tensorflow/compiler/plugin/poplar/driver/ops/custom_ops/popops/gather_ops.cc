@@ -100,7 +100,7 @@ class GatherOp : public PoplarOpDef {
     const auto collapsed_slice_dims = dim_numbers.collapsed_slice_dims();
     const auto start_index_map = dim_numbers.start_index_map();
 
-    DriverProgramSequence prog(graph, debug_info);
+    DriverProgramSequence prog(debug_info);
 
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor operand,

@@ -65,9 +65,8 @@ FullVisitor::FullVisitor(CompilerResources& res,
 Status FullVisitor::HandleConcatenate(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
-  auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   int64_t dimension(inst->concatenate_dimension());
   TF_ASSIGN_OR_RETURN(TensorVectors inputs,
@@ -82,16 +81,15 @@ Status FullVisitor::HandleConcatenate(HloInstruction* inst) {
   });
   DriverTensor out = ConcatenateTensors(tensors, dimension);
 
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
 
   return AddSequenceForInstruction(inst, seq);
 }
 
 Status FullVisitor::HandleReverse(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, resources_, inst,
@@ -123,8 +121,7 @@ Status FullVisitor::HandleBroadcast(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  auto& graph = GetGraph(resources_, inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, resources_, inst,
@@ -144,9 +141,8 @@ Status FullVisitor::HandleBroadcast(HloInstruction* inst) {
 Status FullVisitor::HandleReshape(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
-  auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(auto inputs,
                       FindInplaceOutputs(tensor_map, resources_, inst, seq,
@@ -168,9 +164,8 @@ Status FullVisitor::HandleReshape(HloInstruction* inst) {
 Status FullVisitor::HandleTranspose(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
-  auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, resources_, inst,
@@ -268,9 +263,8 @@ Status FullVisitor::HandleWhile(HloInstruction* inst) {
 Status FullVisitor::HandlePad(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
-  auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, resources_, inst,

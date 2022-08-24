@@ -52,17 +52,16 @@ StatusOr<DriverTensor> GetExecutionCounter(CompilerResources& resources,
   return resources.execution_counter_scopes.top()->GetCounter(shard);
 }
 
-Status CopyExecutionCountersFromScope(DriverGraph& graph,
-                                      CompilerResources& resources,
+Status CopyExecutionCountersFromScope(CompilerResources& resources,
                                       ExecutionCounters& counters,
                                       DriverProgramSequence& sequence) {
   // There must already be a scope present.
   if (resources.execution_counter_scopes.empty()) {
     return FailedPrecondition("Cannot set the execution counters from stack.");
   }
-  TF_ASSIGN_OR_RETURN(DriverProgramSequence copies_seq,
-                      counters.SetInitialValuesFrom(
-                          graph, resources.execution_counter_scopes.top()));
+  TF_ASSIGN_OR_RETURN(
+      DriverProgramSequence copies_seq,
+      counters.SetInitialValuesFrom(resources.execution_counter_scopes.top()));
   sequence.add(copies_seq);
   return Status::OK();
 }
@@ -118,9 +117,9 @@ StatusOr<DriverTensor> ExecutionCounters::GetCounter(int64_t shard) {
 }
 
 StatusOr<DriverProgramSequence> ExecutionCounters::SetInitialValuesFrom(
-    DriverGraph& graph, ExecutionCounters* source) {
+    ExecutionCounters* source) {
   CHECK_EQ(source->counters_.size(), counters_.size());
-  DriverProgramSequence seq(graph, dnai_);
+  DriverProgramSequence seq(dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
       TF_ASSIGN_OR_RETURN(DriverTensor source_counter,
@@ -134,9 +133,8 @@ StatusOr<DriverProgramSequence> ExecutionCounters::SetInitialValuesFrom(
   return seq;
 }
 
-DriverProgramSequence ExecutionCounters::SetInitialValuesToZero(
-    DriverGraph& graph) {
-  DriverProgramSequence seq(graph, dnai_);
+DriverProgramSequence ExecutionCounters::SetInitialValuesToZero() {
+  DriverProgramSequence seq(dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
       auto& graph = GetGraphForShard(resources_, shard);
@@ -149,9 +147,9 @@ DriverProgramSequence ExecutionCounters::SetInitialValuesToZero(
 }
 
 StatusOr<DriverProgramSequence> ExecutionCounters::UpdateCounters(
-    DriverGraph& graph, ExecutionCounters* destination) {
+    ExecutionCounters* destination) {
   CHECK_EQ(destination->counters_.size(), counters_.size());
-  DriverProgramSequence seq(graph, dnai_);
+  DriverProgramSequence seq(dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
       TF_ASSIGN_OR_RETURN(DriverTensor destination_counter,
@@ -164,9 +162,8 @@ StatusOr<DriverProgramSequence> ExecutionCounters::UpdateCounters(
   return seq;
 }
 
-DriverProgramSequence ExecutionCounters::IncrementLiveCounters(
-    DriverGraph& graph) const {
-  DriverProgramSequence seq(graph, dnai_);
+DriverProgramSequence ExecutionCounters::IncrementLiveCounters() const {
+  DriverProgramSequence seq(dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
       DriverGraph& graph = GetGraphForShard(resources_, shard);

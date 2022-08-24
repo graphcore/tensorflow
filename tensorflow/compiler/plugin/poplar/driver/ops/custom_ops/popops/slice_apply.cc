@@ -102,7 +102,7 @@ class SliceApplyaXbYOp : public SliceApplyAllocatorOp {
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyaXbYOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     // Get the inputs.
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -141,7 +141,7 @@ class SliceApplyabYOp : public SliceApplyAllocatorOp {
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyabYOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     // Get the inputs.
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -177,7 +177,7 @@ class SliceApplyaXbOp : public SliceApplyAllocatorOp {
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyaXbOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     // Get the inputs.
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -219,7 +219,7 @@ class SliceApplyOp : public SliceApplyAllocatorOp {
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     // Get the inputs.
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,

@@ -36,7 +36,7 @@ class ScaledInplaceXbYOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ScaledInplaceXbYOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                         FindInplaceOutputTensors(tensor_map, res, inst, seq,
                                                  debug_info, false));
@@ -80,7 +80,7 @@ class ScaledInplaceaXbYOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ScaledInplaceaXbYOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
         FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info, true));

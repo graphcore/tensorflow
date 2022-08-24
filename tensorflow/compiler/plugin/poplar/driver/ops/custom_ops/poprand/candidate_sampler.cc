@@ -35,7 +35,7 @@ class CandidateSamplerOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "CandidateSamplerOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     // Retrieve attributes from the HloPoplarInstruction
     const HloCandidateSampler* sampler_inst = Cast<HloCandidateSampler>(inst);

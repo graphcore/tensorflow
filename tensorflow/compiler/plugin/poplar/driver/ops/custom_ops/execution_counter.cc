@@ -35,7 +35,7 @@ class ExecutionCounterOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ExecutionCounterOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     TF_ASSIGN_OR_RETURN(poplar::Tensor counter, GetExecutionCounter(res, inst));
 

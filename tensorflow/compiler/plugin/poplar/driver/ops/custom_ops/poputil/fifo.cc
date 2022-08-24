@@ -59,7 +59,7 @@ Status AddWriteUndefToFIFOBuffer(
     if (res.pipelining_write_undef_sequences.empty()) {
       return FailedPrecondition("Cannot WriteUndef a FIFO buffer.");
     }
-    DriverProgramSequence seq(graph, debug_name_and_id);
+    DriverProgramSequence seq(debug_name_and_id);
     seq.add(poplar::program::WriteUndef(buffer, {debug_name_and_id}));
     res.pipelining_write_undef_sequences.top().push_back(seq);
   }
@@ -181,7 +181,7 @@ class FifoOp : public PoplarOpDef {
     const size_t fifo_depth = fifo_inst->depth();
     const bool fifo_offload = fifo_inst->offload();
 
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     const std::string debug_name = GetDebugName(inst);
 
     // Opaque inputs are compile-time constants, so pass through FIFOs.

@@ -51,7 +51,7 @@ class StatefulGradientAccumulateOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
                                     "StatefulGradientAccumulateOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     const HloStatefulGradientAccumulate* grad_inst =
         Cast<HloStatefulGradientAccumulate>(inst);
@@ -179,7 +179,7 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
             inst) &&
         res.replication_factor > 1;
 
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                         FindInplaceOutputTensors(tensor_map, res, inst, seq,
@@ -332,7 +332,7 @@ class GradientAccumulatorSinkOp : public PoplarOpDef {
       return InternalErrorStrCat("Expected the instruction ", inst->name(),
                                  " to have been lowered inplace.");
     }
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     TF_ASSIGN_OR_RETURN(auto inputs, FindInplaceOutputs(tensor_map, res, inst,
                                                         seq, debug_info));
     CHECK_EQ(inputs.size(), inst->operand_count());
@@ -364,7 +364,6 @@ class GradientAccumulationCountOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     return DriverProgramSequence(
-        graph,
         PoplarOpDefDebugInfo(debug_context, "GradientAccumulationCount"));
   }
 };

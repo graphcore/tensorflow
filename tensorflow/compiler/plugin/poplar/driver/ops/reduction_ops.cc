@@ -319,7 +319,7 @@ StatusOr<DriverProgramSequence> CreateSimpleReduction(
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);
 
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
   DriverTensor out;
 
   if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
@@ -429,7 +429,7 @@ StatusOr<DriverProgramSequence> CreateSimpleWindowReduction(
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);
 
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
   DriverTensor out;
 
   if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
@@ -593,7 +593,7 @@ StatusOr<DriverProgramSequence> CreatePoplibsWindowReduction(
   if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
     auto& graph = GetGraph(res, inst);
 
-    DriverProgramSequence prog(graph, debug_name_and_id);
+    DriverProgramSequence prog(debug_name_and_id);
     TF_ASSIGN_OR_RETURN(auto out,
                         FindInstructionInput(tensor_map, res, inst, 1, prog,
                                              debug_name_and_id));
@@ -629,7 +629,7 @@ StatusOr<DriverProgramSequence> CreatePoplibsPooling(
     const poplar::DebugNameAndId& debug_name_and_id,
     absl::optional<const HloInstruction*> optional_reduction_op) {
   auto& graph = GetGraph(res, inst);
-  DriverProgramSequence prog(graph, debug_name_and_id);
+  DriverProgramSequence prog(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor to_reduce,
@@ -637,8 +637,7 @@ StatusOr<DriverProgramSequence> CreatePoplibsPooling(
   auto reduction_dims = GetPoolingReductionDims(window);
 
   if (reduction_dims.size() == 0) {
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(to_reduce, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(to_reduce)));
     return prog;
   }
 
@@ -704,7 +703,7 @@ StatusOr<DriverProgramSequence> CreatePoplibsPooling(
   const auto shuffle_out = GetShuffleOutputDimensionsForPoplar(shuffle_in);
   out = out.dimShuffle(shuffle_out);
 
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
   return prog;
 }
 
@@ -712,7 +711,7 @@ StatusOr<DriverProgramSequence> CreatePoplibsMaxPoolGrad(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
     const Window& window, const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor input,
@@ -743,7 +742,7 @@ StatusOr<DriverProgramSequence> CreatePoplibsMaxPoolGrad(
   // Shuffle back
   const auto shuffle_out = GetShuffleOutputDimensionsForPoplar(shuffle_in);
   out = out.dimShuffle(shuffle_out);
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
   return seq;
 }
 
@@ -756,7 +755,7 @@ StatusOr<DriverProgramSequence> CreatePoplibsPoolingGrad(
   }
 
   auto& graph = GetGraph(res, inst);
-  DriverProgramSequence prog(graph, debug_name_and_id);
+  DriverProgramSequence prog(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor output_grad,
@@ -808,7 +807,7 @@ StatusOr<DriverProgramSequence> CreatePoplibsPoolingGrad(
   // Shuffle back
   const auto shuffle_out = GetShuffleOutputDimensionsForPoplar(shuffle_in);
   out = out.dimShuffle(shuffle_out);
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
   return prog;
 }
 
@@ -818,7 +817,7 @@ StatusOr<DriverProgramSequence> CreateSimpleSelectAndScatter(
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::Tensor out;
   auto& graph = GetGraph(res, inst);
-  DriverProgramSequence prog(graph, debug_name_and_id);
+  DriverProgramSequence prog(debug_name_and_id);
 
   // Find the input tensors
   TF_ASSIGN_OR_RETURN(
@@ -983,7 +982,7 @@ StatusOr<DriverProgramSequence> CreateSimpleSelectAndScatter(
                        {debug_name_and_id, "initval"});
   }
 
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
 
   return prog;
 }
@@ -993,8 +992,7 @@ StatusOr<DriverProgramSequence> CreateReplicatedAllReduce(
     const xla::Shape& output, TensorMap& tensor_map,
     const gcl::CollectiveOperator op,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  auto& graph = GetGraph(res, inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(
       auto tensors,
@@ -1023,8 +1021,8 @@ StatusOr<DriverProgramSequence> CreateReplicatedAllReduce(
   }
 
   for (int64_t i = 0; i != flat_tensors.size(); ++i) {
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
-                                DriverTensor(flat_tensors[i], graph)));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, i, DriverTensor(flat_tensors[i])));
   }
 
   return seq;
@@ -1035,7 +1033,7 @@ StatusOr<DriverProgramSequence> CreateReplicatedAllToAll(
     const xla::Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   CHECK_EQ(inst->operand_count(), 1);
 
@@ -1069,7 +1067,7 @@ StatusOr<DriverProgramSequence> CreateReplicatedAllToAll(
 
   output_tensor = output_tensor.reshape(output_dimensions);
   TF_CHECK_OK(
-      AddOutputTensor(tensor_map, inst, 0, DriverTensor(output_tensor, graph)));
+      AddOutputTensor(tensor_map, inst, 0, DriverTensor(output_tensor)));
 
   return seq;
 }

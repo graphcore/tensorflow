@@ -34,7 +34,7 @@ class ConvertToF8Op : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "Fp8Convert");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     auto inputs = FindInstructionInputs(tensor_map, res, inst, 0, seq,
                                         debug_info, /*expand_aliasing=*/true);
     CHECK_EQ(inputs.size(), 2);
@@ -56,7 +56,7 @@ class ConvertToF8Op : public PoplarOpDef {
         DriverTensor(out.getMetadata().reinterpret(poplar::UNSIGNED_CHAR),
                      graph)));
     out = out.reinterpret(poplar::UNSIGNED_CHAR);
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
     return seq;
   }
 };
@@ -68,7 +68,7 @@ class ConvertFromF8Op : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "Fp8Convert");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(output_shape));
     TF_ASSIGN_OR_RETURN(
         auto input,

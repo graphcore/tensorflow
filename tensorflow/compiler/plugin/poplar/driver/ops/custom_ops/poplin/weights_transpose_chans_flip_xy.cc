@@ -66,7 +66,7 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
                                     "WeightsTransposeChansFlipXYOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor in_weights,

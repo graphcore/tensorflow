@@ -80,7 +80,7 @@ class CodeletExpressionOpOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "CodeletExpressionOpOp");
     auto op_inst = Cast<HloCodeletExpressionOpInstruction>(inst);
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     std::vector<poplar::Tensor> input_tensors(inst->operand_count());
     for (int i = 0; i < inst->operand_count(); ++i) {

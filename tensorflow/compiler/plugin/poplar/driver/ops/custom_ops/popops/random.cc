@@ -43,7 +43,7 @@ static StatusOr<DriverProgramSequence> RandomNormal(
 
   TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
   auto out = poprand::normal(graph, nullptr, 0, ref, dtype, mean_val, sd_val,
                              seq, {debug_name_and_id});
 
@@ -96,7 +96,7 @@ static StatusOr<DriverProgramSequence> RandomUniform(
 
   TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
   auto out = poprand::uniform(graph, nullptr, 0, ref, dtype, lower_val,
                               upper_val, seq, {debug_name_and_id});
 

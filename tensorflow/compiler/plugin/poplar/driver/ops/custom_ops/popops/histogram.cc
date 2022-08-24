@@ -47,7 +47,7 @@ class HistogramOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "HistogramOp");
 
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     auto hist_inst = Cast<HloHistogramInstruction>(inst);
 
@@ -65,7 +65,7 @@ class HistogramOp : public PoplarOpDef {
                           seq, {debug_info, "HistogramPoplar"}, options);
 
     TF_RETURN_IF_ERROR(
-        AddOutputTensor(tensor_map, hist_inst, 0, DriverTensor(output, graph)));
+        AddOutputTensor(tensor_map, hist_inst, 0, DriverTensor(output)));
     return seq;
   }
 };
@@ -82,7 +82,7 @@ class HistogramUpdateOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "HistogramUpdateOp");
 
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     auto hist_upd_inst = Cast<HloHistogramUpdateInstruction>(inst);
 

@@ -86,7 +86,7 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
   auto& graph = GetGraph(resources_, inst);
   if (new_stochastic_rounding_enabled !=
       resources_.stochastic_rounding_enabled) {
-    DriverProgramSequence seq(graph, debug_name_and_id);
+    DriverProgramSequence seq(debug_name_and_id);
     poplar::setStochasticRounding(graph, seq, new_stochastic_rounding_enabled,
                                   {debug_name_and_id, "Preprocess"});
     TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
@@ -100,7 +100,7 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
   if (allow_seed_changes_) {
     const auto new_sr_method =
         poplar_backend_config.stochastic_rounding_method();
-    DriverProgramSequence seq(graph, debug_name_and_id);
+    DriverProgramSequence seq(debug_name_and_id);
 
     if (MaybeChangeStochasticRoundingMethod(resources_, inst->name(),
                                             new_sr_method, seq)) {
@@ -156,9 +156,8 @@ Status BaseVisitor::HandleTupleSelect(HloInstruction* inst) {
 
 Status BaseVisitor::HandleBitcastConvert(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, resources_, inst,
@@ -215,7 +214,7 @@ Status BaseVisitor::HandleConstant(HloInstruction* inst) {
   bool is_inplace_read_write = IsOutputModifiedInplace(inst);
   if (is_inplace_read_write && t.numElements() != 0) {
     VLOG(3) << "Constant tensor is read/write inplace, adding copy";
-    DriverProgramSequence prog(graph, debug_info);
+    DriverProgramSequence prog(debug_info);
     auto clone =
         DriverTensor(poputil::duplicate(
                          graph, t, prog, {debug_info, "clone"},
@@ -232,9 +231,8 @@ Status BaseVisitor::HandleConstant(HloInstruction* inst) {
 
 Status BaseVisitor::HandleGetTupleElement(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(
       TensorVectors output_tensors,
@@ -254,8 +252,8 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->ToString();
   auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
-  DriverProgramSequence prog(graph);
+  DriverProgramSequence seq(debug_name_and_id);
+  DriverProgramSequence prog;
   HloComputation* comp = inst->fused_instructions_computation();
 
   if (IsPopOpsFusion(inst)) {
@@ -335,7 +333,7 @@ Status BaseVisitor::HandleReal(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   auto& graph = GetGraph(resources_, inst);
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(DriverTensor in,
                       FindInstructionInput(tensor_map, resources_, inst, 0, seq,
@@ -360,8 +358,7 @@ Status BaseVisitor::HandleAllToAll(HloInstruction* inst) {
 
 Status BaseVisitor::HandleAddDependency(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  auto& graph = GetGraph(resources_, inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   std::vector<std::string> dep_names;
   GetAllDepNames(inst->operand(1), dep_names);
@@ -465,8 +462,8 @@ Status BaseVisitor::PrependSequenceGroupedByInstruction(
   return CreateSequenceGroupedByInstruction(inst, seq);
 }
 
-DriverProgramSequence BaseVisitor::GetRawSequence(DriverGraph& graph) const {
-  DriverProgramSequence result(graph);
+DriverProgramSequence BaseVisitor::GetRawSequence() const {
+  DriverProgramSequence result;
   for (const auto& per_instruction_sequences : sequences_) {
     for (const auto& s : per_instruction_sequences) {
       result.add(s);
@@ -475,17 +472,16 @@ DriverProgramSequence BaseVisitor::GetRawSequence(DriverGraph& graph) const {
   return result;
 }
 
-DriverProgramSequence BaseVisitor::GetSequence(DriverGraph& graph,
-                                               bool copy_execution_counters) {
+DriverProgramSequence BaseVisitor::GetSequence(bool copy_execution_counters) {
   if (copy_execution_counters) {
-    DriverProgramSequence seq(graph, dnai_);
-    TF_CHECK_OK(CopyExecutionCountersFromScope(graph, resources_,
-                                               execution_counters_, seq));
-    seq.add(GetRawSequence(graph));
+    DriverProgramSequence seq(dnai_);
+    TF_CHECK_OK(
+        CopyExecutionCountersFromScope(resources_, execution_counters_, seq));
+    seq.add(GetRawSequence());
     return seq;
   } else {
     CHECK(execution_counters_.Initialized());
-    return GetRawSequence(graph);
+    return GetRawSequence();
   }
 }
 

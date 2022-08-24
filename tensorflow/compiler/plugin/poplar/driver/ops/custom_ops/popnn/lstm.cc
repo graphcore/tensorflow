@@ -179,7 +179,7 @@ class LstmLayerBaseOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) {
     PoplarOpDefDebugInfo debug_info(debug_context, ClassName());
-    DriverProgramSequence seq(graph, {debug_info});
+    DriverProgramSequence seq(debug_info);
 
     auto lstm_inst = Cast<HloRNNInstruction>(inst);
     bool training = lstm_inst->is_training();

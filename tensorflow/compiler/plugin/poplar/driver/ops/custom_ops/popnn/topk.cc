@@ -57,7 +57,7 @@ class TopKOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "TopKOp");
     // Create the control program.
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     const auto& xla_shape = inst->operand(0)->shape();
 
     // Get the input.

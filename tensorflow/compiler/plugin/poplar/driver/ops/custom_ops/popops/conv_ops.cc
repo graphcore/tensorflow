@@ -83,7 +83,7 @@ class Conv2DOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "Conv2DOp");
-    DriverProgramSequence seq(graph, {debug_info});
+    DriverProgramSequence seq(debug_info);
 
     // Find the input tensor
     TF_ASSIGN_OR_RETURN(poplar::Tensor in,
@@ -117,7 +117,7 @@ class Conv2DOp : public PoplarOpDef {
 
     out = ShuffleConvolutionOutputToTensorflow(conv_dims, out);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
 
     return seq;
   }
@@ -161,7 +161,7 @@ class Conv2DReverseOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "Conv2DReverseOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     // Find the input tensor
     TF_ASSIGN_OR_RETURN(poplar::Tensor in,
@@ -195,7 +195,7 @@ class Conv2DReverseOp : public PoplarOpDef {
 
     out = ShuffleConvolutionOutputToTensorflow(conv_dims, out);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
 
     return seq;
   }
@@ -209,7 +209,7 @@ class ConvScaledInplaceOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ConvScaledInplaceOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -260,8 +260,7 @@ class ConvScaledInplaceOp : public PoplarOpDef {
 
     weights = ShuffleConvolutionOutputToTensorflow(conv_dims, weights);
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(weights, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(weights)));
 
     return seq;
   }
@@ -356,7 +355,7 @@ class MultiConvOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiConvOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     const HloMultiConvInstruction* multi_conv_inst =
         Cast<HloMultiConvInstruction>(inst);

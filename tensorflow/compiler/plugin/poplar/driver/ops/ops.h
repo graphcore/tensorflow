@@ -319,9 +319,7 @@ struct ExternalAndLocalTransferSequence {
   // do this, instead of returning the sequence return both so that
   // the calling layer can decide how to interleave these copies
 
-  explicit ExternalAndLocalTransferSequence(DriverGraph& graph)
-      : external_transfer(graph), local_transfer(graph) {}
-
+  ExternalAndLocalTransferSequence() = default;
   ExternalAndLocalTransferSequence(DriverProgramSequence et,
                                    DriverProgramSequence lt)
       : external_transfer(et), local_transfer(lt) {}

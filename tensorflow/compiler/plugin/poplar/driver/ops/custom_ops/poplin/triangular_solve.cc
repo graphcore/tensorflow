@@ -50,7 +50,7 @@ class TriangularSolveOp : public PoplarOpDef {
     PoplarOpDefDebugInfo debug_info(debug_context, "TriangularSolve");
     poplar::DebugNameAndId debug_name_and_id(debug_info);
     // Create the control program.
-    DriverProgramSequence seq(graph, debug_name_and_id);
+    DriverProgramSequence seq(debug_name_and_id);
 
     // Get the input.
     TF_ASSIGN_OR_RETURN(

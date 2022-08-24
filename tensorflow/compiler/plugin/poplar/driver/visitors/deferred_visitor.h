@@ -295,10 +295,9 @@ class DeferredVisitor : public FullVisitor {
       const std::vector<absl::optional<TensorOrRemoteBuffer>>& callsite_input,
       const poplar::DebugNameAndId& debug_name_and_id);
 
-  DriverProgramSequence GetSequence(DriverGraph& graph,
-                                    bool copy_execution_counters = true) final;
+  DriverProgramSequence GetSequence(bool copy_execution_counters = true) final;
 
-  DriverProgramSequence GetFunctionCall(DriverGraph& graph);
+  DriverProgramSequence GetFunctionCall();
 
  protected:
   // Signal that we are entering a new variable scope, where zeroing and write
@@ -507,7 +506,7 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   // the callsite to computation inputs might be required as they are different
   // tensors.
   StatusOr<DriverProgramSequence> GetPreambleCopies(
-      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id);
+      const poplar::DebugNameAndId& debug_name_and_id);
 
  protected:
   // Add the given sequence to the correct sequence for aliasing copies.

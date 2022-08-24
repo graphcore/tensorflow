@@ -82,7 +82,7 @@ class MaskOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "TensorMaskOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     TF_ASSIGN_OR_RETURN(
         DriverTensor input,
@@ -95,8 +95,8 @@ class MaskOp : public PoplarOpDef {
     if (is_inplace) {
       out = input;
     } else {
-      out = ExtendedTensor(
-          poputil::duplicate(graph, input, seq, {debug_info, "clone"}), graph);
+      out = DriverTensor(
+          poputil::duplicate(graph, input, seq, {debug_info, "clone"}));
     }
     const HloInstruction* select = inst->fused_expression_root();
     CHECK_EQ(select->opcode(), HloOpcode::kSelect);

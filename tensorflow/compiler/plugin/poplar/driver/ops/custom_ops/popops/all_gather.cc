@@ -57,7 +57,7 @@ class AllGatherOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "AllGatherOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     const int64_t num_inputs = inst->operand_count();
 
     // If there is no replication, then we can just duplicate the inputs.
@@ -71,8 +71,8 @@ class AllGatherOp : public PoplarOpDef {
             graph, input, seq, {debug_info},
             poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
 
-        TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
-                                    DriverTensor(output_tensor, graph)));
+        TF_CHECK_OK(
+            AddOutputTensor(tensor_map, inst, i, DriverTensor(output_tensor)));
       }
 
       return seq;

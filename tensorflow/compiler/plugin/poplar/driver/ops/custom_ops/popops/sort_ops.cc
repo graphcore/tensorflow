@@ -79,7 +79,7 @@ class SortOp : public PoplarOpDef {
                    "sort is performed instead.";
     }
 
-    DriverProgramSequence prog(graph, debug_info);
+    DriverProgramSequence prog(debug_info);
     // Get the inplace input/outputs.
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,

@@ -326,7 +326,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "HostEmbeddingLookupOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     TF_ASSIGN_OR_RETURN(TensorVector indices,
                         FindInstructionInputTensors(tensor_map, res, inst, 0,
@@ -596,7 +596,7 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "HostEmbeddingUpdateOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     TF_ASSIGN_OR_RETURN(TensorVector grads,
                         FindInstructionInputTensors(tensor_map, res, inst, 1,
@@ -664,7 +664,7 @@ class HostEmbeddingNotifyOp : public PoplarOpDef {
         Cast<HloHostEmbeddingNotifyInstruction>(inst);
 
     PoplarOpDefDebugInfo debug_info(debug_context, "HostEmbeddingNotifyOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     // For synthetic data or remote buffers, there's no communication with the
     // host.

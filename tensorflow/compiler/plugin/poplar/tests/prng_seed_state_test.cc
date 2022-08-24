@@ -535,8 +535,8 @@ struct PrngSeedConsistencyTest
 
       resources_->main_graph = std::move(graph_);
 
-      resources_->preamble_sequence = absl::make_unique<DriverProgramSequence>(
-          *resources_->main_graph, "Preamble");
+      resources_->preamble_sequence =
+          absl::make_unique<DriverProgramSequence>("Preamble");
 
       graph_ = nullptr;
     }

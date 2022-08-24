@@ -65,7 +65,7 @@ class ArgMinMaxOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ArgMinMaxOp");
     // Create the control program.
-    DriverProgramSequence seq(graph, {debug_info});
+    DriverProgramSequence seq(debug_info);
 
     // Get the input.
     TF_ASSIGN_OR_RETURN(

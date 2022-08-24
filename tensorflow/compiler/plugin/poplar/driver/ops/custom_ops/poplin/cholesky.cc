@@ -39,7 +39,7 @@ class CholeskyOp : public PoplarOpDef {
     PoplarOpDefDebugInfo debug_info(debug_context, "Cholesky");
 
     // Create the control program.
-    DriverProgramSequence seq(graph, debug_context);
+    DriverProgramSequence seq(debug_context);
 
     // Get the input.
     TF_ASSIGN_OR_RETURN(poplar::Tensor a,

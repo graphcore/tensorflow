@@ -38,19 +38,17 @@ PipelineStageVisitor::PipelineStageVisitor(
     const poplar::DebugNameAndId& debug_name_and_id)
     : InplaceDeferredVisitor(res, inputs, description, debug_name_and_id) {}
 
-DriverProgramSequence PipelineStageVisitor::GetCachedSequence(
-    DriverGraph& graph) {
+DriverProgramSequence PipelineStageVisitor::GetCachedSequence() {
   if (!has_function_) {
     DriverProgramSequence seq = InplaceDeferredVisitor::GetSequence(
-        graph, /*copy_execution_counters*/ false);
+        /*copy_execution_counters*/ false);
 
     // Always increment the execution counters.
-    seq.add(execution_counters_.IncrementLiveCounters(graph));
+    seq.add(execution_counters_.IncrementLiveCounters());
     function_ = GetMasterGraph(resources_).addFunction(seq);
     has_function_ = true;
   }
-  return DriverProgramSequence({DriverProgramCall(function_, {dnai_})}, graph,
-                               dnai_);
+  return DriverProgramSequence({DriverProgramCall(function_, {dnai_})}, dnai_);
 }
 
 ShapeTree<bool> PipelineStageVisitor::GetOutputCopies(
@@ -95,8 +93,7 @@ Status ReusablePipelineStageVisitor::PropagateDeferredAllocations(
 DriverProgramSequence ReusablePipelineStageVisitor::GetForwardStageSequence(
     const HloInstruction* callsite, const DeferredArgRBVectors& deferred_inputs,
     TensorMap& callsite_tensor_map) {
-  auto& graph = GetGraph(resources_, callsite);
-  DriverProgramSequence seq(graph, dnai_);
+  DriverProgramSequence seq(dnai_);
   // Convert deferred args to actual tensors, filling gaps where required.
   CHECK_EQ(callsite->operand_count(), deferred_inputs.size());
   TensorOrRemoteBufferVectors inputs(deferred_inputs.size());
@@ -142,7 +139,7 @@ DriverProgramSequence ReusablePipelineStageVisitor::GetCachedSequence(
   // modified. Note that since we are adding these copies, the FIFO instructions
   // can be executed after the PipelineStage and before the
   // PipelineStageRecomputation since the values won't be modified inplace.
-  DriverProgramSequence seq(graph, dnai_);
+  DriverProgramSequence seq(dnai_);
   for (int64_t op_idx = 0; op_idx != callsite->operand_count(); ++op_idx) {
     const HloInstruction* operand = callsite->operand(op_idx);
     if (IsPipelineStageReadOnlyInput(operand)) {
@@ -161,7 +158,7 @@ DriverProgramSequence ReusablePipelineStageVisitor::GetCachedSequence(
   }
 
   // Add the actual sequence for the stage.
-  seq.add(PipelineStageVisitor::GetCachedSequence(graph));
+  seq.add(PipelineStageVisitor::GetCachedSequence());
   return seq;
 }
 

@@ -39,12 +39,7 @@ RepeatLoopOverlapIOVisitor::RepeatLoopOverlapIOVisitor(
     const ReallocateInputsInfo& reallocate_inputs_info,
     const poplar::DebugNameAndId& debug_name_and_id)
     : RepeatLoopVisitor(res, inputs, description, reallocate_inputs_info,
-                        debug_name_and_id),
-      // Temporary initializations, will be assigned later.
-      infeed_sequence_(*res.main_graph),
-      outfeed_sequence_(*res.main_graph),
-      io_tile_copy_in_sequence_(*res.main_graph),
-      io_tile_copy_out_sequence_(*res.main_graph) {}
+                        debug_name_and_id) {}
 
 StatusOr<DriverProgramSequence*>
 RepeatLoopOverlapIOVisitor::GetSequenceForInstruction(
@@ -70,9 +65,8 @@ Status RepeatLoopOverlapIOVisitor::AppendSequenceGroupedByInstruction(
 Status RepeatLoopOverlapIOVisitor::PrependSequenceGroupedByInstruction(
     const HloInstruction* inst, const DriverProgramSequence& seq) {
   TF_ASSIGN_OR_RETURN(auto to_update, GetSequenceForInstruction(inst));
-  auto& graph = GetGraph(resources_, inst);
   *to_update =
-      DriverProgramSequence({seq, *to_update}, graph, GetDebugNameAndId(inst));
+      DriverProgramSequence({seq, *to_update}, GetDebugNameAndId(inst));
   return Status::OK();
 }
 
@@ -133,15 +127,15 @@ DriverProgramSequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
   const int64_t repeat_count = GetRepeatLoopCount(inst);
 
   auto& graph = GetGraph(resources_, inst);
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
   seq.add(pre_loop_sequence_);
 
-  DriverProgramSequence call_seq(graph, {debug_name_and_id, "call"});
+  DriverProgramSequence call_seq({debug_name_and_id, "call"});
   {
-    DriverProgramSequence compute_seq(graph, {debug_name_and_id, "compute"});
-    compute_seq.add(GetSequence(graph, /*copy_execution_counters*/ false));
+    DriverProgramSequence compute_seq({debug_name_and_id, "compute"});
+    compute_seq.add(GetSequence(/*copy_execution_counters*/ false));
     // Increase the local execution counters at the end of each iteration.
-    compute_seq.add(execution_counters_.IncrementLiveCounters(graph));
+    compute_seq.add(execution_counters_.IncrementLiveCounters());
     call_seq.add(poplar::program::Call(graph.addFunction(compute_seq)));
   }
 
@@ -154,7 +148,7 @@ DriverProgramSequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
   // IO, assuming they are using non-overlapping tiles. Because we have 2
   // additional compute-batches in the device in any given iteration, we must
   // unroll the loop to fill and flush this.
-  DriverProgramSequence repeat_seq(graph, {debug_name_and_id, "repeat"});
+  DriverProgramSequence repeat_seq({debug_name_and_id, "repeat"});
   // Copy from the IO tiles the nth compute-batch of data.
   repeat_seq.add(io_tile_copy_in_sequence_);
   // Copy to the IO tiles the n-1th compute-batch of data.
@@ -172,7 +166,7 @@ DriverProgramSequence RepeatLoopOverlapIOVisitor::GetRepeatLoopSequence(
     // Create a double loop - the inner loop executes for
     // `num_mini_batches_to_accumulate_` iterations and then performs the
     // resource update.
-    DriverProgramSequence inner_seq(graph, {debug_name_and_id, "inner"});
+    DriverProgramSequence inner_seq({debug_name_and_id, "inner"});
     // Zero the gradient accumulation buffers.
     inner_seq.add(tensors_zeroing_sequence_);
     // Load in initial data.

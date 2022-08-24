@@ -54,7 +54,7 @@ class CTCLossOpBase : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, ClassName());
     // Create the control program.
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     const HloCTCLossInstructionBase* ctc_inst =
         Cast<HloCTCLossInstructionBase>(inst);
 
@@ -210,7 +210,7 @@ class CTCBeamSearchOpBase : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, ClassName());
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     const auto* ctc_inst = Cast<HloCTCInferenceInstructionBase>(inst);
 
     // Retreive intputs, attributes and outputs from instruction

@@ -108,7 +108,7 @@ class ConvBiasAddOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ConvBiasAddOp");
-    DriverProgramSequence prog(graph, {debug_info});
+    DriverProgramSequence prog(debug_info);
 
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -179,7 +179,7 @@ class MatMulBiasAddOp : public PoplarOpDef {
     const HloInstruction* broadcast = root->operand(1);
     CHECK_EQ(broadcast->opcode(), HloOpcode::kBroadcast);
 
-    DriverProgramSequence prog(graph, debug_info);
+    DriverProgramSequence prog(debug_info);
 
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                         FindInplaceOutputTensors(tensor_map, res, inst, prog,
@@ -241,7 +241,7 @@ class BiasApplyOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "BiasApplyOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     const HloInstruction* root = inst->fused_expression_root();
 
@@ -297,7 +297,7 @@ class ZeroPadOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ZeroPadOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     const HloInstruction* root = inst->fused_expression_root();
     const PaddingConfig& cfg(root->padding_config());
 
@@ -320,7 +320,7 @@ class ZeroPadOp : public PoplarOpDef {
     poplar::Tensor out =
         popops::pad(graph, in, paddingLower, paddingUpper, zero);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
     return seq;
   }
 };
@@ -333,7 +333,7 @@ class PaddingReduceWindowOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "PaddingReduceWindowOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     const HloInstruction* root = inst->fused_expression_root();
     const Window& window(root->window());
@@ -357,7 +357,7 @@ class PaddingReduceWindowOp : public PoplarOpDef {
     poplar::Tensor out =
         popops::pad(graph, in, paddingLower, paddingUpper, init_val);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
     return seq;
   }
 };
@@ -425,7 +425,7 @@ class ArithemticExpressionOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ArithemticExpressionOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     // Get all the inputs.
     TensorVectors args;
@@ -441,7 +441,7 @@ class ArithemticExpressionOp : public PoplarOpDef {
     const HloComputation* comp = inst->fused_instructions_computation();
     ArithmeticExprVisitor arithmetic_visitor(res, args, inst, debug_info);
     TF_RETURN_IF_ERROR(comp->Accept(&arithmetic_visitor));
-    seq.add(arithmetic_visitor.GetSequence(graph));
+    seq.add(arithmetic_visitor.GetSequence());
 
     for (size_t i = 0; i < arithmetic_visitor.outputs().size(); i++) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,

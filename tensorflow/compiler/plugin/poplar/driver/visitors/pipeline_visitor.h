@@ -133,7 +133,7 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       DriverTensor accumulation_count_tensor, DriverGraph& graph) const;
 
   StatusOr<DriverProgramSequence> GetPipelineSequence(
-      DriverGraph& graph, IterationsType iterations) const;
+      IterationsType iterations) const;
 
  protected:
   Status AddSequenceForInstruction(const HloInstruction* inst,
@@ -191,13 +191,12 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   };
 
   virtual RepeatBlock GetPipelineRampUpSequence(
-      DriverGraph& graph,
       const poplar::DebugNameAndId& debug_name_and_id) const = 0;
   virtual DriverProgramSequence GetPipelineRampDownSequence(
-      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+      const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& additional_iterations = 0) const = 0;
   virtual DriverProgramSequence GetPipelineRepeatBlockSequence(
-      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+      const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& iterations) const = 0;
 
   // Function which indicates whether stage outputs should be copied.
@@ -235,13 +234,12 @@ class ParallelPipelineVisitor : public PipelineVisitor {
 
  protected:
   RepeatBlock GetPipelineRampUpSequence(
-      DriverGraph& graph,
       const poplar::DebugNameAndId& debug_name_and_id) const override;
   DriverProgramSequence GetPipelineRampDownSequence(
-      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+      const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& additional_iterations = 0) const override;
   DriverProgramSequence GetPipelineRepeatBlockSequence(
-      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+      const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& iterations) const override;
 
   bool StageOutputsRequireCopies() const override { return true; }
@@ -261,13 +259,12 @@ class SequentialPipelineVisitor : public PipelineVisitor {
 
  protected:
   RepeatBlock GetPipelineRampUpSequence(
-      DriverGraph& graph,
       const poplar::DebugNameAndId& debug_name_and_id) const override;
   DriverProgramSequence GetPipelineRampDownSequence(
-      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+      const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& additional_iterations = 0) const override;
   DriverProgramSequence GetPipelineRepeatBlockSequence(
-      DriverGraph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+      const poplar::DebugNameAndId& debug_name_and_id,
       const IterationsType& iterations) const override;
 
   bool StageOutputsRequireCopies() const override { return false; }

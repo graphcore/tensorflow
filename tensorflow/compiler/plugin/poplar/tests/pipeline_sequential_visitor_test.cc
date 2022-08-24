@@ -129,8 +129,7 @@ ENTRY e {
   TF_EXPECT_OK(pipeline_comp->Accept(&visitor));
 
   // Get the pipeline program
-  auto program =
-      visitor.GetPipelineSequence(*resources->main_graph, 6).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(6).ValueOrDie();
 
   // Compile the graph
   poplar::Engine engine(*resources->main_graph, program);

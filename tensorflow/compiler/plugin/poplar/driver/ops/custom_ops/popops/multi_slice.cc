@@ -141,7 +141,7 @@ class MultiSliceOp : public PoplarOpDef {
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiSliceOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor input,
@@ -187,8 +187,7 @@ class MultiSliceOp : public PoplarOpDef {
     // Unflatten the output:
     output = output.reshape(poplar_output_shape);
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(output)));
     return seq;
   }
 
@@ -226,7 +225,7 @@ class StaticMultiSliceOp : public PoplarOpDef {
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "StaticMultiSliceOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     auto slice_inst = Cast<HloStaticMultiSliceInstruction>(inst);
 
@@ -248,8 +247,7 @@ class StaticMultiSliceOp : public PoplarOpDef {
     // Unflatten the output:
     output = output.reshape(PoplarShapeFromXlaShape(output_shape));
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(output)));
 
     return seq;
   }
@@ -317,7 +315,7 @@ class MultiUpdateOp : public PoplarOpDef {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiUpdateOp");
     const HloMultiUpdateInstruction* multi_update =
         Cast<HloMultiUpdateInstruction>(inst);
-    DriverProgramSequence prog(graph, debug_info);
+    DriverProgramSequence prog(debug_info);
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
         FindInplaceOutputTensors(tensor_map, res, inst, prog, debug_info));
@@ -403,7 +401,7 @@ class MultiUpdateAddOp : public MultiUpdateOp {
     PoplarOpDefDebugInfo debug_info(debug_context, "MultiUpdateAddOp");
     const HloMultiUpdateAddInstruction* multi_update_add =
         Cast<HloMultiUpdateAddInstruction>(inst);
-    DriverProgramSequence prog(graph, debug_info);
+    DriverProgramSequence prog(debug_info);
 
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -460,7 +458,7 @@ class StaticMultiUpdateAddOp : public PoplarOpDef {
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "StaticMultiUpdateAddOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     auto* update_inst = Cast<HloStaticMultiUpdateAddInstruction>(inst);
 

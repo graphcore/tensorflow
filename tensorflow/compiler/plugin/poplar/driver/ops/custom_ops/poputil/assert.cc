@@ -42,7 +42,7 @@ class AssertOp : public PoplarOpDef {
     PoplarOpDefDebugInfo debug_info(debug_context, "Assert");
 
     // Create the control program.
-    DriverProgramSequence seq(graph);
+    DriverProgramSequence seq;
 
     // Get the input - don't expand constants.
     TF_ASSIGN_OR_RETURN(

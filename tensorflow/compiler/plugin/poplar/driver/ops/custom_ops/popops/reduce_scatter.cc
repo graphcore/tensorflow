@@ -39,7 +39,7 @@ class ReduceScatterOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ReduceScatterOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     const auto* reduce_scatter_inst = Cast<HloReduceScatterInstruction>(inst);
     const auto replica_groups = reduce_scatter_inst->GetPoplarReplicaGroups();

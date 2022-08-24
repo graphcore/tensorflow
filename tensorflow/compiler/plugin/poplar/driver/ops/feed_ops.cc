@@ -182,7 +182,7 @@ Status CreateReusablePoplarD2HFIFO(
   DriverTensor tmp = CreateTemporary(graph, outfeed_config, in,
                                      /*is_read=*/true, debug_name_and_id);
 
-  ExternalAndLocalTransferSequence external_copy(graph);
+  ExternalAndLocalTransferSequence external_copy;
 
   xla::poplarplugin::PoplarFeedConfig internal_config = outfeed_config;
   // already created the temporary so don't need to create it inside
@@ -209,8 +209,8 @@ StatusOr<ExternalAndLocalTransferSequence> CreateInfeed(
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);
   ExternalAndLocalTransferSequence seqs = {
-      DriverProgramSequence(graph, {debug_name_and_id, "ExternalSequence"}),
-      DriverProgramSequence(graph, {debug_name_and_id, "LocalSequence"})};
+      DriverProgramSequence({debug_name_and_id, "ExternalSequence"}),
+      DriverProgramSequence({debug_name_and_id, "LocalSequence"})};
   const HloInfeedInstruction* infeed = Cast<HloInfeedInstruction>(inst);
 
   // Parse the infeed config to find out how much data to prefetch if at all.
@@ -237,7 +237,7 @@ StatusOr<ExternalAndLocalTransferSequence> CreateInfeed(
     auto& initializer = DataInitializer::GetSyntheticDataInitializer();
     TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
 
-    DriverTensor d(tensor, graph);
+    DriverTensor d(tensor);
     TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, d, literal));
   }
   return seqs;
@@ -248,8 +248,8 @@ StatusOr<ExternalAndLocalTransferSequence> CreateOutfeed(
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);
   ExternalAndLocalTransferSequence seqs = {
-      DriverProgramSequence(graph, {debug_name_and_id, "ExternalSequence"}),
-      DriverProgramSequence(graph, {debug_name_and_id, "LocalSequence"})};
+      DriverProgramSequence({debug_name_and_id, "ExternalSequence"}),
+      DriverProgramSequence({debug_name_and_id, "LocalSequence"})};
 
   const HloOutfeedInstruction* outfeed = Cast<HloOutfeedInstruction>(inst);
   xla::poplarplugin::PoplarFeedConfig outfeed_config;

@@ -34,7 +34,7 @@ class AssumeEqualAcrossReplicasOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "AssumeEqualAcrossReplicas");
 
-    DriverProgramSequence seq(graph);
+    DriverProgramSequence seq;
 
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,

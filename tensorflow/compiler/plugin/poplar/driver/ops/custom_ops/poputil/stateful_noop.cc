@@ -39,7 +39,7 @@ class StatefulNoopOp : public PoplarOpDef {
       const xla::Shape&, TensorMap&,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "StatefulNoopOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     return seq;
   }
 };

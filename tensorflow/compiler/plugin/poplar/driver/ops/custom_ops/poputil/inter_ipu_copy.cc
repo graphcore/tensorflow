@@ -176,7 +176,7 @@ StatusOr<DriverProgramSequence> InterIpuCopyOp::Creator(
     const Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugContext& debug_context) {
   PoplarOpDefDebugInfo debug_info(debug_context, "InterIpuCopyOp");
-  DriverProgramSequence seq(graph, debug_info);
+  DriverProgramSequence seq(debug_info);
 
   if (!inst->has_sharding()) {
     return FailedPrecondition("Missing shard information on %s", inst->name());

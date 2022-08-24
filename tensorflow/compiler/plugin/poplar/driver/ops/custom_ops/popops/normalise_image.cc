@@ -31,7 +31,7 @@ class NormaliseImageOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "NormaliseImageOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     const HloNormaliseImage* as_norm_image = Cast<HloNormaliseImage>(inst);
     const float scale = as_norm_image->Scale();
@@ -59,7 +59,7 @@ class NormaliseImageOp : public PoplarOpDef {
         popops::normaliseImage(graph, seq, image_copy, scale, channel_offsets,
                                channel_scales, {debug_name_and_id});
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
     return seq;
   }
 

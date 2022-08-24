@@ -148,10 +148,9 @@ StatusOr<poplar::Engine> HloPoplarTestBase::Compile(
 
   TF_RETURN_IF_ERROR(entry->AcceptOrdered(&visitor, order));
 
-  DriverProgramSequence main_program(*resources.main_graph);
+  DriverProgramSequence main_program;
   main_program.add(*resources.preamble_sequence);
-  main_program.add(
-      visitor.GetSequenceAndInitializeCounters(*resources.main_graph));
+  main_program.add(visitor.GetSequenceAndInitializeCounters());
 
   return poplar::Engine(*resources.main_graph, main_program);
 }

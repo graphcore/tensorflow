@@ -185,13 +185,13 @@ class BaseVisitor : public DfsHloVisitor {
   // set to true, then prepend the sequence with copies for populating the
   // execution counters with the values from the outer scope.
   virtual DriverProgramSequence GetSequence(
-      DriverGraph& graph, bool copy_execution_counters = true);
+      bool copy_execution_counters = true);
 
   // Return the execution counters for the sequence built by this visitor.
   ExecutionCounters& GetExecutionCounters();
 
   // Get a copy of the sequence without any execution counter logic.
-  DriverProgramSequence GetRawSequence(DriverGraph& graph) const;
+  DriverProgramSequence GetRawSequence() const;
 
  protected:
   Status Unimplemented(HloInstruction* inst);

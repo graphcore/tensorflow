@@ -75,7 +75,7 @@ class RecvFromHostOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "RecvFromHostOp");
-    DriverProgramSequence seq(graph, {debug_info});
+    DriverProgramSequence seq(debug_info);
 
     const auto* recv = Cast<HloRecvFromHostInstruction>(inst);
     const int64_t num_outputs = recv->RendezvousKeys().size();

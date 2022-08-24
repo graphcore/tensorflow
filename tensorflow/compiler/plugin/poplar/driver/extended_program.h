@@ -31,22 +31,7 @@ using ExtendedProgramSync = poplar::program::Sync;
 using ExtendedProgramRepeat = poplar::program::Repeat;
 using ExtendedProgramCall = poplar::program::Call;
 using ExtendedProgramWriteUndef = poplar::program::WriteUndef;
-
-// Wrapper class for poplar (will be removed in T67791)
-class ExtendedProgramSequence : public poplar::program::Sequence {
- public:
-  ExtendedProgramSequence(poplar::Graph& graph,
-                          const poplar::DebugContext& debugContext = {})
-      : poplar::program::Sequence(debugContext) {}
-  ExtendedProgramSequence(
-      std::initializer_list<poplar::program::Program> programs,
-      poplar::Graph& graph, const poplar::DebugContext& debugContext = {})
-      : poplar::program::Sequence(programs, debugContext) {}
-
-  void add(const poplar::program::Program& p) {
-    poplar::program::Sequence::add(p);
-  }
-};
+using ExtendedProgramSequence = poplar::program::Sequence;
 
 }  // namespace poplarplugin
 }  // namespace xla

@@ -160,7 +160,7 @@ class MatMulOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "MatMulOp");
-    DriverProgramSequence seq(graph, {debug_info});
+    DriverProgramSequence seq(debug_info);
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
     // Find matmul lhs tensor
@@ -221,8 +221,7 @@ class MatMulOp : public PoplarOpDef {
     // Reshape to XLA shape
     output = output.reshape(PoplarShapeFromXlaShape(output_shape));
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(output)));
 
     return seq;
   }

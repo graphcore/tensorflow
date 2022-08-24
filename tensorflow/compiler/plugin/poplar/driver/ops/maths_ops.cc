@@ -246,7 +246,7 @@ StatusOr<DriverProgramSequence> CreateTupleSelectOp(
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);
 
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   TF_ASSIGN_OR_RETURN(poplar::Tensor pred,
                       FindInstructionInput(tensor_map, res, inst, 0, seq,
@@ -278,7 +278,7 @@ StatusOr<DriverProgramSequence> CreateTupleSelectOp(
     auto out = popops::map(graph, popops::expr::TernaryOpType::SELECT, i0, i1,
                            p, seq, {debug_name_and_id});
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, DriverTensor(out)));
   }
 
   return seq;
@@ -377,7 +377,7 @@ StatusOr<DriverProgramSequence> CreateCastOp(
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto& graph = GetGraph(res, inst);
 
-  DriverProgramSequence seq(graph, debug_name_and_id);
+  DriverProgramSequence seq(debug_name_and_id);
 
   // TODO(T16423) - Do not expand aliasing when casting.
   TF_ASSIGN_OR_RETURN(
@@ -389,7 +389,7 @@ StatusOr<DriverProgramSequence> CreateCastOp(
   poplar::Tensor out =
       popops::cast(graph, in, poplar_type, seq, {debug_name_and_id});
 
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
 
   return seq;
 }

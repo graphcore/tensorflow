@@ -93,7 +93,7 @@ class AllGatherWithinReplicaOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "AllGatherWithinReplicaOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     const auto ipu_count = GetNumIPUs(res);
     TF_RETURN_IF_ERROR(ValidateInputSharding(inst, ipu_count));
@@ -153,7 +153,7 @@ class ReduceScatterWithinReplicaOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context,
                                     "ReduceScatterWithinReplicaOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     const auto ipu_count = GetNumIPUs(res);
     TF_RETURN_IF_ERROR(ValidateInputSharding(inst, ipu_count));
@@ -175,13 +175,13 @@ class ReduceScatterWithinReplicaOp : public PoplarOpDef {
 
     CHECK_EQ(ipu_count, chunks.chunks.size())
         << "Expecting to have a chunk for each IPU.";
-    TF_CHECK_OK(SetOutputs(graph, chunks.chunks, inst, res, tensor_map));
+    TF_CHECK_OK(SetOutputs(chunks.chunks, inst, res, tensor_map));
 
     return seq;
   }
 
  private:
-  Status SetOutputs(DriverGraph& graph, std::vector<gcl::Chunk>& output_chunks,
+  Status SetOutputs(std::vector<gcl::Chunk>& output_chunks,
                     const HloInstruction* inst, CompilerResources& res,
                     TensorMap& tensor_map) {
     const auto output_tensor_shape =
@@ -212,7 +212,7 @@ class ReduceScatterWithinReplicaOp : public PoplarOpDef {
       }
 
       TF_RETURN_IF_ERROR(
-          AddOutputTensor(tensor_map, inst, i, DriverTensor(tensor, graph)));
+          AddOutputTensor(tensor_map, inst, i, DriverTensor(tensor)));
     }
 
     return Status::OK();
@@ -228,7 +228,7 @@ class AllReduceWithinReplicaOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "AllReduceWithinReplicaOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     const auto ipu_count = GetNumIPUs(res);
     TF_RETURN_IF_ERROR(ValidateInputSharding(inst, ipu_count));

@@ -48,7 +48,7 @@ class ReplicationFactorOp : public PoplarOpDef {
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
-    return DriverProgramSequence(graph, debug_info);
+    return DriverProgramSequence(debug_info);
   }
 };
 REGISTER_POPLAR_OP(ReplicationFactor, ReplicationFactorOp);
@@ -59,7 +59,7 @@ class ReplicationNormaliseOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "ReplicationNormaliseOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     // Get the inplace input.
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,

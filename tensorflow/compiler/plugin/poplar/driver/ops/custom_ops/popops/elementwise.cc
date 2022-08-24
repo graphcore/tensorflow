@@ -39,7 +39,7 @@ class UnaryElementwiseOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "UnaryElementwiseOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     TF_ASSIGN_OR_RETURN(auto expression_inputs,
                         helper::GetElementwiseInputs(res, inst, {0}, tensor_map,
                                                      seq, {debug_info}));
@@ -60,7 +60,7 @@ class UnaryElementwiseOp : public PoplarOpDef {
       out = popops::map(graph, expr, input_tensors, seq, {debug_info});
     }
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
 
     return seq;
   }
@@ -136,7 +136,7 @@ class BinaryElementwiseOp : public PoplarOpDef {
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugNameAndId& debug_name_and_id) {
-    DriverProgramSequence seq(graph, debug_name_and_id);
+    DriverProgramSequence seq(debug_name_and_id);
     TF_ASSIGN_OR_RETURN(
         auto expression_inputs,
         helper::GetElementwiseInputs(res, inst, {0, 1}, tensor_map, seq,
@@ -159,7 +159,7 @@ class BinaryElementwiseOp : public PoplarOpDef {
     } else {
       out = popops::map(graph, expr, input_tensors, seq, {debug_name_and_id});
     }
-    return NaryOutput{seq, DriverTensor(out, graph)};
+    return NaryOutput{seq, DriverTensor(out)};
   }
 
  public:
@@ -309,7 +309,7 @@ class TernaryElementwiseOp : public PoplarOpDef {
       DriverGraph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugNameAndId& debug_name_and_id) {
-    DriverProgramSequence seq(graph, debug_name_and_id);
+    DriverProgramSequence seq(debug_name_and_id);
 
     // Get the ternary operation.
     auto operation = helper::GetElementwiseOp(inst);
@@ -354,7 +354,7 @@ class TernaryElementwiseOp : public PoplarOpDef {
     } else {
       out = popops::map(graph, expr, input_tensors, seq, {debug_name_and_id});
     }
-    return NaryOutput{seq, DriverTensor(out, graph)};
+    return NaryOutput{seq, DriverTensor(out)};
   }
 
  public:

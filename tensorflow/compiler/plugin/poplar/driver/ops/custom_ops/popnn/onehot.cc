@@ -41,7 +41,7 @@ class OneHotOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "OneHotOp");
     // Create the control program.
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     const HloOneHotInstruction* one_hot_op = Cast<HloOneHotInstruction>(inst);
 
     // Get the inputs.

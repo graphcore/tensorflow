@@ -33,7 +33,7 @@ class PipelineStageVisitor : public InplaceDeferredVisitor {
                        const HloPoplarInplaceDescription& description,
                        const poplar::DebugNameAndId& debug_name_and_id);
 
-  DriverProgramSequence GetCachedSequence(DriverGraph& graph);
+  DriverProgramSequence GetCachedSequence();
 
   // Returns whether the output needs a copy.
   virtual ShapeTree<bool> GetOutputCopies(const HloInstruction* inst) const;

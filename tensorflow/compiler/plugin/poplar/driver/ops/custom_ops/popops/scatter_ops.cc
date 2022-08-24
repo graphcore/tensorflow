@@ -108,7 +108,7 @@ class ScatterOp : public PoplarOpDef {
         dim_numbers.scatter_dims_to_operand_dims();
     const auto index_vector_dim = dim_numbers.index_vector_dim();
 
-    DriverProgramSequence prog(graph, debug_info);
+    DriverProgramSequence prog(debug_info);
 
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -176,7 +176,7 @@ class ScatterOp : public PoplarOpDef {
           }
 
           // Add the sequence.
-          p.add(update_comp_visitor->GetSequence(graph));
+          p.add(update_comp_visitor->GetSequence());
 
           // Copy the output out
           p.add(poplar::program::Copy(

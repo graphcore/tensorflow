@@ -67,9 +67,9 @@ ENTRY main {
   EXPECT_THAT(sub_counters.GetLiveCounters(), ::testing::ElementsAre(true));
   EXPECT_THAT(counters.GetLiveCounters(), ::testing::ElementsAre(false));
   // Populate the counters from the outer scope.
-  DriverProgramSequence seq(*resources->main_graph);
-  TF_EXPECT_OK(CopyExecutionCountersFromScope(
-      *resources->main_graph, *resources.get(), sub_counters, seq));
+  DriverProgramSequence seq;
+  TF_EXPECT_OK(
+      CopyExecutionCountersFromScope(*resources.get(), sub_counters, seq));
   // Check that the counter has now been marked as live.
   EXPECT_EQ(counters.GetLiveCounters(), sub_counters.GetLiveCounters());
 }
@@ -102,9 +102,9 @@ ENTRY main {
   EXPECT_THAT(counters.GetLiveCounters(),
               ::testing::ElementsAre(false, false, false, false));
   // Populate the counters from the outer scope.
-  DriverProgramSequence seq(*resources->main_graph);
-  TF_EXPECT_OK(CopyExecutionCountersFromScope(
-      *resources->main_graph, *resources.get(), sub_counters, seq));
+  DriverProgramSequence seq;
+  TF_EXPECT_OK(
+      CopyExecutionCountersFromScope(*resources.get(), sub_counters, seq));
   // Check that the counter has now been marked as live.
   EXPECT_THAT(counters.GetLiveCounters(), sub_counters.GetLiveCounters());
 }

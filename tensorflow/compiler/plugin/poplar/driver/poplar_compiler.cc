@@ -537,7 +537,7 @@ StatusOr<DriverProgramSequence> InitializeSeed(
       graph.addVariable(poplar::UNSIGNED_INT, {2}, {debug_info, "seed"});
   graph.setTileMapping(seed, 0);
 
-  DriverProgramSequence seq(*resources.main_graph, {debug_info});
+  DriverProgramSequence seq(debug_info);
 
   const auto use_synthetic_data =
       UseSyntheticDataFor(SyntheticDataCategory::Seed);
@@ -1466,7 +1466,7 @@ StatusOr<DriverProgram> ConstructGraphAndMainProgram(
   } catch (const std::exception& e) {
     return PoplarExceptionToTensorflowStatus("[Build graph]", e);
   }
-  return visitor.GetSequenceAndInitializeCounters(main_graph);
+  return visitor.GetSequenceAndInitializeCounters();
 }
 
 StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
@@ -1839,7 +1839,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     resources.CreatePreambleSequence();
     auto& main_graph = GetMasterGraph(resources);
 
-    DriverProgramSequence fp_setup(main_graph);
+    DriverProgramSequence fp_setup;
     // Set up the floating point control register if required. Do this before
     // seed setup so we don't overwrite any FP settings it changes.
     if (poplar_executor->FloatingPointBehaviourFlagsSet()) {
@@ -1867,7 +1867,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
                  "and experimentali prng stability is enabled.";
     }
 
-    DriverProgramSequence main_program(*resources.main_graph, {"MainProgram"});
+    DriverProgramSequence main_program("MainProgram");
 
     // Decide whether to synchronise all the replica's starting points.
     if (PoplarXlaFlags::Get().sync_replica_start && replication_factor > 1) {

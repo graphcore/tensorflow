@@ -952,7 +952,7 @@ DriverTensor TensorCloneAndRebalanceAliasing(
   std::tie(dst, offset) =
       poputil::cloneAndExpandAliasing(graph, tensor, offset, debug_name_and_id);
   res.linear_mapping_state[&graph] = offset;
-  return {dst, graph};
+  return {dst};
 }
 
 Status SetInitialTensorValue(DriverGraph& graph, DriverTensor& tensor,

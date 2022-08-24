@@ -33,7 +33,7 @@ class SendRecvBarrierOp : public PoplarOpDef {
     // of the Send/Recv stream copies (which would cause a deadlock).
     return DriverProgramSequence(
         {poplar::program::Sync(poplar::SyncType::INTERNAL, debug_context)},
-        graph, debug_context);
+        debug_context);
   }
 };
 

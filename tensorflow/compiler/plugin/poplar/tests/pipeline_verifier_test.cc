@@ -195,11 +195,9 @@ ENTRY main {
                 grad_acc_placeholder, *(resources->main_graph))
             .ValueOrDie();
     // Get the pipeline program
-    auto program =
-        visitor.GetPipelineSequence(*resources->main_graph, count).ValueOrDie();
+    auto program = visitor.GetPipelineSequence(count).ValueOrDie();
 
-    DriverProgramSequence seq({verify_program, program},
-                              *resources->main_graph);
+    DriverProgramSequence seq({verify_program, program});
 
     // Compile the graph
     poplar::Engine engine(*resources->main_graph, seq);

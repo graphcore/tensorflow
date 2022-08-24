@@ -181,8 +181,7 @@ ENTRY main {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program =
-      visitor.GetPipelineSequence(*resources->main_graph, 8).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(8).ValueOrDie();
 
   // Compile the graph
   poplar::Engine engine(*resources->main_graph, program);
@@ -326,8 +325,7 @@ ENTRY main {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program =
-      visitor.GetPipelineSequence(*resources->main_graph, 8).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(8).ValueOrDie();
 
   // Create unique reporting directory to avoid tests overwriting
   // eachother's reports.
@@ -540,8 +538,7 @@ ENTRY main {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program =
-      visitor.GetPipelineSequence(*resources->main_graph, 12).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(12).ValueOrDie();
 
   // Create unique reporting directory to avoid tests overwriting
   // eachother's reports.
@@ -748,8 +745,7 @@ ENTRY main {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program =
-      visitor.GetPipelineSequence(*resources->main_graph, 12).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(12).ValueOrDie();
 
   // Build and run the graph
   poplar::Engine engine(*resources->main_graph, program,
@@ -960,8 +956,7 @@ ENTRY main {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program =
-      visitor.GetPipelineSequence(*resources->main_graph, 8).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(8).ValueOrDie();
 
   // Compile the graph
   poplar::Engine engine(*resources->main_graph, program);

@@ -40,7 +40,7 @@ class InterTilesetCopyOp : public PoplarOpDef {
     const auto* copy_inst = Cast<HloInterTilesetCopy>(inst);
 
     PoplarOpDefDebugInfo debug_info(debug_context, "InterTilesetCopyOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     CHECK(!IsLoweredInplace(inst)) << inst->ToString();
 

@@ -118,7 +118,7 @@ class DropoutOp : public PoplarOpDef {
     const float rate = dropout_instruction->Rate();
     const float scale = dropout_instruction->Scale();
 
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     TF_ASSIGN_OR_RETURN(poplar::Tensor input,
                         FindInstructionInput(tensor_map, res, inst, 0, seq,
                                              {debug_info}, false));

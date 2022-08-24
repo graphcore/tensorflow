@@ -42,7 +42,7 @@ class PrintTensorOp : public PoplarOpDef {
     PoplarOpDefDebugInfo debug_info(debug_context, "PrintTensorOp");
     auto print_tensor_inst = Cast<HloPrintTensor>(inst);
     // Create the control program.
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     // Get the input - don't expand constants.
     TF_ASSIGN_OR_RETURN(poplar::Tensor input,

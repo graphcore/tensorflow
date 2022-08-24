@@ -309,8 +309,7 @@ struct CompilerResources : public HloResources {
   }
 
   void CreatePreambleSequence() {
-    preamble_sequence =
-        absl::make_unique<DriverProgramSequence>(*main_graph, "Preamble");
+    preamble_sequence = absl::make_unique<DriverProgramSequence>("Preamble");
   }
 
   Status CreateMainGraphAndPreamble(

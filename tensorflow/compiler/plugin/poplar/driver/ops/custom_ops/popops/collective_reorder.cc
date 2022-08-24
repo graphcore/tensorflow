@@ -43,7 +43,7 @@ class CollectiveReorderOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "CollectiveReorderOp");
     poplar::DebugNameAndId dnai(debug_info);
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     CHECK(res.current_cluster_visitor)
         << "collective-reorder instruction must be used only inside "
@@ -93,8 +93,8 @@ class CollectiveReorderOp : public PoplarOpDef {
     seq.add(poplar::program::Copy(input.flatten(), ref.flatten(), false,
                                   debug_info));
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0,
-                                DriverTensor(output.flatten(), graph)));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output.flatten())));
 
     return seq;
   }
@@ -108,7 +108,7 @@ class UndoCollectiveReorderOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "UndoCollectiveReorderOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     CHECK(res.current_cluster_visitor)
         << "undo-collective-reorder instruction must be used only inside "
@@ -129,8 +129,7 @@ class UndoCollectiveReorderOp : public PoplarOpDef {
 
     output = output.reshape(PoplarShapeFromXlaShape(inst->shape()));
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(output)));
 
     return seq;
   }

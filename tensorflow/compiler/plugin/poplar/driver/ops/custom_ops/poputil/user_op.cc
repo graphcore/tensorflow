@@ -86,7 +86,7 @@ class UserOpImpl : public PoplarOpDef {
     as_function_host_rw_ptr =
         reinterpret_cast<decltype(as_function_host_rw_ptr)>(
             user_op_inst->GetPointerToFunc());
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
     std::vector<poplar::Tensor> outputs;
 
     // Track the number of outputs/inputs this operation has.

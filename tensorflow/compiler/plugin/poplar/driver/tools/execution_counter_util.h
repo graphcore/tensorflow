@@ -98,19 +98,19 @@ class ExecutionCounters {
   // Copy counters from `source`. Any counters which are live in `this` are
   // marked as live in `source`.
   StatusOr<DriverProgramSequence> SetInitialValuesFrom(
-      DriverGraph& graph, ExecutionCounters* source);
+      ExecutionCounters* source);
 
   // Create a sequence which sets the values of live counters to zero.
-  DriverProgramSequence SetInitialValuesToZero(DriverGraph& graph);
+  DriverProgramSequence SetInitialValuesToZero();
 
   // Update counters in `destination` by copying the values of current counters.
   // Any counters which are live in `this` are expected to also be live in
   // `destination`
   StatusOr<DriverProgramSequence> UpdateCounters(
-      DriverGraph& graph, ExecutionCounters* destination);
+      ExecutionCounters* destination);
 
   // Increment all the live counters by one.
-  DriverProgramSequence IncrementLiveCounters(DriverGraph& graph) const;
+  DriverProgramSequence IncrementLiveCounters() const;
 
   const std::vector<bool>& GetLiveCounters() const;
 
@@ -137,8 +137,7 @@ StatusOr<DriverTensor> GetExecutionCounter(CompilerResources& resources,
 
 // Add copy programs to the sequence which set the counter values from the
 // current scope currently at the top of the stack.
-Status CopyExecutionCountersFromScope(DriverGraph& graph,
-                                      CompilerResources& resources,
+Status CopyExecutionCountersFromScope(CompilerResources& resources,
                                       ExecutionCounters& counters,
                                       DriverProgramSequence& sequence);
 

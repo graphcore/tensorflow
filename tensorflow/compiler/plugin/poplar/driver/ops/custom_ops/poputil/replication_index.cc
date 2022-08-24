@@ -48,7 +48,7 @@ class ReplicationIndexOp : public PoplarOpDef {
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
-    return DriverProgramSequence(graph, debug_info);
+    return DriverProgramSequence(debug_info);
   }
 };
 REGISTER_HLO_OP(kReplicaId, ReplicationIndexOp);

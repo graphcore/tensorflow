@@ -44,7 +44,7 @@ class SequenceSliceOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "SequenceSliceOp");
 
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     auto seq_slice_inst = Cast<HloSequenceSliceInstruction>(inst);
 

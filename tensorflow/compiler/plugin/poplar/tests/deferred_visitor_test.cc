@@ -138,7 +138,7 @@ ENTRY cluster (arg0.1: (f32[1,4,4,2], f32[2], f32[1,1,2,2])) -> f32[1,4,4,2] {
   auto root = entry_computation->root_instruction();
   auto gte1 = root->operand(1);
   auto arg = gte1->operand(0);
-  auto seq = visitor.GetRawSequence(*resources->main_graph);
+  auto seq = visitor.GetRawSequence();
   DriverTensor root_tensor =
       FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
@@ -188,7 +188,7 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], f32[2], f32[1,1,2,2]))) -> f32[1,4,4,2] {
   auto gte1 = root->operand(1);
   auto gte = gte1->operand(0);
   auto arg = gte->operand(0);
-  auto seq = visitor.GetRawSequence(*resources->main_graph);
+  auto seq = visitor.GetRawSequence();
   DriverTensor root_tensor =
       FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
@@ -243,7 +243,7 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], (f32[2], f32[1,1,2,2])))) -> f32[1,4,4,2]
   auto gte1 = gte1_0->operand(0);
   auto gte = gte1->operand(0);
   auto arg = gte->operand(0);
-  auto seq = visitor.GetRawSequence(*resources->main_graph);
+  auto seq = visitor.GetRawSequence();
   DriverTensor root_tensor =
       FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
@@ -319,7 +319,7 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
   auto gte1 = gte1_0->operand(0);
   auto gte = gte1->operand(0);
   auto arg = gte->operand(0);
-  auto seq = visitor.GetRawSequence(*resources->main_graph);
+  auto seq = visitor.GetRawSequence();
   DriverTensor fusion_0_input_one_tensor =
       FindInstructionInput(tensor_map, *resources.get(), fusion_0, 1, seq,
                            false)
@@ -400,7 +400,7 @@ ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
   auto gte1 = root->operand(1);
   auto gte = gte1->operand(0);
   auto infeed = gte->operand(0);
-  auto seq = visitor.GetRawSequence(*resources->main_graph);
+  auto seq = visitor.GetRawSequence();
   DriverTensor root_tensor =
       FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
@@ -745,7 +745,7 @@ ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get and flatten the resulting sequence.
-  const auto seq = visitor.GetRawSequence(*resources->main_graph);
+  const auto seq = visitor.GetRawSequence();
   std::ostringstream oss;
   poplar::program::dumpProgram(GetMasterGraph(*resources.get()), seq, oss);
   Json::Value json;

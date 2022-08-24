@@ -295,7 +295,7 @@ class NormInferenceOp : public NormInferenceAndTrainingOp {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "NormInferenceOp");
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
@@ -376,7 +376,7 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
       const poplar::DebugContext& debug_context) {
     PoplarOpDefDebugInfo debug_info(debug_context, "NormTrainingOp");
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
@@ -487,7 +487,7 @@ class NormGradOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) {
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
     PoplarOpDefDebugInfo debug_info(debug_context, "NormGradOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
@@ -612,7 +612,7 @@ class NormStatisticsOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) {
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
     PoplarOpDefDebugInfo debug_info(debug_context, "NormStatisticsOp");
-    DriverProgramSequence seq(graph, debug_info);
+    DriverProgramSequence seq(debug_info);
 
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
