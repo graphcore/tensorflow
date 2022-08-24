@@ -51,9 +51,7 @@ C++ code compiled for, and executed on, the IPU.
 
 For more information about writing Poplar graph programs and codelets, refer to
 the `Poplar and PopLibs User Guide
-<https://docs.graphcore.ai/projects/poplar-user-guide/>`_ and the `Poplar
-tutorials <https://github.com/graphcore/tutorials/tree/sdk-release-2.6/tutorials/poplar>`_
-on the Graphcore GitHub tutorials respository.
+<https://docs.graphcore.ai/projects/poplar-user-guide/>`_ and the :tutorials-repo:`Poplar tutorials <tutorials/poplar>` on the Graphcore GitHub tutorials respository.
 
 Your program must contain a function to build the graph, which will be called
 from TensorFlow when you instantiate the custom op. This has the following
@@ -459,11 +457,9 @@ Some examples of using a custom op in TensorFlow are shown in the following
 sections. There are further examples in the Graphcore GitHub tutorials
 repository:
 
-* `Custom op with gradient
-  <https://github.com/graphcore/tutorials/tree/sdk-release-2.6/feature_examples/tensorflow/custom_gradient>`_
+* :tutorials-repo:`Custom op with gradient <feature_examples/tensorflow/custom_gradient>`
 
-* `Custom op with codelet for custom vertex code
-  <https://github.com/graphcore/tutorials/tree/sdk-release-2.6/feature_examples/tensorflow/custom_op>`_
+* :tutorials-repo:`Custom op with codelet for custom vertex code <feature_examples/tensorflow/custom_op>`
 
 
 .. _inplace_operations:

@@ -98,7 +98,7 @@ array and will contain `x1 - x2` for each iteration in the loop.
 
 See entries in the :ref:`api-section` for more details.
 
-For a more practical example, the Graphcore tutorials repository contains a `detailed tutorial about using infeeds and outfeeds with TensorFlow <https://github.com/graphcore/tutorials/tree/sdk-release-2.6/tutorials/tensorflow2/infeed_outfeed>`_.
+For a more practical example, the Graphcore tutorials repository contains a :tutorials-repo:`detailed tutorial about using infeeds and outfeeds with TensorFlow <tutorials/tensorflow2/infeed_outfeed>`.
 
 
 .. _infeed-simplification:

@@ -33,5 +33,4 @@ targets distributed Pod systems.
 PopDistStrategy examples
 ################################
 
-There are examples for `PopDistStrategy` in the Graphcore `feature examples on GitHub
-<https://github.com/graphcore/tutorials/tree/sdk-release-2.6/feature_examples/tensorflow2/popdist>`_.
+There are examples for `PopDistStrategy` in the Graphcore :tutorials-repo:`feature examples on GitHub <feature_examples/tensorflow2/popdist>`.
