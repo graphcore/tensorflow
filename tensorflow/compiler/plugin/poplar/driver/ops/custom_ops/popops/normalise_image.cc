@@ -74,10 +74,8 @@ class NormaliseImageOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(auto type, PoplarDataType(xla_shape));
     auto shape = PoplarShapeFromXlaShape(xla_shape);
 
-    auto out =
-        DriverTensor(popops::createNormaliseImageInput(
-                         graph, type, shape, {debug_context, "CreateInput"}),
-                     graph);
+    auto out = DriverTensor(popops::createNormaliseImageInput(
+        graph, type, shape, {debug_context, "CreateInput"}));
     return out;
   }
 };

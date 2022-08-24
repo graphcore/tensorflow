@@ -202,7 +202,7 @@ StatusOr<DriverTensor> AddNormScaleTensor(
 
   // `gamma` is appended to the name by the createNorm function
   return DriverTensor(
-      poplin::createNormGamma(graph, shuffled, {debug_name_and_id}), graph);
+      poplin::createNormGamma(graph, shuffled, {debug_name_and_id}));
 }
 
 StatusOr<DriverTensor> AddNormOffsetTensor(
@@ -225,7 +225,7 @@ StatusOr<DriverTensor> AddNormOffsetTensor(
 
   // `beta` is appended to the name by the createNorm function
   return DriverTensor(
-      poplin::createNormBeta(graph, shuffled, {debug_name_and_id}), graph);
+      poplin::createNormBeta(graph, shuffled, {debug_name_and_id}));
 }
 
 int64_t CalculateNormBatchSize(const poplar::Tensor& t,
@@ -360,8 +360,7 @@ class NormInferenceOp : public NormInferenceAndTrainingOp {
     }
     output = ShuffleNormOutputToTensorflow(output, norm_opts.feature_index);
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(output)));
 
     return seq;
   }
@@ -467,12 +466,10 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
     }
     output = ShuffleNormOutputToTensorflow(output, norm_opts.feature_index);
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 1, DriverTensor(mean, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(output)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, DriverTensor(mean)));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2,
-                                DriverTensor(variance_or_inv_std_dev, graph)));
+                                DriverTensor(variance_or_inv_std_dev)));
 
     return seq;
   }
@@ -593,12 +590,11 @@ class NormGradOp : public PoplarOpDef {
     operand_grad =
         ShuffleNormOutputToTensorflow(operand_grad, norm_opts.feature_index);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0,
-                                DriverTensor(operand_grad, graph)));
     TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 1, DriverTensor(scale_grad, graph)));
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(operand_grad)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, DriverTensor(scale_grad)));
     TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 2, DriverTensor(offset_grad, graph)));
+        AddOutputTensor(tensor_map, inst, 2, DriverTensor(offset_grad)));
     return seq;
   }
 };
@@ -684,10 +680,9 @@ class NormStatisticsOp : public PoplarOpDef {
       }
     }
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(mean, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(mean)));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1,
-                                DriverTensor(variance_or_inv_std_dev, graph)));
+                                DriverTensor(variance_or_inv_std_dev)));
     return seq;
   }
 };

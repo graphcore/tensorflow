@@ -51,12 +51,11 @@ class ConvertToF8Op : public PoplarOpDef {
                               /*dont_outline=*/false, debug_info));
     poplar::Tensor out =
         popops::cast(graph, input, poplar::QUARTER, metadata, seq, debug_info);
-    TF_CHECK_OK(AddOutputTensor(
-        tensor_map, inst, 1,
-        DriverTensor(out.getMetadata().reinterpret(poplar::UNSIGNED_CHAR),
-                     graph)));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 1,
+                        out.getMetadata().reinterpret(poplar::UNSIGNED_CHAR)));
     out = out.reinterpret(poplar::UNSIGNED_CHAR);
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
     return seq;
   }
 };
@@ -75,7 +74,7 @@ class ConvertFromF8Op : public PoplarOpDef {
         FindF8InstructionInput(tensor_map, res, inst, 0, seq, debug_info));
     poplar::Tensor out =
         popops::cast(graph, input, poplar_type, seq, debug_info);
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
     return seq;
   }
 };

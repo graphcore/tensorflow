@@ -43,10 +43,9 @@ DriverTensor CreateTemporary(DriverGraph& graph,
                              const DriverTensor& target, const bool is_read,
                              const poplar::DebugNameAndId& debug_name_and_id) {
   if (config.optimise_latency()) {
-    return DriverTensor(popops::createHostTransferableTensor(
-                            graph, target.elementType(), target.shape(),
-                            is_read, {debug_name_and_id}),
-                        graph);
+    return popops::createHostTransferableTensor(graph, target.elementType(),
+                                                target.shape(), is_read,
+                                                {debug_name_and_id});
   }
   return graph.clone(target, {debug_name_and_id});
 }

@@ -57,7 +57,7 @@ StatusOr<DriverTensor> AllocatePoplarOpTensor(
   TF_ASSIGN_OR_RETURN(poplar::Tensor out,
                       op_def->Allocator(graph, res, "", tensor_target,
                                         tensor_map, {debug_info}));
-  return DriverTensor(out, graph);
+  return DriverTensor(out);
 }
 
 StatusOr<DriverProgramSequence> CreatePoplarOp(
@@ -101,7 +101,7 @@ StatusOr<DriverTensor> AllocateHloOpTensor(
   TF_ASSIGN_OR_RETURN(poplar::Tensor out,
                       op_def->Allocator(graph, res, "", tensor_target,
                                         tensor_map, {debug_info}));
-  return DriverTensor(out, graph);
+  return DriverTensor(out);
 }
 
 StatusOr<DriverProgramSequence> CreateHloOp(DriverGraph& graph,

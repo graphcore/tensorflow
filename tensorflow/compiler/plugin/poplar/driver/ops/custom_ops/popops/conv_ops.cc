@@ -48,10 +48,8 @@ StatusOr<DriverTensor> AddConvolutionInput(
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                       GetConvolutionOptionsForInst(target, resources));
 
-  auto out =
-      DriverTensor(poplin::createInput(graph, params, {debug_info, "input"},
-                                       opts, &resources.planning_cache),
-                   graph);
+  auto out = DriverTensor(poplin::createInput(
+      graph, params, {debug_info, "input"}, opts, &resources.planning_cache));
 
   auto o = ShuffleConvolutionInputToTensorflow(target, out);
 
@@ -67,10 +65,8 @@ StatusOr<DriverTensor> AddConvolutionWeights(
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                       GetConvolutionOptionsForInst(target, resources));
 
-  auto out =
-      DriverTensor(poplin::createWeights(graph, params, {debug_info, "weights"},
-                                         opts, &resources.planning_cache),
-                   graph);
+  auto out = DriverTensor(poplin::createWeights(
+      graph, params, {debug_info, "weights"}, opts, &resources.planning_cache));
 
   out = RemoveGroupsDimensionFromWeights(params, out);
 
@@ -323,17 +319,15 @@ class MultiConvOp : public PoplarOpDef {
     switch (convolution_spec.type) {
       case ConvType::Conv: {
         if (is_conv_input) {
-          out = DriverTensor(poplin::multiconv::createInput(
-                                 graph, create_args, conv_index,
-                                 multi_conv_options, &res.planning_cache),
-                             graph);  /// T32699 add missing debug info
+          out = poplin::multiconv::createInput(
+              graph, create_args, conv_index, multi_conv_options,
+              &res.planning_cache);  /// T32699 add missing debug info
           out = ShuffleConvolutionInputToTensorflow(
               convolution_spec.batch_group_count, convolution_spec.dims, out);
         } else {
-          out = DriverTensor(poplin::multiconv::createWeights(
-                                 graph, create_args, conv_index,
-                                 multi_conv_options, &res.planning_cache),
-                             graph);  ///  T32699 add missing debug info
+          out = poplin::multiconv::createWeights(
+              graph, create_args, conv_index, multi_conv_options,
+              &res.planning_cache);  ///  T32699 add missing debug info
           out = RemoveGroupsDimensionFromWeights(create_args[conv_index].params,
                                                  out);
           out =
@@ -482,8 +476,7 @@ class MultiConvOp : public PoplarOpDef {
 
     // Set the outputs.
     for (int64_t i = 0; i != convolution_specs.size(); ++i) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
-                                  DriverTensor(outputs[i], graph)));
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
     }
 
     return seq;

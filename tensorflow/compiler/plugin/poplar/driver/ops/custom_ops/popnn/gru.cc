@@ -106,9 +106,8 @@ class GRULayerBaseOp : public PoplarOpDef {
                                const HloInstruction* inst,
                                TensorMap& tensor_map, bool training) {
     for (int64_t j = 0; j < OutputTensorCount(); ++j) {
-      TF_CHECK_OK(
-          AddOutputTensor(tensor_map, inst, j,
-                          DriverTensor(args[j + InputTensorCount()], graph)));
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, j,
+                                  DriverTensor(args[j + InputTensorCount()])));
     }
   }
 
@@ -127,17 +126,13 @@ class GRULayerBaseOp : public PoplarOpDef {
     switch (input_index) {
       case 0: {
         // Allocate GRU input tensor.
-        return DriverTensor(
-            popnn::gru::createInput(graph, gru_params, {debug_info}, gru_opts,
-                                    &res.planning_cache),
-            graph);
+        return DriverTensor(popnn::gru::createInput(
+            graph, gru_params, {debug_info}, gru_opts, &res.planning_cache));
       }
       case 1: {
         // Allocate initial state tensor.
-        return DriverTensor(
-            popnn::gru::createInitialState(graph, gru_params, {debug_info},
-                                           gru_opts, &res.planning_cache),
-            graph);
+        return DriverTensor(popnn::gru::createInitialState(
+            graph, gru_params, {debug_info}, gru_opts, &res.planning_cache));
       }
       case 2: {
         // Allocate GRU weights kernel.
@@ -146,28 +141,22 @@ class GRULayerBaseOp : public PoplarOpDef {
         std::tie(input_weights, output_weights) =
             popnn::gru::createWeightsKernel(graph, gru_params, {debug_info},
                                             gru_opts, &res.planning_cache);
-        return DriverTensor(PackGruKernel(input_weights, output_weights),
-                            graph);
+        return DriverTensor(PackGruKernel(input_weights, output_weights));
       }
       case 3: {
         // Allocate GRU weights biases.
-        return DriverTensor(
-            popnn::gru::createWeightsBiases(graph, gru_params, {debug_info},
-                                            gru_opts, &res.planning_cache),
-            graph);
+        return DriverTensor(popnn::gru::createWeightsBiases(
+            graph, gru_params, {debug_info}, gru_opts, &res.planning_cache));
       }
       case 4: {
         // Allocate AUGRU seq_len
         return DriverTensor(popops::createSliceableTensor(
-                                graph, poplar::INT, {gru_params.rnn.batchSize},
-                                {0}, {1}, 0, name),
-                            graph);
+            graph, poplar::INT, {gru_params.rnn.batchSize}, {0}, {1}, 0, name));
       }
       case 5: {
         // Allocate AUGRU attention
         return DriverTensor(popnn::gru::createAttention(graph, gru_params, name)
-                                .dimShuffle({1, 0}),
-                            graph);
+                                .dimShuffle({1, 0}));
       }
       default: {
         return xla::FailedPrecondition(
@@ -275,9 +264,8 @@ class GRULayerFwdOp : public GRULayerBaseOp {
     int total_param_count = InputTensorCount() + OutputTensorCount();
     GRULayerBaseOp::SetOutputTensor(graph, args, inst, tensor_map, training);
     if (training) {
-      TF_CHECK_OK(
-          AddOutputTensor(tensor_map, inst, OutputTensorCount(),
-                          DriverTensor(args[total_param_count], graph)));
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, OutputTensorCount(),
+                                  DriverTensor(args[total_param_count])));
     }
   }
 

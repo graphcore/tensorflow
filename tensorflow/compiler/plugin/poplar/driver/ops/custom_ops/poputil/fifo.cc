@@ -204,8 +204,7 @@ class FifoOp : public PoplarOpDef {
             graph, inputs[tuple_idx], seq,
             {debug_info, absl::StrCat("copy/", tuple_idx)},
             poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-        TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx,
-                                    DriverTensor(output, graph)));
+        TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
       }
       return seq;
     }

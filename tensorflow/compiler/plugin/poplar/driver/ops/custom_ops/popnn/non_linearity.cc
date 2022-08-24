@@ -62,7 +62,7 @@ class NonLinearityOp : public PoplarOpDef {
       t = popnn::nonLinearity(graph, NLType, t, seq, {debug_info});
     }
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(t, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(t)));
 
     return seq;
   }

@@ -996,7 +996,7 @@ StatusOr<DriverProgramSequence> CreateConditionalOp(
   for (unsigned int i = 0; i < output_count; i++) {
     poplar::Tensor out =
         graph.clone(bodies[0]->outputs()[i].AsTensor(), debug_name_and_id);
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, out));
     outputs.push_back(out);
   }
 

@@ -121,8 +121,7 @@ class ReduceManyOp : public PoplarOpDef {
                            {debug_info, "initval"});
       }
       reduction_dims_id += with_scale ? 3 : 2;
-      TF_CHECK_OK(
-          AddOutputTensor(tensor_map, inst, i, DriverTensor(out, graph)));
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, out));
     }
 
     // Return the sequence.

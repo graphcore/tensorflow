@@ -159,8 +159,7 @@ StatusOr<DriverProgramSequence> CreateDynamicUpdateSliceOp(
                                   {debug_name_and_id}));
   }
 
-  TF_CHECK_OK(
-      AddOutputTensor(tensor_map, dynamic_inst, 0, DriverTensor(input, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, dynamic_inst, 0, input));
 
   return seq;
 }

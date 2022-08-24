@@ -98,7 +98,7 @@ class TriangularSolveOp : public PoplarOpDef {
                                      {debug_name_and_id, "TriangularSolve"},
                                      poplar_options, &res.planning_cache);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(x, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(x)));
     return seq;
   }
 
@@ -145,19 +145,15 @@ class TriangularSolveOp : public PoplarOpDef {
     DriverTensor out;
     switch (input_index) {
       case 0: {
-        out = DriverTensor(poplin::createTriangularSolveInputLHS(
-                               graph, type_a, type_b, poplar_shape_a,
-                               poplar_shape_b, left_side, {debug_info, "lhs"},
-                               poplar_options, &res.planning_cache),
-                           graph);
+        out = poplin::createTriangularSolveInputLHS(
+            graph, type_a, type_b, poplar_shape_a, poplar_shape_b, left_side,
+            {debug_info, "lhs"}, poplar_options, &res.planning_cache);
         break;
       }
       case 1: {
-        out = DriverTensor(poplin::createTriangularSolveInputRHS(
-                               graph, type_a, type_b, poplar_shape_a,
-                               poplar_shape_b, left_side, {debug_info, "rhs"},
-                               poplar_options, &res.planning_cache),
-                           graph);
+        out = poplin::createTriangularSolveInputRHS(
+            graph, type_a, type_b, poplar_shape_a, poplar_shape_b, left_side,
+            {debug_info, "rhs"}, poplar_options, &res.planning_cache);
         break;
       }
       default:

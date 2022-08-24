@@ -63,7 +63,7 @@ class CholeskyOp : public PoplarOpDef {
     auto out = poplin::cholesky(graph, a, lower, seq, {dnai, "Cholesky"},
                                 poplar_options, &res.planning_cache);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out)));
 
     return seq;
   }
@@ -87,11 +87,9 @@ class CholeskyOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags poplar_options,
                         GetCholeskyOptionsForInst(inst, res));
 
-    auto out = DriverTensor(
-        poplin::createCholeskyInput(graph, type, shape, lower,
-                                    {debug_context, "createInput"},
-                                    poplar_options, &res.planning_cache),
-        graph);
+    DriverTensor out = poplin::createCholeskyInput(
+        graph, type, shape, lower, {debug_context, "createInput"},
+        poplar_options, &res.planning_cache);
 
     MappingHelper::RemapTensor(res.linear_mapping_state, graph, out);
 

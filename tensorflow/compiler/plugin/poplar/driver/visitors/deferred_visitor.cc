@@ -889,11 +889,9 @@ Status DeferredVisitor::HandleCopy(HloInstruction* inst) {
         switch (clone_method) {
           case CloneMethod_DeduceNewOrderOrPreserveAliases:
           case CloneMethod_PreserveOrderAndAliases: {
-            out = DriverTensor(
-                poputil::duplicate(
-                    graph, tensor_input, seq, {dnai, std::to_string(tuple_idx)},
-                    poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES),
-                graph);
+            out = poputil::duplicate(
+                graph, tensor_input, seq, {dnai, std::to_string(tuple_idx)},
+                poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
             break;
           }
           case CloneMethod_DeduceNewOrderOrExpandAliases:

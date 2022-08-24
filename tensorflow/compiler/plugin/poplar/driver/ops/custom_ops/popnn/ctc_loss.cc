@@ -88,10 +88,8 @@ class CTCLossOpBase : public PoplarOpDef {
         label_lengths.reinterpret(poplar::UNSIGNED_INT), seq, blank_index,
         *plan, debug_info);
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(loss, graph)));
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 1, DriverTensor(grad, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(loss)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, DriverTensor(grad)));
 
     return seq;
   }
@@ -129,17 +127,15 @@ class CTCLossOpBase : public PoplarOpDef {
         const int64_t max_time = ShapeUtil::GetDimension(data_shape, 0);
         const int64_t num_classes = ShapeUtil::GetDimension(data_shape, 2);
         return DriverTensor(popnn::ctc::createDataInput(
-                                graph, dtype, batch_size, max_time, num_classes,
-                                *plan, {debug_info, "data"}),
-                            graph);
+            graph, dtype, batch_size, max_time, num_classes, *plan,
+            {debug_info, "data"}));
       }
       case 1: {
         const int64_t max_label_length =
             ShapeUtil::GetDimension(labels_shape, 1);
         return DriverTensor(popnn::ctc::createLabelsInput(
-                                graph, dtype, batch_size, max_label_length,
-                                *plan, {debug_info, "labels"}),
-                            graph);
+            graph, dtype, batch_size, max_label_length, *plan,
+            {debug_info, "labels"}));
       }
       default: {
         return FailedPrecondition(
@@ -236,12 +232,12 @@ class CTCBeamSearchOpBase : public PoplarOpDef {
         PerformBeamSearch(graph, data, data_lengths, seq, blank_index,
                           beam_width, top_paths, *plan, debug_info);
 
-    TF_CHECK_OK(AddOutputTensor(
-        tensor_map, inst, 0, DriverTensor(outputs.label_probabilities, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0,
+                                DriverTensor(outputs.label_probabilities)));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1,
-                                DriverTensor(outputs.label_lengths, graph)));
+                                DriverTensor(outputs.label_lengths)));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2,
-                                DriverTensor(outputs.decoded_labels, graph)));
+                                DriverTensor(outputs.decoded_labels)));
     return seq;
   }
 
@@ -275,9 +271,8 @@ class CTCBeamSearchOpBase : public PoplarOpDef {
           dtype.toString(), in_dtype.toString());
     }
     return DriverTensor(popnn::ctc_infer::createDataInput(
-                            graph, dtype, batch_size, max_time, num_classes,
-                            *plan, {debug_info, "data"}),
-                        graph);
+        graph, dtype, batch_size, max_time, num_classes, *plan,
+        {debug_info, "data"}));
   }
 };
 

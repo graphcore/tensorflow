@@ -215,11 +215,9 @@ Status BaseVisitor::HandleConstant(HloInstruction* inst) {
   if (is_inplace_read_write && t.numElements() != 0) {
     VLOG(3) << "Constant tensor is read/write inplace, adding copy";
     DriverProgramSequence prog(debug_info);
-    auto clone =
-        DriverTensor(poputil::duplicate(
-                         graph, t, prog, {debug_info, "clone"},
-                         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES),
-                     graph);
+    auto clone = poputil::duplicate(
+        graph, t, prog, {debug_info, "clone"},
+        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
 
     TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, prog));
     t = clone;

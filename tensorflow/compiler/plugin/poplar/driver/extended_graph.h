@@ -102,7 +102,7 @@ class ExtendedGraph : public poplar::Graph {
       const poplar::Type& type, poplar::ArrayRef<std::size_t> shape,
       const T* values, const poplar::DebugContext& debugContext = {"<const>"}) {
     auto tensor = poplar::Graph::addConstant(type, shape, values, debugContext);
-    return {std::move(tensor), *this};
+    return {std::move(tensor)};
   }
 
   template <typename T>
@@ -111,7 +111,7 @@ class ExtendedGraph : public poplar::Graph {
                              const poplar::DebugContext& debugContext = {
                                  "<const>"}) {
     auto tensor = poplar::Graph::addConstant(type, shape, val, debugContext);
-    return {tensor, *this};
+    return tensor;
   }
 
   ExtendedTensor addConstantHalf(

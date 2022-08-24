@@ -157,10 +157,8 @@ class DropoutOp : public PoplarOpDef {
     ReferenceInfo ref_info(graph, reference);
 
     // Mark that tensor as our output.
-    TF_RETURN_IF_ERROR(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output, graph)));
-    TF_RETURN_IF_ERROR(
-        AddOutputTensor(tensor_map, inst, 1, DriverTensor(seed, graph)));
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, output));
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 1, seed));
     TF_RETURN_IF_ERROR(AddOutputOpaque(tensor_map, inst, 2, {ref_info}));
 
     return seq;

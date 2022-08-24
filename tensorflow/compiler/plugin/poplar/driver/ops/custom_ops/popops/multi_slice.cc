@@ -102,9 +102,8 @@ StatusOr<DriverTensor> CreateInputTensor(
     const poplar::DebugNameAndId& debug_name_and_id) {
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(xla_input_shape));
   return DriverTensor(popops::createSliceableTensor(
-                          graph, type, PoplarShapeFromXlaShape(xla_input_shape),
-                          {0}, {1}, plan, {}, {debug_name_and_id}),
-                      graph);
+      graph, type, PoplarShapeFromXlaShape(xla_input_shape), {0}, {1}, plan, {},
+      {debug_name_and_id}));
 }
 
 StatusOr<poplar::Tensor> CreateReallocatedInputTensor(
@@ -126,11 +125,9 @@ StatusOr<DriverTensor> CreateUpdatesTensor(
       PoplarShapeFromXlaShape(xla_indices_shape);
   const auto num_indices = absl::c_accumulate(indices_shape, std::size_t(1),
                                               std::multiplies<std::size_t>());
-  auto out =
-      DriverTensor(popops::createSliceTensor(
-                       graph, type, PoplarShapeFromXlaShape(xla_input_shape),
-                       {0}, {1}, num_indices, plan, {}, {debug_name_and_id}),
-                   graph);
+  DriverTensor out = popops::createSliceTensor(
+      graph, type, PoplarShapeFromXlaShape(xla_input_shape), {0}, {1},
+      num_indices, plan, {}, {debug_name_and_id});
   out = out.reshape(PoplarShapeFromXlaShape(xla_updates_shape));
   return out;
 }

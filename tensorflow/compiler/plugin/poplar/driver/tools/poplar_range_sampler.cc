@@ -35,16 +35,12 @@ Status RangeSampler::Sample(DriverGraph& graph, DriverTensor& samples,
   DriverTensor out;
   switch (distribution_) {
     case DistributionType::UNIFORM:
-      out = DriverTensor(
-          poprand::uniform(graph, &seed_, 0, samples, poplar::INT, 0.0,
-                           range_max_ - 1, seq, {debug_name_and_id}),
-          graph);
+      out = poprand::uniform(graph, &seed_, 0, samples, poplar::INT, 0.0,
+                             range_max_ - 1, seq, {debug_name_and_id});
       break;
     case DistributionType::LOG_UNIFORM:
-      out = DriverTensor(
-          poprand::logUniform(graph, &seed_, 0, samples, poplar::INT, 1.0,
-                              range_max_, seq, M_E, {debug_name_and_id}),
-          graph);
+      out = poprand::logUniform(graph, &seed_, 0, samples, poplar::INT, 1.0,
+                                range_max_, seq, M_E, {debug_name_and_id});
       popops::mapInPlace(graph, pe::Sub(pe::_1, pe::Const(1)), {out}, seq,
                          {debug_name_and_id, "Minus1"});
       break;
@@ -90,8 +86,7 @@ StatusOr<DriverTensor> RangeSampler::Probabilities(DriverGraph& graph,
               pe::Add(pe::Cast(pe::_1, poplar::FLOAT), pe::Const(1.0f)))),
           pe::Const(static_cast<float>(std::log1p(range_max_))));
       return DriverTensor(popops::map(graph, log_uniform_pdf, {samples}, seq,
-                                      {debug_name_and_id}),
-                          graph);
+                                      {debug_name_and_id}));
     }
     default:
       return xla::Unimplemented("Distribution not supported.");

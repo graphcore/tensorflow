@@ -68,8 +68,8 @@ class ReduceScatterOp : public PoplarOpDef {
         GetReplicatedCollectiveOptions(res));
 
     for (int64_t i = 0; i != outputs.size(); ++i) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
-                                  DriverTensor(outputs[i], graph)));
+      TF_CHECK_OK(
+          AddOutputTensor(tensor_map, inst, i, DriverTensor(outputs[i])));
     }
 
     return seq;

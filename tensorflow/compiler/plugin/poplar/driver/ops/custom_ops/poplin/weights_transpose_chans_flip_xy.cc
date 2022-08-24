@@ -44,12 +44,10 @@ StatusOr<DriverTensor> AddConvWeightsTransposeChansFlipXY(
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                       GetConvolutionOptionsForInst(inst, resources));
 
-  DriverTensor out_weights = DriverTensor(
-      poplin::createWeights(
-          graph, conv_params,
-          {debug_name_and_id, "createWeights_TransposeChansFlipXY"}, opts,
-          &resources.planning_cache),
-      graph);
+  DriverTensor out_weights = poplin::createWeights(
+      graph, conv_params,
+      {debug_name_and_id, "createWeights_TransposeChansFlipXY"}, opts,
+      &resources.planning_cache);
 
   out_weights = RemoveGroupsDimensionFromWeights(conv_params, out_weights);
 
@@ -91,10 +89,9 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
     in_weights = AddGroupsDimensionToWeights(conv_params, in_weights,
                                              /* swap_features= */ true);
 
-    DriverTensor out_weights = DriverTensor(
+    DriverTensor out_weights =
         poplin::createWeights(graph, conv_params, {debug_info, "CreateWeights"},
-                              opts, &res.planning_cache),
-        graph);
+                              opts, &res.planning_cache);
 
     poplin::weightsTransposeChansFlipXY(
         graph, in_weights, out_weights, seq,
@@ -106,7 +103,7 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
         conv_dimension_numbers, out_weights, /* swap_features = */ true);
 
     TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(out_weights, graph)));
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(out_weights)));
 
     return seq;
   }

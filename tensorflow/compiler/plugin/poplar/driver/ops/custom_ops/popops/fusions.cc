@@ -161,7 +161,7 @@ class ConvBiasAddOp : public PoplarOpDef {
         acts, ReversePathTransform(graph, acts, forward_path, {debug_info}));
 
     return DriverTensor(
-        poplin::createBiases(graph, acts, {debug_info, "biases"}), graph);
+        poplin::createBiases(graph, acts, {debug_info, "biases"}));
   }
 };
 
@@ -196,7 +196,7 @@ class MatMulBiasAddOp : public PoplarOpDef {
                                               broadcast->dimensions()));
     popops::addInPlace(graph, in, bias.getPoplarTensor(), prog, {debug_info});
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(in, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(in)));
     return prog;
   }
 
@@ -227,9 +227,8 @@ class MatMulBiasAddOp : public PoplarOpDef {
     // Flatten activations into 2D.
     acts = acts.flatten(0, acts.rank() - 1);
     return DriverTensor(poputil::createBroadcastOperand(
-                            graph, acts, acts.elementType(), acts.rank() - 1,
-                            /*ditherMapping*/ false, {debug_info, "biases"}),
-                        graph);
+        graph, acts, acts.elementType(), acts.rank() - 1,
+        /*ditherMapping*/ false, {debug_info, "biases"}));
   }
 };
 
@@ -282,8 +281,7 @@ class BiasApplyOp : public PoplarOpDef {
                              {popops::Operation::ADD, true, scale}, seq,
                              {debug_name_and_id});
 
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(biases, graph)));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(biases)));
 
     return seq;
   }

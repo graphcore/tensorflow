@@ -282,8 +282,7 @@ StatusOr<DriverTensor> CreateIndicesTensor(
   return DriverTensor(popops::createIndicesTensor(graph, {0}, num_indices, plan,
                                                   {}, {debug_name_and_id})
                           .reshape(indices_shape)
-                          .reinterpret(indices_type),
-                      graph);
+                          .reinterpret(indices_type));
 }
 
 StatusOr<DriverTensor> AddHostCopyTensor(
@@ -294,9 +293,8 @@ StatusOr<DriverTensor> AddHostCopyTensor(
 
   // Passing isRead=false gives better tile balance.
   return DriverTensor(popops::createHostTransferableTensor(
-                          graph, poplar_type, poplar_shape,
-                          /*isRead=*/false, {debug_name_and_id}),
-                      graph);
+      graph, poplar_type, poplar_shape,
+      /*isRead=*/false, {debug_name_and_id}));
 }
 
 DriverTensor ConvertFromDeviceLayout(const Shape& shape,
@@ -613,10 +611,8 @@ static StatusOr<DriverTensor> PathTransform(
         }
 
         // Broadcast the layout and tile mapping across the reduce dimensions.
-        in = DriverTensor(
-            popops::createSliceableTensorFromSlice(
-                graph, in, slice_dims, slice_dim_sizes, {debug_name_and_id}),
-            graph);
+        in = DriverTensor(popops::createSliceableTensorFromSlice(
+            graph, in, slice_dims, slice_dim_sizes, {debug_name_and_id}));
         break;
       }
       case HloOpcode::kCustomCall: {
@@ -650,11 +646,9 @@ StatusOr<DriverTensor> AddDynamicSliceTensor(
   } else {
     TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(shape_xla));
     const auto input_shape = PoplarShapeFromXlaShape(shape_xla);
-    return DriverTensor(
-        popops::createSliceableTensor(
-            graph, poplar_type, input_shape, slice_info.sliced_dims,
-            slice_info.slice_sizes, 0, {debug_name_and_id}),
-        graph);
+    return DriverTensor(popops::createSliceableTensor(
+        graph, poplar_type, input_shape, slice_info.sliced_dims,
+        slice_info.slice_sizes, 0, {debug_name_and_id}));
   }
 }
 
@@ -674,11 +668,9 @@ StatusOr<DriverTensor> AddDynamicUpdateSliceTensor(
   } else {
     TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(update_shape_xla));
     const auto update_shape = PoplarShapeFromXlaShape(update_shape_xla);
-    return DriverTensor(
-        popops::createSliceableTensor(
-            graph, poplar_type, update_shape, slice_info.sliced_dims,
-            slice_info.slice_sizes, 0, {debug_name_and_id}),
-        graph);
+    return DriverTensor(popops::createSliceableTensor(
+        graph, poplar_type, update_shape, slice_info.sliced_dims,
+        slice_info.slice_sizes, 0, {debug_name_and_id}));
   }
 }
 
@@ -1458,7 +1450,7 @@ StatusOr<DriverTensor> FindF8InstructionInput(
       u8_metadata, f8_metadata.reinterpret(poplar::UNSIGNED_CHAR)));
   seq.add(poplar::program::Copy(u8_data,
                                 f8_data.reinterpret(poplar::UNSIGNED_CHAR)));
-  return DriverTensor(f8_data, graph);
+  return DriverTensor(f8_data);
 }
 
 TensorOrRemoteBufferVector FindInstructionInputs(

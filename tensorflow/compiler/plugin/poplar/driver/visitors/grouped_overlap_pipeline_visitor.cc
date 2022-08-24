@@ -131,10 +131,8 @@ GroupedOverlapPipelineVisitor::RampDownAdditionalIterations(
             return PipelineVisitor::IterationsType(
                 PipelineVisitor::CountAndGraph(
                     i.graph,
-                    DriverTensor(
-                        popops::map(i.graph, popops::expr::_1 % overlap_length,
-                                    {i.count}, program),
-                        i.graph)));
+                    popops::map(i.graph, popops::expr::_1 % overlap_length,
+                                {i.count}, program)));
           }),
       iterations);
 }

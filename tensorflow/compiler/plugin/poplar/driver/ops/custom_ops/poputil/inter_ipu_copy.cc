@@ -146,12 +146,10 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
   } else {
     const unsigned dst_device_id = res.shard_to_ipu_id[dst_shard];
-    output = DriverTensor(
-        poputil::cloneToIpu(
-            master_graph, input, dst_device_id,
-            {debug_name_and_id, std::to_string(output_flat_tuple_index)},
-            poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES),
-        master_graph);
+    output = poputil::cloneToIpu(
+        master_graph, input, dst_device_id,
+        {debug_name_and_id, std::to_string(output_flat_tuple_index)},
+        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
   }
 
   auto input_dealiased = input.flatten();

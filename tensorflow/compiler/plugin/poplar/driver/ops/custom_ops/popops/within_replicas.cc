@@ -107,8 +107,8 @@ class AllGatherWithinReplicaOp : public PoplarOpDef {
     CHECK_EQ(ipu_count, output.dim(0))
         << "Expecting the gathered tensor to have an output on each IPU.";
     for (auto ipu = 0; ipu < ipu_count; ++ipu) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, ipu,
-                                  DriverTensor(output[ipu], graph)));
+      TF_CHECK_OK(
+          AddOutputTensor(tensor_map, inst, ipu, DriverTensor(output[ipu])));
     }
 
     return seq;
@@ -250,8 +250,8 @@ class AllReduceWithinReplicaOp : public PoplarOpDef {
     CHECK_EQ(ipu_count, output.dim(0))
         << "Expecting the reduced tensor to have an output on each IPU.";
     for (auto ipu = 0; ipu < ipu_count; ++ipu) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, ipu,
-                                  DriverTensor(output[ipu], graph)));
+      TF_CHECK_OK(
+          AddOutputTensor(tensor_map, inst, ipu, DriverTensor(output[ipu])));
     }
 
     return seq;

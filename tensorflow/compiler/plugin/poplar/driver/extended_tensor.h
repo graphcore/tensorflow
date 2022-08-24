@@ -38,12 +38,6 @@ class ExtendedTensor : public poplar::Tensor {
   ExtendedTensor(const poplar::Tensor& tensor)  // NOLINT
       : poplar::Tensor(tensor) {}
 
-  ExtendedTensor(const poplar::Tensor& tensor,
-                 const ExtendedGraph& graph)  // NOLINT
-      : poplar::Tensor(tensor) {}
-
-  ExtendedTensor(poplar::Graph& graph)  // NOLINT
-      : poplar::Tensor() {}
 
   ExtendedTensor reshape(poplar::ArrayRef<std::size_t> shape) const;
 

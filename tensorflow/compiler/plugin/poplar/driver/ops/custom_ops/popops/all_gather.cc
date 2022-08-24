@@ -102,8 +102,8 @@ class AllGatherOp : public PoplarOpDef {
 
     // Add output tensors.
     for (int64_t i = 0; i != outputs.size(); ++i) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
-                                  DriverTensor(outputs[i], graph)));
+      TF_CHECK_OK(
+          AddOutputTensor(tensor_map, inst, i, DriverTensor(outputs[i])));
     }
 
     // Return the sequence.

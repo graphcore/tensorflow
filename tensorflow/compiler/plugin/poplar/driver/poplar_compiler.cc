@@ -594,10 +594,9 @@ bool InitializeCycleCounter(DriverGraph& graph, DriverProgramSequence& seq,
   } else {
     std::string cycleCounterId = PoplarExecutor::GetCycleCounterStream();
     // TODO(T59406) - Remove explicit tensor construction.
-    auto cycleCounter = DriverTensor(
+    DriverTensor cycleCounter =
         poplar::cycleCount(graph, seq, tile, poplar::SyncType::INTERNAL,
-                           {debug_info, cycleCounterId}),
-        graph);
+                           {debug_info, cycleCounterId});
     auto fifo = graph.addDeviceToHostFIFO(
         cycleCounterId, cycleCounter.elementType(), cycleCounter.numElements());
     seq.add(DriverProgramCopy(cycleCounter, fifo, false, {debug_info}));

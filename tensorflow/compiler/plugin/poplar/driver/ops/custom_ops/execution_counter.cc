@@ -43,8 +43,7 @@ class ExecutionCounterOp : public PoplarOpDef {
     auto counter_copy = poputil::duplicate(
         graph, counter, seq, {debug_info, "ExecutionCounterCopy"});
 
-    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0,
-                                       DriverTensor(counter_copy, graph)));
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, counter_copy));
 
     return seq;
   }

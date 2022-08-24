@@ -47,7 +47,7 @@ static StatusOr<DriverProgramSequence> RandomNormal(
   auto out = poprand::normal(graph, nullptr, 0, ref, dtype, mean_val, sd_val,
                              seq, {debug_name_and_id});
 
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
   return seq;
 }
 
@@ -100,7 +100,7 @@ static StatusOr<DriverProgramSequence> RandomUniform(
   auto out = poprand::uniform(graph, nullptr, 0, ref, dtype, lower_val,
                               upper_val, seq, {debug_name_and_id});
 
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(out, graph)));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
   return seq;
 }
 

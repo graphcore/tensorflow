@@ -55,7 +55,7 @@ class ArgMinMaxOp : public PoplarOpDef {
     indices = indices.reshape(output_dimensions);
 
     TF_RETURN_IF_ERROR(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(indices, graph)));
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(indices)));
     return Status::OK();
   }
 
@@ -129,9 +129,9 @@ class MaxMinAndArgMinMaxOp : public ArgMinMaxOp {
     values = values.reshape(output_dimensions);
 
     TF_RETURN_IF_ERROR(
-        AddOutputTensor(tensor_map, inst, 0, DriverTensor(values, graph)));
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(values)));
     TF_RETURN_IF_ERROR(
-        AddOutputTensor(tensor_map, inst, 1, DriverTensor(indices, graph)));
+        AddOutputTensor(tensor_map, inst, 1, DriverTensor(indices)));
     return Status::OK();
   }
 };

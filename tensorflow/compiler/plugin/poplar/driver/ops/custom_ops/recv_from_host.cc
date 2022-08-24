@@ -113,8 +113,7 @@ class RecvFromHostOp : public PoplarOpDef {
       seq.add(poplar::program::Copy(
           stream, tensor, res.always_rearrange_copies_on_host, {debug_info}));
 
-      TF_CHECK_OK(
-          AddOutputTensor(tensor_map, inst, i, DriverTensor(tensor, graph)));
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, tensor));
       res.annotations.recv_infos.emplace_back(stream.handle(), rendezvous_key,
                                               shape);
     }

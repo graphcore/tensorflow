@@ -92,10 +92,10 @@ class TopKOp : public PoplarOpDef {
     index_output = index_output.reshape(
         PoplarShapeFromXlaShape(output_shape.tuple_shapes(1)));
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0,
-                                DriverTensor(value_output, graph)));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1,
-                                DriverTensor(index_output, graph)));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(value_output)));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 1, DriverTensor(index_output)));
     return seq;
   }
 
@@ -114,10 +114,9 @@ class TopKOp : public PoplarOpDef {
     switch (tensor_target.input_index) {
       case 0: {
         // Create the tensor in 2D.
-        auto tensor = DriverTensor(
+        DriverTensor tensor =
             popops::createTopKInput(graph, type, Get2DDimensions(xla_shape),
-                                    GetParams(tensor_target.tgt), debug_info),
-            graph);
+                                    GetParams(tensor_target.tgt), debug_info);
 
         // Unflatten the tensor.
         return tensor.reshape(PoplarShapeFromXlaShape(xla_shape));

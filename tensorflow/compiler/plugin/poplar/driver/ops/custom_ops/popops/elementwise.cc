@@ -170,8 +170,8 @@ class BinaryElementwiseOp : public PoplarOpDef {
     PoplarOpDefDebugInfo debug_info(debug_context, "BinaryElementwiseOp");
     TF_ASSIGN_OR_RETURN(auto output, Compute(graph, res, inst, output_shape,
                                              tensor_map, debug_info));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0,
-                                DriverTensor(output.result, graph)));
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, DriverTensor(output.result)));
     return output.sequence;
   }
 };
@@ -275,10 +275,9 @@ class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
     other_side = other_side.flatten(0, non_broadcast_dimensions.size());
 
     // Allocate the tensor.
-    auto output = DriverTensor(
+    DriverTensor output =
         poputil::createBroadcastOperand(graph, other_side, type, 0,
-                                        /*ditherMapping*/ false, {debug_info}),
-        graph);
+                                        /*ditherMapping*/ false, {debug_info});
 
     // Reshape back for all the non-broadcasted dimensions.
     output = output.reshape(PoplarShapeFromXlaShape(allocation_shape));

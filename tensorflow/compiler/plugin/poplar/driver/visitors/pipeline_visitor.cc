@@ -919,12 +919,10 @@ StatusOr<DriverProgramSequence> PipelineVisitor::CreatePipelineStageOp(
   for (const auto& leaf : add_copies.leaves()) {
     auto output = pipeline_outputs[flat_tuple_index];
     if (leaf.second && StageOutputsRequireCopies() && output.IsTensor()) {
-      output = DriverTensor(
-          poputil::duplicate(
-              graph, output.AsTensor(), seq,
-              {debug_name_and_id, absl::StrCat("output/", flat_tuple_index)},
-              poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES),
-          graph);
+      output = DriverTensor(poputil::duplicate(
+          graph, output.AsTensor(), seq,
+          {debug_name_and_id, absl::StrCat("output/", flat_tuple_index)},
+          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES));
     }
     TF_CHECK_OK(AddOutput(tensor_map, inst, flat_tuple_index, output));
 

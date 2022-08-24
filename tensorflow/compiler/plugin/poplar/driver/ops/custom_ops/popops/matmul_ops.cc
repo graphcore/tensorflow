@@ -58,12 +58,10 @@ StatusOr<DriverTensor> AddLeftMatMul(
   TF_ASSIGN_OR_RETURN(const poplar::OptionFlags opts,
                       GetMatMulOptionsForInst(target, resources));
 
-  auto result = DriverTensor(
-      poplin::createMatMulGroupedInputLHS(
-          graph, type, type, PoplarShapeFromXlaShape(a_shape),
-          PoplarShapeFromXlaShape(b_shape), {debug_name_and_id, "lhs"}, opts,
-          &resources.planning_cache),
-      graph);
+  DriverTensor result = poplin::createMatMulGroupedInputLHS(
+      graph, type, type, PoplarShapeFromXlaShape(a_shape),
+      PoplarShapeFromXlaShape(b_shape), {debug_name_and_id, "lhs"}, opts,
+      &resources.planning_cache);
 
   // Unpack matrix
   result = result.reshape(PoplarShapeFromXlaShape(shuffled_shape));
@@ -128,21 +126,17 @@ StatusOr<DriverTensor> AddRightMatMul(
     // Set the correct contracting dimension in a as well.
     poplar_a_shape[2] = poplar_b_shape[1];
 
-    result = DriverTensor(
-        poplin::createMatMulGroupedInputRHS(
-            graph, type, type, poplar_a_shape, poplar_b_shape,
-            {debug_name_and_id, "rhs"}, opts, &resources.planning_cache),
-        graph);
+    result = poplin::createMatMulGroupedInputRHS(
+        graph, type, type, poplar_a_shape, poplar_b_shape,
+        {debug_name_and_id, "rhs"}, opts, &resources.planning_cache);
 
     // Move the contracting dimension and output dimension into the right
     // locations.
     result = result.dimShuffle({0, 2, 1});
   } else {
-    result = DriverTensor(
-        poplin::createMatMulGroupedInputRHS(
-            graph, type, type, poplar_a_shape, poplar_b_shape,
-            {debug_name_and_id, "rhs"}, opts, &resources.planning_cache),
-        graph);
+    result = poplin::createMatMulGroupedInputRHS(
+        graph, type, type, poplar_a_shape, poplar_b_shape,
+        {debug_name_and_id, "rhs"}, opts, &resources.planning_cache);
   }
 
   // Unpack matrix
