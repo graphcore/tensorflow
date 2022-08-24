@@ -291,22 +291,22 @@ const std::vector<std::pair<std::string, int>> assignments_0 = {
     {"inter-ipu-copy", 0},
     {"inter-ipu-copy.1", 2}};
 
-const string& expected_0 = R"(/print-tensor: 1
-/print-tensor.1: 2
-/print-tensor.2: 4
-/print-tensor: 1
-/print-tensor.3: 5
-/print-tensor.1: 2
-/print-tensor: 1
-/print-tensor.2: 4
-/print-tensor.1: 2
-/print-tensor.3: 5
-/print-tensor.2: 4
-/print-tensor: 1
-/print-tensor.3: 5
-/print-tensor.1: 2
-/print-tensor.2: 4
-/print-tensor.3: 5
+const string& expected_0 = R"(/print-tensor: 1.0000000
+/print-tensor.1: 2.0000000
+/print-tensor.2: 4.0000000
+/print-tensor: 1.0000000
+/print-tensor.3: 5.0000000
+/print-tensor.1: 2.0000000
+/print-tensor: 1.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.1: 2.0000000
+/print-tensor.3: 5.0000000
+/print-tensor.2: 4.0000000
+/print-tensor: 1.0000000
+/print-tensor.3: 5.0000000
+/print-tensor.1: 2.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.3: 5.0000000
 )";
 
 const TestParams TestPipelineVisitorOrder(hlo_0, assignments_0, 4, {},
@@ -383,12 +383,12 @@ const std::vector<std::pair<std::string, int>> assignments_1 = {
     // Inter-IPU-copy between stage 2 and 3
     {"inter-ipu-copy.1", 2}};
 
-const string& expected_1 = R"(/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
+const string& expected_1 = R"(/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
 )";
 
 TestParams TestPipelineVisitorValue(hlo_1, assignments_1, 6, {}, expected_1);
@@ -469,10 +469,10 @@ const std::vector<std::pair<std::string, int>> assignments_2 = {
     {"fifo", 0},
 };
 
-const string& expected_2 = R"(/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
+const string& expected_2 = R"(/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
 )";
 
 TestParams TestPipelineVisitorFifoValue{
@@ -561,14 +561,14 @@ const std::vector<std::pair<std::string, int>> assignments_3 = {
     {"fifo", 0},
 };
 
-const string& expected_3 = R"(/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
+const string& expected_3 = R"(/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
 )";
 
 TestParams TestPipelineVisitorFifoValueTuples{
@@ -1064,54 +1064,54 @@ const std::vector<std::pair<std::string, int>> assignments_5 = {
     {"inter-ipu-copy.4", 4},
 };
 
-const string& expected_5 = R"(/print-tensor: 0
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor: 0
-/print-tensor.5: 5
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor: 0
-/print-tensor.5: 5
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor: 0
-/print-tensor.5: 5
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor.5: 5
+const string& expected_5 = R"(/print-tensor: 0.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor: 0.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor: 0.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor: 0.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.5: 5.0000000
 )";
 
 TestParams TestPipelineVisitorRevisitIPUOrder{
@@ -1201,14 +1201,14 @@ const std::vector<std::pair<std::string, int>> assignments_4 = {
     {"fifo", 0},
 };
 
-const string& expected_4 = R"(/print-tensor: {206,212}
-/print-tensor: {206,212}
-/print-tensor: {206,212}
-/print-tensor: {206,212}
-/print-tensor: {206,212}
-/print-tensor: {206,212}
-/print-tensor: {206,212}
-/print-tensor: {206,212}
+const string& expected_4 = R"(/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
 )";
 
 TestParams TestPipelineVisitorFifoValueBroadcastTuples{
@@ -1298,12 +1298,12 @@ ENTRY e {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/print-tensor: 3
-/print-tensor: 3
-/print-tensor: 3
-/print-tensor: 3
-/print-tensor: 3
-/print-tensor: 3
+  const std::string expected = R"(/print-tensor: 3.0000000
+/print-tensor: 3.0000000
+/print-tensor: 3.0000000
+/print-tensor: 3.0000000
+/print-tensor: 3.0000000
+/print-tensor: 3.0000000
 )";
 
   ASSERT_EQ(expected, ss.str());
@@ -1373,22 +1373,22 @@ ENTRY main {
 }
 )";
 
-const string& expected_6 = R"(/print-tensor: 1
-/print-tensor.1: 2
-/print-tensor.2: 4
-/print-tensor.3: 5
-/print-tensor: 1
-/print-tensor.1: 2
-/print-tensor.2: 4
-/print-tensor.3: 5
-/print-tensor: 1
-/print-tensor.1: 2
-/print-tensor.2: 4
-/print-tensor.3: 5
-/print-tensor: 1
-/print-tensor.1: 2
-/print-tensor.2: 4
-/print-tensor.3: 5
+const string& expected_6 = R"(/print-tensor: 1.0000000
+/print-tensor.1: 2.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.3: 5.0000000
+/print-tensor: 1.0000000
+/print-tensor.1: 2.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.3: 5.0000000
+/print-tensor: 1.0000000
+/print-tensor.1: 2.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.3: 5.0000000
+/print-tensor: 1.0000000
+/print-tensor.1: 2.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.3: 5.0000000
 )";
 
 const std::vector<std::pair<std::string, int>> assignments_6 = {
@@ -1483,12 +1483,12 @@ const std::vector<std::pair<std::string, int>> assignments_7 = {
     {"inter-ipu-copy.1", 2},
 };
 
-const string& expected_7 = R"(/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
+const string& expected_7 = R"(/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
 )";
 
 // This tests that the output value has the expected value, given a pipeline
@@ -1573,15 +1573,7 @@ const std::vector<std::pair<std::string, int>> assignments_8 = {
     {"inter-ipu-copy.1", 2},
 };
 
-const string& expected_8 = R"(/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-)";
+const string& expected_8 = expected_3;
 
 // This tests that the output value has the expected value, given a pipeline
 // poplar control program with tuples.
@@ -1692,54 +1684,54 @@ const std::vector<std::pair<std::string, int>> assignments_9 = {
     {"inter-ipu-copy.4", 4},
 };
 
-const string& expected_9 = R"(/print-tensor: 0
-/print-tensor.1: 1
-/print-tensor.2: 2
-/print-tensor.3: 3
-/print-tensor.4: 4
-/print-tensor.5: 5
-/print-tensor: 0
-/print-tensor.1: 1
-/print-tensor.2: 2
-/print-tensor.3: 3
-/print-tensor.4: 4
-/print-tensor.5: 5
-/print-tensor: 0
-/print-tensor.1: 1
-/print-tensor.2: 2
-/print-tensor.3: 3
-/print-tensor.4: 4
-/print-tensor.5: 5
-/print-tensor: 0
-/print-tensor.1: 1
-/print-tensor.2: 2
-/print-tensor.3: 3
-/print-tensor.4: 4
-/print-tensor.5: 5
-/print-tensor: 0
-/print-tensor.1: 1
-/print-tensor.2: 2
-/print-tensor.3: 3
-/print-tensor.4: 4
-/print-tensor.5: 5
-/print-tensor: 0
-/print-tensor.1: 1
-/print-tensor.2: 2
-/print-tensor.3: 3
-/print-tensor.4: 4
-/print-tensor.5: 5
-/print-tensor: 0
-/print-tensor.1: 1
-/print-tensor.2: 2
-/print-tensor.3: 3
-/print-tensor.4: 4
-/print-tensor.5: 5
-/print-tensor: 0
-/print-tensor.1: 1
-/print-tensor.2: 2
-/print-tensor.3: 3
-/print-tensor.4: 4
-/print-tensor.5: 5
+const string& expected_9 = R"(/print-tensor: 0.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.5: 5.0000000
+/print-tensor: 0.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.5: 5.0000000
+/print-tensor: 0.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.5: 5.0000000
+/print-tensor: 0.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.5: 5.0000000
+/print-tensor: 0.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.5: 5.0000000
+/print-tensor: 0.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.5: 5.0000000
+/print-tensor: 0.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.5: 5.0000000
+/print-tensor: 0.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.5: 5.0000000
 )";
 
 TestParams TestPipelineVisitorRevisitIPUOrderSequential{
@@ -1832,38 +1824,38 @@ const std::vector<std::pair<std::string, int>> assignments_10 = {
     {"inter-ipu-copy.1", 2},
 };
 
-const string& expected_10 = R"(/print-tensor: 1
-/print-tensor.1: 2
-/print-tensor: 1
-/print-tensor.2: 4
-/print-tensor.1: 2
-/print-tensor: 1
-/print-tensor.3: 5
-/print-tensor.2: 4
-/print-tensor.1: 2
-/print-tensor: 1
-/print-tensor.3: 5
-/print-tensor.2: 4
-/print-tensor.1: 2
-/print-tensor: 1
-/print-tensor.3: 5
-/print-tensor.2: 4
-/print-tensor.1: 2
-/print-tensor: 1
-/print-tensor.3: 5
-/print-tensor.2: 4
-/print-tensor.1: 2
-/print-tensor: 1
-/print-tensor.3: 5
-/print-tensor.2: 4
-/print-tensor.1: 2
-/print-tensor: 1
-/print-tensor.3: 5
-/print-tensor.2: 4
-/print-tensor.1: 2
-/print-tensor.3: 5
-/print-tensor.2: 4
-/print-tensor.3: 5
+const string& expected_10 = R"(/print-tensor: 1.0000000
+/print-tensor.1: 2.0000000
+/print-tensor: 1.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.1: 2.0000000
+/print-tensor: 1.0000000
+/print-tensor.3: 5.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.1: 2.0000000
+/print-tensor: 1.0000000
+/print-tensor.3: 5.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.1: 2.0000000
+/print-tensor: 1.0000000
+/print-tensor.3: 5.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.1: 2.0000000
+/print-tensor: 1.0000000
+/print-tensor.3: 5.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.1: 2.0000000
+/print-tensor: 1.0000000
+/print-tensor.3: 5.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.1: 2.0000000
+/print-tensor: 1.0000000
+/print-tensor.3: 5.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.1: 2.0000000
+/print-tensor.3: 5.0000000
+/print-tensor.2: 4.0000000
+/print-tensor.3: 5.0000000
 )";
 
 TestParams TestPipelineVisitorOrderGrouped{
@@ -1939,14 +1931,14 @@ const std::vector<std::pair<std::string, int>> assignments_11 = {
     {"inter-ipu-copy.1", 2},
 };
 
-const string& expected_11 = R"(/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
+const string& expected_11 = R"(/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
 )";
 
 TestParams TestPipelineVisitorValueGrouped{
@@ -2007,14 +1999,14 @@ ENTRY main {
 }
 )";
 
-const string& expected_12 = R"(/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
-/print-tensor: 4
+const string& expected_12 = R"(/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
+/print-tensor: 4.0000000
 )";
 
 const std::vector<std::pair<std::string, int>> assignments_12 = {
