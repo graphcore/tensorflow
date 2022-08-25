@@ -30,7 +30,7 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.python.ipu.horovod.ipu_horovod_strategy import IPUHorovodStrategy
+from tensorflow.python.ipu.distributed.ipu_horovod_strategy import IPUHorovodStrategy
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu import gradient_accumulation as ga
 from tensorflow.python.ipu.scopes import ipu_scope
