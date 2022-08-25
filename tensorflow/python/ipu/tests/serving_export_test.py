@@ -24,8 +24,10 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import function
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import tensor_spec
+from tensorflow.python.ops.functional_ops import partitioned_call
 from tensorflow.python.ipu import config
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import serving
@@ -862,6 +864,52 @@ class TestServingExport(TestServingExportBase):
                                 iterations=16,
                                 device_mapping=[0, 0],
                                 predict_step_signature=predict_step_signature)
+
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=False)
+  @test_util.run_v2_only
+  def test_export_simple_model_with_variables_stateful_partition_call(self):
+    element_count = 3
+    input_shape = (element_count,)
+    input_tensor = array_ops.zeros(shape=input_shape, dtype=np.float16)
+
+    predict_step_signature = (tensor_spec.TensorSpec(shape=input_shape,
+                                                     dtype=dtypes.float32),)
+
+    var_value = np.float32(10.)
+    w = variables.Variable(var_value)
+
+    z_value = np.float32(15.)
+    z = variables.Variable(z_value)
+
+    @function.Defun(dtypes.float32, dtypes.float32)
+    def partition_call_body(constant, var):
+      return (constant + constant) * var
+
+    @def_function.function(
+        input_signature=(tensor_spec.TensorSpec(shape=input_shape,
+                                                dtype=dtypes.float32),
+                         tensor_spec.TensorSpec(shape=input_shape,
+                                                dtype=dtypes.float32)))
+    def predict_step(x, y):
+      call_result = partitioned_call(args=[x, w], f=partition_call_body)
+
+      predict_step_result = call_result + y + z
+      return array_ops.reshape(predict_step_result, input_shape)
+
+    x = np.arange(element_count, dtype=np.float32)
+    y = np.arange(element_count, dtype=np.float32)
+    expected_result = list(((x + x) * var_value) + y + z_value)
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      iterations = 16
+      serving.export_single_step(predict_step, tmp_folder, iterations)
+
+      result = list(
+          self._load_and_run(tmp_folder, {
+              'x': x,
+              'y': y
+          })["output_0"].numpy())
+      self.assertAllClose(result, expected_result)
 
 
 if __name__ == "__main__":

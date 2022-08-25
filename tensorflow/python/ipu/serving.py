@@ -25,8 +25,9 @@ import uuid
 
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import def_function
-from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework import convert_to_constants
+from tensorflow.python.framework import tensor_spec
+from tensorflow.python.framework.ops import convert_to_tensor
 from tensorflow.python.framework.ops import Tensor
 from tensorflow.python.ipu import application_compile_op
 from tensorflow.python.ipu import embedded_runtime
@@ -205,7 +206,8 @@ def _validate_signatures(predict_step,
 def _prepare_input_signature(defunc,
                              defunc_signature=None,
                              input_dataset=None,
-                             non_feed_inputs=None):
+                             non_feed_inputs=None,
+                             remove_non_feed_inputs_from_signature=True):
   """Prepare `input_signature` for `defunc` from given arguments.
 
   Args:
@@ -218,6 +220,8 @@ def _prepare_input_signature(defunc,
       will be inferred.
     non_feed_inputs (list, optional): List of inputs that will be provided
       to the graph without usage of infeed queue.
+    remove_non_feed_inputs_from_signature (bool, optional): If True passed
+      non_feed_inputs will be removed from created input signature.
 
   Returns:
     list: List of `tf.TensorSpec` objects with types, shapes and names.
@@ -241,6 +245,8 @@ def _prepare_input_signature(defunc,
     input_signature = input_dataset.element_spec
     if isinstance(input_signature, tensor_spec.TensorSpec):
       input_signature = input_signature,
+    input_signature = tuple(
+        _get_signature_from_tensors(non_feed_inputs)) + input_signature
   elif defunc_signature is None:
     if isinstance(defunc, def_function.Function):
       input_signature = defunc.input_signature
@@ -253,14 +259,16 @@ def _prepare_input_signature(defunc,
                     f'list, received {str(type(input_signature))}')
 
   names = list(inspect.signature(defunc).parameters.keys())
-  if non_feed_inputs:
+  if non_feed_inputs is not None and remove_non_feed_inputs_from_signature:
     names = names[len(non_feed_inputs):]
     if len(input_signature) > len(names):
       input_signature = input_signature[len(non_feed_inputs):]
 
   if len(input_signature) != len(names):
-    raise ValueError('Length of input_signature does not match the number of '
-                     f'{defunc.__name__} arguments')
+    raise ValueError(
+        'Length of input_signature does not match the number of '
+        f'{defunc.__name__} arguments, input_signature : {input_signature}, '
+        f'names : {names}')
 
   # Store argument names in the input_signature
   input_signature = [
@@ -293,13 +301,51 @@ def _create_feeds(input_signature, input_dataset=None):
   return (infeed, outfeed)
 
 
+def _get_signature_from_tensors(tensors):
+  if tensors is None:
+    return []
+
+  def to_tensor(data):
+    if not isinstance(data, Tensor):
+      return convert_to_tensor(data)
+
+    return data
+
+  return [
+      tensor_spec.TensorSpec.from_tensor(to_tensor(tensor))
+      for tensor in tensors
+  ]
+
+
 def _freeze_defunc(defunc, input_signature):
   @def_function.function(input_signature=input_signature)
   def defunc_wrapper(*args):
     return defunc(*args)
 
-  return convert_to_constants.convert_variables_to_constants_v2(
+  concrete_defunc = convert_to_constants.convert_variables_to_constants_v2(
       defunc_wrapper.get_concrete_function(*input_signature))
+
+  @def_function.function(input_signature=input_signature)
+  def transformed_defunc_wrapper(*args):
+    return concrete_defunc(*args)
+
+  return transformed_defunc_wrapper, _get_signature_from_tensors(
+      concrete_defunc.outputs)
+
+
+def _freeze_single_step(defunc, input_signature):
+  return _freeze_defunc(defunc, input_signature)[0]
+
+
+def _freeze_computational_stages(computational_stages, input_signature):
+  def transform(stage):
+    nonlocal input_signature
+    transformed_stage, output_signature = _freeze_defunc(
+        stage, input_signature)
+    input_signature = output_signature
+    return transformed_stage
+
+  return [transform(stage) for stage in computational_stages]
 
 
 def _export_saved_model(predict_step,
@@ -373,11 +419,12 @@ def _export_saved_model(predict_step,
     with_postprocessing = postprocessing_step is not None
 
     if with_preprocessing:
-      preprocessing_step = _freeze_defunc(preprocessing_step, input_signature)
+      preprocessing_step = _freeze_single_step(preprocessing_step,
+                                               input_signature)
 
     if with_postprocessing:
-      postprocessing_step = _freeze_defunc(postprocessing_step,
-                                           postprocessing_step_signature)
+      postprocessing_step = _freeze_single_step(postprocessing_step,
+                                                postprocessing_step_signature)
 
     def validate_io_matching(src_return_tensors, dst_input_signature,
                              src_step_name, dst_step_name):
@@ -618,6 +665,7 @@ def export_single_step(predict_step,
     postprocessing_step_signature = _prepare_input_signature(
         postprocessing_step, postprocessing_step_signature)
 
+  predict_step = _freeze_single_step(predict_step, predict_step_signature)
   predict_loop = _wrap_in_loop(predict_step, predict_step_signature,
                                input_dataset, iterations)
   return _export_saved_model(predict_loop, export_dir, input_signature,
@@ -769,6 +817,13 @@ def export_pipeline(computational_stages,
                        preprocessing_step, preprocessing_step_signature,
                        postprocessing_step, postprocessing_step_signature)
 
+  computational_stages = _freeze_computational_stages(
+      computational_stages,
+      _prepare_input_signature(predict_step,
+                               predict_step_signature,
+                               input_dataset,
+                               non_feed_inputs=inputs,
+                               remove_non_feed_inputs_from_signature=False))
   if preprocessing_step is not None:
     input_signature = _prepare_input_signature(preprocessing_step,
                                                preprocessing_step_signature,
