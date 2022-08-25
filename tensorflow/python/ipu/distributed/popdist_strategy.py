@@ -29,7 +29,7 @@ from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import server_lib
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
-from tensorflow.python.ipu.horovod import Sum, Average, \
+from tensorflow.python.ipu.distributed import Sum, Average, \
     allreduce as hvd_allreduce, \
     broadcast as hvd_broadcast
 
