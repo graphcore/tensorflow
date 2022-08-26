@@ -40,7 +40,7 @@ cc_library(
             "lib*/popit/libpopit.so",
             "lib*/poprithms/libpoprithms.so",
         ] + if_custom_poplibs([
-            "lib*/poplar/libgcl_ct*",
+            "lib*/poplar/libgcl*",
             "lib*/poplar/libpva.so",
             "lib*/poplar/libpvti.so",
             "lib*/poplar/libtbb.*",
@@ -58,7 +58,7 @@ cc_library(
             "lib*/poplibs/libpoputil.so",
             "lib*/popdist/libpopdist.so",
         ], [
-            "lib*/**/libgcl_ct*",
+            "lib*/**/libgcl*",
             "lib*/**/libpopef.so",
             "lib*/**/libpva.so",
             "lib*/**/libpvti.so",
