@@ -11,6 +11,7 @@ poplar_cc_library(
         "all_reduce.cc",
     ],
     deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:poplar_util",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
@@ -27,6 +28,7 @@ poplar_cc_library(
         "broadcast.cc",
     ],
     deps = [
+        "//tensorflow/compiler/plugin/poplar/driver/tools:poplar_util",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",

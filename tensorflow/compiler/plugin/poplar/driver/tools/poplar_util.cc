@@ -1042,5 +1042,9 @@ void CheckPoplarPackageHash() {
     }
   }
 }
+
+Status ConvertError(const std::exception& e) {
+  return PoplarExceptionToTensorflowStatus("", e);
+}
 }  // namespace poplarplugin
 }  // namespace xla

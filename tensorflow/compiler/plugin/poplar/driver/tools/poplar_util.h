@@ -19,6 +19,10 @@ limitations under the License.
  * These functions are related to poplar, and cannot be used within the
  * optimizers target in the BUILD file.
  */
+#include <string>
+#include <utility>
+#include <vector>
+
 #include <gcl/Collectives.hpp>
 #include <poplar/Program.hpp>
 #include <poplar/exceptions.hpp>
@@ -27,8 +31,6 @@ limitations under the License.
 #include <popnn/Pooling.hpp>
 #include <popops/Expr.hpp>
 #include <poputil/exceptions.hpp>
-#include <string>
-#include <vector>
 
 #include "absl/container/inlined_vector.h"
 #include "absl/types/optional.h"
@@ -282,6 +284,31 @@ bool HasIOTiles(CompilerResources& res);
 int64_t GetNumIPUs(CompilerResources& res);
 
 void CheckPoplarPackageHash();
+
+template <class T>
+using StatusType = typename std::conditional<std::is_same<T, void>::value,
+                                             Status, StatusOr<T>>::type;
+
+template <typename F, typename... Args>
+using DeducedReturn = StatusType<typename std::result_of<F(Args...)>::type>;
+
+Status ConvertError(const std::exception& e);
+
+// Function that runs a poplar function and converts any errors to
+// status/statusor<T>
+template <typename E, typename F, typename... Args>
+DeducedReturn<F, Args...> RunPoplarFunction(F f, Args&&... args) {
+  try {
+    if constexpr (std::is_same<DeducedReturn<F, Args...>, Status>::value) {
+      f(std::forward<Args>(args)...);
+      return Status::OK();
+    } else {
+      return f(std::forward<Args>(args)...);
+    }
+  } catch (const E& e) {
+    return ConvertError(e);
+  }
+}
 }  // namespace poplarplugin
 }  // namespace xla
 

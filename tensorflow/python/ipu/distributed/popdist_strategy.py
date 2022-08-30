@@ -31,22 +31,11 @@ from tensorflow.python.framework import device as tf_device
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import keras_extensions
 from tensorflow.python.ipu.ops import cross_replica_ops
+from tensorflow.python.ipu.distributed import host_collective_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import server_lib
 from tensorflow.python.training.tracking import base as trackable
-from tensorflow.python.ipu.horovod import Sum, Average, \
-    allreduce as hvd_allreduce, \
-    broadcast as hvd_broadcast
-
-
-def _to_horovod_op(reduce_op):
-  if reduce_op == reduce_util.ReduceOp.SUM:
-    return Sum
-  if reduce_op == reduce_util.ReduceOp.MEAN:
-    return Average
-
-  raise ValueError("Unsupported reduce op: {}".format(reduce_op))
 
 
 def _is_current_device_ipu():
@@ -281,7 +270,7 @@ class PopDistExtendedV1(
       value = value.values[0]
 
     if not _is_current_device_ipu():
-      return hvd_allreduce(value, op=_to_horovod_op(reduce_op))
+      return host_collective_ops.all_reduce(value, reduce_op)
 
     # On the IPU, do reduction with GCL if requested.
     if not self._add_ipu_cross_replica_reductions:
@@ -338,4 +327,4 @@ class PopDistExtendedV1(
       raise RuntimeError(
           "Can only broadcast on CPU, but got device {}".format(device))
 
-    return hvd_broadcast(initial_value, root_rank=0)
+    return host_collective_ops.broadcast(initial_value)

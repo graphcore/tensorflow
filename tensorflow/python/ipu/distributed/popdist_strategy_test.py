@@ -219,7 +219,6 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
   def test_all_reduce(self):
     config = self._create_test_objects()
     self.strategy.update_ipu_config(config)
-
     with self.strategy.scope():
 
       @def_function.function

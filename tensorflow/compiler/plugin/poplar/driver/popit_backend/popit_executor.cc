@@ -229,7 +229,7 @@ Status PopItExecutor::Memset32(se::Stream* stream,
 }
 bool PopItExecutor::Memcpy(se::Stream* stream, void* host_dst,
                            const se::DeviceMemoryBase& src, uint64 size) {
-  return RunPoplarFunction([&] {
+  return RunPoplarFunction<poplar::poplar_error>([&] {
            return popitCopyToHost(
                static_cast<const PopItSubBuffer*>(src.opaque())->GetDevicePtr(),
                static_cast<char*>(host_dst));
@@ -238,7 +238,7 @@ bool PopItExecutor::Memcpy(se::Stream* stream, void* host_dst,
 }
 bool PopItExecutor::Memcpy(se::Stream* stream, se::DeviceMemoryBase* dst,
                            const void* host_src, uint64 size) {
-  return RunPoplarFunction([&] {
+  return RunPoplarFunction<poplar::poplar_error>([&] {
            return popitCopyFromHost(
                static_cast<const char*>(host_src),
                static_cast<PopItSubBuffer*>(dst->opaque())->GetDevicePtr());
@@ -249,7 +249,7 @@ bool PopItExecutor::MemcpyDeviceToDevice(se::Stream* stream,
                                          se::DeviceMemoryBase* dst,
                                          const se::DeviceMemoryBase& src,
                                          uint64 size) {
-  return RunPoplarFunction([&] {
+  return RunPoplarFunction<poplar::poplar_error>([&] {
            return popitCopy(
                static_cast<const PopItSubBuffer*>(src.opaque())->GetDevicePtr(),
                static_cast<PopItSubBuffer*>(dst->opaque())->GetDevicePtr())
@@ -260,7 +260,7 @@ bool PopItExecutor::HostCallback(se::Stream* stream,
                                  std::function<void()> callback) {
   // For now sync and then callback, we should aim to make this async
   // though
-  return RunPoplarFunction([&] {
+  return RunPoplarFunction<poplar::poplar_error>([&] {
            popitSync(session_.get());
            callback();
          })

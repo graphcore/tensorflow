@@ -65,34 +65,6 @@ struct PopItSubBuffer {
   PopItSubBuffer(popitMem_t* mem, int64_t size)
       : PopItSubBuffer(PopItBufferType(mem, PopItDeallocator()), 0, size) {}
 };
-
-template <class T>
-using StatusType = typename std::conditional<std::is_same<T, void>::value,
-                                             Status, StatusOr<T>>::type;
-
-template <typename F, typename... Args>
-using DeducedReturn = StatusType<typename std::result_of<F(Args...)>::type>;
-
-Status ConvertError(const std::exception& e) {
-  return PoplarExceptionToTensorflowStatus("", e);
-}
-
-// Function that runs a poplar function and converts any errors to
-// status/statusor<T>
-template <typename F, typename... Args>
-DeducedReturn<F, Args...> RunPoplarFunction(F f, Args&&... args) {
-  try {
-    if constexpr (std::is_same<DeducedReturn<F, Args...>, Status>::value) {
-      f(std::forward<Args>(args)...);
-      return Status::OK();
-    } else {
-      return f(std::forward<Args>(args)...);
-    }
-  } catch (const poplar::poplar_error& e) {
-    return ConvertError(e);
-  }
-}
-
 }  // namespace poplarplugin
 }  // namespace xla
 

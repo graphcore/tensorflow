@@ -19,16 +19,7 @@ namespace tensorflow {
 REGISTER_OP("PopdistBroadcast")
     .Attr("T: numbertype")
     .Input("tensor: T")
+    .Attr("tensor_name: string")
     .Output("sum: T")
-    .SetShapeFn([](shape_inference::InferenceContext* c) {
-      shape_inference::ShapeHandle output;
-
-      if (c->Rank(c->input(0)) > 0) {
-        TF_RETURN_IF_ERROR(
-            c->ReplaceDim(c->input(0), 0, c->UnknownDim(), &output));
-      }
-
-      c->set_output(0, output);
-      return Status::OK();
-    });
+    .SetShapeFn(shape_inference::UnchangedShape);
 }  // namespace tensorflow

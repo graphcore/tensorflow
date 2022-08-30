@@ -12,6 +12,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <future>
+
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/op_requires.h"
 #include "tensorflow/core/framework/register_types.h"
@@ -21,27 +24,50 @@ limitations under the License.
 #include <popdist/collectives.hpp>
 #include <popdist/context.hpp>
 
+namespace poplar {
+template <>
+struct equivalent_device_type<Eigen::half> {
+  const Type& value = HALF;
+};
+}  // namespace poplar
+
 namespace tensorflow {
 template <typename T>
-class PopDistBroadcastOp : public OpKernel {
+class PopDistBroadcastOp : public AsyncOpKernel {
  public:
-  explicit PopDistBroadcastOp(OpKernelConstruction* ctx) : OpKernel(ctx) {}
+  explicit PopDistBroadcastOp(OpKernelConstruction* ctx) : AsyncOpKernel(ctx) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("tensor_name", &tensor_name_));
+  }
 
-  void Compute(OpKernelContext* ctx) override {
+  void ComputeAsync(OpKernelContext* ctx, DoneCallback done) override {
     auto& input = ctx->input(0);
     Tensor* output;
 
-    OP_REQUIRES_OK(ctx, ctx->allocate_output(0, input.shape(), &output));
-    OP_REQUIRES_OK(ctx, tensorflow::functor::DoCopy(ctx->eigen_cpu_device(),
-                                                    input, output));
-    popdist::collectives::sequential::broadcast(
-        output->flat<T>().data(), output->NumElements(),
-        poplar::equivalent_device_type<T>().value);
+    OP_REQUIRES_OK_ASYNC(ctx, ctx->allocate_output(0, input.shape(), &output),
+                         done);
+    OP_REQUIRES_OK_ASYNC(
+        ctx,
+        tensorflow::functor::DoCopy(ctx->eigen_cpu_device(), input, output),
+        done);
+
+    auto future = std::async(std::launch::async, [&] {
+      OP_REQUIRES_OK_ASYNC(
+          ctx,
+          xla::poplarplugin::RunPoplarFunction<popdist::popdist_error>([&] {
+            popdist::collectives::parallel::broadcast(
+                output->flat<T>().data(), output->NumElements(),
+                poplar::equivalent_device_type<T>().value, this->tensor_name_);
+
+            done();
+          }),
+          done);
+    });
   }
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PopDistBroadcastOp);
-};
+  std::string tensor_name_;
+};  // namespace tensorflow
 
 #define REGISTER_CPU(T)                                                   \
   REGISTER_KERNEL_BUILDER(                                                \
@@ -49,6 +75,7 @@ class PopDistBroadcastOp : public OpKernel {
       PopDistBroadcastOp<T>);
 
 TF_CALL_INTEGRAL_TYPES(REGISTER_CPU);
+TF_CALL_half(REGISTER_CPU);
 TF_CALL_float(REGISTER_CPU);
 #undef REGISTER_CPU
 }  // namespace tensorflow
