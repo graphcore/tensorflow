@@ -197,14 +197,14 @@ ENTRY main {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
-/print-tensor: {306,6012}
+  const std::string expected = R"(/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
+/print-tensor: [ 306.0000 6012.0000]
 )";
 
   ASSERT_EQ(expected, ss.str());
@@ -764,78 +764,78 @@ ENTRY main {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/print-tensor: 0
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor: 0
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.1: 1
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.2: 2
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor.3: 3
-/print-tensor.5: 5
-/print-tensor.4: 4
-/print-tensor.5: 5
+  const std::string expected = R"(/print-tensor: 0.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor: 0.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.1: 1.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.2: 2.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.3: 3.0000000
+/print-tensor.5: 5.0000000
+/print-tensor.4: 4.0000000
+/print-tensor.5: 5.0000000
 )";
 
   ASSERT_EQ(expected, ss.str());
@@ -976,14 +976,14 @@ ENTRY main {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/print-tensor: {206,212}
-/print-tensor: {206,212}
-/print-tensor: {206,212}
-/print-tensor: {206,212}
-/print-tensor: {206,212}
-/print-tensor: {206,212}
-/print-tensor: {206,212}
-/print-tensor: {206,212}
+  const std::string expected = R"(/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
+/print-tensor: [206.00000 212.00000]
 )";
 
   // Check the output of the stage has aliases.

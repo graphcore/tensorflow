@@ -148,12 +148,12 @@ ENTRY e {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/print-tensor: 3
-/print-tensor: 3
-/print-tensor: 3
-/print-tensor: 3
-/print-tensor: 3
-/print-tensor: 3
+  const std::string expected = R"(/print-tensor: 3.0000000
+/print-tensor: 3.0000000
+/print-tensor: 3.0000000
+/print-tensor: 3.0000000
+/print-tensor: 3.0000000
+/print-tensor: 3.0000000
 )";
 
   ASSERT_EQ(expected, ss.str());
