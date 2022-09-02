@@ -40,6 +40,7 @@ def _poplar_autoconf_impl(repository_ctx):
 
             repository_ctx.symlink(poplar_base + "/lib", "poplar/lib/poplar")
             repository_ctx.symlink(poplar_base + "/lib", "poplar/lib/popit")
+            repository_ctx.symlink(poplar_base + "/lib", "poplar/lib/popir")
             repository_ctx.symlink(poplar_base + "/lib", "poplar/lib/poprithms")
             repository_ctx.symlink(poplar_base + "/lib/python", "poplar/lib/python")
             repository_ctx.symlink(poplar_base + "/bin", "poplar/poplar/bin")
@@ -48,6 +49,7 @@ def _poplar_autoconf_impl(repository_ctx):
             if repository_ctx.path(poplar_base + "/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/lib64", "poplar/lib64/poplar")
                 repository_ctx.symlink(poplar_base + "/lib64", "poplar/lib64/popit")
+                repository_ctx.symlink(poplar_base + "/lib64", "poplar/lib64/popir")
                 repository_ctx.symlink(poplar_base + "/lib64", "poplar/lib64/poprithms")
                 repository_ctx.symlink(poplar_base + "/lib64/python", "poplar/lib64/python")
 
@@ -98,6 +100,7 @@ def _poplar_autoconf_impl(repository_ctx):
             repository_ctx.symlink(poplar_base + "/poplar/bin", "poplar/poplar/bin")
             repository_ctx.symlink(poplar_base + "/poplibs/lib", "poplar/lib/poplibs")
             repository_ctx.symlink(poplar_base + "/popit/lib", "poplar/lib/popit")
+            repository_ctx.symlink(poplar_base + "/popir/lib", "poplar/lib/popir")
             repository_ctx.symlink(poplar_base + "/poprithms/lib", "poplar/lib/poprithms")
             repository_ctx.symlink(poplar_base + "/poplar/lib", "poplar/lib/poplar")
             repository_ctx.symlink(poplar_base + "/tbb/lib", "poplar/lib/tbb")
@@ -144,6 +147,7 @@ def _poplar_autoconf_impl(repository_ctx):
                 repository_ctx.symlink(poplar_base + "/poplibs/lib64", "poplar/poplar/lib64/poplibs")
                 repository_ctx.symlink(poplar_base + "/tbb/lib64", "poplar/lib64/tbb")
                 repository_ctx.symlink(poplar_base + "/popit/lib64", "poplar/poplar/lib64/popit")
+                repository_ctx.symlink(poplar_base + "/popir/lib64", "poplar/poplar/lib64/popir")
                 repository_ctx.symlink(poplar_base + "/poprithms/lib64", "poplar/poplar/lib64/poprithms")
 
             if repository_ctx.path(poplar_base + "/popef/lib64").exists:
