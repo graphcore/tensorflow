@@ -377,17 +377,6 @@ StatusOr<bool> InsertCopies(InplacingState& state) {
                       copy->shape(), CloneMethod_PreserveOrderUnlessAliases)));
       }
 
-      // If we copy result of the instruction, we have to guarantee that
-      // result was copied before any control successors (that potentially may
-      // modify this buffer inplace).
-      for (auto succ : op->control_successors()) {
-        TF_RETURN_IF_ERROR(copy->AddControlDependencyTo(succ));
-      }
-      // If the instruction has control predecessors, we have to guarantee
-      // that copies are made after all predecessors.
-      for (HloInstruction* pred : inst->control_predecessors()) {
-        TF_RETURN_IF_ERROR(pred->AddControlDependencyTo(copy));
-      }
       op->SetupDerivedInstruction(copy);
       TF_RETURN_IF_ERROR(inst->ReplaceOperandWith(op_index, copy));
       changed = true;
