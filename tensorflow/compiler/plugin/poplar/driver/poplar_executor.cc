@@ -307,8 +307,8 @@ PoplarExecutor::TensorControl::TensorControl(size_t size_) {
 std::size_t PoplarExecutor::TensorControl::GetRemoteBufferSize() const {
   if (host_rearrangement) {
     return ShapeUtil::ByteSizeOf(ShapeUtil::MakeShape(
-        element_type, {host_rearrangement->replicationFactor,
-                       host_rearrangement->totalElementsPerReplica}));
+        element_type, {host_rearrangement->getReplicationFactor(),
+                       host_rearrangement->getTotalElementsPerReplica()}));
   }
   return size;
 }
@@ -2848,11 +2848,12 @@ Status PoplarExecutor::MoveDeviceToHost() {
                 // code.
                 std::vector<char> temp(buffer.size());
                 tc->host_rearrangement->undoRearrangeForCollective(
-                    buffer.data(), temp.data(), bytes_per_element);
+                    buffer, temp, bytes_per_element);
                 memcpy(tc->data, temp.data(), tc->size);
               } else {
                 tc->host_rearrangement->undoRearrangeForCollective(
-                    buffer.data(), tc->data, bytes_per_element);
+                    buffer.data(), buffer.size(), tc->data, tc->size,
+                    bytes_per_element);
               }
             }
           } else {
@@ -2975,10 +2976,11 @@ Status PoplarExecutor::MoveHostToDevice() {
                 std::vector<char> temp(buffer_size);
                 memcpy(temp.data(), tc->data, tc->size);
                 tc->host_rearrangement->rearrangeForCollective(
-                    temp.data(), buffer.data(), bytes_per_element);
+                    temp, buffer, bytes_per_element);
               } else {
                 tc->host_rearrangement->rearrangeForCollective(
-                    tc->data, buffer.data(), bytes_per_element);
+                    tc->data, tc->size, buffer.data(), buffer.size(),
+                    bytes_per_element);
               }
             } else {
               buffer.resize(bytes_per_replica);
