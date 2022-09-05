@@ -21,30 +21,23 @@ limitations under the License.
 
 namespace tensorflow {
 
-REGISTER_OP("IpuConvertFromF8")
-    .Input("input: uint8")
-    .Input("input_metadata: uint8")
+REGISTER_OP("IpuF8Matmul")
+    .Input("lhs: uint8")
+    .Input("lhs_meta: uint8")
+    .Input("rhs: uint8")
+    .Input("rhs_meta: uint8")
     .Output("output: float16")
+    .Output("output_meta: uint8")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
-      c->set_output(0, c->input(0));
+      auto lhs_shape = c->input(0);
+      auto rhs_shape = c->input(2);
+      auto groups = c->Dim(lhs_shape, 0);
+      auto M = c->Dim(lhs_shape, 1);
+      auto N = c->Dim(rhs_shape, 2);
+      c->set_output(0, c->MakeShape({groups, M, N}));
+      c->set_output(1, {});
       return Status::OK();
     })
-    .Doc(R"doc(
-Converts input from any type to F8 representation (U8 tensor + U8 metadata).
-)doc");
-
-REGISTER_OP("IpuConvertToF8")
-    .Input("input: float16")
-    .Input("input_metadata: uint8")
-    .Output("output: uint8")
-    .Output("output_metadata: uint8")
-    .SetShapeFn([](shape_inference::InferenceContext* c) {
-      c->set_output(0, c->input(0));
-      c->set_output(1, c->input(1));
-      return Status::OK();
-    })
-    .Doc(R"doc(
-Converts from F8 representation (U8 tensor + U8 metadata) to F8.
-)doc");
+    .Doc(R"doc(Matmul which handles an input being fp8)doc");
 
 }  // namespace tensorflow

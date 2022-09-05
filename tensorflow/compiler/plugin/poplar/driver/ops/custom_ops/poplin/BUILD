@@ -37,3 +37,14 @@ poplar_cc_library(
     ],
     alwayslink = True,
 )
+
+poplar_cc_library(
+    name = "fp8_ops",
+    srcs = [
+        "fp8_ops.cc",
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar/driver:tensor",
+    ],
+    alwayslink = True,
+)

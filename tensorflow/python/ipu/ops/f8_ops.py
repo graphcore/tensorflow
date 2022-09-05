@@ -22,6 +22,7 @@ from enum import IntEnum
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
+from tensorflow.python.ops import array_ops
 from tensorflow.python.ops.math_ops import cast
 
 
@@ -41,6 +42,23 @@ class Format(IntEnum):
 
 def create_metadata(fmt, scale=0):
   return (128 if fmt == Format.F143 else 0) | (scale & 0x3f)
+
+
+class QuarterTensor:
+  """
+  Represents a tensor with data type fp8.
+  """
+  def __init__(self, data, metadata):
+    """
+    Constructs a quarter tensor from the values tensor and metadata.
+
+    Args:
+      data: A tensor with data type uint8.
+      metadata: The metadata for this quarter tensor, should be scalar
+        uint8 tensor.
+    """
+    self.data = data
+    self.metadata = metadata
 
 
 def convert_to_f8(values, metadata, name=None):
@@ -84,3 +102,56 @@ def convert_from_f8(packed_input, dtype=dtypes.half, name=None):
   if values.dtype != dtype:
     values = cast(values, dtype=dtype)
   return values
+
+
+def canonicalise_input(inp):
+  result = None
+  # input expects data and metadata, if input is type without metadata just put in junk
+  if isinstance(inp, QuarterTensor):
+    result = [inp.data, inp.metadata]
+  else:
+    result = [
+        ops.convert_to_tensor(inp),
+        ops.convert_to_tensor(0, dtype=dtypes.uint8)
+    ]
+  if not result[0].shape.is_fully_defined():
+    raise Exception(f"Input shape must be fully defined: {result[0]}")
+  # XLA op always expects grouped matmul so if doesn't have group dimension then add it
+  if len(result[0].shape) == 2:
+    result[0] = array_ops.expand_dims(result[0],
+                                      axis=0,
+                                      name="MatMulCanonicalise")
+  result[0].shape.assert_has_rank(3)
+  return result
+
+
+def canonicalise_output(output, lhs):
+  if isinstance(lhs, QuarterTensor):
+    lhs = lhs.data
+  if (len(lhs.shape) == 2):
+    out = array_ops.squeeze(output[0], axis=0)
+  else:
+    out = output[0]
+  return out
+
+
+"""
+Performs a matmul on the 2 inputs tensors supporting element type fp8.
+
+Args:
+  lhs: Left hand side of matmul, can be tensor or quarter tensor.
+  rhs: Right hand side of matmul, can be tensor or quarter tensor.
+
+Returns:
+  Tensor with type float16.
+"""
+
+
+def f8_matmul(lhs, rhs, name="f8_matmul"):
+  inputs = canonicalise_input(lhs) + canonicalise_input(rhs)
+  values = gen_popops_ops.ipu_f8_matmul(lhs=inputs[0],
+                                        lhs_meta=inputs[1],
+                                        rhs=inputs[2],
+                                        rhs_meta=inputs[3],
+                                        name=name)
+  return canonicalise_output(values, lhs)

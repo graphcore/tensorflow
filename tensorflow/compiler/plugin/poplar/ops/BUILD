@@ -326,6 +326,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/ops/popops:all_to_all",
         "//tensorflow/compiler/plugin/poplar/ops/popops:cross_replica_sum",
         "//tensorflow/compiler/plugin/poplar/ops/popops:f8_convert",
+        "//tensorflow/compiler/plugin/poplar/ops/popops:fp8_ops",
         "//tensorflow/compiler/plugin/poplar/ops/popops:histogram",
         "//tensorflow/compiler/plugin/poplar/ops/popops:multi_slice",
         "//tensorflow/compiler/plugin/poplar/ops/popops:normalise_image",

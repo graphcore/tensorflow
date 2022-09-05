@@ -34,6 +34,7 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popfloat:cast_to_gfloat",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popfloat:gfloat_ops_utils",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplin:cholesky",
+        "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplin:fp8_ops",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplin:triangular_solve",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplin:weights_transpose_chans_flip_xy",
         "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popnn:arg_min_max",

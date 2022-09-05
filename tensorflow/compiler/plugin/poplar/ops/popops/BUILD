@@ -38,6 +38,17 @@ poplar_cc_library(
 )
 
 poplar_cc_library(
+    name = "fp8_ops",
+    srcs = [
+        "fp8_ops.cc",
+    ],
+    deps = [
+        "//tensorflow/core:framework",
+    ],
+    alwayslink = True,
+)
+
+poplar_cc_library(
     name = "histogram",
     srcs = [
         "histogram.cc",
@@ -110,6 +121,7 @@ poplar_cc_library(
         ":all_to_all",
         ":cross_replica_sum",
         ":f8_convert",
+        ":fp8_ops",
         ":histogram",
         ":multi_slice",
         ":normalise_image",
