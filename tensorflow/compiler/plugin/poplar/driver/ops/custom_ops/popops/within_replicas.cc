@@ -121,6 +121,7 @@ class AllGatherWithinReplicaOp : public PoplarOpDef {
     gcl::Chunks chunks;
 
     std::vector<poplar::Tensor> shards;
+    std::vector<gcl::Chunk> chunks_vec;
     for (auto i = 0u; i < inst->operand_count(); ++i) {
       TF_ASSIGN_OR_RETURN(
           poplar::Tensor input,
@@ -131,14 +132,16 @@ class AllGatherWithinReplicaOp : public PoplarOpDef {
       // to the subtensor after indexing the outermost dimension). Having
       // index=i means that the chunks in our gathered tensor will be in the
       // same order as the inputs.
-      chunks.chunks.push_back({input, /*index*/ i, /*offset*/ 0});
 
+      chunks_vec.emplace_back(input, i, 0);
       shards.push_back(input);
     }
 
+    chunks.setChunks(chunks_vec);
+
     auto original_input = poplar::concat(shards);
-    chunks.originalInput =
-        original_input.expand({0}).broadcast(inst->operand_count(), 0);
+    chunks.setOriginalInput(
+        original_input.expand({0}).broadcast(inst->operand_count(), 0));
     return chunks;
   }
 };
@@ -173,15 +176,15 @@ class ReduceScatterWithinReplicaOp : public PoplarOpDef {
         {debug_info, "ReduceScatterWithinReplica"},
         GetReplicatedCollectiveOptions(res));
 
-    CHECK_EQ(ipu_count, chunks.chunks.size())
+    CHECK_EQ(ipu_count, chunks.getChunks().size())
         << "Expecting to have a chunk for each IPU.";
-    TF_CHECK_OK(SetOutputs(chunks.chunks, inst, res, tensor_map));
+    TF_CHECK_OK(SetOutputs(chunks.getChunks(), inst, res, tensor_map));
 
     return seq;
   }
 
  private:
-  Status SetOutputs(std::vector<gcl::Chunk>& output_chunks,
+  Status SetOutputs(const std::vector<gcl::Chunk>& output_chunks,
                     const HloInstruction* inst, CompilerResources& res,
                     TensorMap& tensor_map) {
     const auto output_tensor_shape =
@@ -191,7 +194,7 @@ class ReduceScatterWithinReplicaOp : public PoplarOpDef {
     const auto output_tensor_size = output_tensor_shape.dimensions(0);
 
     for (auto i = 0; i < output_chunks.size(); ++i) {
-      auto tensor = output_chunks[i].tensor;
+      auto tensor = output_chunks[i].getTensor();
       CHECK_EQ(tensor.rank(), 1);
 
       // Pad everything to a consistent shape. We don't know how
