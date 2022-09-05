@@ -410,6 +410,7 @@ _ALL_DEVICES = -1
 def pipeline(computational_stages,
              gradient_accumulation_count=None,
              gradient_accumulation_dtype=None,
+             gradient_accumulation_for_captured_grads=True,
              repeat_count=1,
              batch_serialization_iterations=1,
              inputs=None,
@@ -633,6 +634,10 @@ def pipeline(computational_stages,
       a cast is needed at some point to make them compatible. If you want
       to cast the gradients immediately, you can wrap your optimizer in the
       `MapGradientOptimizer` with a `tf.cast`.
+    gradient_accumulation_for_captured_grads: If `True`, any captured gradients
+      are accumulated before being passed to the optimizer's `apply_gradients`
+      method (via its `captured_grads` keyword argument, if it exists).
+      If `False`, the "raw", unaccumulated gradients are passed instead.
     repeat_count: the number of times the pipeline will be executed.
     batch_serialization_iterations: (EXPERIMENTAL) number of times a loop
       executes to compute a batch on each pipeline stage execution. Currently
@@ -1024,10 +1029,7 @@ def pipeline(computational_stages,
 
           outfeed_sinks.append(nest.map_structure(create_accumulate, tensor))
 
-    def _accumulate_captured_grads(opt_fn,
-                                   gradient_accumulation_dtype,
-                                   accum_scale=1.0,
-                                   grad_scale=None):
+    def _extract_captured_grads(opt_fn):
       if not opt_fn:
         return None
 
@@ -1043,7 +1045,12 @@ def pipeline(computational_stages,
 
       # Pull out any grads that have been captured by
       # ipu.ops.grad_util_ops.capture_upstream_gradients.
-      captured_grads = captured_grad_src.captured_gradients
+      return captured_grad_src.captured_gradients
+
+    def _accumulate_captured_grads(captured_grads,
+                                   gradient_accumulation_dtype,
+                                   accum_scale=1.0,
+                                   grad_scale=None):
       if not captured_grads:
         return None
 
@@ -1150,11 +1157,14 @@ def pipeline(computational_stages,
       accumulated_grads_and_vars = op_util.accumulate_gradients(
           grads_and_vars, gradient_accumulation_dtype, accum_scale, grad_scale)
 
-      accumulated_captured_grads = _accumulate_captured_grads(
-          opt_fn,
-          gradient_accumulation_dtype,
-          accum_scale=accum_scale,
-          grad_scale=grad_scale)
+      captured_grads = _extract_captured_grads(opt_fn)
+
+      if gradient_accumulation_for_captured_grads:
+        captured_grads = _accumulate_captured_grads(
+            captured_grads,
+            gradient_accumulation_dtype,
+            accum_scale=accum_scale,
+            grad_scale=grad_scale)
 
     elif not isinstance(outputs, ops.Operation) and accumulate_outfeed:
       # In inference, we never expect tensor outputs from the final stage,
@@ -1178,10 +1188,10 @@ def pipeline(computational_stages,
           # keyword argument.
           kwargs = dict(apply_gradients_kwargs)
           _, _, kw, _ = inspect.getargspec(opt.__class__.apply_gradients)
-          if accumulated_captured_grads and (kw and 'captured_grads' in kw) or\
+          if captured_grads and (kw and 'captured_grads' in kw) or\
             (hasattr(opt, 'supports_captured_grads') and \
               opt.supports_captured_grads):
-            kwargs['captured_grads'] = accumulated_captured_grads
+            kwargs['captured_grads'] = captured_grads
 
           apply_grads = opt.apply_gradients(accumulated_grads_and_vars,
                                             *apply_gradients_args, **kwargs)
@@ -1189,9 +1199,8 @@ def pipeline(computational_stages,
           if apply_grads is not None:
             resource_update_ops.append(apply_grads)
 
-          if accumulated_captured_grads and opt_fn.captured_gradient_outfeed:
-            opt_fn.captured_gradient_outfeed.enqueue(
-                accumulated_captured_grads)
+          if captured_grads and opt_fn.captured_gradient_outfeed:
+            opt_fn.captured_gradient_outfeed.enqueue(captured_grads)
 
         # Enqueue any accumulated outfeed data
         if outfeed_sinks:
