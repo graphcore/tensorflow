@@ -92,16 +92,21 @@ For example, this will not work:
   :members: IPUMultiWorkerStrategy
   :special-members: __init__
 
-.. automodule:: tensorflow.python.ipu.horovod
+.. automodule:: tensorflow.python.ipu.distributed
   :members:
 
-.. automodule:: tensorflow.python.ipu.horovod.ipu_horovod_strategy
+.. automodule:: tensorflow.python.ipu.distributed.ipu_horovod_strategy
   :members: IPUHorovodStrategy
   :special-members: __init__
 
-.. automodule:: tensorflow.python.ipu.horovod.popdist_strategy
+.. automodule:: tensorflow.python.ipu.distributed.popdist_strategy
   :members: PopDistStrategy
   :special-members: __init__
+
+.. note::
+  Both :py:class:`tensorflow.python.ipu.distributed.popdist_strategy.PopDistStrategy`
+  and :py:class:`tensorflow.python.ipu.distributed.ipu_horovod_strategy.IPUHorovodStrategy`
+  are still available through the deprecated module `tensorflow.python.ipu.horovod`.
 
 .. Serving utilities
 

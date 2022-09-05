@@ -16,7 +16,7 @@ from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import reduce_util
 from tensorflow.python.distribute.cluster_resolver import cluster_resolver as cluster_resolver_lib
 from tensorflow.python.ipu import ipu_multi_worker_strategy
-from tensorflow.python.ipu.horovod import Sum, Average, size, allreduce, broadcast
+from tensorflow.python.ipu.distributed import Sum, Average, size, allreduce, broadcast
 from tensorflow.python.training import server_lib
 from tensorflow.python.util import deprecation
 

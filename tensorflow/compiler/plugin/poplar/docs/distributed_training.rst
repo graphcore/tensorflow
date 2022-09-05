@@ -10,7 +10,7 @@ communication over the host network, for example for broadcasting the
 initial values of variables from the first instance to the others.
 
 To perform distributed training on Pod systems, use
-:class:`~tensorflow.python.ipu.horovod.popdist_strategy.PopDistStrategy`,
+:class:`~tensorflow.python.ipu.distributed.popdist_strategy.PopDistStrategy`,
 which performs data-parallel synchronous training using multiple host processes.
 In this sense it is similar to
 `MultiWorkerMirroredStrategy <https://www.tensorflow.org/api_docs/python/tf/distribute/MultiWorkerMirroredStrategy>`_
@@ -20,7 +20,7 @@ network using Horovod.
 Collective operations (explicitly through a member function like ``reduce()`` or
 implicitly by using an optimizer under the strategy scope) will be performed
 directly on the IPU by using compiled communications with the GCL library
-over the IPU links and GW-Links. The
+over the IPU-Links and GW-Links. The
 ``PopDistStrategy`` is designed for use with PopDist and PopRun.
 Refer to the `PopDist and PopRun User Guide
 <https://docs.graphcore.ai/projects/poprun-user-guide/>`_ for more details.
