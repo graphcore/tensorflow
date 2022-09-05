@@ -230,26 +230,29 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
                 info.host_rearrangement_id);
             CHECK(hr_it !=
                   annotations.remote_parameter_host_rearrangements.end());
-            auto& host_rearrangement = hr_it->second;
+            const auto& host_rearrangement = hr_it->second;
             auto& gcl = host_rearrangements[index];
-            gcl.replicationFactor = host_rearrangement.replication_factor;
-            gcl.totalElementsPerReplica =
-                host_rearrangement.total_elements_per_replica;
-            for (auto& slice : host_rearrangement.gathered_to_ref_slice) {
-              gcl.gatheredToRefSlices.emplace_back(slice.first, slice.second);
-            }
-            gcl.elementMap = host_rearrangement.element_map;
+            gcl.setReplicationFactor(host_rearrangement.replication_factor);
+            gcl.setTotalElementsPerReplica(
+                host_rearrangement.total_elements_per_replica);
+            std::vector<poplar::Interval> gathered_to_ref_slices =
+                gcl.getGatheredToRefSlices();
 
-            CHECK_EQ(gcl.replicationFactor, param.replication_factor);
-            per_replica_size = gcl.totalElementsPerReplica;
-            aligned_size = per_replica_size * gcl.replicationFactor;
+            for (const auto& slice : host_rearrangement.gathered_to_ref_slice) {
+              gathered_to_ref_slices.emplace_back(slice.first, slice.second);
+            }
+
+            gcl.setGatheredToRefSlices(gathered_to_ref_slices);
+            gcl.setElementMap(host_rearrangement.element_map);
+
+            CHECK_EQ(gcl.getReplicationFactor(), param.replication_factor);
+            per_replica_size = gcl.getTotalElementsPerReplica();
+            aligned_size = per_replica_size * gcl.getReplicationFactor();
             buffer.resize(aligned_size);
 
             std::vector<float> tmp(aligned_size);
             VLOG(1) << "Rearranging for collective...";
-            gcl.rearrangeForCollective(
-                reinterpret_cast<const char*>(buffer.data()),
-                reinterpret_cast<char*>(tmp.data()), 4);
+            gcl.rearrangeForCollective(buffer, tmp);
             buffer = std::move(tmp);
           }
 
@@ -319,9 +322,9 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
           auto host_rearrangement_it = host_rearrangements.find(index);
           if (host_rearrangement_it != host_rearrangements.end()) {
             auto& host_rearrangement = host_rearrangement_it->second;
-            per_replica_size = host_rearrangement.totalElementsPerReplica;
+            per_replica_size = host_rearrangement.getTotalElementsPerReplica();
             aligned_size =
-                per_replica_size * host_rearrangement.replicationFactor;
+                per_replica_size * host_rearrangement.getReplicationFactor();
           }
 
           VLOG(1) << "Downloading data from " << info.buffer_name
@@ -340,9 +343,7 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
             EXPECT_TRUE(cluster);
             std::vector<float> tmp(buffer.size());
             VLOG(1) << "Undo rearrangement for collective...";
-            host_rearrangement.undoRearrangeForCollective(
-                reinterpret_cast<const char*>(buffer.data()),
-                reinterpret_cast<char*>(tmp.data()), 4);
+            host_rearrangement.undoRearrangeForCollective(buffer, tmp);
             buffer = std::move(tmp);
           }
           buffer.resize(size);

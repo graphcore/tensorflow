@@ -73,19 +73,24 @@ void PoplarExecutableCore::PopulateCollectiveBalanceReorderHostRerrangements() {
   for (auto& param_host_rearrangement_entry :
        GetRemoteParameterHostRearrangements()) {
     int64 id = param_host_rearrangement_entry.first;
-    auto& param_host_rearrangement = param_host_rearrangement_entry.second;
+    const auto& param_host_rearrangement =
+        param_host_rearrangement_entry.second;
     gcl::CollectiveBalancedHostRearrangement host_rearrangement;
-    host_rearrangement.replicationFactor =
-        param_host_rearrangement.replication_factor;
-    host_rearrangement.totalElementsPerReplica =
-        param_host_rearrangement.total_elements_per_replica;
-    host_rearrangement.gatheredToRefSlices.reserve(
+    host_rearrangement.setReplicationFactor(
+        param_host_rearrangement.replication_factor);
+    host_rearrangement.setTotalElementsPerReplica(
+        param_host_rearrangement.total_elements_per_replica);
+
+    std::vector<poplar::Interval> gathered_to_ref_slices(
+        host_rearrangement.getGatheredToRefSlices());
+    gathered_to_ref_slices.reserve(
         param_host_rearrangement.gathered_to_ref_slice.size());
-    for (auto& slice : param_host_rearrangement.gathered_to_ref_slice) {
-      host_rearrangement.gatheredToRefSlices.emplace_back(slice.first,
-                                                          slice.second);
+
+    for (const auto& slice : param_host_rearrangement.gathered_to_ref_slice) {
+      gathered_to_ref_slices.emplace_back(slice.first, slice.second);
     }
-    host_rearrangement.elementMap = param_host_rearrangement.element_map;
+    host_rearrangement.setGatheredToRefSlices(gathered_to_ref_slices);
+    host_rearrangement.setElementMap(param_host_rearrangement.element_map);
     cbr_host_rearrangements_[id] = std::move(host_rearrangement);
   }
 }

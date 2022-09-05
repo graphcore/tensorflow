@@ -138,9 +138,9 @@ Status PartitionedElementwiseClusterVisitor::ValidateShape(
   const gcl::CollectiveBalancedHostRearrangement& host_rearrangement =
       cbr->getHostRearrangement();
   const int64 replicated_element_count =
-      host_rearrangement.totalElementsPerReplica;
+      host_rearrangement.getTotalElementsPerReplica();
   const int64 non_replicated_element_count =
-      replicated_element_count * host_rearrangement.replicationFactor;
+      replicated_element_count * host_rearrangement.getReplicationFactor();
   const int64 xla_element_count = ShapeUtil::ElementsIn(shape);
   VLOG(3) << "CBR slice element count: " << replicated_element_count
           << ", total collectives elements: " << non_replicated_element_count
@@ -200,7 +200,7 @@ PartitionedElementwiseClusterVisitor::MakeParameterAllocationFunction(
       TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(shape));
       auto element_count = ShapeUtil::ElementsIn(shape);
       auto& host_rearrangement = cbr->getHostRearrangement();
-      if (host_rearrangement.totalElementsPerReplica == element_count) {
+      if (host_rearrangement.getTotalElementsPerReplica() == element_count) {
         tensor_like = DriverTensor(cbr->createReplicaSlice(type));
       }
     }
@@ -287,13 +287,16 @@ PartitionedElementwiseClusterVisitor::UpdateRemoteBufferInformation(
           cbr_info->host_rearrangement_id) ==
       remote_parameter_host_rearrangements.end()) {
     RemoteParameterHostRearrangement host_rearrangement;
-    host_rearrangement.replication_factor = src.replicationFactor;
-    host_rearrangement.total_elements_per_replica = src.totalElementsPerReplica;
-    for (auto& interval : src.gatheredToRefSlices) {
+    host_rearrangement.replication_factor = src.getReplicationFactor();
+    host_rearrangement.total_elements_per_replica =
+        src.getTotalElementsPerReplica();
+    for (const auto& interval : src.getGatheredToRefSlices()) {
       host_rearrangement.gathered_to_ref_slice.emplace_back(interval.begin(),
                                                             interval.end());
     }
-    host_rearrangement.element_map = src.elementMap;
+
+    host_rearrangement.element_map = src.getElementMap();
+
     remote_parameter_host_rearrangements[cbr_info->host_rearrangement_id] =
         std::move(host_rearrangement);
   }
@@ -310,7 +313,7 @@ PartitionedElementwiseClusterVisitor::UpdateRemoteBufferInformation(
   for (auto param_idx : merged_params) {
     TF_RETURN_IF_ERROR(SetRemoteBufferHostRearrangementId(
         graph, entry_comp, param_idx, cbr_info->host_rearrangement_id,
-        src.totalElementsPerReplica));
+        src.getTotalElementsPerReplica()));
   }
 
   return true;
