@@ -81,7 +81,7 @@ class StatefulGradientAccumulateOp : public PoplarOpDef {
     auto accumulator = graph.clone(input, {debug_info, "Accumulator"});
     AddZeroTensorToPreamble(res, accumulator, {debug_info});
     // Accumulate the input into the buffer.
-    popops::addInPlace(graph, accumulator, input.getPoplarTensor(), seq,
+    popops::addInPlace(graph, accumulator, input, seq,
                        {debug_info, "Accumulate"});
 
     // Output the accumulated gradients if counter == MiniBatchesToAccumulate -
@@ -221,8 +221,8 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
       poplar::program::Sequence if_true({}, debug_info);
       {
         // Apply the momentum.
-        popops::mulInPlace(graph, accumulator, momentum.getPoplarTensor(),
-                           if_true, {debug_info, "ApplyMomentum"});
+        popops::mulInPlace(graph, accumulator, momentum, if_true,
+                           {debug_info, "ApplyMomentum"});
       }
       // Do nothing in false case.
       poplar::program::Sequence if_false({}, debug_info);
@@ -231,7 +231,7 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
     }
 
     // Add the gradient.
-    popops::addInPlace(graph, accumulator, grad.getPoplarTensor(), seq,
+    popops::addInPlace(graph, accumulator, grad, seq,
                        {debug_info, "MomentumAddGrad"});
 
     poplar::Tensor output = grad;

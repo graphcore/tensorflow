@@ -133,11 +133,6 @@ StatusOr<NormOptions> GetNormOptions(const HloInstruction* inst) {
   }
 }
 
-poplar::Tensor ShuffleNormInputToPoplar(const poplar::Tensor& input,
-                                        uint32 feature_index) {
-  return input.dimShufflePartial({feature_index}, {1});
-}
-
 DriverTensor ShuffleNormInputToPoplar(const DriverTensor& input,
                                       uint32 feature_index) {
   return input.dimShufflePartial({feature_index}, {1});

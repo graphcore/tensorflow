@@ -29,7 +29,12 @@ limitations under the License.
 #include <poplar/CodeletFileType.hpp>
 #include <poplar/CycleCount.hpp>
 #include <poplar/exceptions.hpp>
+#include <poplin/codelets.hpp>
+#include <popnn/codelets.hpp>
 #include <popops/Cast.hpp>
+#include <popops/codelets.hpp>
+#include <poprand/codelets.hpp>
+#include <popsparse/codelets.hpp>
 #include <random>
 #include <string>
 
@@ -898,7 +903,13 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     return xla::InternalError("Failed to compile Poplar TF codelets: %s",
                               compile_output.str());
   }
-  main_graph.addPoplibsCodelets();
+
+  poplin::addCodelets(main_graph);
+  popnn::addCodelets(main_graph);
+  popops::addCodelets(main_graph);
+  poprand::addCodelets(main_graph);
+  popsparse::addCodelets(main_graph);
+  popfloat::experimental::addCodelets(main_graph);
 
   return Status::OK();
 }

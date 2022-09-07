@@ -190,8 +190,8 @@ Status ArithmeticExprVisitor::FinishScopedVisit(HloInstruction* inst) {
   // get the expression
   TF_ASSIGN_OR_RETURN(auto expr, FindExpressionInput(inst));
   // map expression with the tensors
-  DriverTensor out = popops::map(graph, *expr, GetPoplarTensors(ts_), seq,
-                                 {debug_name_and_id, "expression"});
+  DriverTensor out =
+      popops::map(graph, *expr, ts_, seq, {debug_name_and_id, "expression"});
   outputs_.push_back(out);
 
   resources_.tensor_maps.AddTensorMapForComputation(inst->parent()->name(),

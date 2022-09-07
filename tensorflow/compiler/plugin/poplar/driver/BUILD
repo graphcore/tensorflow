@@ -136,18 +136,11 @@ poplar_cc_library(
 
 poplar_cc_library(
     name = "driver_backend",
-    srcs = [
-        "extended_graph.cc",
-        "extended_tensor.cc",
-    ],
+    srcs = [],
     hdrs = [
         "driver_types.h",
-        "extended_graph.h",
-        "extended_program.h",
-        "extended_tensor.h",
     ],
     deps = [
-        "@com_google_absl//absl/algorithm:container",
         "@local_config_poplar//poplar:poplar_libs",
     ],
 )

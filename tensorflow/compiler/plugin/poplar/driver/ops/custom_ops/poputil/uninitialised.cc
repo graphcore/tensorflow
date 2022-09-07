@@ -48,8 +48,8 @@ class UninitialisedOp : public PoplarOpDef {
                                   res, tensor_map, {debug_info}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
-    return DriverProgramSequence(
-        {ExtendedProgramWriteUndef(output, debug_info)}, debug_info);
+    return DriverProgramSequence({DriverProgramWriteUndef(output, debug_info)},
+                                 debug_info);
   }
 };
 REGISTER_POPLAR_OP(Uninitialised, UninitialisedOp);

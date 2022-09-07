@@ -19,27 +19,28 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "tensorflow/compiler/plugin/poplar/driver/extended_graph.h"
-#include "tensorflow/compiler/plugin/poplar/driver/extended_program.h"
-#include "tensorflow/compiler/plugin/poplar/driver/extended_tensor.h"
+#include <poplar/DataStream.hpp>
+#include <poplar/Graph.hpp>
+#include <poplar/Program.hpp>
+#include <poplar/Tensor.hpp>
 
 namespace xla {
 namespace poplarplugin {
 
-using DriverGraph = ExtendedGraph;
-using DriverTensor = ExtendedTensor;
-using DriverDataStream = ExtendedDataStream;
-using DriverRemoteBuffer = ExtendedRemoteBuffer;
+using DriverGraph = poplar::Graph;
+using DriverTensor = poplar::Tensor;
+using DriverDataStream = poplar::DataStream;
+using DriverRemoteBuffer = poplar::RemoteBuffer;
 
-using DriverProgram = ExtendedProgram;
-using DriverProgramSequence = ExtendedProgramSequence;
-using DriverProgramCopy = ExtendedProgramCopy;
-using DriverProgramSync = ExtendedProgramSync;
-using DriverProgramRepeat = ExtendedProgramRepeat;
-using DriverProgramCall = ExtendedProgramCall;
-using DriverProgramWriteUndef = ExtendedProgramWriteUndef;
+using DriverProgram = poplar::program::Program;
+using DriverProgramSequence = poplar::program::Sequence;
+using DriverProgramCopy = poplar::program::Copy;
+using DriverProgramSync = poplar::program::Sync;
+using DriverProgramRepeat = poplar::program::Repeat;
+using DriverProgramCall = poplar::program::Call;
+using DriverProgramWriteUndef = poplar::program::WriteUndef;
 
-using DriverFunction = ExtendedFunction;
+using DriverFunction = poplar::Function;
 
 }  // namespace poplarplugin
 }  // namespace xla

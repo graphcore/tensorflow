@@ -16,6 +16,7 @@ limitations under the License.
 #include <algorithm>
 #include <poplar/Graph.hpp>
 #include <popops/AllTrue.hpp>
+#include <poputil/TileMapping.hpp>
 #include <poputil/Util.hpp>
 
 #include "absl/strings/str_cat.h"
@@ -860,7 +861,9 @@ StatusOr<DriverProgramSequence> CreatePipelineOp(
     // of the pipeline graph. Provide dummy tensor as won't be used.
     // If not known at compile time we can't create the sequence yet as
     // need to call PropagateDeferredAllocations first
-    auto dummy = graph.addLinearlyMappedVariable(poplar::FLOAT, {});
+    auto dummy = graph.addVariable(poplar::FLOAT, {});
+    poputil::mapTensorLinearly(graph, dummy);
+
     TF_RETURN_IF_ERROR(
         visitor
             ->VerifyPipelineArguments(

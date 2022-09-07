@@ -200,9 +200,8 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     // address space indices to the replica-local address space. Given we can
     // currently assume there is a power of two replication factor, this could
     // be rewritten as bitshift right log_2(rep) bits.
-    poplar::Tensor ind =
-        popops::div(graph, indices.flatten(), rep.getPoplarTensor(), seq,
-                    {debug_name_and_id, "shift_indices"});
+    poplar::Tensor ind = popops::div(graph, indices.flatten(), rep, seq,
+                                     {debug_name_and_id, "shift_indices"});
 
     // Create the host sliceable temporary tensor.
     auto host_sliceable = popops::createHostSliceableTensor(
@@ -226,15 +225,15 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     // Take the modulus of the global indices with the replication factor.
     // Given we can currently assume that the replication factor is a power of
     // two, this could be rewritten as a bitwise-and with rep-1.
-    poplar::Tensor rem = popops::rem(graph, indices, rep.getPoplarTensor(), seq,
+    poplar::Tensor rem = popops::rem(graph, indices, rep, seq,
                                      {debug_name_and_id, "mask_indices"});
 
     // Check whether (i mod r) is equal to this replica id. This tells us
     // whether the element refered to by the global index is "owned" by this
     // replca.
-    poplar::Tensor mask = popops::eq(
-        graph, rem.reinterpret(replica_id.elementType()),
-        replica_id.getPoplarTensor(), seq, {debug_name_and_id, "mask"});
+    poplar::Tensor mask =
+        popops::eq(graph, rem.reinterpret(replica_id.elementType()), replica_id,
+                   seq, {debug_name_and_id, "mask"});
 
     // Create a constant zero fo masking.
     auto zero = graph.addConstant(host_sliceable.tensor.elementType(), {}, 0,
@@ -479,8 +478,8 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
     // address space indices to the replica-local address space. Given we can
     // currently assume there is a power of two replication factor, this could
     // be rewritten as bitshift right log_2(rep) bits.
-    popops::divInPlace(graph, host_sliceable.indices, rep.getPoplarTensor(),
-                       seq, {debug_name_and_id, "shift_indices"});
+    popops::divInPlace(graph, host_sliceable.indices, rep, seq,
+                       {debug_name_and_id, "shift_indices"});
 
     // Create an invalid constant index that is used to avoid clobbering valid
     // values in the remote buffer. Currently implemented as one-past-the-end
@@ -500,16 +499,15 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
     // Take the modulus of the global indices with the replication factor.
     // Given we can currently assume that the replication factor is a power of
     // two, this could be rewritten as a bitwise-and with rep-1.
-    poplar::Tensor rem =
-        popops::rem(graph, host_sliceable.indices, rep.getPoplarTensor(), seq,
-                    {debug_name_and_id, "mask_indices"});
+    poplar::Tensor rem = popops::rem(graph, host_sliceable.indices, rep, seq,
+                                     {debug_name_and_id, "mask_indices"});
 
     // Check whether (i mod r) is equal to this replica id. This tells us
     // whether the element refered to by the global index is "owned" by this
     // replca.
-    poplar::Tensor mask = popops::eq(
-        graph, rem.reinterpret(replica_id.elementType()),
-        replica_id.getPoplarTensor(), seq, {debug_name_and_id, "mask"});
+    poplar::Tensor mask =
+        popops::eq(graph, rem.reinterpret(replica_id.elementType()), replica_id,
+                   seq, {debug_name_and_id, "mask"});
 
     // Use the computed mask, based on whether this replica "owns" the requested
     // element, to invalidate the indices and avoid overwritting valid regions

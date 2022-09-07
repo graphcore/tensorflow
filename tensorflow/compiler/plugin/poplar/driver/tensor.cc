@@ -777,7 +777,7 @@ static StatusOr<DriverTensor> AddElementwiseBinary(
       TensorCloneAndRebalanceAliasing(graph, res, other_side, {});
 
   if (output.elementType() != poplar_type) {
-    output = graph.clone(poplar_type, output, {});
+    output = graph.clone(poplar_type, output);
   }
 
   return output;

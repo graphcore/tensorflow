@@ -194,7 +194,7 @@ class MatMulBiasAddOp : public PoplarOpDef {
 
     TF_ASSIGN_OR_RETURN(bias, BroadcastTensor(bias, broadcast->shape(),
                                               broadcast->dimensions()));
-    popops::addInPlace(graph, in, bias.getPoplarTensor(), prog, {debug_info});
+    popops::addInPlace(graph, in, bias, prog, {debug_info});
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, DriverTensor(in)));
     return prog;
