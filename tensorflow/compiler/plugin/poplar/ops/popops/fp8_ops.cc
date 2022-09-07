@@ -22,12 +22,14 @@ limitations under the License.
 namespace tensorflow {
 
 REGISTER_OP("IpuF8Matmul")
-    .Input("lhs: uint8")
+    .Input("lhs: lhs_type")
     .Input("lhs_meta: uint8")
-    .Input("rhs: uint8")
+    .Input("rhs: rhs_type")
     .Input("rhs_meta: uint8")
     .Output("output: float16")
     .Output("output_meta: uint8")
+    .Attr("lhs_type: {uint8, float16, float32}")
+    .Attr("rhs_type: {uint8, float16, float32}")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto lhs_shape = c->input(0);
       auto rhs_shape = c->input(2);

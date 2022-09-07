@@ -68,6 +68,12 @@ bool OpFilter(KernelDef* kdef) {
   if (kdef->op() == "Assert") {
     AddDtypeToKernelDefConstraint("T", DT_STRING, kdef);
   }
+
+  if (kdef->op() == "IpuF8Matmul") {
+    AddDtypeToKernelDefConstraint("lhs_type", DT_UINT8, kdef);
+    AddDtypeToKernelDefConstraint("rhs_type", DT_UINT8, kdef);
+  }
+
   if (kdef->op() == "Const") {
     AddDtypeToKernelDefConstraint("dtype", DT_STRING, kdef);
     AddDtypeToKernelDefConstraint("dtype", DT_UINT8, kdef);

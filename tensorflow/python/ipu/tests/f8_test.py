@@ -106,6 +106,7 @@ def mat_mul_test_cases():
   pauli_z = array_ops.constant(pauli_z_)
 
   ans = np.matmul(np.array(pauli_x_), np.array(pauli_z_))
+  # Can add float16/32 when poplibs supports these.
   for ltype in [dtypes.uint8]:
     result.append({
         'testcase_name': f"mat_mul_{ltype}",
