@@ -195,8 +195,8 @@ Status FindStartPoints(AllocationLoopState& state, HloModule* module) {
 }
 
 // Only some inputs affect tile mapping of output, for this function
-// only add the user if next.instruction's tile mapping is related to
-// it's output
+// only add the user if the next instruction's tile mapping is related to
+// its output.
 Status AddIfMappingDependsOnOperand(std::vector<IndexedLocation>& to_visit,
                                     HloInstruction* user,
                                     const IndexedLocation& operand,
