@@ -60,6 +60,9 @@ class QuarterTensor:
     self.data = data
     self.metadata = metadata
 
+  def __iter__(self):
+    return iter([self.data, self.metadata])
+
 
 def convert_to_f8(values, metadata, name=None):
   """
@@ -74,13 +77,13 @@ def convert_to_f8(values, metadata, name=None):
   Returns:
     (output, metadata) tuple of uint8 output and metadata.
   """
-  if values.dtype == dtypes.uint8:
-    return values, metadata
+
+  if values.dtype != dtypes.float16:
+    values = cast(values, dtypes.float16)
 
   metadata = ops.convert_to_tensor(metadata, dtype=dtypes.uint8)
-  if values.dtype != dtypes.float16:
-    values = cast(values, dtype=dtypes.float16)
-  return gen_popops_ops.ipu_convert_to_f8(values, metadata, name=name)
+  v, m = gen_popops_ops.ipu_convert_to_f8(values, metadata, name=name)
+  return QuarterTensor(v, m)
 
 
 def convert_from_f8(packed_input, dtype=dtypes.half, name=None):

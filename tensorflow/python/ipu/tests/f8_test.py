@@ -85,9 +85,7 @@ class F8Test(test_util.TensorFlowTestCase, parameterized.TestCase):
 
 
 def convert_to_quarter(x):
-  x = tf.cast(x, dtypes.float16)
-  x = convert_to_f8(x, create_metadata(Format.F143, 1))
-  return QuarterTensor(x[0], x[1])
+  return convert_to_f8(x, create_metadata(Format.F143, 1))
 
 
 def cast_to(x, dtype):
