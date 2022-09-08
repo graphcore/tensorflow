@@ -254,10 +254,16 @@ StatusOr<bool> HandleReduce(HloInstruction* inst, HloInstruction* elementwise) {
       if (elementwise->opcode() != HloOpcode::kAdd &&
           elementwise->opcode() != HloOpcode::kSubtract)
         return false;
+      if (elementwise->opcode() == HloOpcode::kSubtract &&
+          inst != elementwise->operand(0))
+        return false;
       break;
     case HloOpcode::kMultiply:
       if (elementwise->opcode() != HloOpcode::kMultiply &&
           elementwise->opcode() != HloOpcode::kDivide)
+        return false;
+      if (elementwise->opcode() == HloOpcode::kDivide &&
+          inst != elementwise->operand(0))
         return false;
       break;
     case HloOpcode::kMaximum:
