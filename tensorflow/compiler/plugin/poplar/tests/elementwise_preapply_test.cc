@@ -754,6 +754,30 @@ static std::string hlo_binary_float() {
     )";
 }
 
+// Same as hlo_binary_float, but the arguments to output are swapped.
+// When $FUNC2 is subtract or divide, this should not match the pattern
+// even if hlo_binary_float() would.
+static std::string hlo_binary_float_swapped() {
+  return R"(
+    HloModule module
+
+    function_to_apply {
+      p0 = f32[] parameter(0)
+      p1 = f32[] parameter(1)
+      ROOT output = f32[] $FUNC1(p0, p1)
+    }
+
+    ENTRY f {
+      reduce_param = f32[2, 3] constant({{1, 2, 3}, {4, 5, 6}})
+      reduce_init = f32[] constant(5)
+      reduce = f32[3] reduce(reduce_param, reduce_init), dimensions={0}, to_apply=function_to_apply  
+      c = f32[] constant(2)
+      second_elementwise_arg = f32[3] broadcast(c), dimensions={}
+      ROOT output = f32[3] $FUNC2(second_elementwise_arg, reduce)
+    }
+    )";
+}
+
 static std::string hlo_binary_bool() {
   return absl::StrReplaceAll(
       hlo_binary_float(),
@@ -822,6 +846,8 @@ INSTANTIATE_TEST_SUITE_P(
         {"divide", "multiply", hlo_binary_float()},
         {"xor", "xor", hlo_binary_bool()},
         {"minimum", "copy", hlo_unary_float()},
+        {"add", "subtract", hlo_binary_float_swapped()},
+        {"multiply", "divide", hlo_binary_float_swapped()},
         // scalar result (no broadcast for constant)
         {"minimum", "maximum", hlo_scalar_result()},
         {"add", "multiply", hlo_scalar_result()},
