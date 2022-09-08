@@ -28,3 +28,8 @@ def if_custom_poplibs(if_true, if_false = []):
     if custom_poplibs_available():
         return if_true
     return if_false
+
+def ld_library_path():
+    """Returns the value of the LD_LIBRARY_PATH env variable if set, else ""
+    """
+    return "LD_LIBRARY_PATH"

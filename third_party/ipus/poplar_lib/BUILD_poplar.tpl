@@ -36,7 +36,6 @@ cc_library(
             "lib*/poplar/libpoplar.so",
             "lib*/poplar/libpoplar_test.so",
             "lib*/**/libpopsolver.so",
-            "lib*/popit/libpopir.so",
             "lib*/popit/libpopit.so",
             "lib*/poprithms/libpoprithms.so",
         ] + if_custom_poplibs([

@@ -1,5 +1,6 @@
 load("//tensorflow/core/platform:build_config.bzl", "tf_proto_library")
 load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")
+load("@local_config_poplar//poplar:build_defs.bzl", "ld_library_path")
 
 licenses(["restricted"])
 
@@ -113,7 +114,7 @@ genrule(
     outs = [
         "poplar_version.cc",
     ],
-    cmd = "./$(location //tensorflow/compiler/plugin/poplar:poplar_version_generator) > $@",
+    cmd = "LD_LIBRARY_PATH={} ./$(location //tensorflow/compiler/plugin/poplar:poplar_version_generator) > $@".format(ld_library_path()),
     tools = ["//tensorflow/compiler/plugin/poplar:poplar_version_generator"],
 )
 

@@ -6,6 +6,12 @@ def _poplar_autoconf_impl(repository_ctx):
     # Tensorflow build tag
     tf_poplar_build_tag = "UNKNOWN"
     tf_custom_poplibs_available = "False"
+
+    if "LD_LIBRARY_PATH" in repository_ctx.os.environ:
+        ld_library_path = repository_ctx.os.environ["LD_LIBRARY_PATH"]
+    else:
+        ld_library_path = ""
+
     if not "TF_POPLAR_SANDBOX" in repository_ctx.os.environ and \
        not "TF_POPLAR_BASE" in repository_ctx.os.environ:
         tf_poplar_build_tag = ""
@@ -165,6 +171,7 @@ def _poplar_autoconf_impl(repository_ctx):
             "TF_POPLAR_BUILD_TAG": tf_poplar_build_tag,
             "TF_POPLAR_AVAILABLE": tf_poplar_available,
             "TF_CUSTOM_POPLIBS_AVAILABLE": tf_custom_poplibs_available,
+            "LD_LIBRARY_PATH": ld_library_path,
         },
     )
 
