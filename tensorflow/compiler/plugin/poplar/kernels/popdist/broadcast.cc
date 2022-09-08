@@ -12,8 +12,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include <future>
-
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/op_requires.h"
@@ -50,16 +48,18 @@ class PopDistBroadcastOp : public AsyncOpKernel {
         tensorflow::functor::DoCopy(ctx->eigen_cpu_device(), input, output),
         done);
 
-    auto future = std::async(std::launch::async, [&] {
+    Env::Default()->SchedClosure([output, ctx, done, this] {
       OP_REQUIRES_OK_ASYNC(
           ctx,
-          xla::poplarplugin::RunPoplarFunction<popdist::popdist_error>([&] {
-            popdist::collectives::parallel::broadcast(
-                output->flat<T>().data(), output->NumElements(),
-                poplar::equivalent_device_type<T>().value, this->tensor_name_);
+          xla::poplarplugin::RunPoplarFunction<popdist::popdist_error>(
+              [&output, &ctx, &done, this] {
+                popdist::collectives::parallel::broadcast(
+                    output->flat<T>().data(), output->NumElements(),
+                    poplar::equivalent_device_type<T>().value,
+                    this->tensor_name_);
 
-            done();
-          }),
+                done();
+              }),
           done);
     });
   }

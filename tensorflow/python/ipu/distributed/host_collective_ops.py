@@ -23,13 +23,13 @@ def _normalize_name(name):
   return re.sub('[^a-zA-Z0-9_]', '_', name)
 
 
-def broadcast(value, root_rank=0, tensor_name=None):
+def all_gather(value, tensor_name=None):
   if not tensor_name and not context.executing_eagerly():
-    tensor_name = "PopDistBroadcast_{}".format(_normalize_name(value.name))
+    tensor_name = "PopDistAllGather_{}".format(_normalize_name(value.name))
   else:
     tensor_name = "Default"
 
-  return gen_popdist_ops.popdist_broadcast(value, tensor_name=tensor_name)
+  return gen_popdist_ops.popdist_all_gather(value, tensor_name=tensor_name)
 
 
 def all_reduce(value, reduce_op, tensor_name=None):
@@ -41,3 +41,12 @@ def all_reduce(value, reduce_op, tensor_name=None):
   return gen_popdist_ops.popdist_all_reduce(value,
                                             reduce_op=reduce_op.value,
                                             tensor_name=tensor_name)
+
+
+def broadcast(value, root_rank=0, tensor_name=None):
+  if not tensor_name and not context.executing_eagerly():
+    tensor_name = "PopDistBroadcast_{}".format(_normalize_name(value.name))
+  else:
+    tensor_name = "Default"
+
+  return gen_popdist_ops.popdist_broadcast(value, tensor_name=tensor_name)

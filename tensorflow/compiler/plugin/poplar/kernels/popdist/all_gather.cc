@@ -31,10 +31,9 @@ struct equivalent_device_type<Eigen::half> {
 
 namespace tensorflow {
 template <typename T>
-class PopDistAllReduceOp : public AsyncOpKernel {
+class PopDistAllGatherOp : public AsyncOpKernel {
  public:
-  explicit PopDistAllReduceOp(OpKernelConstruction* ctx) : AsyncOpKernel(ctx) {
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("reduce_op", &reduce_op_));
+  explicit PopDistAllGatherOp(OpKernelConstruction* ctx) : AsyncOpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("tensor_name", &tensor_name_));
   }
 
@@ -42,34 +41,22 @@ class PopDistAllReduceOp : public AsyncOpKernel {
     auto& input = ctx->input(0);
     Tensor* output;
 
-    OP_REQUIRES_OK_ASYNC(ctx, ctx->allocate_output(0, input.shape(), &output),
+    auto output_shape = input.shape();
+    output_shape.InsertDim(0, popdist::getNumInstances());
+
+    OP_REQUIRES_OK_ASYNC(ctx, ctx->allocate_output(0, output_shape, &output),
                          done);
-    OP_REQUIRES_OK_ASYNC(
-        ctx,
-        tensorflow::functor::DoCopy(ctx->eigen_cpu_device(), input, output),
-        done);
 
-    auto* flattened_buffer = output->flat<T>().data();
-
-    Env::Default()->SchedClosure([flattened_buffer, ctx, done, this] {
+    Env::Default()->SchedClosure([input = &input, output, ctx, done, this] {
       OP_REQUIRES_OK_ASYNC(
           ctx,
           xla::poplarplugin::RunPoplarFunction<popdist::popdist_error>(
-              [&flattened_buffer, &ctx, &done, this] {
-                const auto num_elements = ctx->input(0).NumElements();
-
-                popdist::collectives::parallel::allReduceSum(
-                    flattened_buffer, num_elements,
+              [&input, &output, &ctx, &done, this] {
+                popdist::collectives::parallel::allGather(
+                    input->flat<T>().data(), output->flat<T>().data(),
+                    input->NumElements(),
                     poplar::equivalent_device_type<T>().value,
                     this->tensor_name_);
-
-                const auto num_instances = popdist::getNumInstances();
-
-                if (this->reduce_op_ == "MEAN") {
-                  for (auto i = 0; i < num_elements; ++i) {
-                    *(flattened_buffer + i) /= static_cast<T>(num_instances);
-                  }
-                }
 
                 done();
               }),
@@ -78,16 +65,14 @@ class PopDistAllReduceOp : public AsyncOpKernel {
   }
 
  private:
-  TF_DISALLOW_COPY_AND_ASSIGN(PopDistAllReduceOp);
-
-  std::string reduce_op_;
+  TF_DISALLOW_COPY_AND_ASSIGN(PopDistAllGatherOp);
   std::string tensor_name_;
 };  // namespace tensorflow
 
 #define REGISTER_CPU(T)                                                   \
   REGISTER_KERNEL_BUILDER(                                                \
-      Name("PopdistAllReduce").Device(DEVICE_CPU).TypeConstraint<T>("T"), \
-      PopDistAllReduceOp<T>);
+      Name("PopdistAllGather").Device(DEVICE_CPU).TypeConstraint<T>("T"), \
+      PopDistAllGatherOp<T>);
 
 TF_CALL_INTEGRAL_TYPES(REGISTER_CPU);
 TF_CALL_half(REGISTER_CPU);
