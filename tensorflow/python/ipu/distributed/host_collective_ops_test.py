@@ -40,6 +40,14 @@ class HostCollectiveOpsTest(test_util.TensorFlowTestCase,
     popdist.init()
 
   @parameterized.named_parameters(*TESTCASES)
+  def test_all_gather(self, dtype):
+    x = constant_op.constant(popdist.getInstanceIndex(), dtype=dtype)
+    self.assertAllEqual(
+        host_collective_ops.all_gather(x),
+        np.array([i for i in range(popdist.getNumInstances())],
+                 dtype=dtype.as_numpy_dtype))
+
+  @parameterized.named_parameters(*TESTCASES)
   def test_all_reduce_sum(self, dtype):
     x = constant_op.constant(popdist.getInstanceIndex(), dtype=dtype)
     self.assertAllEqual(
@@ -59,6 +67,44 @@ class HostCollectiveOpsTest(test_util.TensorFlowTestCase,
     x = constant_op.constant(42 if popdist.getInstanceIndex() == 0 else 0,
                              dtype=dtype)
     self.assertAllEqual(host_collective_ops.broadcast(x), 42)
+
+  def test_all_all_gather_different_order(self):
+    # Call collective on `x` first and `y` afterwards.
+    @def_function.function()
+    def body_instance_even(x, y):
+      res_x = host_collective_ops.all_gather(x)
+      res_y = host_collective_ops.all_gather(y)
+
+      return (res_x, res_y)
+
+    # Call collective on `y` first and `x` afterwards.
+    @def_function.function()
+    def body_instance_odd(x, y):
+      res_y = host_collective_ops.all_gather(y)
+      res_x = host_collective_ops.all_gather(x)
+
+      return (res_x, res_y)
+
+    x = constant_op.constant(popdist.getInstanceIndex(), dtype=dtypes.float32)
+    y = constant_op.constant(
+        [popdist.getInstanceIndex(),
+         popdist.getInstanceIndex()],
+        dtype=dtypes.int32)
+
+    is_even = popdist.getInstanceIndex() % 2 == 0
+
+    # Test that we can call collectives in any order as long as our tensors have names.
+    (res_x,
+     res_y) = body_instance_even(x, y) if is_even else body_instance_odd(x, y)
+
+    self.assertAllEqual(
+        res_x,
+        np.array([i for i in range(popdist.getNumInstances())],
+                 dtype=np.float32))
+    self.assertAllEqual(
+        res_y,
+        np.array([[i, i] for i in range(popdist.getNumInstances())],
+                 dtype=np.float32))
 
   def test_all_reduce_different_order(self):
     # Call collective on `x` first and `y` afterwards.
@@ -123,6 +169,39 @@ class HostCollectiveOpsTest(test_util.TensorFlowTestCase,
 
     self.assertAllEqual(res_x, 42)
     self.assertAllEqual(res_y, [42, 42])
+
+  def test_all_gather_different_dtype(self):
+    dtype = dtypes.float32 if popdist.getInstanceIndex(
+    ) % 2 == 0 else dtypes.int32
+    x = constant_op.constant(popdist.getInstanceIndex(), dtype=dtype)
+
+    try:
+      host_collective_ops.all_gather(x)
+    except errors.UnknownError as e:
+      self.assertAllEqual(
+          True,
+          "Tensor layouts did not match on all instances" in e.message,
+      )
+
+      return
+
+    self.fail()
+
+  def test_all_gather_different_shape(self):
+    value = 1 if popdist.getInstanceIndex() % 2 == 0 else [1, 1]
+    x = constant_op.constant(value, dtype=dtypes.int32)
+
+    try:
+      host_collective_ops.all_gather(x)
+    except errors.UnknownError as e:
+      self.assertAllEqual(
+          True,
+          "Tensor layouts did not match on all instances" in e.message,
+      )
+
+      return
+
+    self.fail()
 
   def test_all_reduce_different_dtype(self):
     dtype = dtypes.float32 if popdist.getInstanceIndex(
