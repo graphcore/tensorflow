@@ -144,7 +144,6 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/tools:attributes_utils",
         "//tensorflow/compiler/plugin/poplar/driver/tools:xla_util",
         "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
-        "//tensorflow/compiler/plugin/poplar/kernels/popdist",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/tf2xla:xla_compiler",
         "//tensorflow/compiler/tf2xla/kernels:tensor_list_utils",
