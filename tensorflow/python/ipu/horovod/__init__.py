@@ -20,6 +20,6 @@ from .ipu_horovod_strategy import *
 from .popdist_strategy import *
 
 logging.warning(
-    'Module `%s` is deprecated in favour of `%s` and will be removed in a' \
-    'future release.',
-    'tensorflow.python.ipu.horovod', 'tensorflow.python.ipu.distributed')
+    'Module `%s` is deprecated in favour of `%s` and will be removed in a '
+    'future release.', 'tensorflow.python.ipu.horovod',
+    'tensorflow.python.ipu.distributed')
