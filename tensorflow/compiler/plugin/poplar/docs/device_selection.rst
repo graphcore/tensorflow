@@ -199,7 +199,7 @@ For example:
   cfg.auto_select_ipus = 4
   cfg.ipu_model.compile_ipu_code = False
   cfg.ipu_model.version = "ipu2"
-  cfg.scheduling.algorithm = ipu.config.SchedulingAlgorithm.Clustering
+  cfg.scheduling.algorithm = ipu.config.SchedulingAlgorithm.CLUSTERING
   ...
 
   cfg.configure_ipu_system()
