@@ -566,7 +566,7 @@ StatusOr<DriverProgramSequence> InitializeSeed(
         popops::cast(graph,
                      gcl::allReduceCrossReplica(
                          graph, popops::cast(graph, seed, poplar::FLOAT, seq),
-                         gcl::CollectiveOperator::MEAN, seq,
+                         gcl::CollectiveOperator::MEAN, seq, {},
                          {debug_info, "allReduceSeed"}),
                      poplar::UNSIGNED_INT, seq);
 
