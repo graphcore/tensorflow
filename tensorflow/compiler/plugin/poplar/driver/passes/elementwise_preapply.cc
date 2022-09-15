@@ -82,6 +82,10 @@ StatusOr<bool> TryHandle(HloInstruction* inst) {
     // elementwise.
     return false;
   }
+  if (user->metadata().op_type() == "AssignAddVariableOp" ||
+      user->metadata().op_type() == "AssignSubVariableOp") {
+    return false;
+  }
   for (const HloInstruction* operand : user->operands()) {
     // An elementwise op is uniform on inst if all of its operands are one of
     // inst, have size 1, or are a broadcast of a variable with size 1.
