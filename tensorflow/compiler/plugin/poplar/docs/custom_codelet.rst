@@ -379,7 +379,7 @@ a library file called ``libcustom_op.so``:
 
   $ g++ poplar_code.cpp -shared -fpic -o libcustom_op.so -lpoplar -lpoputil -lpoprand
 
-Note that you also need to link the Poplar and PopLibs libraries that you use
+Note that you need to link the Poplar and PopLibs libraries that you use
 (in this example ``poplar``, ``poputil`` and ``poprand``). See the `Poplar and
 PopLibs API Reference
 <https://docs.graphcore.ai/projects/poplar-api/page/using_libs.html>`_ for more
@@ -388,6 +388,9 @@ information.
 It is not necessary to include or link against any TensorFlow header or library
 files. Only the Poplar and PopLibs headers, and the corresponding libraries are
 required.
+
+You can add ``-g`` to the above command to compile the custom operation with
+debugging symbols. This allows you to debug the C++ code with ``gdb``. 
 
 
 Using the custom op in TensorFlow
