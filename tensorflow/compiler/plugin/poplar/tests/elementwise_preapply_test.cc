@@ -788,6 +788,27 @@ static std::string hlo_binary_bool() {
         "constant({{true, false, true}, {false, true, false}})"}});
 }
 
+static std::string hlo_assign_add_sub(const std::string& assign_op) {
+  return absl::StrReplaceAll(R"(
+    HloModule module
+
+    function_to_apply {
+      p0 = f32[] parameter(0)
+      p1 = f32[] parameter(1)
+      ROOT output = f32[] $FUNC1(p0, p1)
+    }
+
+    ENTRY f {
+      reduce_param = f32[2, 3] constant({{1, 2, 3}, {4, 5, 6}})
+      reduce_init = f32[] constant(5)
+      reduce = f32[] reduce(reduce_param, reduce_init), dimensions={0, 1}, to_apply=function_to_apply  
+      second_elementwise_arg = f32[] parameter(0)
+      ROOT output = f32[] $FUNC2(reduce, second_elementwise_arg), metadata={op_type="$ASSIGN_OP"}
+    }
+    )",
+                             {{"$ASSIGN_OP", assign_op}});
+}
+
 static std::string hlo_unary_float() {
   return absl::StrReplaceAll(
       hlo_binary_float(),
@@ -848,6 +869,9 @@ INSTANTIATE_TEST_SUITE_P(
         {"minimum", "copy", hlo_unary_float()},
         {"add", "subtract", hlo_binary_float_swapped()},
         {"multiply", "divide", hlo_binary_float_swapped()},
+        // tf.assign_add(), tf.assign_sub
+        {"add", "add", hlo_assign_add_sub("AssignAddVariableOp")},
+        {"add", "subtract", hlo_assign_add_sub("AssignSubVariableOp")},
         // scalar result (no broadcast for constant)
         {"minimum", "maximum", hlo_scalar_result()},
         {"add", "multiply", hlo_scalar_result()},
