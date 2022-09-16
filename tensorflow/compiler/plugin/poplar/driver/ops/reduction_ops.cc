@@ -1054,9 +1054,9 @@ StatusOr<DriverProgramSequence> CreateReplicatedAllToAll(
         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
   } else {
     // Perfom the actual Replica->Replica exchange version.
-    output_tensor =
-        gcl::allToAllCrossReplica(graph, target_input, seq, {debug_name_and_id},
-                                  GetReplicatedCollectiveOptions(res));
+    output_tensor = gcl::allToAllCrossReplica(
+        graph, target_input, seq, {}, {debug_name_and_id},
+        GetReplicatedCollectiveOptions(res));
   }
 
   std::vector<std::size_t> output_dimensions{};
