@@ -60,7 +60,7 @@ def poprun_py_test(
             str(num_instances),
             "--ipus-per-replica",
             str(ipus_per_replica),
-            "--numa-aware=no",
+            "--process-placement=disabled",
             "--mpi-global-args=--tag-output",
             "--mpi-global-args=--allow-run-as-root",
             "{PYTHON_INTERPRETER}",
