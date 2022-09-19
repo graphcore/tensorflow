@@ -106,8 +106,11 @@ class PoprunReplicaPartitioningTest(test.TestCase):
               process_count=process_count,
               process_index=process_index)
 
-    self.assertAllClose(losses[False], losses[True])
-    self.assertAllClose(variables[False], variables[True])
+    self.assertAllClose(losses[False], losses[True], rtol=1e-5, atol=1e-5)
+    self.assertAllClose(variables[False],
+                        variables[True],
+                        rtol=1e-5,
+                        atol=1e-5)
 
   def _setupTest(self):
     def dataset_fn():
