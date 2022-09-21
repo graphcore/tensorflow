@@ -479,9 +479,9 @@ def pipeline(computational_stages,
   Note that pipelining supports the recomputation of activations for stateless
   ops during the backwards pass. This reduces the number of activations that
   will be stored on the device, saving memory at the expense of additional
-  computation. To enable recomputation, use the
-  :func:`tensorflow.python.ipu.utils.set_recomputation_options()` function when
-  configuring the device.
+  computation. To enable recomputation, set the
+  :attr:`tensorflow.python.ipu.config.IPUConfig.allow_recompute` attribute
+  to `True` when configuring the device.
 
   For example a simple inference network for the MNIST can be split across two
   IPUs:
@@ -662,9 +662,9 @@ def pipeline(computational_stages,
       lowering. Defaults to `PipelineSchedule.Grouped`.
     recomputation_mode: The recomputation mode to use for training pipeline
       models. Defaults to RecomputationMode.Auto. Only applies if recomputation
-      is enabled. This must be done by using the
-      :func:`tensorflow.python.ipu.utils.set_recomputation_options` function
-      when configuring the device.
+      is enabled. This must be done by setting the
+      :attr:`tensorflow.python.ipu.config.IPUConfig.allow_recompute` attribute
+      to `True` when configuring the device.
     forward_propagation_stages_poplar_options: If provided, a list of length
       equal to the number of computational stages. Each element is a
       PipelineStageOptions object which allows for fine grain control of the

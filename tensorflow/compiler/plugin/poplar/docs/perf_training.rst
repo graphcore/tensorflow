@@ -348,6 +348,45 @@ expected latency is lower than the serialised pipeline.
     Comparison of the same logical pipelines with concurrent stages (top) and
     without (bottom).
 
+.. _recomputation:
+
+Recomputation
+~~~~~~~~~~~~~
+
+As outlined in the technical note :doc:`tf-model-parallelism:index`,
+the recomputation of activations can be enabled for the backward passes.
+Instead of storing every activation in a FIFO stash on the devices, only a
+subset are kept while the rest are recomputed when they are required. This
+can lead to a reduction in activation memory liveness, at the expense of extra
+computation cycles. It can be a useful optimisation of memory usage, and can
+be applied to pipelined multi-IPU and non-pipelined single-IPU models.
+
+To enable recomputation, use the
+:py:attr:`~tensorflow.python.ipu.config.IPUConfig.allow_recompute` attribute of
+an instance of the
+:py:class:`~tensorflow.python.ipu.config.IPUConfig` class when configuring the
+device.
+
+Recomputation only applies to stateless activations. Stateful activations (such
+as Dropout) will always be stashed.
+
+With pipelining, each computational stage is an implicit recomputation point.
+For non-pipelined models, recomputation checkpoints need to be added.
+Checkpoints can be set in multiple ways:
+
+* A tensor in the graph can be wrapped in a :py:func:`~tensorflow.python.ipu.ops.pipelining_ops.recomputation_checkpoint` op.
+* In Keras, the :py:class:`~ipu_tensorflow_addons.keras.layers.RecomputationCheckpoint` layer can be used.
+
+When using explicit recomputation checkpoints, the ``Grouped`` pipeline
+schedule (:numref:`fig-pipeline-grouped`) must be used for multi-IPU models. For non-pipelined models the
+``Sequential`` schedule (:numref:`fig-pipeline-sequential`) must be used.
+
+For more information on recomputation and recomputation checkpoints, refer to the following:
+
+* the :ref:`ipu-programmers-guide:recomputation` section in the :doc:`ipu-programmers-guide:index`.
+* the :ref:`memory-performance-optimisation:activation recompilations` section in the :doc:`memory-performance-optimisation:index`.
+* the feature example on :tutorials-repo:`Using Recomputation Checkpoints <feature_examples/tensorflow2/recomputation_checkpoints>` for a code example.
+
 .. _gradient-accumulation:
 
 Gradient accumulation

@@ -253,7 +253,8 @@ The parameters are used to return the following information about the operation:
   any internally stored state, then the operation is said to be stateless.
   Marking an operation as stateless will allow the TensorFlow backend to perform
   optimisations which would otherwise not be possible, such as common code
-  removal. It also allows the custom op to be used with recomputation.
+  removal. It also allows the custom op to be used with recomputation, see
+  :numref:`recomputation`.
 
   Custom ops are stateful by default.
 
