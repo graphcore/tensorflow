@@ -52,7 +52,7 @@ class PopDistAllGatherOp : public AsyncOpKernel {
           ctx,
           xla::poplarplugin::RunPoplarFunction<popdist::popdist_error>(
               [&input, &output, &ctx, &done, this] {
-                popdist::collectives::parallel::allGather(
+                popdist::collectives::allGather(
                     input->flat<T>().data(), output->flat<T>().data(),
                     input->NumElements(),
                     poplar::equivalent_device_type<T>().value,
