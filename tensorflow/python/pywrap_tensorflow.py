@@ -68,9 +68,13 @@ try:
     sys.setdlopenflags(_default_dlopen_flags)
 except ImportError:
   msg = """%s\n\nFailed to load the native TensorFlow runtime.\n
+Poplar shared objects need to be added to LD_LIBRARY_PATH.\n
+This error can occur when the Poplar SDK has not been enabled.\n
+If this error persists after running `source /path/to/poplar-sdk/enable` 
+try to reinstall the TensorFlow wheel and the Poplar SDK.\n
 See https://www.tensorflow.org/install/errors\n
 for some common reasons and solutions.  Include the entire stack trace
-above this error message when asking for help.""" % traceback.format_exc()
+above this error message when asking for help.\n""" % traceback.format_exc()
   raise ImportError(msg)
 
 # pylint: enable=wildcard-import,g-import-not-at-top,unused-import,line-too-long
