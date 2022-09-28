@@ -52,7 +52,7 @@ class PopDistBroadcastOp : public AsyncOpKernel {
       OP_REQUIRES_OK_ASYNC(
           ctx,
           xla::poplarplugin::RunPoplarFunction<popdist::popdist_error>(
-              [&output, &ctx, &done, this] {
+              [&output, &done, this] {
                 popdist::collectives::broadcast(
                     output->flat<T>().data(), output->NumElements(),
                     poplar::equivalent_device_type<T>().value,
@@ -74,6 +74,7 @@ class PopDistBroadcastOp : public AsyncOpKernel {
       Name("PopdistBroadcast").Device(DEVICE_CPU).TypeConstraint<T>("T"), \
       PopDistBroadcastOp<T>);
 
+TF_CALL_bool(REGISTER_CPU);
 TF_CALL_INTEGRAL_TYPES(REGISTER_CPU);
 TF_CALL_half(REGISTER_CPU);
 TF_CALL_float(REGISTER_CPU);
