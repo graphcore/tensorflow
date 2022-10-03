@@ -13,8 +13,8 @@
 # limitations under the License.
 # =============================================================================
 """
-Horovod
-~~~~~~~
+Distribution using PopDist
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 import atexit
 import ctypes

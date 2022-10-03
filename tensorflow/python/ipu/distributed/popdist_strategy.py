@@ -47,13 +47,13 @@ class PopDistStrategy(distribute_lib.StrategyV1,
                       keras_extensions.KerasExtensions):
   """This is a distribution strategy for multi-replica distribution
   that uses compiled communications with GCL for reductions over
-  IPU-Links and GW-Links. It uses Horovod for broadcasting of
-  the initial values of variables to all processes. It also uses Horovod when a
-  reduction is requested with a CPU as the current device.
+  IPU-Links and GW-Links, across all the global replicas in the
+  application. This is the recommended distribution strategy when using
+  :ref:`PopDist and PopRun <poprun-user-guide:index>`.
 
-  This is the recommended distribution strategy when using PopDist and PopRun.
-  The GCL reductions will then be performed across all the global replicas in
-  the application.
+  PopDist is used for host communication, for example when broadcasting
+  initial values of variables to all processes. Another example is when
+  a reduction is requested with a CPU as the current device.
   """
   _collective_key_base = 0
 

@@ -88,25 +88,13 @@ For example, this will not work:
 
 .. Distributed training
 
-.. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
-  :members: IPUMultiWorkerStrategy
-  :special-members: __init__
-
 .. automodule:: tensorflow.python.ipu.distributed
   :members:
 
-.. automodule:: tensorflow.python.ipu.distributed.ipu_horovod_strategy
-  :members: IPUHorovodStrategy
-  :special-members: __init__
-
 .. automodule:: tensorflow.python.ipu.distributed.popdist_strategy
-  :members: PopDistStrategy
+  :members: PopDistStrategy, host_collective_ops
   :special-members: __init__
-
-.. note::
-  Both :py:class:`tensorflow.python.ipu.distributed.popdist_strategy.PopDistStrategy`
-  and :py:class:`tensorflow.python.ipu.distributed.ipu_horovod_strategy.IPUHorovodStrategy`
-  are still available through the deprecated module `tensorflow.python.ipu.horovod`.
+  :exclude-members: IPUDistributedVariable, IPUMirroredVariable, IPUOnReadPolicy, IPUOnWritePolicy, IPUSyncOnReadVariable, PopDistExtendedV1
 
 .. Serving utilities
 
