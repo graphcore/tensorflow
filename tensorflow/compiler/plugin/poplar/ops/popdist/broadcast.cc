@@ -17,7 +17,7 @@ limitations under the License.
 
 namespace tensorflow {
 REGISTER_OP("PopdistBroadcast")
-    .Attr("T: numbertype")
+    .Attr("T: {numbertype, bool}")
     .Input("tensor: T")
     .Attr("tensor_name: string")
     .Output("sum: T")
