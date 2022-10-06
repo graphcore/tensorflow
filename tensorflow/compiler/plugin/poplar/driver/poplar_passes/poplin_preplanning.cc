@@ -137,6 +137,34 @@ Status PoplinPreplanning::StorePreplanConv(const HloInstruction* inst,
   return Status::OK();
 }
 
+Status PoplinPreplanning::StorePreplanF8MatMul(const HloInstruction* inst) {
+  const poplar::Target& target = GetGraph(resources_, inst).getTarget();
+
+  poplar::OptionFlags option_flags;
+  option_flags.set("partialsType", poplar::HALF.toString());
+
+  poplin::MatMulParams mat_mul_params;
+
+  const Shape& lhs_shape = inst->operand(0)->shape();
+  const Shape& rhs_shape = inst->operand(2)->shape();
+
+  poplar::Type input_type = poplar::QUARTER;
+  poplar::Type output_type = poplar::HALF;
+
+  mat_mul_params.inputType = input_type;
+  mat_mul_params.outputType = output_type;
+  mat_mul_params.aShape = std::vector<std::size_t>(
+      lhs_shape.dimensions().begin(), lhs_shape.dimensions().end());
+  mat_mul_params.bShape = std::vector<std::size_t>(
+      rhs_shape.dimensions().begin(), rhs_shape.dimensions().end());
+
+  option_flags_store.push_back(option_flags);
+  preplan_matmuls.emplace(&target, mat_mul_params,
+                          &(option_flags_store.back()));
+
+  return Status::OK();
+}
+
 Status PoplinPreplanning::StorePreplanMatMulsLSTM(const HloInstruction* inst) {
   const poplar::Target& target = GetGraph(resources_, inst).getTarget();
 
@@ -295,6 +323,8 @@ StatusOr<bool> PoplinPreplanning::Run(HloModule* module) {
         } else if (IsPoplarInstruction(PoplarOp::GRULayerFwd)(inst) ||
                    IsPoplarInstruction(PoplarOp::GRULayerBwd)(inst)) {
           TF_RETURN_IF_ERROR(StorePreplanMatMulsGRU(inst));
+        } else if (IsPoplarInstruction(PoplarOp::F8MatMul)(inst)) {
+          TF_RETURN_IF_ERROR(StorePreplanF8MatMul(inst));
         }
       }
     }

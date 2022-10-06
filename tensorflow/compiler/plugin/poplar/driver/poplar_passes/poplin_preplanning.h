@@ -69,6 +69,8 @@ class PoplinPreplanning : public HloModulePass {
 
   Status StorePreplanMatMuls(const HloInstruction* inst);
 
+  Status StorePreplanF8MatMul(const HloInstruction* inst);
+
   CompilerResources& resources_;
 };
 

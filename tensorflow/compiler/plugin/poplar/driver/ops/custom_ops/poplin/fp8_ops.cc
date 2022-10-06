@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include <popops/Cast.hpp>
+#include <poputil/Util.hpp>
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -29,7 +30,9 @@ poplar::Tensor GetMetaData(const poplar::Tensor& t, poplar::Graph& graph) {
   if (t.hasMetadata()) {
     return t.getMetadata();
   }
-  return graph.addConstant(poplar::QUARTER_METADATA, {}, 0);
+  return poputil::createVariableMetadataTensor(
+             graph, poplar::QuarterMetadata::Format::F143, 0)
+      .reshape({});
 }
 
 poplar::OptionFlags GetDefaultOptions() {
