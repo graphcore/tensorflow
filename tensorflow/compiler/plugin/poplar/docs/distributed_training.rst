@@ -34,3 +34,9 @@ PopDistStrategy examples
 ########################
 
 There are examples for `PopDistStrategy` in the Graphcore :tutorials-repo:`feature examples on GitHub <feature_examples/tensorflow2/popdist>`.
+
+Limitations and known issues
+############################
+
+* Replicated Tensor Sharding (RTS) is not supported for distributed training
+  with ``PopDistStrategy``.
