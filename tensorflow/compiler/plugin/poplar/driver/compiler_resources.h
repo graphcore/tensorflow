@@ -308,15 +308,18 @@ struct CompilerResources : public HloResources {
     return Status::OK();
   }
 
-  void CreatePreambleSequence() {
+  Status CreatePreambleSequence() try {
     preamble_sequence = absl::make_unique<DriverProgramSequence>("Preamble");
+    return Status::OK();
+  } catch (const std::exception& e) {
+    return PoplarExceptionToTensorflowStatus("[Create Preamble Sequence]", e);
   }
 
   Status CreateMainGraphAndPreamble(
       const poplar::Target& target,
       absl::optional<uint32> replication_factor = {}) {
     TF_RETURN_IF_ERROR(CreateMainGraph(target, replication_factor));
-    CreatePreambleSequence();
+    TF_RETURN_IF_ERROR(CreatePreambleSequence());
     return Status::OK();
   }
 

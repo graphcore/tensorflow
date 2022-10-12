@@ -1846,7 +1846,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
     // Only create the graphs if we are compiling.
     TF_RETURN_IF_ERROR(CreatePoplarGraphs(resources, module, poplar_executor));
-    resources.CreatePreambleSequence();
+    TF_RETURN_IF_ERROR(resources.CreatePreambleSequence());
     auto& main_graph = GetMasterGraph(resources);
 
     DriverProgramSequence fp_setup;
