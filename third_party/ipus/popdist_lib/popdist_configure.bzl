@@ -1,11 +1,9 @@
 """
-Configuration for Horovod.
+Configuration for PopDist.
 
-If Horovod is enabled, find the installed MPI headers and libraries and make
+If PopDist is enabled, find the installed MPI headers and libraries and make
 them available as filegroups.
 """
-
-_TF_NEED_IPU_HOROVOD = "TF_NEED_IPU_HOROVOD"
 
 def _exec(repository_ctx, cmd):
     result = repository_ctx.execute(cmd)
@@ -16,24 +14,18 @@ def _exec(repository_ctx, cmd):
         fail("Command had no output: {}".format(cmd))
     return output[0]
 
-def _enable_horovod(repository_ctx):
-    return int(repository_ctx.os.environ.get(_TF_NEED_IPU_HOROVOD, 0)) == 1
-
 def _impl(repository_ctx):
     repository_ctx.file("BUILD", "")
 
-    enabled = _enable_horovod(repository_ctx)
     repository_ctx.template(
-        "build_defs_horovod.bzl",
-        Label("//third_party/ipus/horovod:build_defs_horovod.tpl"),
+        "build_defs_popdist.bzl",
+        Label("//third_party/ipus/popdist_lib:build_defs_popdist.tpl"),
         {
-            "{HOROVOD_ENABLED}": str(enabled),
             "{PYTHON_INTERPRETER}": str(repository_ctx.which("python")),
         },
     )
 
-ipu_horovod_configure = repository_rule(
+popdist_configure = repository_rule(
     implementation = _impl,
     local = True,
-    environ = [_TF_NEED_IPU_HOROVOD],
 )
