@@ -1,6 +1,21 @@
 TensorFlow API changes
 ----------------------
 
+Release 3.1
+~~~~~~~~~~~
+
+The following changes have been made to the TensorFlow API in the Poplar SDK version 3.1.
+This may require you to change your code.
+
+Breaking changes
+________________
+
+Removal of deprecated APIs
+''''''''''''''''''''''''''
+
+  - The `tensorflow.python.ipu.horovod` module has been removed (deprecated in Poplar SDK version 3.0). As a result, the following distribution strategies are no longer available from the module - `IPUHorovodStrategy` and `PopDistStrategy`.
+  - The `tensorflow.python.ipu.distributed.ipu_horovod_strategy` module has been removed (deprecated in Poplar SDK version 3.0). As a result, the distribution strategy `IPUHorovodStrategy` is no longer available.
+
 Release 3.0
 ~~~~~~~~~~~
 

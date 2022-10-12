@@ -24,7 +24,6 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.keras.optimizer_v2 import gradient_descent
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.python.ipu import horovod as hvd
 from tensorflow.python.ipu.distributed.popdist_strategy import PopDistStrategy, IPUSyncOnReadVariable, IPUMirroredVariable
 from tensorflow.python.ops import variables
 from tensorflow.python.ops.variable_scope import VariableAggregation, VariableSynchronization
@@ -57,13 +56,8 @@ def test_dataset(length=None, batch_size=1, x_val=1.0, y_val=0.2):
 class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abstract-method
   @classmethod
   def setUpClass(cls):
-    hvd.init()
     # Instantiate here to call popdist.init() and popdist.finalizeBackend() once
     cls.strategy = PopDistStrategy()
-
-  @classmethod
-  def tearDownClass(cls):
-    hvd.shutdown()
 
   def _create_test_objects(self, auto_select_ipus=1):
     config = IPUConfig()
@@ -108,7 +102,7 @@ class PopDistStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abst
       per_replica_value = self.strategy.run(per_replica_fn,
                                             args=[constant_op.constant(2.0)])
 
-      # This reduction is performed on CPU, and hence uses Horovod.
+      # This reduction is performed on CPU, and hence uses PopDist.
       value_all_reduced = self.strategy.reduce(ReduceOp.SUM, per_replica_value)
 
       # The initial value should be broadcast from rank 0.
