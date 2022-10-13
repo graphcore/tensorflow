@@ -4,7 +4,7 @@
 load("//tensorflow:version_check.bzl", "check_bazel_version_at_least")
 load("//third_party/ipus:poplar_configure.bzl", "poplar_configure")
 load("//third_party/ipus/popit_lib:popit_configure.bzl", "popit_configure")
-load("//third_party/ipus/popdist_lib:popdist_configure.bzl", "popdist_configure")
+load("//third_party/ipus/horovod:horovod_configure.bzl", "ipu_horovod_configure")
 load("//third_party/gpus:cuda_configure.bzl", "cuda_configure")
 load("//third_party/gpus:rocm_configure.bzl", "rocm_configure")
 load("//third_party/tensorrt:tensorrt_configure.bzl", "tensorrt_configure")
@@ -102,7 +102,7 @@ def _tf_toolchains():
     # IPU specific.
     poplar_configure(name="local_config_poplar")
     popit_configure(name="local_config_popit")
-    popdist_configure(name="local_config_popdist")
+    ipu_horovod_configure(name="local_config_ipu_horovod")
 
     # For windows bazel build
     # TODO: Remove def file filter when TensorFlow can export symbols properly on Windows.
@@ -1084,6 +1084,18 @@ def _tf_repositories():
         urls = [
             "http://mirror.tensorflow.org/github.com/apple/coremltools/archive/3.3.zip",
             "https://github.com/apple/coremltools/archive/3.3.zip",
+        ],
+    )
+
+    # IPU specific dependency.
+    tf_http_archive(
+        name = "horovod_boost",
+        build_file = "//third_party/ipus/horovod:boost.BUILD",
+        sha256 = "da3411ea45622579d419bfda66f45cd0f8c32a181d84adfa936f5688388995cf",
+        strip_prefix = "boost_1_68_0",
+        urls = [
+            "https://storage.googleapis.com/mirror.tensorflow.org/dl.bintray.com/boostorg/release/1.68.0/source/boost_1_68_0.tar.gz",
+            "https://boostorg.jfrog.io/artifactory/main/release/1.68.0/source/boost_1_68_0.tar.gz",
         ],
     )
 

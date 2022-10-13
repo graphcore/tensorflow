@@ -23,7 +23,7 @@ def _normalize_name(name):
   return re.sub('[^a-zA-Z0-9_]', '_', name)
 
 
-def allgather(value, tensor_name=None):
+def all_gather(value, tensor_name=None):
   if not tensor_name and not context.executing_eagerly():
     tensor_name = "PopDistAllGather_{}".format(_normalize_name(value.name))
   else:
@@ -32,7 +32,7 @@ def allgather(value, tensor_name=None):
   return gen_popdist_ops.popdist_all_gather(value, tensor_name=tensor_name)
 
 
-def allreduce(value, reduce_op, tensor_name=None):
+def all_reduce(value, reduce_op, tensor_name=None):
   if not tensor_name and not context.executing_eagerly():
     tensor_name = "PopDistAllReduce_{}".format(_normalize_name(value.name))
   else:

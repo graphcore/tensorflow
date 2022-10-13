@@ -1,4 +1,33 @@
-"""Macros for supporting PopDist with OpenMPI."""
+"""Build configurations for Horovod."""
+
+def if_horovod(if_true, if_false = []):
+    """Tests whether Horovod is enabled in this build."""
+    return if_true if {HOROVOD_ENABLED} else if_false
+
+def horovod_py_test(
+        name,
+        srcs,
+        main,
+        num_processes = 1,
+        args = [],
+        **kwargs):
+    if {HOROVOD_ENABLED}:
+        native.py_test(
+            name = name,
+            srcs = srcs + [
+                "//third_party/ipus/horovod:horovod_test_wrapper.py",
+            ],
+            main = "horovod_test_wrapper.py",
+            args = [
+                "$(location @local_config_poplar//poplar:mpirun)",
+                str(num_processes),
+                "$(location {})".format(main),
+            ] + args,
+            data = ["@local_config_poplar//poplar:mpirun"],
+            **kwargs
+        )
+    else:
+        print("Skipping test %s as Horovod is not configured.\n" % name)
 
 def poprun_py_test(
         name,
@@ -13,7 +42,7 @@ def poprun_py_test(
     native.py_test(
         name = name,
         srcs = srcs + [
-            "//third_party/ipus/popdist_lib:poprun_test_wrapper.py",
+            "//third_party/ipus/horovod:poprun_test_wrapper.py",
         ],
         main = "poprun_test_wrapper.py",
         # All poprun tests use hardware and must be exclusive to avoid other

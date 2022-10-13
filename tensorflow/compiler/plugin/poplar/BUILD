@@ -1,7 +1,7 @@
 load("//tensorflow/compiler/xla/tests:build_defs.bzl", "xla_test")
 load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
-load("@local_config_popdist//:build_defs_popdist.bzl", "poprun_py_test")
+load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "poprun_py_test")
 load("//tensorflow:tensorflow.bzl", "py_binary", "tf_cc_binary", "tf_cc_test")
 load("//tensorflow/core/platform:build_config.bzl", "tf_proto_library")
 load("//tensorflow/compiler/plugin/poplar:poplar.bzl", "poplar_cc_library")

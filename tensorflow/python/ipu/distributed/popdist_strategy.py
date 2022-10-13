@@ -65,7 +65,7 @@ class PopDistStrategy(distribute_lib.StrategyV1,
     popdist.init()
 
     # We create an empty cluster here since we will not be using gRPC for communication.
-    # All the communication is delegated to either GCL or PopDist (MPI) below.
+    # All the communication is delegated to either GCL or Horovod (MPI) below.
     cluster_resolver = cluster_resolver_lib.SimpleClusterResolver(
         server_lib.ClusterSpec({}))
 
@@ -270,7 +270,7 @@ class PopDistExtendedV1(
       value = value.values[0]
 
     if not _is_current_device_ipu():
-      return host_collective_ops.allreduce(value, reduce_op)
+      return host_collective_ops.all_reduce(value, reduce_op)
 
     # On the IPU, do reduction with GCL if requested.
     if not self._add_ipu_cross_replica_reductions:

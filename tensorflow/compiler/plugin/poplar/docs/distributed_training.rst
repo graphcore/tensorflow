@@ -15,7 +15,7 @@ which performs data-parallel synchronous training using multiple host processes.
 In this sense it is similar to
 `MultiWorkerMirroredStrategy <https://www.tensorflow.org/api_docs/python/tf/distribute/MultiWorkerMirroredStrategy>`_
 provided in standard TensorFlow. Initial values are broadcast over the host
-network using PopDist.
+network using Horovod.
 
 Collective operations (explicitly through a member function like ``reduce()`` or
 implicitly by using an optimizer under the strategy scope) will be performed
@@ -31,7 +31,7 @@ a single system with one or more IPUs attached, whereas ``PopDistStrategy``
 targets distributed Pod systems.
 
 PopDistStrategy examples
-########################
+################################
 
 There are examples for `PopDistStrategy` in the Graphcore :tutorials-repo:`feature examples on GitHub <feature_examples/tensorflow2/popdist>`.
 

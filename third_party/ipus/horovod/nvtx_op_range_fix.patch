@@ -1,0 +1,13 @@
+diff --git a/horovod/common/nvtx_op_range.h b/horovod/common/nvtx_op_range.h
+index 094c9fa..98eb91a 100644
+--- a/horovod/common/nvtx_op_range.h
++++ b/horovod/common/nvtx_op_range.h
+@@ -1,6 +1,8 @@
+ #ifndef HOROVOD_NVTX_OP_RANGE_H
+ #define HOROVOD_NVTX_OP_RANGE_H
+ 
++#include <stdint.h>
++
+ #if HAVE_NVTX
+ #include <memory>
+ #include <nvtx3/nvToolsExt.h>

@@ -8,7 +8,7 @@ package(
 )
 
 load("//tensorflow:tensorflow.bzl", "tf_py_test")
-load("@local_config_popdist//:build_defs_popdist.bzl", "poprun_py_test")
+load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "if_horovod", "poprun_py_test")
 load("//tensorflow/python/ipu:ipu_python.bzl", "popit_py_test")
 
 py_library(
@@ -220,20 +220,22 @@ py_library(
         ":data",
         ":dataset_extractor",
         ":ipu_eager_lib",
-        ":ipu_grad_ops_lib",
         ":ipu_ops_lib",
+        ":ipu_grad_ops_lib",
+        "//tensorflow/python/ipu/test_utils:test_utils",
         "//tensorflow/compiler/plugin/poplar/driver:backend_config_proto_py",
-        "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar/ops:sendrecv_ops_py",
+        "//tensorflow/compiler/plugin/poplar/ops:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor_lib",
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/distribute:values",
         "//tensorflow/python/estimator:estimator_py",
-        "//tensorflow/python/ipu/distributed:distributed_lib",
-        "//tensorflow/python/ipu/test_utils",
-    ],
+    ] + if_horovod([
+        "//tensorflow/python/ipu/distributed:horovod_lib",
+        "//tensorflow/python/ipu/horovod:horovod_lib",
+    ]),
 )
 
 tf_py_test(
@@ -1799,7 +1801,6 @@ test_suite(
     tests = [
         ":all_tests",
         "//tensorflow/compiler/plugin/poplar:poplar_ci_test_suite",
-        "//tensorflow/python/ipu/distributed:popdist_test_suite",
         "//tensorflow/python/ipu/tests/keras/extensions:extensions_test_suite",
-    ],
+    ] + if_horovod(["//tensorflow/python/ipu/distributed:horovod_test_suite"]),
 )
