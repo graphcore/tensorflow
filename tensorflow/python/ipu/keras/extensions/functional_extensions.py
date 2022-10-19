@@ -271,9 +271,9 @@ class FunctionalExtension(keras_extension_base.KerasExtensionBase):  # pylint: d
     Args:
       gradient_accumulation_steps_per_replica: An integer which indicates the
         number of steps the gradients will be accumulated for in each replica.
-        This value multiplied by the number of replicas needs to divide the
-        `steps_per_execution` value the model has been compiled with. This value
-        is saved/loaded when the model is saved/loaded.
+        The `steps_per_execution` value used when compiling the model must be
+        divisible by `gradient_accumulation_steps_per_replica`. This value is
+        saved/loaded when the model is saved/loaded.
       experimental_normalize_gradients: If set to `True`, the gradients for each
         step are first scaled by
         `1/(gradient_accumulation_steps_per_replica * number of replicas)`
@@ -352,9 +352,9 @@ class FunctionalExtension(keras_extension_base.KerasExtensionBase):  # pylint: d
     Args:
       gradient_accumulation_steps_per_replica: An integer which indicates the
         number of steps the gradients will be accumulated for in each replica.
-        This value multiplied by the number of replicas needs to divide the
-        `steps_per_execution` value the model has been compiled with. This value
-        is saved/loaded when the model is saved/loaded.
+        The `steps_per_execution` value used when compiling the model must be
+        divisible by `gradient_accumulation_steps_per_replica`. This value is
+        saved/loaded when the model is saved/loaded.
       device_mapping: If provided, a list of length equal to the number of
         pipeline stages assigned in this model. An element at index `i` in the
         list represents which IPU the `i`'th pipeline stage should reside on.
