@@ -54,6 +54,11 @@ std::pair<poplar::Tensor, poplar::Tensor> MaybeGetAsF8(
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto new_metadata = graph.clone(poplar::QUARTER_METADATA, metadata);
   if (input.elementType() != poplar::UNSIGNED_CHAR) {
+    auto new_input = input;
+    if (input.elementType() != poplar::QUARTER) {
+      new_input = popops::cast(graph, input, poplar::QUARTER, new_metadata, seq,
+                               {debug_name_and_id, "MaybeGetAsF8Cast"});
+    }
     return {input, new_metadata};
   }
   // We can't reinterpret to neither QUARTER_METADATA nor QUARTER type.

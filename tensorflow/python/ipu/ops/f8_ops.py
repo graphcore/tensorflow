@@ -24,6 +24,7 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops.math_ops import cast
+import tensorflow as tf
 
 
 class Format(IntEnum):
@@ -53,12 +54,35 @@ class QuarterTensor:
     Constructs a quarter tensor from the values tensor and metadata.
 
     Args:
-      data: A tensor with data type uint8.
-      metadata: The metadata for this quarter tensor, should be scalar
+      data: A tensor with data type uint8 or float16. Should be either ,
+        tf.Variable, tf.Tensor or an object from which a tf.Variable can
+        be constructed. Use uint8 only when you have raw data that should
+        be copied into an fp8 tensor, for all other cases use float16.
+      metadata: The metadata for this quarter tensor, should be a scalar
         uint8 tensor.
     """
-    self.data = data
+    self.data = self.maybe_get_tf_variable(data)
     self.metadata = metadata
+
+  def maybe_get_tf_variable(self, data):
+    result = data
+    if not isinstance(data, tf.Variable) and not isinstance(data, tf.Tensor):
+      result = tf.Variable(data)
+    if result.dtype != "float16" and result.dtype != "uint8":
+      raise TypeError(
+          "Trying to set/update QuarterTensor data with a tensor of type "
+          f"{result.dtype}, but only float16 and uint8 are supported")
+    return result
+
+  def numpy(self):
+    return [self.data.numpy(), self.metadata]
+
+  def assign(self, new_values, **kwargs):
+    self.data = self.maybe_get_tf_variable(new_values[0])
+    self.metadata = new_values[1]
+
+  def __eq__(self, other):
+    return self.numpy() == other.numpy()
 
   @property
   def shape(self):
@@ -66,7 +90,7 @@ class QuarterTensor:
 
   @property
   def dtype(self):
-    return self.data.dtype
+    return tf.uint8
 
   def __len__(self):
     return len(self.data)
