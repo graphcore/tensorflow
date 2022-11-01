@@ -37,9 +37,9 @@ def barrier(tensors, insert_barrier_for_gradients=False, name=None):
       g = e + a
       return f, g
 
-    The operations `f` and `g` are independent of each other meaning that either
-    `f` or `g` can execute first. However if we want to force `f` to execute
-    first, we can insert a barrier operation:
+  The operations `f` and `g` are independent of each other meaning that either
+  `f` or `g` can execute first. However if we want to force `f` to execute
+  first, we can insert a barrier operation:
 
   .. code-block:: python
 

@@ -383,11 +383,9 @@ schedule (:numref:`fig-pipeline-grouped`) must be used for multi-IPU models. For
 
 For more information on recomputation and recomputation checkpoints, refer to the following:
 
-* the :ref:`ipu-programmers-guide:recomputation` section in the :doc:`ipu-programmers-guide:index`.
-* the :ref:`memory-performance-optimisation:activation recompilations` section in the :doc:`memory-performance-optimisation:index`.
-* the feature example on :tutorials-repo:`Using Recomputation Checkpoints <feature_examples/tensorflow2/recomputation_checkpoints>` for a code example.
-
-.. _gradient-accumulation:
+* The :ref:`ipu-programmers-guide:recomputation` section in the :doc:`ipu-programmers-guide:index`.
+* The :ref:`memory-performance-optimisation:sec-activation-recomputation` section in the :doc:`memory-performance-optimisation:index`.
+* The feature example on :tutorials-repo:`Using Recomputation Checkpoints <feature_examples/tensorflow2/recomputation_checkpoints>` for a code example.
 
 Gradient accumulation
 ~~~~~~~~~~~~~~~~~~~~~

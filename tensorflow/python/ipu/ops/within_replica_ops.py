@@ -14,7 +14,7 @@
 # ==============================================================================
 """
 Popops within replica operators
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops

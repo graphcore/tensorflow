@@ -310,14 +310,14 @@ def accumulate_gradients(grads_and_vars,
       an optimizer's compute_gradients() function.
     gradient_accumulation_dtype: The data type used for the gradient
       accumulation buffer. One of:
+      - `None`: Use an accumulator of the same type as the variable type.
+      - A `DType`: Use this type for all the accumulators.
+        For example `tf.float32`.
+      - A callable that takes the variable and returns a `DType`: Allows
+        specifying the accumulator type on a per-variable basis.
     grad_scale: Value to scale gradients with.
     create_accumulator_from_shape: Use the shape of the variables rather
       than layout to create the accumulator. Default is False.
-
-      - `None`: Use an accumulator of the same type as the variable type.
-      - A `DType`: Use this type for all the accumulators.
-      - A callable that takes the variable and returns a `DType`: Allows
-        specifying the accumulator type on a per-variable basis.
   """
   accumulated_grads_and_vars = []
   for grad, var in grads_and_vars:
@@ -391,12 +391,12 @@ def accumulate_tagged_gradients(tagged_grads,
     indexed by their tags (as provided to the aforementioned operation).
     gradient_accumulation_dtype: The data type used for the gradient
       accumulation buffer. One of:
-    grad_scale: Value to scale gradients with.
-
       - `None`: Use an accumulator of the same type as the variable type.
       - A `DType`: Use this type for all the accumulators.
+        For example `tf.float32`.
       - A callable that takes the variable and returns a `DType`: Allows
         specifying the accumulator type on a per-variable basis.
+    grad_scale: Value to scale gradients with.
   """
   # accumulate_gradients does everything we need to do, but in our case we
   # don't have any variables. In accumulate_gradients, the variables are

@@ -417,7 +417,7 @@ def segment_sum(data, segment_ids, num_segments, name=None):
     ValueError: If the length of the 0th dimension of ``data`` and
       ``segment_ids`` are not equal.
     ValueError: If ``data`` does not have at least rank 1.
-    ValueError: If ``segment_ids` does not have a rank equal to 1.
+    ValueError: If ``segment_ids`` does not have a rank equal to 1.
   """
   data = ops.convert_to_tensor(data)
   segment_ids = ops.convert_to_tensor(segment_ids, dtype=dtypes.int32)

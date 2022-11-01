@@ -626,6 +626,7 @@ def pipeline(computational_stages,
 
       - `None`: Use an accumulator of the same type as the variable type.
       - A `DType`: Use this type for all the accumulators.
+        For example `tf.float32`.
       - A callable that takes the variable and returns a `DType`: Allows
         specifying the accumulator type on a per-variable basis.
 
@@ -752,6 +753,7 @@ def pipeline(computational_stages,
 
       - `None`: Use an accumulator of the same type as the variable type.
       - A `DType`: Use this type for all the accumulators.
+        For example `tf.float32`.
       - A callable that takes the variable and returns a `DType`: Allows
         specifying the accumulator type on a per-variable basis.
     outfeed_mask: If set, a list of booleans of same length as the same number

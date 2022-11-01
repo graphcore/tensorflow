@@ -101,10 +101,12 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
         `availableMemoryProportion` might need to be changed).
       dtype: The data type used for the gradient accumulation buffer.
         One of:
-          - `None`: Use an accumulator of the same type as the variable type.
-          - A `DType`: Use this type for all the accumulators.
-          - A callable that takes the variable and returns a `DType`: Allows
-            specifying the accumulator type on a per-variable basis.
+
+        - `None`: Use an accumulator of the same type as the variable type.
+        - A `DType`: Use this type for all the accumulators.
+          For example `tf.float32`.
+        - A callable that takes the variable and returns a `DType`: Allows
+          specifying the accumulator type on a per-variable basis.
 
         The gradients passed to `Optimizer.apply_gradients` will have the dtype
         requested here. If that dtype is different from the variable dtype
@@ -220,17 +222,19 @@ class CrossReplicaGradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disa
         `Poplar remote buffers`. Offloading variables into remote memory can
         reduce maximum memory liveness, but can also increase the computation
         time of the weight update.
-      replicated_optimizer_state_sharding: If True, any any `tf.Variable` which
+      replicated_optimizer_state_sharding: If True, any `tf.Variable` which
         is offloaded will be partitioned across the replicas. A collective
         all-gather will be inserted to restore the tensor on each replica.
         If `None`, this value will match the value of
         `offload_weight_update_variables`.
       dtype: The data type used for the gradient accumulation buffer.
         One of:
-          - `None`: Use an accumulator of the same type as the variable type.
-          - A `DType`: Use this type for all the accumulators.
-          - A callable that takes the variable and returns a `DType`: Allows
-            specifying the accumulator type on a per-variable basis.
+
+        - `None`: Use an accumulator of the same type as the variable type.
+        - A `DType`: Use this type for all the accumulators.
+          For example `tf.float32`.
+        - A callable that takes the variable and returns a `DType`: Allows
+          specifying the accumulator type on a per-variable basis.
 
         The gradients passed to `Optimizer.apply_gradients` will have the dtype
         requested here. If that dtype is different from the variable dtype

@@ -43,15 +43,16 @@ def dataset_benchmark(dataset,
     Returns:
       A JSON string with performance statistics, which records the following
       metrics every epoch:
-        * `elements_processed` - number of elements processed.
-        * `total_bytes_processed` - total number of bytes which was processed.
-        * `time_elapsed` - the time it took (in seconds) for the epoch to
-          complete.
-        * `elements_per_second` - number of elements processed per second.
-        * `bandwidth` - the bandwidth achieved, measured in GB/s.
 
-    The JSON string returned can be parsed into a native Python JSON library
-    (see https://docs.python.org/3/library/json.html).
+      * `elements_processed` - number of elements processed.
+      * `total_bytes_processed` - total number of bytes which was processed.
+      * `time_elapsed` - the time it took (in seconds) for the epoch to
+        complete.
+      * `elements_per_second` - number of elements processed per second.
+      * `bandwidth` - the bandwidth achieved, measured in GB/s.
+
+      The JSON string returned can be parsed into a native Python JSON library
+      (see https://docs.python.org/3/library/json.html).
 
     Raises:
       TypeError: if `dataset` is not an instance of `tf.data.Dataset`.
@@ -104,15 +105,16 @@ def infeed_benchmark(infeed_queue,
     Returns:
       A JSON string with performance statistics, which records the following
       metrics every epoch:
-        * `elements_processed` - number of elements processed.
-        * `total_bytes_processed` - total number of bytes which was processed.
-        * `time_elapsed` - the time it took (in seconds) for the epoch to
-          complete.
-        * `elements_per_second` - number of elements processed per second.
-        * `bandwidth` - the bandwidth achieved, measured in GB/s.
+      
+      * `elements_processed` - number of elements processed.
+      * `total_bytes_processed` - total number of bytes which was processed.
+      * `time_elapsed` - the time it took (in seconds) for the epoch to
+        complete.
+      * `elements_per_second` - number of elements processed per second.
+      * `bandwidth` - the bandwidth achieved, measured in GB/s.
 
-    The JSON string returned can be parsed into a native Python JSON library
-    (see https://docs.python.org/3/library/json.html).
+      The JSON string returned can be parsed into a native Python JSON library
+      (see https://docs.python.org/3/library/json.html).
 
     Raises:
       TypeError: if `infeed_queue` is not an instance of

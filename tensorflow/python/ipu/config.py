@@ -1763,9 +1763,9 @@ class _OptimizationConfig(_ConfigBase):
     Defines the block size for the triangular solver expander. The processing
     within each block is performed on a single tile. The control code for
     performing computations over blocks is unrolled on the device. For a matrix
-    of rank ``N`` and block size `B``, there are ``log2(N/B)`` iterations of the
-    control code. The choice of this parameter therefore has to balance between
-    the amount of data in a tile (lower value is better, gives better
+    of rank ``N`` and block size ``B``, there are ``log2(N/B)`` iterations of
+    the control code. The choice of this parameter therefore has to balance
+    between the amount of data in a tile (lower value is better, gives better
     parallelism) and the amount of control code (larger value is better, less
     control code). A value of 0 (default) selects an implementation defined
     default.

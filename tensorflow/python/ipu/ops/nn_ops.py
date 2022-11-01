@@ -89,13 +89,13 @@ def swish(x, name=None):
 
 
 def softmax(x, stable=False, name=None):
-  """ IPU implementation of the softmax activation function.
+  """IPU implementation of the softmax activation function.
 
     Args:
-    x: The input tensor.
-    stable: A boolean to decide whether to use the stable softmax
-      implementation. Defaults to `False`.
-    name: Optional op name.
+      x: The input tensor.
+      stable: A boolean to decide whether to use the stable softmax
+        implementation. Defaults to `False`.
+      name: Optional op name.
   """
   if stable:
     return gen_popnn_ops.ipu_stable_softmax(x, name=name)

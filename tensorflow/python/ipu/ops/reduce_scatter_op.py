@@ -35,7 +35,7 @@ def reduce_scatter(x, replication_factor, op='COLLECTIVE_OP_ADD', name=None):
             Replica1: [z0 + z1, 0]
 
   Args:
-    x: The input `Tensor` or list of `Tensor`s. `Tensor`s must have rank 1.
+    x: The input tensor or list of tensors. The tensors must have rank 1.
     replication_factor: The number of replicas in each collective group.
       If less than the total number of replicas in the model, the replicas
       are divided into consecutive groups of the given size, and the

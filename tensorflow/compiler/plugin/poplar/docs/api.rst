@@ -123,6 +123,7 @@ Estimators
 .. autoclass:: IPUEstimator
   :members:
   :inherited-members:
+  :exclude-members: export_savedmodel
 .. autoclass:: IPUEstimatorSpec
   :members: __new__
 
@@ -130,6 +131,7 @@ Estimators
 .. autoclass:: IPUPipelineEstimator
   :members:
   :inherited-members:
+  :exclude-members: export_savedmodel
 .. autoclass:: IPUPipelineEstimatorSpec
   :members: __new__
 
@@ -235,11 +237,6 @@ It is also possible to access the operators via the
   :members:
   :imported-members:
 
-.. automodule:: tensorflow.python.ipu.rnn_ops
-  :members:
-  :special-members: __init__
-  :imported-members:
-
 .. Popops
 
 .. automodule:: tensorflow.python.ipu.all_to_all_op
@@ -284,10 +281,6 @@ It is also possible to access the operators via the
 .. automodule:: tensorflow.python.ipu.statistics_ops
   :members:
   :special-members: __init__
-  :imported-members:
-
-.. automodule:: tensorflow.python.ipu.summary_ops
-  :members:
   :imported-members:
 
 .. automodule:: tensorflow.python.ipu.embedded_runtime

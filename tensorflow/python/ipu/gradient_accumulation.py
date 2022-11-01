@@ -36,9 +36,9 @@ class GradientAccumulationReductionMethod(Enum):
   and
   :class:`~tensorflow.python.ipu.optimizers.CrossReplicaGradientAccumulationOptimizerV2`  # pylint: disable=line-too-long
 
-  SUM: Performs a sum of gradients.
-  MEAN: Performs a sum of gradients scaled by (`1/num_mini_batches`)
-  RUNNING_MEAN: Performs a running mean of gradients
+  * SUM: Performs a sum of gradients
+  * MEAN: Performs a sum of gradients scaled by (`1/num_mini_batches`)
+  * RUNNING_MEAN: Performs a running mean of gradients
     (`acc*n/(n+1) + grad/(n+1)` for the nth iteration)
   """
   SUM = 0
