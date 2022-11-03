@@ -3,7 +3,7 @@ Efficient IPU I/O
 When developing applications for the IPU, maximising the I/O performance is
 important. If an application is I/O-bound, after optimisation of the host data
 loading, then you can explore further optimisations of the movement of data
-into the IPU. This chapter will cover two options that can improve I/O
+into the IPU. This chapter will cover three options that can improve I/O
 performance.
 
 Prefetch elements
@@ -82,3 +82,18 @@ very large number of I/O tiles can cause performance regressions in the main
 computation. However, too few I/O tiles can cause the transferred tensors to
 not fit in the available tile memory. Therefore, this may require some
 experimentation to find the best value for a specific application.
+
+uint8 data
+~~~~~~~~~~
+Using ``uint8`` data, or converting existing data to ``uint8`` before
+training, enables increased bandwidth and lower memory usage at the cost of
+decreased precision.
+
+We do not support doing calculations directly in ``uint8``, however in many
+cases TensorFlow will implicitly cast ``uint8`` tensors to an appropriate data
+type. This means that often you can use ``uint8`` data without requiring any
+changes to your model.
+
+In some cases you will need to manually insert cast operations at the beginning
+of the model. This can be done using ``keras.backend.cast``. For ``Sequential``
+models, this can be wrapped in a ``keras.layers.Lambda`` layer.
