@@ -48,18 +48,19 @@ poplar::Tensor MaybeGetAsU8(const poplar::Tensor& input) {
              : input;
 }
 
-std::pair<poplar::Tensor, poplar::Tensor> MaybeGetAsF8(
+StatusOr<std::pair<poplar::Tensor, poplar::Tensor>> MaybeGetAsF8(
     const poplar::Tensor& input, const poplar::Tensor& metadata,
     poplar::Graph& graph, DriverProgramSequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
   auto new_metadata = graph.clone(poplar::QUARTER_METADATA, metadata);
   if (input.elementType() != poplar::UNSIGNED_CHAR) {
-    auto new_input = input;
     if (input.elementType() != poplar::QUARTER) {
-      new_input = popops::cast(graph, input, poplar::QUARTER, new_metadata, seq,
-                               {debug_name_and_id, "MaybeGetAsF8Cast"});
+      return tensorflow::errors::InvalidArgument(
+          "MaybeGetAsF8 received an input tensor with a type ",
+          input.elementType(),
+          "; the allowed types are poplar::UNSIGNED_CHAR and poplar::QUARTER");
     }
-    return {input, new_metadata};
+    return std::make_pair(input, new_metadata);
   }
   // We can't reinterpret to neither QUARTER_METADATA nor QUARTER type.
   // Instead, clone them and copy raw unsigned char data over.
@@ -70,7 +71,7 @@ std::pair<poplar::Tensor, poplar::Tensor> MaybeGetAsF8(
       metadata, new_metadata.reinterpret(poplar::UNSIGNED_CHAR)));
   seq.add(
       poplar::program::Copy(input, output.reinterpret(poplar::UNSIGNED_CHAR)));
-  return {output, new_metadata};
+  return std::make_pair(output, new_metadata);
 }
 
 class QuarterMatMulOp : public PoplarOpDef {
@@ -103,12 +104,13 @@ class QuarterMatMulOp : public PoplarOpDef {
                                false));
     }
 
-    auto new_inputs =
-        MaybeGetAsF8(inputs[0], inputs[1], graph, seq, debug_name_and_id);
+    TF_ASSIGN_OR_RETURN(
+        auto new_inputs,
+        MaybeGetAsF8(inputs[0], inputs[1], graph, seq, debug_name_and_id));
     inputs[0] = new_inputs.first;
     inputs[1] = new_inputs.second;
-    new_inputs =
-        MaybeGetAsF8(inputs[2], inputs[3], graph, seq, debug_name_and_id);
+    TF_ASSIGN_OR_RETURN(new_inputs, MaybeGetAsF8(inputs[2], inputs[3], graph,
+                                                 seq, debug_name_and_id));
     inputs[2] = new_inputs.first;
     inputs[3] = new_inputs.second;
 

@@ -54,12 +54,10 @@ class QuarterTensor:
     Constructs a quarter tensor from the values tensor and metadata.
 
     Args:
-      data: A tensor with data type uint8 or float16. Should be either ,
-        tf.Variable, tf.Tensor or an object from which a tf.Variable can
-        be constructed. Use uint8 only when you have raw data that should
-        be copied into an fp8 tensor, for all other cases use float16.
-      metadata: The metadata for this quarter tensor, should be a scalar
-        uint8 tensor.
+      data: A tensor with data type uint8. Should generally be the output
+        of a call to `convert_to_f8`.
+      metadata: The metadata for this quarter tensor, should be the output
+        of a call to `create_metadata`.
     """
     self.data = self.maybe_get_tf_variable(data)
     self.metadata = metadata
@@ -68,16 +66,25 @@ class QuarterTensor:
     result = data
     if not isinstance(data, tf.Variable) and not isinstance(data, tf.Tensor):
       result = tf.Variable(data)
-    if result.dtype != "float16" and result.dtype != "uint8":
+    if result.dtype != "uint8":
       raise TypeError(
           "Trying to set/update QuarterTensor data with a tensor of type "
-          f"{result.dtype}, but only float16 and uint8 are supported")
+          f"{result.dtype}, but only uint8 are supported. Check that data "
+          "is a value returned by `convert_to_f8`")
     return result
 
   def numpy(self):
+    """Returns a numpy representation of the tensor
+    """
     return [self.data.numpy(), self.metadata]
 
   def assign(self, new_values, **kwargs):
+    """Assigns new values to the tensor
+
+    Args:
+      new_values: An array of format [data, metadata] that
+        should be the output of `QuarterTensor.numpy`.
+    """
     self.data = self.maybe_get_tf_variable(new_values[0])
     self.metadata = new_values[1]
 
