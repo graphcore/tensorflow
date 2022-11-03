@@ -10,8 +10,24 @@ This may require you to change your code.
 Breaking changes
 ________________
 
-Removal of deprecated APIs
-''''''''''''''''''''''''''
+Removal of deprecated Keras API
+'''''''''''''''''''''''''''''''
+
+The `tensorflow.python.ipu.keras` module has been removed (deprecated in Poplar SDK version 2.6, see :ref:`ipu-keras-changes`).
+The removed classes have been moved to the Keras and IPU TensorFlow Addons packages.
+
+  - Keras layers were previously moved to the :py:mod:`ipu_tensorflow_addons.keras.layers` namespace in the IPU TensorFlow Addons package (see :ref:`layers-moved-to-addons:`).
+  - The Keras optimizers in the `tensorflow.python.ipu.keras.optimizers` namespace do not have direct replacements.
+    You can find IPU-specific Keras optimizers in the :py:mod:`keras.ipu.optimizers` namespace in the Keras package, and the :py:mod:`ipu_tensorflow_addons.keras.optimizers` namespace in the IPU TensorFlow Addons package.
+  - Everything else can be found in the :py:mod:`keras.ipu` namespace in the Keras package. This namespace can also be accessed via `tensorflow.keras.ipu`.
+
+This means the deprecated Keras implementation in `tensorflow.python.keras` can no longer be used with IPUs.
+You must use the separate Keras package, which can also be accessed via `tensorflow.keras`.
+Note that in `tensorflow.keras`, classes are arranged into different namespaces than in `keras`.
+The namespaces in `tensorflow.keras` more closely match those in `tensorflow.python.keras`. This is not relevant to IPU-specific classes.
+
+Removal of deprecated Horovod API
+'''''''''''''''''''''''''''''''''
 
   - The `tensorflow.python.ipu.horovod` module has been removed (deprecated in Poplar SDK version 3.0). As a result, the following distribution strategies are no longer available from the module - `IPUHorovodStrategy` and `PopDistStrategy`.
   - The `tensorflow.python.ipu.distributed.ipu_horovod_strategy` module has been removed (deprecated in Poplar SDK version 3.0). As a result, the distribution strategy `IPUHorovodStrategy` is no longer available.
@@ -48,6 +64,8 @@ Removal of deprecated APIs
 
 Non-breaking changes
 ____________________
+
+.. _ipu-keras-changes:
 
 IPU Keras changes
 '''''''''''''''''

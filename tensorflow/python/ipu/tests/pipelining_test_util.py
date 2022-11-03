@@ -38,7 +38,6 @@ from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import cross_replica_optimizer
 from tensorflow.python.ipu.config import IPUConfig
-from tensorflow.python.ipu.keras.optimizers import ipu_wrappers
 from tensorflow.python.ipu import gradient_accumulation as ga
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as gao
 from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour
@@ -246,37 +245,24 @@ class PipelineTester(object):
         outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
         outs.append(enqueue_op)
         if optimizer:
-          is_v2 = isinstance(optimizer, optimizer_v2.OptimizerV2)
-          if is_v2:
-            opt = ipu_wrappers._KerasOptimizerWrapper(None, optimizer)  # pylint: disable=protected-access
-          else:
-            opt = optimizer
+          assert not isinstance(optimizer, optimizer_v2.OptimizerV2)
 
           if replication_factor > 1:
             opt = \
               gao.CrossReplicaGradientAccumulationOptimizerV2(# pylint: disable=line-too-long
-                  opt,
+                  optimizer,
                   num_batches_to_accumulate,
                   replicated_optimizer_state_sharding=replicated_optimizer_state_sharding, # pylint: disable=line-too-long
                   reduction_method=reduction_method)
           else:
             opt = \
               gao.GradientAccumulationOptimizerV2(
-                  opt,
+                  optimizer,
                   num_batches_to_accumulate,
                   replicated_optimizer_state_sharding=replicated_optimizer_state_sharding, # pylint: disable=line-too-long
                   reduction_method=reduction_method)
 
-          if is_v2:
-            # Note that the V2 optimizer is wrapped in the V1 API
-            # in this instance.
-            trainable_variables = variables.trainable_variables()
-            grads = opt.compute_gradients(outputs, trainable_variables)
-
-            assert len(grads) == len(trainable_variables)
-            outs.append(opt.apply_gradients(grads))
-          else:
-            outs.append(opt.minimize(outputs))
+          outs.append(opt.minimize(outputs))
         return outs
 
       def my_net(*args):

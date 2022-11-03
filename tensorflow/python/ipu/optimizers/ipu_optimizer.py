@@ -41,7 +41,7 @@ class IpuOptimizer(optimizer.Optimizer):
     """
     if isinstance(opt, OptimizerV2):
       raise ValueError("Should use optimizer in "
-                       "ipu.keras.optimizers "
+                       "keras.ipu.optimizers (in the Keras package) "
                        "to wrap V2 optimizers")
     super(IpuOptimizer, self).__init__(False, name)
     self._opt = opt

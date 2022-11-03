@@ -961,15 +961,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(
       *test_util.generate_combinations_with_testcase_name(
-          opt_cfg=[
-              (gradient_descent.GradientDescentOptimizer, (0.01,)),
-              (gradient_descent_v2.SGD, (0.01,)),
-          ],
           reduction_method=list(ga.GradientAccumulationReductionMethod)))
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare2(self, opt_cfg, reduction_method):
+  def testPipelineCompare2(self, reduction_method):
     # Resnet like network.
-    opt_type, opt_args = opt_cfg
 
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -988,7 +983,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     repeat_count = 2
 
     def optimizer_fn():
-      return opt_type(*opt_args)
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -1080,14 +1075,9 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(
       *test_util.generate_combinations_with_testcase_name(
-          opt_cfg=[
-              (gradient_descent.GradientDescentOptimizer, (0.01,)),
-              (gradient_descent_v2.SGD, (0.01,)),
-          ],
           reduction_method=list(ga.GradientAccumulationReductionMethod)))
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare3(self, opt_cfg, reduction_method):
-    opt_type, opt_args = opt_cfg
+  def testPipelineCompare3(self, reduction_method):
 
     if utils.running_on_ipu_model():
       self.skipTest("Replicated top level graphs are not supported on the "
@@ -1108,7 +1098,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     repeat_count = 2
 
     def optimizer_fn():
-      return opt_type(*opt_args)
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(idx, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -2662,15 +2652,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(
       *test_util.generate_combinations_with_testcase_name(
-          opt_cfg=[
-              (gradient_descent.GradientDescentOptimizer, (0.01,)),
-              (gradient_descent_v2.SGD, (0.01,)),
-          ],
           reduction_method=list(ga.GradientAccumulationReductionMethod)))
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareMultiIPUStage(self, opt_cfg, reduction_method):
+  def testPipelineCompareMultiIPUStage(self, reduction_method):
     # Resnet like network.
-    opt_type, opt_args = opt_cfg
 
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -2689,7 +2674,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     repeat_count = 2
 
     def optimizer_fn():
-      return opt_type(*opt_args)
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -2782,15 +2767,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(
       *test_util.generate_combinations_with_testcase_name(
-          opt_cfg=[
-              (gradient_descent.GradientDescentOptimizer, (0.01,)),
-              (gradient_descent_v2.SGD, (0.01,)),
-          ],
           reduction_method=list(ga.GradientAccumulationReductionMethod)))
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareParStages(self, opt_cfg, reduction_method):
+  def testPipelineCompareParStages(self, reduction_method):
     # Resnet like network.
-    opt_type, opt_args = opt_cfg
 
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -2809,7 +2789,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     repeat_count = 2
 
     def optimizer_fn():
-      return opt_type(*opt_args)
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -2907,15 +2887,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(
       *test_util.generate_combinations_with_testcase_name(
-          opt_cfg=[
-              (gradient_descent.GradientDescentOptimizer, (0.01,)),
-              (gradient_descent_v2.SGD, (0.01,)),
-          ],
           reduction_method=list(ga.GradientAccumulationReductionMethod)))
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareParStagesInfeed(self, opt_cfg, reduction_method):
+  def testPipelineCompareParStagesInfeed(self, reduction_method):
     # Resnet like network.
-    opt_type, opt_args = opt_cfg
 
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -2934,7 +2909,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     repeat_count = 2
 
     def optimizer_fn():
-      return opt_type(*opt_args)
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1

@@ -20,7 +20,7 @@ from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.python.ipu import test_utils as tu
 from tensorflow.python import ipu
-from tensorflow.python import keras
+from tensorflow import keras
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import backprop
 from tensorflow.python.eager import def_function
@@ -680,67 +680,6 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           r"resource update instruction *"):
         sess.run(variables.global_variables_initializer())
         sess.run(outputs)
-
-  def testPipelineFirstConstant(self):
-    cfg = ipu.config.IPUConfig()
-    cfg.auto_select_ipus = 2
-    cfg.configure_ipu_system()
-
-    input_data = np.array([0., 1., 2., 3.])
-    actual_value = np.array([[-123., 0., 123., 246.]]).T
-
-    strategy = ipu.ipu_strategy.IPUStrategy()
-    with strategy.scope():
-      input_ = keras.Input(shape=(1,))
-
-      with ipu.keras.PipelineStage(0):
-        x = math_ops.multiply(123., input_)
-
-      with ipu.keras.PipelineStage(1):
-        y = math_ops.subtract(x, 123.)
-
-      model = keras.Model(input_, y)
-      model.set_pipelining_options(gradient_accumulation_steps_per_replica=4)
-      model.compile(optimizer='adam', loss='mse', steps_per_execution=8)
-
-      expected_value = model.predict(input_data, batch_size=2)
-      self.assertAllClose(expected_value, actual_value, atol=1e-05)
-
-  def testPipelineFirstLargeConstant(self):
-    cfg = ipu.config.IPUConfig()
-    cfg.auto_select_ipus = 2
-    cfg.configure_ipu_system()
-
-    const_shape = (12, 12)
-
-    input_data = np.array([0., 1., 2., 3.])
-    actual_value_numbers = [-123., 0., 123., 246.]
-    actual_value = np.zeros(shape=(const_shape[0] * len(input_data),
-                                   const_shape[1]))
-    # Broadcast the actual_value_numbers to const_shape chunks then stack
-    for i, n in enumerate(actual_value_numbers):
-      start = i * const_shape[0]
-      end = (i + 1) * const_shape[0]
-      actual_value[start:end, :] = n
-
-    strategy = ipu.ipu_strategy.IPUStrategy()
-    with strategy.scope():
-      input_ = keras.Input(shape=(1,), dtype=dtypes.float32)
-
-      with ipu.keras.PipelineStage(0):
-        x = math_ops.multiply(
-            np.full(fill_value=123., shape=const_shape, dtype=np.float32),
-            input_)
-
-      with ipu.keras.PipelineStage(1):
-        y = math_ops.subtract(x, np.full(fill_value=123., shape=const_shape))
-
-      model = keras.Model(input_, y)
-      model.set_pipelining_options(gradient_accumulation_steps_per_replica=4)
-      model.compile(optimizer='adam', loss='mse', steps_per_execution=8)
-
-      expected_value = model.predict(input_data, batch_size=1)
-      self.assertAllClose(expected_value, actual_value, atol=1e-05)
 
   def testOutlinedFunctionInFunction(self):
     @ipu.outlined_function

@@ -147,38 +147,6 @@ Estimators
   :members:
   :special-members: __init__
 
-Keras
-^^^^^
-
-.. automodule:: tensorflow.python.ipu.keras.extensions
-  :members: FunctionalExtension, PipelineStage, FunctionalLayerPipelineStageAssignment, SequentialExtension, SequentialLayerPipelineStageAssignment, ModelExtension, ModelLayerPipelineStageAssignment
-  :imported-members: FunctionalExtension, PipelineStage, FunctionalLayerPipelineStageAssignment, SequentialExtension, SequentialLayerPipelineStageAssignment, ModelExtension, ModelLayerPipelineStageAssignment
-
-.. _keras-layers-api:
-
-Keras layers
-^^^^^^^^^^^^
-
-.. automodule:: tensorflow.python.ipu.keras.layers
-  :members: Dropout, EffectiveTransformer, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, SerialDense, CTCInferenceLayer, CTCPredictionsLayer, RecomputationCheckpoint
-  :imported-members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, SerialDense, CTCInferenceLayer, CTCPredictionsLayer, RecomputationCheckpoint
-
-Keras losses
-^^^^^^^^^^^^
-
-.. automodule:: tensorflow.python.ipu.keras.losses
-  :members: CTCLoss
-  :imported-members: CTCLoss
-
-.. _keras-optimizers-api:
-
-Keras optimizers
-^^^^^^^^^^^^^^^^
-
-.. automodule:: tensorflow.python.ipu.keras.optimizers
-  :members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer, MapGradientOptimizerInvertedChaining, GradientAccumulationOptimizer
-  :imported-members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer, MapGradientOptimizerInvertedChaining, GradientAccumulationOptimizer
-
 .. _operators-api:
 
 Operators

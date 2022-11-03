@@ -38,8 +38,6 @@ from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import nest
-from tensorflow.python.ipu.keras.extensions import functional_extensions
-from tensorflow.python.ipu.keras.extensions import sequential_extensions
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import keras_extensions
 
