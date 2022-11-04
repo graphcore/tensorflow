@@ -20,7 +20,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_conv.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/weights_transpose_chans_flip_xy.h"
-
+#include "tensorflow/compiler/plugin/poplar/driver/tools/window_util.h"
+#include "tensorflow/compiler/xla/window_util.h"
 namespace xla {
 namespace poplarplugin {
 namespace {
@@ -138,9 +139,20 @@ StatusOr<poplin::ConvParams> GetConvolutionParameters(
     const HloInstruction* inst, int64_t input_index, int64_t kernel_index) {
   const Shape& input = inst->operand(input_index)->shape();
   const Shape& kernel = inst->operand(kernel_index)->shape();
-  const Shape& output = inst->shape();
+  Shape output = inst->shape();
+
+  // If we are using F8 convolution, then the output will be a tuple
+  // of the form (data, metadata). In this function, we are only
+  // interested in `data`, not `metadata`.
+  if (output.IsTuple()) {
+    output = ShapeUtil::GetTupleElementShape(output, 0);
+  }
 
   TF_ASSIGN_OR_RETURN(poplar::Type input_dtype, PoplarDataType(input));
+  if (input_dtype == poplar::UNSIGNED_CHAR) {
+    input_dtype = poplar::QUARTER;
+  }
+
   TF_ASSIGN_OR_RETURN(poplar::Type output_dtype, PoplarDataType(output));
 
   std::vector<size_t> input_dims = PoplarShapeFromXlaShape(input);
@@ -148,6 +160,7 @@ StatusOr<poplin::ConvParams> GetConvolutionParameters(
   std::vector<size_t> output_dims = PoplarShapeFromXlaShape(output);
 
   TF_ASSIGN_OR_RETURN(Window window, GetConvolutionWindow(inst));
+
   TF_ASSIGN_OR_RETURN(auto dims, GetConvolutionDims(inst));
 
   TF_ASSIGN_OR_RETURN(unsigned int f_g, GetFeatureGroupCount(inst));

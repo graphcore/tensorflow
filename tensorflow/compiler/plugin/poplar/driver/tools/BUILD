@@ -693,6 +693,7 @@ poplar_cc_library(
         ":conv_util",
         ":poplar_replica_groups",
         ":poplar_util",
+        ":window_util",
         "//tensorflow/compiler/plugin/poplar/driver/tools/custom_ops:multi_conv",
     ],
 )
@@ -1054,6 +1055,19 @@ poplar_cc_library(
         "//tensorflow/compiler/plugin/poplar/driver/tools:while_loop_util",
         "//tensorflow/compiler/xla/service:while_loop_analysis",
         "//tensorflow/compiler/xla/service:while_loop_invariant_code_motion",
+    ],
+)
+
+poplar_cc_library(
+    name = "window_util",
+    srcs = [
+        "window_util.cc",
+    ],
+    hdrs = [
+        "window_util.h",
+    ],
+    deps = [
+        ":util",
     ],
 )
 

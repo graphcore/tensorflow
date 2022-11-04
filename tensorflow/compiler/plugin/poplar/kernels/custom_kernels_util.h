@@ -67,6 +67,8 @@ class AttributeMap {
 
   // These are included as absl::flat_hash_set<T> is unordered,
   // whereas this allows a list to be passed whilst preserving ordering.
+  StatusOr<std::vector<int32>> GetAttributeInt32Vector(
+      const std::string& field_name) const;
   StatusOr<std::vector<int64_t>> GetAttributeInt64Vector(
       const std::string& field_name) const;
 

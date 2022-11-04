@@ -15,6 +15,7 @@ limitations under the License.
 
 // XLA specific pooling ops.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/window_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
@@ -45,67 +46,6 @@ using namespace xla::poplarplugin;
 
 namespace tensorflow {
 namespace {
-xla::StatusOr<xla::Window> MakeWindow(
-    const xla::Shape& input_shape, absl::Span<const int64_t> window_dimensions,
-    absl::Span<const int64_t> window_strides, xla::Padding xla_padding,
-    absl::Span<const int64_t> lhs_dilation,
-    absl::Span<const int64_t> rhs_dilation) {
-  TF_RETURN_IF_ERROR(
-      xla::ValidatePaddingValues(xla::AsInt64Slice(input_shape.dimensions()),
-                                 window_dimensions, window_strides));
-
-  std::vector<std::pair<int64_t, int64_t>> padding =
-      xla::MakePadding(xla::AsInt64Slice(input_shape.dimensions()),
-                       window_dimensions, window_strides, xla_padding);
-
-  const auto verify_size = [&](const size_t x, const char* x_name) {
-    if (x == 0 || x == window_dimensions.size()) {
-      return Status::OK();
-    } else {
-      return xla::InvalidArgument(
-          "%s", absl::StrCat(
-                    "Window has different number of window dimensions than of ",
-                    x_name,
-                    "\nNumber of window dimensions: ", window_dimensions.size(),
-                    "\nNumber of ", x_name, ": ", x, "\n"));
-    }
-  };
-  TF_RETURN_IF_ERROR(verify_size(window_strides.size(), "window strides"));
-  TF_RETURN_IF_ERROR(verify_size(padding.size(), "padding entries"));
-  TF_RETURN_IF_ERROR(verify_size(lhs_dilation.size(), "lhs dilation factors"));
-  TF_RETURN_IF_ERROR(verify_size(rhs_dilation.size(), "rhs dilation factors"));
-
-  xla::Window window;
-  for (size_t i = 0; i < window_dimensions.size(); i++) {
-    auto dim = window.add_dimensions();
-    dim->set_size(window_dimensions[i]);
-    if (!window_strides.empty()) {
-      dim->set_stride(window_strides[i]);
-    } else {
-      dim->set_stride(1);
-    }
-    if (!padding.empty()) {
-      dim->set_padding_low(padding[i].first);
-      dim->set_padding_high(padding[i].second);
-    } else {
-      dim->set_padding_low(0);
-      dim->set_padding_high(0);
-    }
-    if (!lhs_dilation.empty()) {
-      dim->set_base_dilation(lhs_dilation[i]);
-    } else {
-      dim->set_base_dilation(1);
-    }
-    if (!rhs_dilation.empty()) {
-      dim->set_window_dilation(rhs_dilation[i]);
-    } else {
-      dim->set_window_dilation(1);
-    }
-    dim->set_window_reversal(false);
-  }
-  return window;
-}
-
 // Superclass of pooling ops.
 class PoolingOp : public XlaOpKernel, IpuOpKernel {
  public:

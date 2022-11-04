@@ -45,6 +45,7 @@ poplar_cc_library(
     ],
     deps = [
         "//tensorflow/compiler/plugin/poplar/driver:tensor",
+        "//tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops:conv_ops_helpers",
     ],
     alwayslink = True,
 )

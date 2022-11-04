@@ -246,6 +246,8 @@ poplar_cc_library(
     ],
     deps = [
         ":custom_ops_dependencies",
+        "//tensorflow/compiler/plugin/poplar/driver/tools:window_util",
+        "//tensorflow/compiler/xla:shape_util",
     ],
 )
 

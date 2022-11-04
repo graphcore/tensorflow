@@ -512,6 +512,7 @@ tf_py_test(
     name = "f8_test",
     size = "medium",
     srcs = ["tests/f8_test.py"],
+    shard_count = 8,
     deps = [
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:framework",

@@ -22,6 +22,7 @@ limitations under the License.
 
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops/conv_ops_helpers.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
@@ -35,43 +36,12 @@ limitations under the License.
 
 using ::absl::StrCat;
 
+using xla::poplarplugin::helper::AddConvolutionInput;
+using xla::poplarplugin::helper::AddConvolutionWeights;
+
 namespace xla {
 namespace poplarplugin {
 namespace {
-
-StatusOr<DriverTensor> AddConvolutionInput(
-    DriverGraph& graph, const HloInstruction* target,
-    CompilerResources& resources, const poplar::DebugInfo& debug_info) {
-  TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
-                      GetConvolutionParameters(target, 0, 1));
-
-  TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
-                      GetConvolutionOptionsForInst(target, resources));
-
-  auto out = DriverTensor(poplin::createInput(
-      graph, params, {debug_info, "input"}, opts, &resources.planning_cache));
-
-  auto o = ShuffleConvolutionInputToTensorflow(target, out);
-
-  return o;
-}
-
-StatusOr<DriverTensor> AddConvolutionWeights(
-    DriverGraph& graph, const HloInstruction* target,
-    CompilerResources& resources, const poplar::DebugInfo& debug_info) {
-  TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
-                      GetConvolutionParameters(target, 0, 1));
-
-  TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
-                      GetConvolutionOptionsForInst(target, resources));
-
-  auto out = DriverTensor(poplin::createWeights(
-      graph, params, {debug_info, "weights"}, opts, &resources.planning_cache));
-
-  out = RemoveGroupsDimensionFromWeights(params, out);
-
-  return ShuffleConvolutionWeightsToTensorflow(target, out);
-}
 
 class Conv2DOp : public PoplarOpDef {
   StatusOr<DriverProgramSequence> Creator(

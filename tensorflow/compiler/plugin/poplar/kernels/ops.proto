@@ -131,6 +131,8 @@ enum PoplarOp {
   ConvertToF8 = 126;
   ConvertFromF8 = 127;
   F8MatMul = 128;
+  F8Conv2D = 129;
+  F8Conv3D = 130;
 
   // Supported Fusions.
   Conv_biasadd = 200;

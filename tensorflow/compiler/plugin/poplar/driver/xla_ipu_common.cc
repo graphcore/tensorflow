@@ -74,6 +74,11 @@ bool OpFilter(KernelDef* kdef) {
     AddDtypeToKernelDefConstraint("rhs_type", DT_UINT8, kdef);
   }
 
+  if (kdef->op() == "IpuF8Conv2D" || kdef->op() == "IpuF8Conv3D") {
+    AddDtypeToKernelDefConstraint("T", DT_UINT8, kdef);
+    AddDtypeToKernelDefConstraint("U", DT_UINT8, kdef);
+  }
+
   if (kdef->op() == "Const") {
     AddDtypeToKernelDefConstraint("dtype", DT_STRING, kdef);
     AddDtypeToKernelDefConstraint("dtype", DT_UINT8, kdef);

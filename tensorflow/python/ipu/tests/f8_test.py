@@ -24,7 +24,9 @@ from tensorflow.python.framework import ops
 import tensorflow as tf
 from tensorflow.python.ops import array_ops
 from tensorflow.python.platform import googletest
-from tensorflow.python.ipu.ops.f8_ops import Format, convert_from_f8, convert_to_f8, create_metadata, QuarterTensor, f8_matmul
+from tensorflow.python.ipu.ops.f8_ops import Format, QuarterTensor
+from tensorflow.python.ipu.ops.f8_ops import convert_from_f8, convert_to_f8, create_metadata
+from tensorflow.python.ipu.ops.f8_ops import f8_matmul, f8_conv_1d, f8_conv_2d, f8_conv_3d
 
 
 def _f8_convert_cases():
@@ -158,6 +160,183 @@ class F8MatMulTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         })
 
     self.assertAllEqual(answer, result)
+
+
+def conv_1d_cases():
+  out_cases = []
+
+  cases = [(5, 3, 2), (2, 1, 2), (4, 2, 3)]
+  for in_dim, k_dim, stride_dim in cases:
+    out_cases.append({
+        'testcase_name':
+        "conv1d_%d_%d_%d" % (in_dim, k_dim, stride_dim),
+        'conv_input':
+        np.expand_dims(np.expand_dims(np.ones(in_dim, dtype=np.float16), 0),
+                       -1),
+        'conv_kernel':
+        np.expand_dims(
+            np.expand_dims(np.ones(k_dim, dtype=np.float16) * 2, -1), -1),
+        'stride_dim':
+        stride_dim
+    })
+
+    return out_cases
+
+
+class F8Conv1D(test_util.TensorFlowTestCase, parameterized.TestCase):
+  @parameterized.named_parameters(*conv_1d_cases())
+  @test_util.deprecated_graph_mode_only
+  def testConv1D(self, conv_input, conv_kernel, stride_dim):
+    strides = (1, stride_dim, 1)
+
+    def model(x, k):
+      out_f16 = tf.nn.conv1d(x, k, stride=strides, padding="SAME")
+
+      x_f8 = convert_to_quarter(x)
+      k_f8 = convert_to_quarter(k)
+      out_f8 = f8_conv_1d(x_f8, k_f8, strides=strides, padding="SAME")
+
+      if isinstance(out_f8, QuarterTensor):
+        out_f8_cast = convert_from_f8((out_f8.data, out_f8.metadata),
+                                      dtype=dtypes.int32)
+      else:
+        out_f8_cast = tf.cast(out_f8, dtypes.int32)
+
+      return out_f16, out_f8_cast
+
+    with ops.device('cpu'):
+      x = array_ops.placeholder(conv_input.dtype, conv_input.shape)
+      k = array_ops.placeholder(conv_kernel.dtype, conv_kernel.shape)
+
+    with tu.ipu_session() as sess:
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        res = ipu.ipu_compiler.compile(model, [x, k])
+        res_f16, res_f8, = sess.run(res, {
+            x: conv_input,
+            k: conv_kernel,
+        })
+
+    self.assertAllEqual(res_f16, res_f8)
+
+
+def conv_2d_cases():
+  out_cases = []
+
+  cases = [(5, 3, 2), (2, 1, 2), (4, 2, 3)]
+  for in_dim, k_dim, stride_dim in cases:
+    out_cases.append({
+        'testcase_name':
+        "conv2d_%d_%d_%d" % (in_dim, k_dim, stride_dim),
+        'conv_input':
+        np.expand_dims(np.expand_dims(np.eye(in_dim, dtype=np.float16), 0),
+                       -1),
+        'conv_kernel':
+        np.expand_dims(np.expand_dims(np.eye(k_dim, dtype=np.float16), -1),
+                       -1),
+        'stride_dim':
+        stride_dim
+    })
+
+    return out_cases
+
+
+class F8Conv2D(test_util.TensorFlowTestCase, parameterized.TestCase):
+  @parameterized.named_parameters(*conv_2d_cases())
+  @test_util.deprecated_graph_mode_only
+  def testConv2D(self, conv_input, conv_kernel, stride_dim):
+    strides = (1, stride_dim, stride_dim, 1)
+
+    def model(x, k):
+      out_f16 = tf.nn.conv2d(x, k, strides=strides, padding="SAME")
+
+      x_f8 = convert_to_quarter(x)
+      k_f8 = convert_to_quarter(k)
+      out_f8 = f8_conv_2d(x_f8, k_f8, strides=strides, padding="SAME")
+
+      if isinstance(out_f8, QuarterTensor):
+        out_f8_cast = convert_from_f8((out_f8.data, out_f8.metadata),
+                                      dtype=dtypes.int32)
+      else:
+        out_f8_cast = tf.cast(out_f8, dtypes.int32)
+
+      return out_f16, out_f8_cast
+
+    with ops.device('cpu'):
+      x = array_ops.placeholder(conv_input.dtype, conv_input.shape)
+      k = array_ops.placeholder(conv_kernel.dtype, conv_kernel.shape)
+
+    with tu.ipu_session() as sess:
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        res = ipu.ipu_compiler.compile(model, [x, k])
+        res_f16, res_f8, = sess.run(res, {
+            x: conv_input,
+            k: conv_kernel,
+        })
+
+    self.assertAllEqual(res_f16, res_f8)
+
+
+def conv_3d_cases():
+  out_cases = []
+
+  cases = [(5, 6, 3, 2), (2, 3, 1, 2), (4, 6, 2, 3)]
+  for in_dim, in_depth, k_dim, stride_dim in cases:
+    out_cases.append({
+        'testcase_name':
+        "conv3d_%d_%d_%d_%d" % (in_dim, in_depth, k_dim, stride_dim),
+        'conv_input':
+        np.expand_dims(
+            np.expand_dims(
+                np.repeat(np.expand_dims(np.eye(in_dim, dtype=np.float16), 0),
+                          in_depth,
+                          axis=0), 0), -1),
+        'conv_kernel':
+        np.repeat(np.expand_dims(
+            np.expand_dims(np.expand_dims(np.eye(k_dim, dtype=np.float16), -1),
+                           -1), 0),
+                  k_dim,
+                  axis=0),
+        'stride_dim':
+        stride_dim
+    })
+
+    return out_cases
+
+
+class F8Conv3D(test_util.TensorFlowTestCase, parameterized.TestCase):
+  @parameterized.named_parameters(*conv_3d_cases())
+  @test_util.deprecated_graph_mode_only
+  def testConv3D(self, conv_input, conv_kernel, stride_dim):
+    strides = (1, stride_dim, stride_dim, stride_dim, 1)
+
+    def model(x, k):
+      out_f16 = tf.nn.conv3d(x, k, strides=strides, padding="SAME")
+
+      x_f8 = convert_to_quarter(x)
+      k_f8 = convert_to_quarter(k)
+      out_f8 = f8_conv_3d(x_f8, k_f8, strides=strides, padding="SAME")
+
+      if isinstance(out_f8, QuarterTensor):
+        out_f8_cast = convert_from_f8((out_f8.data, out_f8.metadata),
+                                      dtype=dtypes.int32)
+      else:
+        out_f8_cast = tf.cast(out_f8, dtypes.int32)
+
+      return out_f16, out_f8_cast
+
+    with ops.device('cpu'):
+      x = array_ops.placeholder(conv_input.dtype, conv_input.shape)
+      k = array_ops.placeholder(conv_kernel.dtype, conv_kernel.shape)
+
+    with tu.ipu_session() as sess:
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        res = ipu.ipu_compiler.compile(model, [x, k])
+        res_f16, res_f8, = sess.run(res, {
+            x: conv_input,
+            k: conv_kernel,
+        })
+
+    self.assertAllEqual(res_f16, res_f8)
 
 
 if __name__ == "__main__":

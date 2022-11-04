@@ -35,6 +35,21 @@ poplar_cc_library(
         "conv_ops.cc",
     ],
     deps = [
+        ":conv_ops_helpers",
+        "//tensorflow/compiler/plugin/poplar/driver:tensor",
+    ],
+    alwayslink = True,
+)
+
+poplar_cc_library(
+    name = "conv_ops_helpers",
+    srcs = [
+        "conv_ops_helpers.cc",
+    ],
+    hdrs = [
+        "conv_ops_helpers.h",
+    ],
+    deps = [
         "//tensorflow/compiler/plugin/poplar/driver:tensor",
     ],
     alwayslink = True,

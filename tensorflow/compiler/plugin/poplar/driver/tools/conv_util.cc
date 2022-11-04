@@ -36,7 +36,9 @@ namespace poplarplugin {
 namespace {
 bool IsCustomConvolutionInstruction(const HloInstruction* inst) {
   return IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY, inst) ||
-         IsPoplarInstruction(PoplarOp::ConvWithReverse, inst);
+         IsPoplarInstruction(PoplarOp::ConvWithReverse, inst) ||
+         IsPoplarInstruction(PoplarOp::F8Conv2D, inst) ||
+         IsPoplarInstruction(PoplarOp::F8Conv3D, inst);
 }
 }  // namespace
 
