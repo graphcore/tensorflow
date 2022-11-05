@@ -59,20 +59,16 @@ For example, this will not work:
 
 .. automodule:: tensorflow.python.ipu.config
   :members:
-  :exclude-members: deprecate_config_attribute, deprecate_config_attributes, running_on_ipu_model, IPUConfig, AttributeMetadata
-
-.. autoclass:: tensorflow.python.ipu.config.AttributeMetadata()
-  :members:
-
+  :inherited-members:
+  :exclude-members: deprecate_config_attribute, deprecate_config_attributes, running_on_ipu_model, IPUConfig
 
 .. autoclass:: tensorflow.python.ipu.config.IPUConfig
-
-  .. automethod:: tensorflow.python.ipu.config.IPUConfig.get_attribute_metadata(attr)
-  .. automethod:: tensorflow.python.ipu.config.IPUConfig.configure_ipu_system(device='cpu')
-  .. automethod:: tensorflow.python.ipu.config.IPUConfig.from_dict(dct)
-  .. automethod:: tensorflow.python.ipu.config.IPUConfig.to_dict()
-  .. automethod:: tensorflow.python.ipu.config.IPUConfig.from_json(json_cfg)
-  .. automethod:: tensorflow.python.ipu.config.IPUConfig.to_json()
+  :members:
+  :inherited-members:
+  :exclude-members: allow_recompute, auto_select_ipus, compilation_poplar_options, convolutions, 
+                    device_connection, experimental, floating_point_behaviour, gcl_poplar_options, 
+                    io_tiles, ipu_model, matmuls, norms, optimizations, pooling, select_ipus, 
+                    selection_order, serialization_output_folder, slices
 
 .. Looping utilities
 
@@ -120,20 +116,15 @@ Estimators
 ^^^^^^^^^^
 
 .. automodule:: tensorflow.python.ipu.ipu_estimator
-.. autoclass:: IPUEstimator
   :members:
   :inherited-members:
   :exclude-members: export_savedmodel
-.. autoclass:: IPUEstimatorSpec
-  :members: __new__
+  
 
 .. automodule:: tensorflow.python.ipu.ipu_pipeline_estimator
-.. autoclass:: IPUPipelineEstimator
   :members:
   :inherited-members:
   :exclude-members: export_savedmodel
-.. autoclass:: IPUPipelineEstimatorSpec
-  :members: __new__
 
 .. Run configs
 

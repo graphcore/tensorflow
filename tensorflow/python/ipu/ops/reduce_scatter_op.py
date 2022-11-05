@@ -53,8 +53,8 @@ def reduce_scatter(x, replication_factor, op='COLLECTIVE_OP_ADD', name=None):
     name: Optional op name.
 
   Returns:
-    A `Tensor` or list of `Tensor`s. The shape of each output will be
-    `[ceil(input_length / number_of_replicas)]`.
+    A `Tensor` object or list of `Tensor` objects. The shape of each
+    output will be `[ceil(input_length / number_of_replicas)]`.
   """
 
   flat_x = nest.flatten(x)

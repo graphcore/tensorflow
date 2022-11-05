@@ -518,7 +518,9 @@ class AttributeMetadata:
        :value: ATTR_DEFAULT_VALUE (empty strings display as "")
 
        .. note:: (optional deprecation note box)
+
          DEPRECATED: ATTR_DEPRECATED_MSG
+
        ATTR_DOCSTRING (attribute docstring pasted as-is here)
 
 
@@ -555,8 +557,8 @@ class AttributeMetadata:
 
     # Deprecation note.
     if self.deprecated:
-      lines.append("   .. note::")
-      lines.append(f"      DEPRECATED: {self.deprecated_msg}")
+      lines.append("   .. note::\n")
+      lines.append(f"      DEPRECATED: {self.deprecated_msg}\n")
 
     # Indent and add the docstring.
     for line in self.__doc__.split('\n'):
@@ -884,8 +886,9 @@ class _ConfigBase(object):
         if val != attr:
           setattr(self, name, val)
       else:
-        logging.warn(f"{metadata.name} didn't have a value: the existing value"
-                     "will be retained")
+        logging.warn(
+            f"{metadata.name} didn't have a value: the existing value "
+            "will be retained")
 
   def to_json(self):
     """
@@ -1664,7 +1667,7 @@ class _NormConfig(_ConfigBase):
 
 @deprecate_config_attribute(
     "enable_fast_math",
-    "'enable_fast_math' has been moved to 'optimizations.math.fast'."
+    "'enable_fast_math' has been moved to 'optimizations.math.fast'. "
     "It will be removed from this location in a future release.")
 class _OptimizationConfig(_ConfigBase):
   def __init__(self):

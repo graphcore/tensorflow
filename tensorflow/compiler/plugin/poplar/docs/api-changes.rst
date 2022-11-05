@@ -16,7 +16,7 @@ Removal of deprecated Keras API
 The `tensorflow.python.ipu.keras` module has been removed (deprecated in Poplar SDK version 2.6, see :ref:`ipu-keras-changes`).
 The removed classes have been moved to the Keras and IPU TensorFlow Addons packages.
 
-  - Keras layers were previously moved to the :py:mod:`ipu_tensorflow_addons.keras.layers` namespace in the IPU TensorFlow Addons package (see :ref:`layers-moved-to-addons:`).
+  - Keras layers were previously moved to the :py:mod:`ipu_tensorflow_addons.keras.layers` namespace in the IPU TensorFlow Addons package (see :ref:`layers-moved-to-addons`).
   - The Keras optimizers in the `tensorflow.python.ipu.keras.optimizers` namespace do not have direct replacements.
     You can find IPU-specific Keras optimizers in the :py:mod:`keras.ipu.optimizers` namespace in the Keras package, and the :py:mod:`ipu_tensorflow_addons.keras.optimizers` namespace in the IPU TensorFlow Addons package.
   - Everything else can be found in the :py:mod:`keras.ipu` namespace in the Keras package. This namespace can also be accessed via `tensorflow.keras.ipu`.

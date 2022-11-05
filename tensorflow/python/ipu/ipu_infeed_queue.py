@@ -482,8 +482,18 @@ class IPUIterator(iterator_ops.OwnedIterator):
     except errors.OutOfRangeError:
       raise StopIteration
 
+  # docstring copied form Iterator to fix a formatting issue.
   @property
   def element_spec(self):
+    """The type specification of an element of this iterator.
+
+    For more information, read `this guide
+    <https://www.tensorflow.org/guide/data#dataset_structure>`_.
+
+    Returns:
+      A (nested) structure of `tf.TypeSpec` objects matching the structure of an
+      element of this iterator and specifying the type of individual components.
+    """
     return self._element_spec
 
   @property

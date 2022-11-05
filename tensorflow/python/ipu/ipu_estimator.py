@@ -1134,6 +1134,128 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
     return itertools.islice(flat_predictions, num_predictions)
 
 
+_IPUEstimatorBase.experimental_export_all_saved_models.__doc__ = """
+  Exports a `SavedModel` with `tf.MetaGraphDefs` for each requested mode.
+
+  For each mode passed in via the `input_receiver_fn_map`,
+  this method builds a new graph by calling the `input_receiver_fn` to obtain
+  feature and label `Tensor` objects. Next, this method calls the `Estimator` object's
+  `model_fn` in the passed mode to generate the model graph based on
+  those features and labels, and restores the given checkpoint
+  (or, lacking that, the most recent checkpoint) into the graph.
+  Only one of the modes is used for saving variables to the `SavedModel`
+  (order of preference: `tf.estimator.ModeKeys.TRAIN`,
+  `tf.estimator.ModeKeys.EVAL`, then
+  `tf.estimator.ModeKeys.PREDICT`), such that up to three
+  `tf.MetaGraphDefs` are saved with a single set of variables in a single
+  `SavedModel` directory.
+
+  For the variables and `tf.MetaGraphDefs`, a timestamped export directory
+  below `export_dir_base`, and writes a `SavedModel` into it containing the
+  `tf.MetaGraphDef` for the given mode and its associated signatures.
+
+  For prediction, the exported `MetaGraphDef` will provide one `SignatureDef`
+  for each element of the `export_outputs` dict returned from the `model_fn`,
+  named using the same keys.  One of these keys is always
+  `tf.saved_model.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY`,
+  indicating which signature will be served when a serving request does not
+  specify one. For each signature, the outputs are provided by the
+  corresponding `tf.estimator.export.ExportOutput` objects, and the inputs are always
+  the input receivers provided by the `serving_input_receiver_fn`.
+
+  For training and evaluation the `train_op` is stored in an extra
+  collection. Loss, metrics, and predictions are included in a
+  `SignatureDef` for the mode in question.
+
+  Extra assets may be written into the `SavedModel` via the `assets_extra`
+  argument.  This should be a dict, where each key gives a destination path
+  (including the filename) relative to the `assets.extra` directory.  The
+  corresponding value gives the full path of the source file to be copied.
+  For example, the simple case of copying a single file without renaming it
+  is specified as `{'my_asset_file.txt': '/path/to/my_asset_file.txt'}`.
+
+  Args:
+    export_dir_base: A string containing a directory in which to create
+      timestamped subdirectories containing exported `SavedModel` objects.
+    input_receiver_fn_map: dict of `tf.estimator.ModeKeys` to
+      `input_receiver_fn` mappings, where the `input_receiver_fn` is a
+      function that takes no arguments and returns the appropriate subclass of
+      `InputReceiver`.
+    assets_extra: A dict specifying how to populate the `assets.extra` directory
+      within the exported `SavedModel`, or `None` if no extra assets are
+      needed.
+    as_text: whether to write the `SavedModel` proto in text format.
+    checkpoint_path: The checkpoint path to export.  If `None` (the default),
+      the most recent checkpoint found within the model directory is chosen.
+
+  Returns:
+    The path to the exported directory as a bytes object.
+
+  Raises:
+    ValueError: if any `input_receiver_fn` is `None`, no `export_outputs`
+      are provided, or no checkpoint can be found.
+"""
+
+_IPUEstimatorBase.export_saved_model.__doc__ = """
+  Exports inference graph as a `SavedModel` into the given directory.
+
+  For a detailed guide to using SavedModel, see
+  `Using the SavedModel format
+  <https://tensorflow.org/guide/saved_model#savedmodels_from_estimators>`_.
+
+  This method builds a new graph by first calling the
+  `serving_input_receiver_fn` to obtain feature `Tensor` objects, and then calling
+  this `Estimator` object's `model_fn` to generate the model graph based on those
+  features. It restores the given checkpoint (or, lacking that, the most
+  recent checkpoint) into this graph in a fresh session.  Finally it creates
+  a timestamped export directory below the given `export_dir_base`, and writes
+  a `SavedModel` into it containing a single `tf.MetaGraphDef` saved from this
+  session.
+
+  The exported `MetaGraphDef` will provide one `SignatureDef` for each
+  element of the `export_outputs` dict returned from the `model_fn`, named
+  using the same keys.  One of these keys is always
+  `tf.saved_model.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY`,
+  indicating which signature will be served when a serving request does not
+  specify one. For each signature, the outputs are provided by the
+  corresponding `tf.estimator.export.ExportOutput` objects, and the inputs are always
+  the input receivers provided by the `serving_input_receiver_fn`.
+
+  Extra assets may be written into the `SavedModel` via the `assets_extra`
+  argument.  This should be a dict, where each key gives a destination path
+  (including the filename) relative to the `assets.extra` directory. The
+  corresponding value gives the full path of the source file to be copied.
+  For example, the simple case of copying a single file without renaming it
+  is specified as `{'my_asset_file.txt': '/path/to/my_asset_file.txt'}`.
+
+  The experimental_mode parameter can be used to export a single
+  train/eval/predict graph as a `SavedModel`.
+  See `experimental_export_all_saved_models` for a full description.
+
+  Args:
+    export_dir_base: A string containing a directory in which to create
+      timestamped subdirectories containing exported `SavedModel` objects.
+    serving_input_receiver_fn: A function that takes no argument and returns a
+      `tf.estimator.export.ServingInputReceiver` or
+      `tf.estimator.export.TensorServingInputReceiver`.
+    assets_extra: A dict specifying how to populate the `assets.extra` directory
+      within the exported `SavedModel`, or `None` if no extra assets are
+      needed.
+    as_text: whether to write the `SavedModel` proto in text format.
+    checkpoint_path: The checkpoint path to export.  If `None` (the default),
+      the most recent checkpoint found within the model directory is chosen.
+    experimental_mode: `tf.estimator.ModeKeys` value indicating with mode will
+      be exported. Note that this feature is experimental.
+
+  Returns:
+    The path to the exported directory as a bytes object.
+
+  Raises:
+    ValueError: if no `serving_input_receiver_fn` is provided, no
+    `export_outputs` are provided, or no checkpoint can be found.
+"""
+
+
 class IPUEstimator(_IPUEstimatorBase):
   """Estimator with IPU support.
 

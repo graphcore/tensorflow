@@ -99,8 +99,112 @@ class IPUStrategyV1(distribute_lib.StrategyV1,
     keras_extensions.KerasExtensions.__init__(self, enable_dataset_iterators,
                                               enable_keras_extensions)
 
+  # docstring copied from StrategyBase to fix a formatting issue
   @libpvti.instrument_fn(_pvti_trace_channel)
   def run(self, fn, args=(), kwargs=None, options=None):
+    """Invokes `fn` on each replica, with the given arguments.
+
+    This method is the primary way to distribute your computation with a
+    `tf.distribute` object. It invokes `fn` on each replica. If `args` or
+    `kwargs` have `tf.distribute.DistributedValues`, such as those produced by
+    a `tf.distribute.DistributedDataset` from
+    `tf.distribute.Strategy.experimental_distribute_dataset` or
+    `tf.distribute.Strategy.distribute_datasets_from_function`,
+    when `fn` is executed on a particular replica, it will be executed with the
+    component of `tf.distribute.DistributedValues` that correspond to that
+    replica.
+
+    `fn` is invoked under a replica context. `fn` may call
+    `tf.distribute.get_replica_context()` to access members such as
+    `all_reduce`. See the module-level docstring of `tf.distribute` for the
+    concept of replica context.
+
+    All arguments in `args` or `kwargs` can be nested structures of tensors,
+    for example a list of tensors, in which case `args` and `kwargs` will be
+    passed to the `fn` invoked on each replica. Or `args` or `kwargs` can be
+    `tf.distribute.DistributedValues` containing tensors or composite tensors,
+    that is `tf.compat.v1.TensorInfo.CompositeTensor`, in which case each `fn`
+    call will get the component of a `tf.distribute.DistributedValues`
+    corresponding to its replica. Note that arbitrary Python values that are
+    not of the types above are not supported.
+
+    IMPORTANT: Depending on the implementation of `tf.distribute.Strategy` and
+    whether eager execution is enabled, `fn` may be called one or more times. If
+    `fn` is annotated with `tf.function` or `tf.distribute.Strategy.run` is
+    called inside a `tf.function` (eager execution is disabled inside a
+    `tf.function` by default), `fn` is called once per replica to generate a
+    TensorFlow graph, which will then be reused for execution with new inputs.
+    Otherwise, if eager execution is enabled, `fn` will be called once per
+    replica every step just like regular Python code.
+
+    Example usage:
+
+    1. Constant tensor input.
+
+    >>> strategy = tf.distribute.MirroredStrategy(["GPU:0", "GPU:1"])
+    >>> tensor_input = tf.constant(3.0)
+    >>> @tf.function
+    ... def replica_fn(input):
+    ...   return input*2.0
+    >>> result = strategy.run(replica_fn, args=(tensor_input,))
+    >>> result
+    PerReplica:{
+      0: <tf.Tensor: shape=(), dtype=float32, numpy=6.0>,
+      1: <tf.Tensor: shape=(), dtype=float32, numpy=6.0>
+    }
+
+    2. DistributedValues input.
+
+    >>> strategy = tf.distribute.MirroredStrategy(["GPU:0", "GPU:1"])
+    >>> @tf.function
+    ... def run():
+    ...   def value_fn(value_context):
+    ...     return value_context.num_replicas_in_sync
+    ...   distributed_values = (
+    ...     strategy.experimental_distribute_values_from_function(
+    ...       value_fn))
+    ...   def replica_fn2(input):
+    ...     return input*2
+    ...   return strategy.run(replica_fn2, args=(distributed_values,))
+    >>> result = run()
+    >>> result
+    <tf.Tensor: shape=(), dtype=int32, numpy=4>
+
+    3. Use `tf.distribute.ReplicaContext` to allreduce values.
+
+    >>> strategy = tf.distribute.MirroredStrategy(["gpu:0", "gpu:1"])
+    >>> @tf.function
+    ... def run():
+    ...    def value_fn(value_context):
+    ...      return tf.constant(value_context.replica_id_in_sync_group)
+    ...    distributed_values = (
+    ...        strategy.experimental_distribute_values_from_function(
+    ...            value_fn))
+    ...    def replica_fn(input):
+    ...      return tf.distribute.get_replica_context().all_reduce("sum", input)
+    ...    return strategy.run(replica_fn, args=(distributed_values,))
+    >>> result = run()
+    >>> result
+    PerReplica:{
+      0: <tf.Tensor: shape=(), dtype=int32, numpy=1>,
+      1: <tf.Tensor: shape=(), dtype=int32, numpy=1>
+    }
+
+    Args:
+      fn: The function to run on each replica.
+      args: Optional positional arguments to `fn`. Its element can be a tensor,
+        a nested structure of tensors or a `tf.distribute.DistributedValues`.
+      kwargs: Optional keyword arguments to `fn`. Its element can be a tensor,
+        a nested structure of tensors or a `tf.distribute.DistributedValues`.
+      options: An optional instance of `tf.distribute.RunOptions` specifying
+        the options to run `fn`.
+
+    Returns:
+      Merged return value of `fn` across replicas. The structure of the return
+      value is the same as the return value from `fn`. Each element in the
+      structure can either be `tf.distribute.DistributedValues` or `Tensor`
+      objects (for example, if running on a single replica).
+    """
     _validate_run_function(fn)
     return super().run(fn, args, kwargs, options)
 
@@ -271,8 +375,26 @@ class IPUExtendedV1(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstr
   def _distribute_datasets_from_function(self, dataset_fn, options):
     del options
     return dataset_fn(distribute_lib.InputContext())
-
+  # pylint: disable=line-too-long
   def non_slot_devices(self, var_list):
+    """Device(s) for non-slot variables.
+
+    DEPRECATED: TF 1.x ONLY.
+
+    This method returns non-slot devices where non-slot variables are placed.
+    Users can create non-slot variables on these devices by using a block:
+
+    .. code:: python
+
+      with tf.distribute.StrategyExtended.colocate_vars_with(tf.distribute.StrategyExtended.non_slot_devices(...)):
+        ...
+
+    Args:
+      var_list: The list of variables being optimized, needed with the
+        default `tf.distribute.Strategy`.
+    Returns:
+      A sequence of devices for non-slot variables.
+    """
     del var_list
     return self._ipu_device
 

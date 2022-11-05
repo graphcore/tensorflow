@@ -450,8 +450,8 @@ class ConfigBaseTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     nested2_desc = '\n'.join([
         "         .. _nested1.nested2:",
         "         .. py:attribute:: nested1.nested2", "         ",
-        "            .. note::",
-        "               DEPRECATED: Category is no longer relevant.",
+        "            .. note::\n",
+        "               DEPRECATED: Category is no longer relevant.\n",
         "            This is a docstring that tests deprecating a nested config"
     ])
     self.assertTrue(nested2_desc in test_config.__doc__)
@@ -463,9 +463,9 @@ class ConfigBaseTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         "         .. _nested1.attr1:",
         "         .. py:attribute:: nested1.attr1",
         "            :type: typing.Union[int, list]", "            :value: 1",
-        "         ", "            .. note::",
+        "         ", "            .. note::\n",
         "               DEPRECATED: Attribute has been removed as it doesn't"
-        " have an effect.", "            This is the docstring for attr1"
+        " have an effect.\n", "            This is the docstring for attr1"
     ])
     self.assertTrue(attr1_desc in test_config.__doc__)
     self.assertTrue(
@@ -476,8 +476,8 @@ class ConfigBaseTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         "            .. _nested1.nested2.attr2:",
         "            .. py:attribute:: nested1.nested1.nested2.attr2",
         "               :type: int", "               :value: 1",
-        "            ", "               .. note::",
-        "                  DEPRECATED: Category is no longer relevant.",
+        "            ", "               .. note::\n",
+        "                  DEPRECATED: Category is no longer relevant.\n",
         "               No description provided."
     ])
     self.assertTrue(attr2_desc in test_config.__doc__)

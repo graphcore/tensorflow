@@ -103,8 +103,9 @@ class RunConfig(run_config_lib.RunConfig):
   def __init__(self, ipu_run_config=None, master=None, **kwargs):
     """Constructs a RunConfig with IPU support.
 
-    These are the arguments specific to the RunConfig for IPUs. All remaining
-    keyword arguments are passed to the base class, which is documented below.
+    Below are the arguments specific to the RunConfig for IPUs. See the `base
+    class documentation <https://www.tensorflow.org/versions/r2.6/api_docs/python/tf/estimator/RunConfig>`_
+    for the remaining arguments.
 
     Args:
       ipu_run_config: :class:`.IPURunConfig` object for IPU-specific
@@ -119,8 +120,6 @@ class RunConfig(run_config_lib.RunConfig):
     # only override here if the user gave it explicitly.
     if master is not None:
       self._master = master
-
-  __init__.__doc__ += run_config_lib.RunConfig.__init__.__doc__
 
   @property
   def ipu_run_config(self):
