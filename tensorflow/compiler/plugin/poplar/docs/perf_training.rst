@@ -523,6 +523,27 @@ Offloading variables into remote memory can reduce maximum memory liveness, but
 it can also increase the computation time of the weight update as more time is
 spent communicating with the host.
 
+.. _replicated-tensor-sharding:
+
+Replicated tensor sharding
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Replicated tensor sharding (RTS) attempts to reduce memory usage in replicated
+models by partitioning applicable tensors and distributing them across replicas.
+RTS identifies tensors that share the same value across replicas and partitions
+each tensor into evenly sized shards such that each replica stores one shard.
+If an operation requires the full tensor, the shards can be broadcast to all
+replicas.
+
+RTS is used to save memory when using stateful optimizers, such as Adam or LAMB,
+with replicas. In Keras, it can be enabled by setting the 
+`replicated_optimizer_state_sharding`
+argument to True in the 
+:py:func:`~keras.ipu.extensions.FunctionalExtension.set_gradient_accumulation_options`
+method for non-pipelined models and the 
+:py:func:`~keras.ipu.extensions.FunctionalExtension.set_pipelining_options` method
+for pipelined models.
+
 Dataset benchmarking
 ~~~~~~~~~~~~~~~~~~~~
 In order to fully utilise the potential of the IPU, the ``tf.data.Dataset`` used
