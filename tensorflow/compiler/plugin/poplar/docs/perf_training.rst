@@ -115,7 +115,7 @@ predictions for an inference model to achieve minimal latency for each sample.
 .. _replicated_graphs:
 
 
-You can also follow this :tutorials-repo:`tutorial on using outfeed queues to inspect tensors and return activation and gradient tensors <feature_examples/tensorflow/inspecting_tensors>` from the Graphcore tutorials repository.
+You can also follow this :tutorials-repo-tf1:`tutorial on using outfeed queues to inspect tensors and return activation and gradient tensors <feature_examples/tensorflow/inspecting_tensors>` from the Graphcore tutorials repository.
 
 Replicated graphs
 ~~~~~~~~~~~~~~~~~
@@ -126,7 +126,7 @@ See the `Poplar and PopLibs User Guide
 <https://docs.graphcore.ai/projects/poplar-user-guide/>`_ for more background
 about replicated graphs.
 
-The Graphcore tutorials repository also has a :tutorials-repo:`tutorial on using replication in TensorFlow to train a simple model <feature_examples/tensorflow/replication>`.
+The Graphcore tutorials repository also has a :tutorials-repo-tf1:`tutorial on using replication in TensorFlow to train a simple model <feature_examples/tensorflow/replication>`.
 
 
 Selecting the number of replicas
@@ -387,7 +387,7 @@ gone through the whole model pipeline, where the number of mini-batches is the
   gradient accumulation optimizer should be used in combination with pipelining.
 
 You can also find a practical example of this in the Graphcore tutorials repository:
-:tutorials-repo:`Using pipelining for a simple model in TensorFlow <feature_examples/tensorflow/pipelining>`.
+:tutorials-repo-tf1:`Using pipelining for a simple model in TensorFlow <feature_examples/tensorflow/pipelining>`.
 
 Accumulation data type
 ______________________
@@ -503,4 +503,4 @@ You can write your model or modify an existing model to perform some or all comp
 using the native ``tf.float16`` data type. To find out more about using half or mixed precision
 data types for training models in TensorFlow, take a look at this tutorial from the Graphcore
 tutorials repository:
-:tutorials-repo:`TensorFlow 1 on the IPU: Training a model using half- and mixed-precision <tutorials/tensorflow1/half_precision_training>`.
+:tutorials-repo-tf1:`TensorFlow 1 on the IPU: Training a model using half- and mixed-precision <tutorials/tensorflow1/half_precision_training>`.

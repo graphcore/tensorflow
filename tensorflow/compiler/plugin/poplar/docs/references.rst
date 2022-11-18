@@ -14,6 +14,7 @@ _________
 - There are `Graphcore videos <https://www.graphcore.ai/resources/how-to-videos>`_ with explanations and demos of Graphcore software
 - The source code for `TensorFlow for the IPU <https://github.com/graphcore/tensorflow>`_ on GitHub
 
+
 TensorFlow
 __________
 

@@ -36,4 +36,6 @@ which already use it internally.
 PopDistStrategy examples
 ########################
 
-There are examples for `PopDistStrategy` in the Graphcore :tutorials-repo:`feature examples on GitHub <feature_examples/tensorflow/popdist>`.
+There are examples for `PopDistStrategy` in the Graphcore :tutorials-repo-tf1:`feature examples on GitHub <feature_examples/tensorflow/popdist>`.
+
+.. note:: From Poplar SDK 3.1, TensorFlow 1 will only be supported in CentOS 7. In addition, `Examples <https://github.com/graphcore/examples/tree/v3.0.0>`__ and `Tutorials <https://github.com/graphcore/tutorials/tree/sdk-release-3.0>`__ for TensorFlow 1 are only available up to version 3.0 of the SDK. There has been limited testing of the 3.0 versions of the TensorFlow 1 tutorials and examples with Poplar SDK 3.1.

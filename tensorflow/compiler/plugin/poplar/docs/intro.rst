@@ -5,13 +5,15 @@ The purpose of this document is to introduce the TensorFlow framework from the
 perspective of developing and training models for the IPU. It assumes you have
 some knowledge of machine learning and TensorFlow.
 
+For more information about the IPU architecture, abstract programming model and tools, as well as algorithmic techniques, refer to the :external+ipu-programmers-guide:doc:`index`. The :external+memory-performan-optimisation:doc:`index` contains guidelines for optimising performance in machine learning models running on the IPU.
+
 .. note:: This document is for TensorFlow 1. For information on TensorFlow 2
           please refer to `Targeting the IPU from TensorFlow 2
           <https://docs.graphcore.ai/projects/tensorflow-user-guide/>`_.
 
-See the "Getting Started" guide for your IPU system in the
+See the `Getting Started" guide for your IPU system <https://docs.graphcore.ai/en/latest/getting-started.html>`__ in the
 `Graphcore documentation <https://docs.graphcore.ai>`_
-for information on installing the Poplar SDK and TensorFlow.
+for information on installing the Poplar SDK and refer to the :external+tensorflow1-quick-start:doc:`index` for installing TensorFlow 1 and running a simple application.
 
 TensorFlow is a powerful graph-modelling framework that can be used for the
 development, training and deployment of deep learning models. In the Graphcore
