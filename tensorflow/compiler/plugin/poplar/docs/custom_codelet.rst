@@ -391,7 +391,7 @@ files. Only the Poplar and PopLibs headers, and the corresponding libraries are
 required.
 
 You can add ``-g`` to the above command to compile the custom operation with
-debugging symbols. This allows you to debug the C++ code with ``gdb``. 
+debugging symbols. This allows you to debug the C++ code with ``gdb``.
 
 
 Using the custom op in TensorFlow
@@ -461,9 +461,14 @@ Some examples of using a custom op in TensorFlow are shown in the following
 sections. There are further examples in the Graphcore GitHub tutorials
 repository:
 
-* :tutorials-repo:`Custom op with gradient <feature_examples/tensorflow/custom_gradient>`
+* :tutorials-repo-tf1:`Custom op with gradient <feature_examples/tensorflow/custom_gradient>`
 
-* :tutorials-repo:`Custom op with codelet for custom vertex code <feature_examples/tensorflow/custom_op>`
+* :tutorials-repo-tf1:`Custom op with codelet for custom vertex code <feature_examples/tensorflow/custom_op>`
+
+.. note:: These examples are for TensorFlow 1.
+
+  From Poplar SDK 3.1, TensorFlow 1 will only be supported in CentOS 7. In addition, `Examples <https://github.com/graphcore/examples/tree/v3.0.0>`__ and `Tutorials <https://github.com/graphcore/tutorials/tree/sdk-release-3.0>`__ for TensorFlow 1 are only available up to version 3.0 of the SDK. There has been limited testing of the 3.0 versions of the TensorFlow 1 tutorials and examples with Poplar SDK 3.1.
+
 
 
 .. _inplace_operations:

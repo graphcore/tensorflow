@@ -17,8 +17,12 @@ for the op that can perform this padding, in addition to normalising and casting
 performed on-device, after the data has been transferred to the IPU.
 
 An example of its use can be found in the ``fused_normalise_image()`` function in the `CNN training application
-example <https://github.com/graphcore/examples/blob/master/vision/cnns/tensorflow1/training/Datasets/imagenet_preprocessing.py>`_
+example <https://github.com/graphcore/examples/blob/v3.0.0/vision/cnns/tensorflow1/training/Datasets/imagenet_preprocessing.py>`_
 in Graphcore's examples repository on GitHub.
+
+.. note:: This example is for TensorFlow 1.
+    From Poplar SDK 3.1, TensorFlow 1 will only be supported in CentOS 7. In addition, `Examples <https://github.com/graphcore/examples/tree/v3.0.0>`__ and `Tutorials <https://github.com/graphcore/tutorials/tree/sdk-release-3.0>`__ for TensorFlow 1 are only available up to version 3.0 of the SDK. There has been limited testing of the 3.0 versions of the TensorFlow 1 tutorials and examples with Poplar SDK 3.1.
+
 
 Matmul serialisation
 ~~~~~~~~~~~~~~~~~~~~
@@ -28,8 +32,12 @@ the code size of the multiplication and the temporary memory requirements of the
 
 See :py:func:`tensorflow.python.ipu.math_ops.serialized_matmul` for details of the op.
 
-An example of its use can be found in the ``mlm_head()`` function in the `BERT application example <https://github.com/graphcore/examples/blob/master/nlp/bert/tensorflow1/modeling.py>`_
+An example of its use can be found in the ``mlm_head()`` function in the `BERT application example <https://github.com/graphcore/examples/blob/v3.0.0/nlp/bert/tensorflow1/modeling.py>`_
 in Graphcore's examples repository on GitHub.
+
+.. note:: This example is for TensorFlow 1.
+    From Poplar SDK 3.1, TensorFlow 1 will only be supported in CentOS 7. In addition, `Examples <https://github.com/graphcore/examples/tree/v3.0.0>`__ and `Tutorials <https://github.com/graphcore/tutorials/tree/sdk-release-3.0>`__ for TensorFlow 1 are only available up to version 3.0 of the SDK. There has been limited testing of the 3.0 versions of the TensorFlow 1 tutorials and examples with Poplar SDK 3.1.
+
 
 Dropout
 ~~~~~~~
