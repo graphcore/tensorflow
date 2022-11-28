@@ -26,6 +26,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops.math_ops import cast
 from tensorflow.python.ops.nn_ops import _get_sequence
 import tensorflow as tf
+import numpy as np
 
 
 class Format(IntEnum):
@@ -60,19 +61,18 @@ class QuarterTensor:
       metadata: The metadata for this quarter tensor, should be the output
         of a call to `create_metadata`.
     """
-    self.data = self.maybe_get_tf_variable(data)
+    self.data = self._maybe_get_tf_variable(data)
     self.metadata = metadata
 
-  def maybe_get_tf_variable(self, data):
-    result = data
-    if not isinstance(data, tf.Variable) and not isinstance(data, tf.Tensor):
-      result = tf.Variable(data)
-    if result.dtype != "uint8":
+  def _maybe_get_tf_variable(self, data):
+    if isinstance(data, np.ndarray):
+      data = tf.Variable(data)
+    if data.dtype != "uint8":
       raise TypeError(
           "Trying to set/update QuarterTensor data with a tensor of type "
-          f"{result.dtype}, but only uint8 are supported. Check that data "
+          f"{data.dtype}, but only uint8 are supported. Check that data "
           "is a value returned by `convert_to_f8`")
-    return result
+    return data
 
   def numpy(self):
     """Returns a numpy representation of the tensor
@@ -86,7 +86,7 @@ class QuarterTensor:
       new_values: An array of format [data, metadata] that
         should be the output of `QuarterTensor.numpy`.
     """
-    self.data = self.maybe_get_tf_variable(new_values[0])
+    self.data = self._maybe_get_tf_variable(new_values[0])
     self.metadata = new_values[1]
 
   def __eq__(self, other):
@@ -127,7 +127,8 @@ def convert_to_f8(values, metadata, name=None):
   if not (values.dtype is dtypes.float16):
     values = cast(values, dtypes.float16)
 
-  metadata = ops.convert_to_tensor(metadata, dtype=dtypes.uint8)
+  if isinstance(metadata, np.ndarray) or isinstance(metadata, int):
+    metadata = ops.convert_to_tensor(metadata, dtype=dtypes.uint8)
   v, m = gen_popops_ops.ipu_convert_to_f8(values, metadata, name=name)
   return QuarterTensor(v, m)
 
@@ -146,7 +147,8 @@ def convert_from_f8(packed_input, dtype=dtypes.half, name=None):
     Tensor with type dtype with unpacked f8 values.
   """
   values, metadata = packed_input
-  metadata = ops.convert_to_tensor(metadata, dtype=dtypes.uint8)
+  if isinstance(metadata, np.ndarray) or isinstance(metadata, int):
+    metadata = ops.convert_to_tensor(metadata, dtype=dtypes.uint8)
   values = gen_popops_ops.ipu_convert_from_f8(values, metadata, name=name)
   if values.dtype != dtype:
     values = cast(values, dtype=dtype)
