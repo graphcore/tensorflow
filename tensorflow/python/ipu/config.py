@@ -27,6 +27,7 @@ import json
 import os
 import pydoc
 import typing
+import sys
 
 from tensorflow.python.eager.context import executing_eagerly
 from tensorflow.compiler.plugin.poplar.driver import config_pb2
@@ -37,6 +38,16 @@ from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
 from tensorflow.python.platform import tf_logging as logging
+
+if sys.version_info >= (3, 9):
+  # Python 3.9 makes breaking changes to ast.Subscript.
+  def _get_subscript_slice(subscript_node):
+    return subscript_node.slice
+else:
+
+  def _get_subscript_slice(subscript_node):
+    assert isinstance(subscript_node.slice, ast.Index)
+    return subscript_node.slice.value
 
 
 def _annotation_to_str(node):
@@ -134,11 +145,11 @@ def _get_type_check_fn_from_AST_type_hints(node, f_globals):
     if isinstance(node, ast.Subscript):
       lhs = node.value
       if is_typing_module_attr(lhs):
+        slice_value = _get_subscript_slice(node)
         # e.g. Union[int, str], check v for all union types
         if lhs.attr == "Union":
-          assert isinstance(node.slice, ast.Index)
-          assert isinstance(node.slice.value, ast.Tuple)
-          types = [helper(n) for n in node.slice.value.elts]
+          assert isinstance(slice_value, ast.Tuple)
+          types = [helper(n) for n in slice_value.elts]
           type_tys = [ty for _, ty in types]
           if int in type_tys and any([issubclass(Enum, ty)
                                       for ty in type_tys]):
@@ -150,31 +161,29 @@ def _get_type_check_fn_from_AST_type_hints(node, f_globals):
         if lhs.attr == "Tuple":
           check_tuple = lambda v: isinstance(v, tuple)
           # single element Tuple: check the single element in v for type
-          if isinstance(node.slice.value, ast.Name):
-            type_fn, _ = helper(node.slice.value)
+          if isinstance(slice_value, ast.Name):
+            type_fn, _ = helper(slice_value)
             return lambda v: check_tuple(v) and len(v) == 1 and type_fn(v[
                 0]), tuple
           # more than one element Tuple
-          if isinstance(node.slice.value, ast.Tuple):
+          if isinstance(slice_value, ast.Tuple):
             # e.g. Tuple[int, ...], check each element in v for the same type
-            if len(node.slice.value.elts) > 1 and isinstance(
-                node.slice.value.elts[1], ast.Ellipsis):
-              type_fn, _ = helper(node.slice.value.elts[0])
+            if len(slice_value.elts) > 1 and isinstance(
+                slice_value.elts[1], ast.Ellipsis):
+              type_fn, _ = helper(slice_value.elts[0])
               return lambda v: check_tuple(v) and all([type_fn(e)
                                                        for e in v]), tuple
             # e.g. Tuple[int, str], pair-wise (element, type) check
-            type_fns = [
-                fn for fn, _ in [helper(n) for n in node.slice.value.elts]
-            ]
+            type_fns = [fn for fn, _ in [helper(n) for n in slice_value.elts]]
             return lambda v: check_tuple(v) and len(v) == len(
                 type_fns) and all([fn(e) for fn, e in zip(type_fns, v)]), tuple
         # e.g. List[int], check each element in v for the same type
         if lhs.attr == "List":
           assert not isinstance(
-              node.slice.value,
+              slice_value,
               ast.Tuple), "List with more than one type not allowed."
           check_list = lambda v: isinstance(v, list)
-          type_fn, _ = helper(node.slice.value)
+          type_fn, _ = helper(slice_value)
           return lambda v: check_list(v) and all([type_fn(e) for e in v]), list
         raise Exception(f"Unsupported 'typing' attribute {lhs.attr}")
       raise Exception(
