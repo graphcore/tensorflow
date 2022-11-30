@@ -120,10 +120,9 @@ class IpuConvertToF8Op : public XlaOpKernel, public IpuOpKernel {
     xla::Shape output_shape = xla::ShapeUtil::MakeTupleShape(
         {output_data_shape, output_metadata_shape});
 
-    auto packed_input = xla::Tuple(b, {input_data, input_metadata});
-    auto output_tuple =
-        xla::CustomCall(b, PoplarOp_Name(PoplarOp::ConvertToF8), {packed_input},
-                        {output_shape}, attribute_map_.Serialise());
+    auto output_tuple = xla::CustomCall(
+        b, PoplarOp_Name(PoplarOp::ConvertToF8), {input_data, input_metadata},
+        output_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, xla::GetTupleElement(output_tuple, 0));
     ctx->SetOutput(1, xla::GetTupleElement(output_tuple, 1));
@@ -155,10 +154,9 @@ class IpuConvertFromF8Op : public XlaOpKernel, public IpuOpKernel {
     xla::Shape output_shape;
     OP_REQUIRES_OK(
         ctx, TensorShapeToXLAShape(DT_HALF, ctx->InputShape(0), &output_shape));
-    xla::XlaOp input = xla::Tuple(b, {input_data, input_metadata});
-    auto output =
-        xla::CustomCall(b, PoplarOp_Name(PoplarOp::ConvertFromF8), {input},
-                        {output_shape}, attribute_map_.Serialise());
+    auto output = xla::CustomCall(b, PoplarOp_Name(PoplarOp::ConvertFromF8),
+                                  {input_data, input_metadata}, output_shape,
+                                  attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }

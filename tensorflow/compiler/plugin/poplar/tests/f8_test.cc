@@ -35,8 +35,12 @@ TEST_F(Fp8Test, TestConvert) {
 
   ENTRY main {
     input = (f16[2,2], u8[]) parameter(0)
-    input.fp8 = (u8[2,2], u8[]) custom-call(input), custom_call_target="ConvertToF8"
-    input.fp = f16[2,2] custom-call(input.fp8), custom_call_target="ConvertFromF8"
+    input.1 = f16[2,2] get-tuple-element(input), index=0
+    input.2 = u8[] get-tuple-element(input), index=1
+    input.fp8 = (u8[2,2], u8[]) custom-call(input.1, input.2), custom_call_target="ConvertToF8"
+    input.fp8.1 = u8[2,2] get-tuple-element(input.fp8), index=0
+    input.fp8.2 = u8[] get-tuple-element(input.fp8), index=1
+    input.fp = f16[2,2] custom-call(input.fp8.1, input.fp8.2), custom_call_target="ConvertFromF8"
     ROOT root = ((f16[2,2], u8[]), (u8[2,2], u8[]), f16[2,2]) tuple(input, input.fp8, input.fp)
   }
   )";

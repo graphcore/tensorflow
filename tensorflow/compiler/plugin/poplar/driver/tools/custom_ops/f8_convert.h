@@ -31,8 +31,9 @@ namespace poplarplugin {
 template <PoplarOp Op>
 class HloF8ConvertInstruction : public HloPoplarInstruction {
  public:
-  HloF8ConvertInstruction(const Shape& shape, HloInstruction* operand)
-      : HloPoplarInstruction(shape, {operand}, Op) {}
+  HloF8ConvertInstruction(const Shape& shape,
+                          absl::Span<HloInstruction* const> operands)
+      : HloPoplarInstruction(shape, operands, Op) {}
 
   absl::flat_hash_set<int64_t> AllocatingIndices() const override { return {}; }
   bool AllocatingOutput() const override { return false; }
@@ -67,13 +68,10 @@ class HloF8ConvertInstruction : public HloPoplarInstruction {
 class HloConvertFromF8Instruction
     : public HloF8ConvertInstruction<PoplarOp::ConvertFromF8> {
  public:
-  HloConvertFromF8Instruction(const Shape& shape, HloInstruction* operand);
-  explicit HloConvertFromF8Instruction(HloInstruction* operand)
-      : HloConvertFromF8Instruction(GetShape(operand), operand) {}
+  HloConvertFromF8Instruction(const Shape& shape, HloInstruction* data,
+                              HloInstruction* metadata);
 
  private:
-  Shape GetShape(const HloInstruction* operand);
-
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
@@ -84,13 +82,10 @@ std::unique_ptr<HloInstruction> CreateConvertToF8Instruction(
 class HloConvertToF8Instruction
     : public HloF8ConvertInstruction<PoplarOp::ConvertToF8> {
  public:
-  HloConvertToF8Instruction(const Shape& shape, HloInstruction* operand);
-  explicit HloConvertToF8Instruction(HloInstruction* operand)
-      : HloConvertToF8Instruction(GetShape(operand), operand) {}
+  HloConvertToF8Instruction(const Shape& shape, HloInstruction* data,
+                            HloInstruction* metadata);
 
  private:
-  Shape GetShape(const HloInstruction* operand);
-
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;

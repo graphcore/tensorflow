@@ -1419,38 +1419,33 @@ StatusOr<DriverTensor> FindF8InstructionInput(
     const poplar::DebugNameAndId& debug_name_and_id, bool expand_aliasing) {
   const HloInstruction* operand = inst->operand(input);
 
-  TensorOrRemoteBufferVector inputs = GetTensorsMaybeExpand(
-      map, res, operand, seq, expand_aliasing, debug_name_and_id, 0, 2);
+  TF_ASSIGN_OR_RETURN(
+      auto u8_data,
+      FindInstructionInput(map, res, inst, 0, seq, debug_name_and_id,
+                           /*expand_aliasing=*/true));
+  // return u8_data;
+  TF_ASSIGN_OR_RETURN(
+      auto u8_metadata,
+      FindInstructionInput(map, res, inst, 1, seq, debug_name_and_id,
+                           /*expand_aliasing=*/true));
 
-  if (inputs.size() == 0) {
-    return tensorflow::errors::Unknown(
-        StrCat("[Poplar] Couldn't find input ", input, " for ", inst->name()));
-  }
-
-  CHECK_EQ(inputs.size(), 2);
   auto& graph =
       GetGraphWithOutputIndex(res, operand, /*flattened_output_tuple_index=*/0);
-  CHECK(&graph == &GetGraphWithOutputIndex(res, operand,
-                                           /*flattened_output_tuple_index=*/1));
-  poplar::Graph& poplar_graph = graph;
-
   // We can't reinterpret to neither QUARTER_METADATA nor QUARTER type.
   // Instead, clone them and copy raw unsigned char data over.
   // Those copies will be elided by poplar.
 
-  DriverTensor u8_data = inputs[0].AsTensor();
-  DriverTensor u8_metadata = inputs[1].AsTensor();
-  auto f8_metadata = poplar_graph.clone(
+  auto f8_metadata = graph.clone(
       poplar::QUARTER_METADATA, u8_metadata.reshape({1}), debug_name_and_id,
       poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-  auto f8_data = poplar_graph.clone(
-      poplar::QUARTER, f8_metadata, u8_data, debug_name_and_id,
-      poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+  auto f8_data =
+      graph.clone(poplar::QUARTER, f8_metadata, u8_data, debug_name_and_id,
+                  poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
   seq.add(poplar::program::Copy(
       u8_metadata, f8_metadata.reinterpret(poplar::UNSIGNED_CHAR)));
   seq.add(poplar::program::Copy(u8_data,
                                 f8_data.reinterpret(poplar::UNSIGNED_CHAR)));
-  return DriverTensor(f8_data);
+  return f8_data;
 }
 
 TensorOrRemoteBufferVector FindInstructionInputs(

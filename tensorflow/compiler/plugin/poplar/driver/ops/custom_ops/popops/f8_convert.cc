@@ -35,11 +35,13 @@ class ConvertToF8Op : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     PoplarOpDefDebugInfo debug_info(debug_context, "Fp8Convert");
     DriverProgramSequence seq(debug_info);
-    auto inputs = FindInstructionInputs(tensor_map, res, inst, 0, seq,
-                                        debug_info, /*expand_aliasing=*/true);
-    CHECK_EQ(inputs.size(), 2);
-    DriverTensor input = inputs[0].AsTensor();
-    DriverTensor input_metadata = inputs[1].AsTensor();
+    TF_ASSIGN_OR_RETURN(
+        auto input, FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                         debug_info, /*expand_aliasing=*/true));
+    TF_ASSIGN_OR_RETURN(
+        auto input_metadata,
+        FindInstructionInput(tensor_map, res, inst, 1, seq, debug_info,
+                             /*expand_aliasing=*/true));
     // We can't reinterpret to neither QUARTER_METADATA nor QUARTER type.
     // Instead, clone them and copy raw unsigned char data over.
     // This copy will be elided by poplar.

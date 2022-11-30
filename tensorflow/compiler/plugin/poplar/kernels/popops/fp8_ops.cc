@@ -143,7 +143,7 @@ class PoplinF8ConvOp : public XlaOpKernel, IpuOpKernel {
 
     OP_REQUIRES(
         ctx, op_type != PoplarOp::Unknown,
-        xla::InvalidArgument("Unsupported F8 Convolution Dimension ", D));
+        xla::InvalidArgument("Unsupported F8 Convolution Dimension %d", D));
 
     auto call_output =
         xla::CustomCall(ctx->builder(), PoplarOp_Name(op_type), args, out_shape,
