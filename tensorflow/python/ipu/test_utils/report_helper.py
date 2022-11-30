@@ -303,23 +303,21 @@ class ReportJSON:
         if evt.type == IpuTraceEvent.COMPILE_END:
           if evt.compile_end.tensor_map:
             assert IpuTraceEvent.COMPILE_END not in self.events
-            self.tensor_map = TensorMap(
-                js.loads(evt.compile_end.tensor_map, encoding="utf-8"))
-            self.instruction_info = js.loads(evt.compile_end.instruction_info,
-                                             encoding="utf-8")
+            self.tensor_map = TensorMap(js.loads(evt.compile_end.tensor_map))
+            self.instruction_info = js.loads(evt.compile_end.instruction_info)
         if evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
           if evt.data_transfer.data_transfer:
             # Save every transfer event
             if IpuTraceEvent.HOST_TO_DEVICE_TRANSFER not in self.events:
               self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER] = []
-            data = js.loads(evt.data_transfer.data_transfer, encoding="utf-8")
+            data = js.loads(evt.data_transfer.data_transfer)
             self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER].append(data)
         if evt.type == IpuTraceEvent.DEVICE_TO_HOST_TRANSFER:
           if evt.data_transfer.data_transfer:
             # Save every transfer event
             if IpuTraceEvent.DEVICE_TO_HOST_TRANSFER not in self.events:
               self.events[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER] = []
-            data = js.loads(evt.data_transfer.data_transfer, encoding="utf-8")
+            data = js.loads(evt.data_transfer.data_transfer)
             self.events[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER].append(data)
         if evt.type == IpuTraceEvent.LOAD_ENGINE:
           pass
