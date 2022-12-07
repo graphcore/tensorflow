@@ -79,6 +79,14 @@ bool OpFilter(KernelDef* kdef) {
     AddDtypeToKernelDefConstraint("U", DT_UINT8, kdef);
   }
 
+  if (kdef->op() == "While") {
+    AddDtypeToKernelDefConstraint("T", DT_UINT8, kdef);
+  }
+
+  if (kdef->op() == "ReadVariableOp") {
+    AddDtypeToKernelDefConstraint("dtype", DT_UINT8, kdef);
+  }
+
   if (kdef->op() == "Const") {
     AddDtypeToKernelDefConstraint("dtype", DT_STRING, kdef);
     AddDtypeToKernelDefConstraint("dtype", DT_UINT8, kdef);

@@ -62,11 +62,11 @@ class QuarterTensor:
         of a call to `create_metadata`.
     """
     self.data = self._maybe_get_tf_variable(data)
-    self.metadata = metadata
+    self.metadata = self._maybe_get_tf_variable(metadata)
 
   def _maybe_get_tf_variable(self, data):
-    if isinstance(data, np.ndarray):
-      data = tf.Variable(data)
+    if isinstance(data, np.ndarray) or isinstance(data, int):
+      data = ops.convert_to_tensor(data, dtype=dtypes.uint8)
     if data.dtype != "uint8":
       raise TypeError(
           "Trying to set/update QuarterTensor data with a tensor of type "
@@ -77,7 +77,7 @@ class QuarterTensor:
   def numpy(self):
     """Returns a numpy representation of the tensor
     """
-    return [self.data.numpy(), self.metadata]
+    return [self.data.numpy(), self.metadata.numpy()]
 
   def assign(self, new_values, **kwargs):
     """Assigns new values to the tensor
@@ -87,7 +87,10 @@ class QuarterTensor:
         should be the output of `QuarterTensor.numpy`.
     """
     self.data = self._maybe_get_tf_variable(new_values[0])
-    self.metadata = new_values[1]
+    self.metadata = self._maybe_get_tf_variable(new_values[1])
+
+  def __repr__(self):
+    return f"QuarterTensor(data={self.data}, metadata={self.metadata})"
 
   def __eq__(self, other):
     return self.numpy() == other.numpy()
@@ -127,8 +130,7 @@ def convert_to_f8(values, metadata, name=None):
   if not (values.dtype is dtypes.float16):
     values = cast(values, dtypes.float16)
 
-  if isinstance(metadata, np.ndarray) or isinstance(metadata, int):
-    metadata = ops.convert_to_tensor(metadata, dtype=dtypes.uint8)
+  metadata = ops.convert_to_tensor(metadata, dtype=dtypes.uint8)
   v, m = gen_popops_ops.ipu_convert_to_f8(values, metadata, name=name)
   return QuarterTensor(v, m)
 
@@ -147,8 +149,8 @@ def convert_from_f8(packed_input, dtype=dtypes.half, name=None):
     Tensor with type dtype with unpacked f8 values.
   """
   values, metadata = packed_input
-  if isinstance(metadata, np.ndarray) or isinstance(metadata, int):
-    metadata = ops.convert_to_tensor(metadata, dtype=dtypes.uint8)
+
+  metadata = ops.convert_to_tensor(metadata, dtype=dtypes.uint8)
   values = gen_popops_ops.ipu_convert_from_f8(values, metadata, name=name)
   if values.dtype != dtype:
     values = cast(values, dtype=dtype)
