@@ -28,6 +28,7 @@ py_library(
         "ops/cross_replica_ops.py",
         "ops/embedded_runtime.py",
         "ops/embedding_ops.py",
+        "ops/f8_ops.py",
         "ops/functional_ops.py",
         "ops/grad_util_ops.py",
         "ops/image_ops.py",

@@ -212,6 +212,11 @@ It is also possible to access the operators via the
   :imported-members:
   :exclude-members: mul, reduce
 
+.. automodule:: tensorflow.python.ipu.f8_ops
+  :members:
+  :imported-members:
+  :exclude-members: canonicalise_input, canonicalise_output
+
 .. automodule:: tensorflow.python.ipu.reduce_scatter_op
   :members:
   :imported-members:
