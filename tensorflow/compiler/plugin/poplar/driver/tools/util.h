@@ -173,6 +173,7 @@ bool IsPipelineStageBackward(const HloInstruction*);
 bool IsPipelineStageRecomputation(const HloInstruction*);
 bool IsResourceUpdate(const HloInstruction*);
 bool IsFunction(const HloInstruction*);
+bool IsCall(const HloInstruction*);
 bool IsMultiConv(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
 bool IsBatchSerializedPipelineOp(const HloInstruction*);

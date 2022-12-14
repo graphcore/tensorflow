@@ -666,7 +666,7 @@ StatusOr<DriverProgramSequence> CreateFunctionOp(
   HloComputation* comp = inst->to_apply();
 
   bool keep_input_layouts = false;
-  if (IsFunction(inst)) {
+  if (IsFunction(inst) || IsCall(inst)) {
     keep_input_layouts = GetFunctionKeepInputLayouts(inst);
   }
 

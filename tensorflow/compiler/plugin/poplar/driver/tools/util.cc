@@ -457,6 +457,10 @@ bool IsFunction(const HloInstruction* inst) {
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Function);
 }
 
+bool IsCall(const HloInstruction* inst) {
+  return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Call);
+}
+
 bool IsMultiConv(const HloInstruction* inst) {
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::MultiConv);
 }
