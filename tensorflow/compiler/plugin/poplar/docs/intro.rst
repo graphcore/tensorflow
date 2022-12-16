@@ -5,7 +5,7 @@ The purpose of this document is to introduce the TensorFlow framework from the
 perspective of developing and training models for the IPU. It assumes you have
 some knowledge of machine learning and TensorFlow.
 
-For more information about the IPU architecture, abstract programming model and tools, as well as algorithmic techniques, refer to the :external+ipu-programmers-guide:doc:`index`. The :external+memory-performan-optimisation:doc:`index` contains guidelines for optimising performance in machine learning models running on the IPU.
+For more information about the IPU architecture, abstract programming model and tools, as well as algorithmic techniques, refer to the :external+ipu-programmers-guide:doc:`index`. The :external+memory-performance-optimisation:doc:`index` contains guidelines for optimising performance in machine learning models running on the IPU.
 
 .. note:: This document is for TensorFlow 1. For information on TensorFlow 2
           please refer to `Targeting the IPU from TensorFlow 2
