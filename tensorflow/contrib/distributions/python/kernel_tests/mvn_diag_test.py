@@ -273,7 +273,7 @@ class MultivariateNormalDiagTest(test.TestCase):
           loc=loc, scale_diag=np.ones([dims], dtype=np.float32))
       g = gradients_impl.gradients(ds.kl_divergence(mvn, mvn), loc)
       g_ = sess.run(g)
-      self.assertAllEqual(np.ones_like(g_, dtype=np.bool), np.isfinite(g_))
+      self.assertAllEqual(np.ones_like(g_, dtype=np.bool_), np.isfinite(g_))
 
 
 if __name__ == "__main__":

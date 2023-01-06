@@ -1690,7 +1690,7 @@ class DecodeJSONExampleTest(test.TestCase):
 
   def _testRoundTrip(self, examples):
     with self.cached_session() as sess:
-      examples = np.array(examples, dtype=np.object)
+      examples = np.array(examples, dtype=np.object_)
 
       json_tensor = constant_op.constant(
           [json_format.MessageToJson(m) for m in examples.flatten()],

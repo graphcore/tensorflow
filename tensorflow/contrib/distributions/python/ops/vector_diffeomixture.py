@@ -1058,7 +1058,7 @@ def softmax(x, axis, name=None):
     axis = ops.convert_to_tensor(axis, dtype=dtypes.int32, name="axis")
     axis_ = tensor_util.constant_value(axis)
     if axis_ is not None:
-      axis = np.int(ndims + axis_ if axis_ < 0 else axis_)
+      axis = np.int_(ndims + axis_ if axis_ < 0 else axis_)
     else:
       axis = array_ops.where_v2(axis < 0, ndims + axis, axis)
   return nn_ops.softmax(x, axis=axis)

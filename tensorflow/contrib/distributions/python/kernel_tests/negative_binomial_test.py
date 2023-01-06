@@ -229,7 +229,7 @@ class NegativeBinomialTest(test.TestCase):
       sample_min = math_ops.reduce_min(samples)
       [sample_mean_, sample_var_, sample_min_] = sess.run([
           sample_mean, sample_var, sample_min])
-      self.assertAllEqual(np.ones(sample_min_.shape, dtype=np.bool),
+      self.assertAllEqual(np.ones(sample_min_.shape, dtype=np.bool_),
                           sample_min_ >= 0.0)
       for i in range(2):
         self.assertAllClose(sample_mean_[i],
@@ -249,7 +249,7 @@ class NegativeBinomialTest(test.TestCase):
       nb = negative_binomial.NegativeBinomial(
           total_count=total_count, logits=logits)
       log_prob_ = sess.run(nb.log_prob(x))
-      self.assertAllEqual(np.ones_like(log_prob_, dtype=np.bool),
+      self.assertAllEqual(np.ones_like(log_prob_, dtype=np.bool_),
                           np.isfinite(log_prob_))
 
   def testLogProbUnderflow(self):
@@ -260,7 +260,7 @@ class NegativeBinomialTest(test.TestCase):
       nb = negative_binomial.NegativeBinomial(
           total_count=total_count, logits=logits)
       log_prob_ = sess.run(nb.log_prob(x))
-      self.assertAllEqual(np.ones_like(log_prob_, dtype=np.bool),
+      self.assertAllEqual(np.ones_like(log_prob_, dtype=np.bool_),
                           np.isfinite(log_prob_))
 
 

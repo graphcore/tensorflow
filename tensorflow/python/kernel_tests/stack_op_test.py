@@ -47,7 +47,7 @@ class StackOpTest(test.TestCase):
     np.random.seed(7)
     with self.session(use_gpu=True):
       for shape in (2,), (3,), (2, 3), (3, 2), (4, 3, 2):
-        for dtype in [np.bool, np.float32, np.int32, np.int64]:
+        for dtype in [np.bool_, np.float32, np.int32, np.int64]:
           data = np.random.randn(*shape).astype(dtype)
           # Convert [data[0], data[1], ...] separately to tensorflow
           # TODO(irving): Remove list() once we handle maps correctly
@@ -81,7 +81,7 @@ class StackOpTest(test.TestCase):
     np.random.seed(7)
     with self.session(use_gpu=True):
       for shape in (2,), (3,), (2, 3), (3, 2), (4, 3, 2):
-        for dtype in [np.bool, np.float32, np.int16, np.int32, np.int64]:
+        for dtype in [np.bool_, np.float32, np.int16, np.int32, np.int64]:
           data = np.random.randn(*shape).astype(dtype)
           # Stack back into a single tensorflow tensor directly using np array
           c = array_ops.stack(data)

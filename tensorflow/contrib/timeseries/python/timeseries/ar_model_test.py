@@ -52,12 +52,12 @@ class ARModelTest(test.TestCase):
     self.period = 25
     num_samples = 200
     time = 1 + 3 * np.arange(num_samples).astype(np.int64)
-    time_offset = (2 * np.pi * (time % self.period).astype(np.float) /
+    time_offset = (2 * np.pi * (time % self.period).astype(np.float_) /
                    self.period).reshape([-1, 1])
     if multiple_periods:
       period2 = 55
       self.period = [self.period, period2]
-      time_offset2 = ((time % period2).astype(np.float) / period2).reshape(
+      time_offset2 = ((time % period2).astype(np.float_) / period2).reshape(
           [-1, 1])
       data1 = np.sin(time_offset / 2.0) ** 2 * (1 + time_offset2)
     else:

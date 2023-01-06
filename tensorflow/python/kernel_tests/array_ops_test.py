@@ -398,7 +398,7 @@ class ReverseV2Test(test_util.TensorFlowTestCase):
   @test_util.run_deprecated_v1
   def testReverse1DimAuto(self):
     for dtype in [
-        np.uint8, np.int8, np.uint16, np.int16, np.int32, np.int64, np.bool,
+        np.uint8, np.int8, np.uint16, np.int16, np.int32, np.int64, np.bool_,
         np.float16, np.float32, np.float64, np.complex64, np.complex128,
         np.array(b"").dtype.type
     ]:
@@ -407,7 +407,7 @@ class ReverseV2Test(test_util.TensorFlowTestCase):
   @test_util.run_deprecated_v1
   def testReverse2DimAuto(self):
     for dtype in [
-        np.uint8, np.int8, np.uint16, np.int16, np.int32, np.int64, np.bool,
+        np.uint8, np.int8, np.uint16, np.int16, np.int32, np.int64, np.bool_,
         np.float16, np.float32, np.float64, np.complex64, np.complex128,
         np.array(b"").dtype.type
     ]:
@@ -521,7 +521,7 @@ class StridedSliceChecker(object):
   def __init__(self, test, x, tensor_type=dtypes.int32, check_type_infer=True):
     self.x_np = np.array(x).astype(tensor_type.as_numpy_dtype)
     if tensor_type.is_bool:
-      self.x_np = np.array(x % 3).astype(np.bool)
+      self.x_np = np.array(x % 3).astype(np.bool_)
     # Give the value a non-zero imaginary component for complex types.
     if tensor_type.is_complex:
       self.x_np -= 1j * self.x_np

@@ -208,7 +208,7 @@ class LargeGraphAndLargeTensorsDebugTest(test_util.TensorFlowTestCase):
 
       u_init_value = self.debug_server.debug_tensor_values[
           "u_init:0:DebugIdentity"][0]
-      self.assertEqual(np.object, u_init_value.dtype)
+      self.assertEqual(np.object_, u_init_value.dtype)
       self.assertEqual(0, len(u_init_value))
 
 

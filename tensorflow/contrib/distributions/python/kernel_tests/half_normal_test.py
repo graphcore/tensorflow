@@ -53,7 +53,7 @@ class HalfNormalTest(test.TestCase):
 
   def assertAllFinite(self, tensor):
     is_finite = np.isfinite(tensor.eval())
-    all_true = np.ones_like(is_finite, dtype=np.bool)
+    all_true = np.ones_like(is_finite, dtype=np.bool_)
     self.assertAllEqual(all_true, is_finite)
 
   def _testParamShapes(self, sample_shape, expected):

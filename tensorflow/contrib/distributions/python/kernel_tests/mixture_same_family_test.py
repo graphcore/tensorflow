@@ -69,7 +69,7 @@ class MixtureSameFamilyTest(test_util.VectorDistributionTestHelpers,
       self.assertEqual([4, 5, 2], x.shape)
       self.assertEqual([4, 5, 2], log_prob_x.shape)
       self.assertAllEqual(
-          np.ones_like(x_, dtype=np.bool), np.logical_or(x_ == 0., x_ == 1.))
+          np.ones_like(x_, dtype=np.bool_), np.logical_or(x_ == 0., x_ == 1.))
 
   def testSampleAndLogProbMultivariateShapes(self):
     with self.cached_session():

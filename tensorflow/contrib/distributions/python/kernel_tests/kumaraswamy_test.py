@@ -358,8 +358,8 @@ class KumaraswamyTest(test.TestCase):
         b = 10. * np.random.random(shape).astype(dt)
         x = np.random.random(shape).astype(dt)
         actual = kumaraswamy_lib.Kumaraswamy(a, b).cdf(x).eval()
-        self.assertAllEqual(np.ones(shape, dtype=np.bool), 0. <= x)
-        self.assertAllEqual(np.ones(shape, dtype=np.bool), 1. >= x)
+        self.assertAllEqual(np.ones(shape, dtype=np.bool_), 0. <= x)
+        self.assertAllEqual(np.ones(shape, dtype=np.bool_), 1. >= x)
         if not stats:
           return
         self.assertAllClose(
@@ -374,8 +374,8 @@ class KumaraswamyTest(test.TestCase):
         x = np.random.random(shape).astype(dt)
         actual = math_ops.exp(kumaraswamy_lib.Kumaraswamy(a,
                                                           b).log_cdf(x)).eval()
-        self.assertAllEqual(np.ones(shape, dtype=np.bool), 0. <= x)
-        self.assertAllEqual(np.ones(shape, dtype=np.bool), 1. >= x)
+        self.assertAllEqual(np.ones(shape, dtype=np.bool_), 0. <= x)
+        self.assertAllEqual(np.ones(shape, dtype=np.bool_), 1. >= x)
         if not stats:
           return
         self.assertAllClose(

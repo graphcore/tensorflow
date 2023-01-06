@@ -50,7 +50,7 @@ class StatisticalTestingTest(test.TestCase):
         detectable_discrepancies_, false_pass_rates, false_fail_rates):
       below_threshold = discrepancies <= thresholds
       self.assertAllEqual(
-          np.ones_like(below_threshold, np.bool), below_threshold,
+          np.ones_like(below_threshold, np.bool_), below_threshold,
           msg='false_pass_rate({}), false_fail_rate({})'.format(
               false_pass_rate, false_fail_rate))
 
@@ -88,7 +88,7 @@ class StatisticalTestingTest(test.TestCase):
         detectable_discrepancies_, false_pass_rates, false_fail_rates):
       below_threshold = discrepancies <= thresholds
       self.assertAllEqual(
-          np.ones_like(below_threshold, np.bool), below_threshold,
+          np.ones_like(below_threshold, np.bool_), below_threshold,
           msg='false_pass_rate({}), false_fail_rate({})'.format(
               false_pass_rate, false_fail_rate))
 

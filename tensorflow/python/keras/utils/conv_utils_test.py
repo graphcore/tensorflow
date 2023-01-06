@@ -169,7 +169,7 @@ class TestConvUtils(test.TestCase, parameterized.TestCase):
     ndims = len(input_shape)
     strides = (1,) * ndims
     output_shape = _get_const_output_shape(input_shape, dim=1)
-    mask = np.ones(input_shape + output_shape, np.bool)
+    mask = np.ones(input_shape + output_shape, np.bool_)
     self.assertAllEqual(
         mask,
         conv_utils.conv_kernel_mask(
@@ -186,7 +186,7 @@ class TestConvUtils(test.TestCase, parameterized.TestCase):
     strides = (1,) * ndims
 
     for padding in ['valid', 'same']:
-      mask = np.identity(int(np.prod(input_shape)), np.bool)
+      mask = np.identity(int(np.prod(input_shape)), np.bool_)
       mask = np.reshape(mask, input_shape * 2)
       self.assertAllEqual(
           mask,
@@ -205,7 +205,7 @@ class TestConvUtils(test.TestCase, parameterized.TestCase):
     strides = tuple([max(d, 1) for d in input_shape])
     output_shape = _get_const_output_shape(input_shape, dim=1)
 
-    mask = np.zeros(input_shape + output_shape, np.bool)
+    mask = np.zeros(input_shape + output_shape, np.bool_)
     if all(d > 0 for d in mask.shape):
       mask[(0,) * len(output_shape)] = True
 
@@ -226,7 +226,7 @@ class TestConvUtils(test.TestCase, parameterized.TestCase):
     strides = tuple([max(d - 1, 1) for d in input_shape])
     output_shape = _get_const_output_shape(input_shape, dim=2)
 
-    mask = np.zeros(input_shape + output_shape, np.bool)
+    mask = np.zeros(input_shape + output_shape, np.bool_)
     if all(d > 0 for d in mask.shape):
       for in_position in itertools.product(*[[0, d - 1] for d in input_shape]):
         out_position = tuple([min(p, 1) for p in in_position])
@@ -254,7 +254,7 @@ class TestConvUtils(test.TestCase, parameterized.TestCase):
       output_shape = list(input_shape)
       output_shape[d] = min(1, input_shape[d])
 
-      mask = np.identity(int(np.prod(input_shape)), np.bool)
+      mask = np.identity(int(np.prod(input_shape)), np.bool_)
       mask = np.reshape(mask, input_shape * 2)
 
       for p in itertools.product(*[range(input_shape[dim])

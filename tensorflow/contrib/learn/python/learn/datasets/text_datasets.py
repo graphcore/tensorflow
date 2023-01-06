@@ -70,8 +70,8 @@ def load_dbpedia(size='small', test_with_fake_data=False):
     test_path = os.path.join(module_path, 'data', 'text_test.csv')
 
   train = base.load_csv_without_header(
-      train_path, target_dtype=np.int32, features_dtype=np.str, target_column=0)
+      train_path, target_dtype=np.int32, features_dtype=np.str_, target_column=0)
   test = base.load_csv_without_header(
-      test_path, target_dtype=np.int32, features_dtype=np.str, target_column=0)
+      test_path, target_dtype=np.int32, features_dtype=np.str_, target_column=0)
 
   return base.Datasets(train=train, validation=None, test=test)

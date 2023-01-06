@@ -149,7 +149,7 @@ class SegmentationTest(test_util.TensorFlowTestCase):
 
   def testRandom_scipy(self):
     np.random.seed(42)
-    images = np.random.randint(0, 2, size=(10, 100, 200)).astype(np.bool)
+    images = np.random.randint(0, 2, size=(10, 100, 200)).astype(np.bool_)
     expected = connected_components_reference_implementation(images)
     if expected is None:
       return

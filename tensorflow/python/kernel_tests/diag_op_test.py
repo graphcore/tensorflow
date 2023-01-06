@@ -373,7 +373,7 @@ class MatrixDiagTest(test.TestCase):
     self._testBatchVector(np.float64)
     self._testBatchVector(np.int32)
     self._testBatchVector(np.int64)
-    self._testBatchVector(np.bool)
+    self._testBatchVector(np.bool_)
 
   @test_util.run_deprecated_v1
   def testRectangularBatch(self):
@@ -606,7 +606,7 @@ class MatrixSetDiagTest(test.TestCase):
     self._testSquareBatch(np.float64)
     self._testSquareBatch(np.int32)
     self._testSquareBatch(np.int64)
-    self._testSquareBatch(np.bool)
+    self._testSquareBatch(np.bool_)
 
   @test_util.run_deprecated_v1
   def testRectangularBatch(self):
@@ -811,7 +811,7 @@ class MatrixDiagPartTest(test.TestCase):
     self._testSquareBatch(np.float64)
     self._testSquareBatch(np.int32)
     self._testSquareBatch(np.int64)
-    self._testSquareBatch(np.bool)
+    self._testSquareBatch(np.bool_)
 
   @test_util.run_deprecated_v1
   def testRectangularBatch(self):

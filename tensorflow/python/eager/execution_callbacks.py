@@ -171,7 +171,7 @@ def inf_nan_callback(op_type,
 
     numpy_dtype = output.dtype.as_numpy_dtype
     if (np.issubdtype(numpy_dtype, np.floating) or
-        np.issubdtype(numpy_dtype, np.complex) or
+        np.issubdtype(numpy_dtype, np.complex_) or
         np.issubdtype(numpy_dtype, np.integer)):
       try:
         check_numerics_op_attrs = (

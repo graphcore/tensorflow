@@ -102,7 +102,7 @@ class HashTableOpTest(test.TestCase):
   def testHashTableInitWithNumPyArrays(self):
     with self.cached_session():
       default_val = -1
-      keys = np.array(["brain", "salad", "surgery"], dtype=np.str)
+      keys = np.array(["brain", "salad", "surgery"], dtype=np.str_)
       values = np.array([0, 1, 2], dtype=np.int64)
       table = lookup.HashTable(
           lookup.KeyValueTensorInitializer(keys, values), default_val)

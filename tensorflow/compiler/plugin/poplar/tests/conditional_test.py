@@ -43,7 +43,7 @@ class ConditionalTest(xla_test.XLATestCase):
         return [output]
 
       with ops.device("cpu"):
-        pcond = array_ops.placeholder(np.bool, [], name="pred")
+        pcond = array_ops.placeholder(np.bool_, [], name="pred")
         pa = array_ops.placeholder(np.float32, [], name="a")
         pb = array_ops.placeholder(np.float32, [], name="b")
         pc = array_ops.placeholder(np.float32, [], name="c")
@@ -69,7 +69,7 @@ class ConditionalTest(xla_test.XLATestCase):
         return [output]
 
       with ops.device("cpu"):
-        pcond = array_ops.placeholder(np.bool, [], name="pred")
+        pcond = array_ops.placeholder(np.bool_, [], name="pred")
         pa = array_ops.placeholder(np.float32, [], name="a")
         pb = array_ops.placeholder(np.float32, [], name="b")
         pc = array_ops.placeholder(np.float32, [], name="c")
@@ -101,7 +101,7 @@ class ConditionalTest(xla_test.XLATestCase):
         return [o]
 
       with ops.device("cpu"):
-        pcond = array_ops.placeholder(np.bool, [], name="pred")
+        pcond = array_ops.placeholder(np.bool_, [], name="pred")
 
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_model, inputs=[pcond])
@@ -133,7 +133,7 @@ class ConditionalTest(xla_test.XLATestCase):
         return [o, va.read_value()]
 
       with ops.device("cpu"):
-        pcond = array_ops.placeholder(np.bool, [], name="pred")
+        pcond = array_ops.placeholder(np.bool_, [], name="pred")
 
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_model, inputs=[pcond])

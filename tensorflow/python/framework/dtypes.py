@@ -591,10 +591,10 @@ _TF_TO_NP = {
         np.int16,
     types_pb2.DT_INT8:
         np.int8,
-    # NOTE(touts): For strings we use np.object as it supports variable length
+    # NOTE(touts): For strings we use np.object_ as it supports variable length
     # strings.
     types_pb2.DT_STRING:
-        np.object,
+        np.object_,
     types_pb2.DT_COMPLEX64:
         np.complex64,
     types_pb2.DT_COMPLEX128:
@@ -602,7 +602,7 @@ _TF_TO_NP = {
     types_pb2.DT_INT64:
         np.int64,
     types_pb2.DT_BOOL:
-        np.bool,
+        np.bool_,
     types_pb2.DT_QINT8:
         _np_qint8,
     types_pb2.DT_QUINT8:
@@ -636,7 +636,7 @@ _TF_TO_NP = {
     types_pb2.DT_INT8_REF:
         np.int8,
     types_pb2.DT_STRING_REF:
-        np.object,
+        np.object_,
     types_pb2.DT_COMPLEX64_REF:
         np.complex64,
     types_pb2.DT_COMPLEX128_REF:
@@ -646,7 +646,7 @@ _TF_TO_NP = {
     types_pb2.DT_UINT64_REF:
         np.uint64,
     types_pb2.DT_BOOL_REF:
-        np.bool,
+        np.bool_,
     types_pb2.DT_QINT8_REF:
         _np_qint8,
     types_pb2.DT_QUINT8_REF:

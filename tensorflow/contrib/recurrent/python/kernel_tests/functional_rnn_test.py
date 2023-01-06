@@ -76,7 +76,7 @@ class FunctionalRnnTest(test_util.TensorFlowTestCase):
     sequence_length = np.random.randint(
         0, high=FunctionalRnnTest._TOTAL_TIME - 1,
         size=FunctionalRnnTest._BATCH_SIZE,
-        dtype=np.int)
+        dtype=np.int_)
     return (inputs, sequence_length)
 
   def _CreateSymmetricInputs(self):
@@ -94,7 +94,7 @@ class FunctionalRnnTest(test_util.TensorFlowTestCase):
         0,
         high=FunctionalRnnTest._BATCH_SIZE - 1,
         size=FunctionalRnnTest._BATCH_SIZE,
-        dtype=np.int)
+        dtype=np.int_)
     return (inputs, sequence_length)
 
   def _CreateRnnGraph(self,

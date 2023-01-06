@@ -91,8 +91,8 @@ class CrfTest(test.TestCase):
         np.array(
             [[True, True, False], [True, False, True], [False, True, True],
              [True, False, True]],
-            dtype=np.bool),
-        np.array([[True, True, False]], dtype=np.bool)
+            dtype=np.bool_),
+        np.array([[True, True, False]], dtype=np.bool_)
     ]
     for sequence_lengths, inputs, tag_bitmap in zip(
         sequence_lengths_list, inputs_list, tag_bitmap_list):

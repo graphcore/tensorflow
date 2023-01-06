@@ -487,7 +487,7 @@ class TensorUtilTest(test.TestCase):
       string_val: "foo"
       """, t)
     a = tensor_util.MakeNdarray(t)
-    self.assertEquals(np.object, a.dtype)
+    self.assertEquals(np.object_, a.dtype)
     self.assertEquals([b"foo"], a)
 
   def testStringWithImplicitRepeat(self):
@@ -496,7 +496,7 @@ class TensorUtilTest(test.TestCase):
     self.assertAllEqual(
         np.array([[b"f", b"g", b"g", b"g"], [b"g", b"g", b"g", b"g"],
                   [b"g", b"g", b"g", b"g"]],
-                 dtype=np.object), a)
+                 dtype=np.object_), a)
 
   def testStringN(self):
     t = tensor_util.make_tensor_proto([b"foo", b"bar", b"baz"], shape=[1, 3])
@@ -508,7 +508,7 @@ class TensorUtilTest(test.TestCase):
       string_val: "baz"
       """, t)
     a = tensor_util.MakeNdarray(t)
-    self.assertEquals(np.object, a.dtype)
+    self.assertEquals(np.object_, a.dtype)
     self.assertAllEqual(np.array([[b"foo", b"bar", b"baz"]]), a)
 
   def testStringNpArray(self):
@@ -523,7 +523,7 @@ class TensorUtilTest(test.TestCase):
       string_val: "abcd"
       """, t)
     a = tensor_util.MakeNdarray(t)
-    self.assertEquals(np.object, a.dtype)
+    self.assertEquals(np.object_, a.dtype)
     self.assertAllEqual(np.array([[b"a", b"ab"], [b"abc", b"abcd"]]), a)
 
   def testArrayMethod(self):
@@ -542,7 +542,7 @@ class TensorUtilTest(test.TestCase):
       string_val: "baz"
       """, t)
     a = tensor_util.MakeNdarray(t)
-    self.assertEquals(np.object, a.dtype)
+    self.assertEquals(np.object_, a.dtype)
     self.assertAllEqual(np.array([[b"foo", b"bar", b"baz"]]), a)
 
   def testArrayInterface(self):
@@ -562,7 +562,7 @@ class TensorUtilTest(test.TestCase):
       string_val: "baz"
       """, t)
     a = tensor_util.MakeNdarray(t)
-    self.assertEquals(np.object, a.dtype)
+    self.assertEquals(np.object_, a.dtype)
     self.assertAllEqual(np.array([[b"foo", b"bar", b"baz"]]), a)
 
   def testStringTuple(self):
@@ -576,7 +576,7 @@ class TensorUtilTest(test.TestCase):
       string_val: "abcd"
       """, t)
     a = tensor_util.MakeNdarray(t)
-    self.assertEquals(np.object, a.dtype)
+    self.assertEquals(np.object_, a.dtype)
     self.assertAllEqual(np.array((b"a", b"ab", b"abc", b"abcd")), a)
 
   def testStringNestedTuple(self):
@@ -590,7 +590,7 @@ class TensorUtilTest(test.TestCase):
       string_val: "abcd"
       """, t)
     a = tensor_util.MakeNdarray(t)
-    self.assertEquals(np.object, a.dtype)
+    self.assertEquals(np.object_, a.dtype)
     self.assertAllEqual(np.array(((b"a", b"ab"), (b"abc", b"abcd"))), a)
 
   def testComplex64(self):

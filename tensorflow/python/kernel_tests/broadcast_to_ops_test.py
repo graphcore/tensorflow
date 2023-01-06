@@ -51,7 +51,7 @@ class BroadcastToTest(test_util.TensorFlowTestCase):
   @test_util.run_deprecated_v1
   def testBroadcastToBool(self):
     with self.session(use_gpu=True):
-      x = np.array([True, False, True], dtype=np.bool)
+      x = np.array([True, False, True], dtype=np.bool_)
       v_tf = array_ops.broadcast_to(constant_op.constant(x), [3, 3])
       v_np = np.broadcast_to(x, [3, 3])
       self.assertAllEqual(v_tf.eval(), v_np)
@@ -109,7 +109,7 @@ class BroadcastToTest(test_util.TensorFlowTestCase):
   @test_util.run_deprecated_v1
   def testBroadcastScalarToNonScalar(self):
     with self.session(use_gpu=True):
-      x = np.array(1.0, dtype=np.float)
+      x = np.array(1.0, dtype=np.float_)
       v_tf = array_ops.broadcast_to(constant_op.constant(1.0), [2, 3, 4,
                                                                 1, 1, 1])
       v_np = np.broadcast_to(x, [2, 3, 4, 1, 1, 1])

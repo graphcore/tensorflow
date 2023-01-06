@@ -85,8 +85,8 @@ def NumpyArrayS64(*args, **kwargs):
 
 
 def NumpyArrayBool(*args, **kwargs):
-  """Convenience wrapper to create Numpy arrays with a np.bool dtype."""
-  return np.array(*args, dtype=np.bool, **kwargs)
+  """Convenience wrapper to create Numpy arrays with a np.bool_ dtype."""
+  return np.array(*args, dtype=np.bool_, **kwargs)
 
 
 class ComputationPrinting(absltest.TestCase):
@@ -572,7 +572,7 @@ class SingleOpTest(ComputationTest):
 
   def testConvertElementType(self):
     xla_types = {
-        np.bool: xla_client.PrimitiveType.PRED,
+        np.bool_: xla_client.PrimitiveType.PRED,
         np.int32: xla_client.PrimitiveType.S32,
         np.int64: xla_client.PrimitiveType.S64,
         np.float32: xla_client.PrimitiveType.F32,

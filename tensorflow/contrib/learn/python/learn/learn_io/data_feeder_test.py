@@ -123,8 +123,8 @@ class DataFeederTest(test.TestCase):
 
   def test_input_bool(self):
     data = np.array([[False for _ in xrange(2)] for _ in xrange(2)])
-    self._assert_dtype(np.bool, dtypes.bool, data)
-    self._assert_dtype(np.bool, dtypes.bool, self._wrap_dict(data))
+    self._assert_dtype(np.bool_, dtypes.bool, data)
+    self._assert_dtype(np.bool_, dtypes.bool, self._wrap_dict(data))
 
   def test_input_string(self):
     input_data = np.array([['str%d' % i for i in xrange(2)] for _ in xrange(2)])

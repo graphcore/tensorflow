@@ -379,7 +379,7 @@ class SequenceQueueingStateSaverTest(test.TestCase):
               "seq1": np.random.rand(pad_i, 5),
               "seq2": np.random.rand(pad_i, 4, 2),
               "seq3": np.random.rand(pad_i),
-              "context1": np.random.rand(3, 4).astype(np.str),
+              "context1": np.random.rand(3, 4).astype(np.str_),
               "context2": np.asarray(
                   100 * np.random.rand(), dtype=np.int32),
               "state1": np.random.rand(6, 7),
@@ -456,7 +456,7 @@ class SequenceQueueingStateSaverTest(test.TestCase):
             self.assertAllClose(state1[i], expected_state1)
             self.assertAllEqual(state2[i], expected_state2)
             # context1 is strings, which come back as bytes
-            self.assertAllEqual(context1[i].astype(np.str),
+            self.assertAllEqual(context1[i].astype(np.str_),
                                 stored_state["context1"])
             self.assertAllEqual(context2[i], stored_state["context2"])
             self.assertAllClose(seq1[i], expected_sequence1)
@@ -528,7 +528,7 @@ class SequenceQueueingStateSaverTest(test.TestCase):
                      length: np.random.randint(2 * num_unroll),
                      key: "%05d" % insert_key[0],
                      sequences["seq1"]: np.random.rand(2 * num_unroll, 5),
-                     context["context1"]: np.random.rand(3, 4).astype(np.str),
+                     context["context1"]: np.random.rand(3, 4).astype(np.str_),
                      initial_states["state1"]: 0.0
                  })
         insert_key[0] += 1
@@ -596,7 +596,7 @@ class SequenceQueueingStateSaverTest(test.TestCase):
                      length: np.random.randint(2 * num_unroll),
                      key: "%05d" % insert_key,
                      sequences["seq1"]: np.random.rand(2 * num_unroll, 5),
-                     context["context1"]: np.random.rand(3, 4).astype(np.str),
+                     context["context1"]: np.random.rand(3, 4).astype(np.str_),
                      initial_states["state1"]: 0.0
                  })
 

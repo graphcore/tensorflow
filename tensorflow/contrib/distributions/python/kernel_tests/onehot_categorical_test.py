@@ -134,7 +134,7 @@ class OneHotCategoricalTest(test.TestCase):
       dist = onehot_categorical.OneHotCategorical(logits=logits)
       np_sample = dist.sample().eval()
       np_prob = dist.prob(np_sample).eval()
-      expected_prob = prob[np_sample.astype(np.bool)]
+      expected_prob = prob[np_sample.astype(np.bool_)]
       self.assertAllClose(expected_prob, np_prob.flatten())
 
   def testSample(self):

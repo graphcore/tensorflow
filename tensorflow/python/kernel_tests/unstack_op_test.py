@@ -43,7 +43,7 @@ class UnstackOpTest(test.TestCase):
     np.random.seed(7)
     for shape in (2,), (3,), (2, 3), (3, 2), (4, 3, 2):
       for dtype in [
-          np.bool, np.float16, np.float32, np.float64, np.uint8, np.int32,
+          np.bool_, np.float16, np.float32, np.float64, np.uint8, np.int32,
           np.int64
       ]:
         data = np.random.randn(*shape).astype(dtype)
@@ -64,7 +64,7 @@ class UnstackOpTest(test.TestCase):
     with test_util.force_gpu():
       for shape in (2,), (3,), (2, 3), (3, 2), (4, 3, 2):
         for dtype in [
-            np.bool, np.float16, np.float32, np.float64, np.uint8, np.int32,
+            np.bool_, np.float16, np.float32, np.float64, np.uint8, np.int32,
             np.int64
         ]:
           data = np.random.randn(*shape).astype(dtype)

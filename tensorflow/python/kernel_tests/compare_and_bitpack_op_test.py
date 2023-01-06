@@ -43,7 +43,7 @@ class CompareAndBitpackTest(test.TestCase):
     rows = 371
     cols = 294
     x = np.random.randn(rows, cols * 8)
-    if dtype == np.bool:
+    if dtype == np.bool_:
       x = x > 0
     else:
       x = x.astype(dtype)
@@ -63,7 +63,7 @@ class CompareAndBitpackTest(test.TestCase):
     self._testBasic(np.float16)
 
   def testBasicBool(self):
-    self._testBasic(np.bool)
+    self._testBasic(np.bool_)
 
   def testBasicInt8(self):
     self._testBasic(np.int8)
