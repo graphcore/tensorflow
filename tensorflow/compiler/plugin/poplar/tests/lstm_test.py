@@ -864,7 +864,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable
     kernel = normal((INPUT_SIZE + NUM_CHANNELS, 4 * NUM_CHANNELS))
     biases = normal((4, NUM_CHANNELS))
     seq_lens = shuffled_range(batch_size) % SEQ_LEN + 1
-    c_state_mask = np.zeros((batch_size, NUM_CHANNELS), np.bool)
+    c_state_mask = np.zeros((batch_size, NUM_CHANNELS), np.bool_)
     c_state_mask[seq_lens == SEQ_LEN, :] = True
 
     cfg = IPUConfig()

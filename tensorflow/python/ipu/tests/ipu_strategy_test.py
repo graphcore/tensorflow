@@ -544,7 +544,7 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     @def_function.function
     def training_step(num_iteration, iterator):
-      x = constant_op.constant(0.0, np.float)
+      x = constant_op.constant(0.0, np.float32)
       for _ in math_ops.range(num_iteration):
         j = next(iterator)[0]
         outfeed_queue.enqueue(j[0])

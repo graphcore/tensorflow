@@ -72,7 +72,7 @@ cmsis_windowed_input = new_data_to_array(
 micro_dft = new_data_to_array('micro_dft.txt', datatype='int32')
 cmsis_dft = new_data_to_array('cmsis_dft.txt', datatype='int16')
 py_dft = np.fft.rfft(to_float(cmsis_windowed_input, 15), n=512)
-py_result = np.empty((2 * py_dft.size), dtype=np.float)
+py_result = np.empty((2 * py_dft.size), dtype=np.float_)
 py_result[0::2] = np.real(py_dft)
 py_result[1::2] = np.imag(py_dft)
 
