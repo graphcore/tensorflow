@@ -100,6 +100,9 @@ class PoplarXlaFlags {
   // Whether to show the compilation progress bar.
   std::string show_progress_bar = "auto";
 
+  // When true, sets connection type to 'ON_DEMAND', useful for CI.
+  bool use_on_demand = false;
+
   // When using 'ON_DEMAND' connection type, configure how often to poll for the
   // device (in milliseconds) when a device is not available - defaults to
   // 1000ms. Minimum is 100ms.

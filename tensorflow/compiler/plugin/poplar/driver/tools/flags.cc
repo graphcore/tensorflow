@@ -112,6 +112,8 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
       {"show_progress_bar",
        "Whether to show the compilation progress bar. Either \"true\", "
        "\"false\" or \"auto\". Defaults to \"auto\"."},
+      {"use_on_demand",
+       "When true, sets connection type to \"ON_DEMAND\", useful for CI."},
       {"on_demand_device_poll_time",
        "When using \"ON_DEMAND\" connection type, configure how often to poll "
        "for the device (in miliseconds) when a device is not available - "
@@ -166,6 +168,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(allow_nans)
     ADD_FLAG(null_data_feed)
     ADD_FLAG(show_progress_bar)
+    ADD_FLAG(use_on_demand)
     ADD_FLAG(on_demand_device_poll_time)
     ADD_FLAG(on_demand_device_timeout)
     ADD_FLAG(ipu_model_tiles)
