@@ -1039,6 +1039,24 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "utils_use_on_demand_test",
+    size = "medium",
+    srcs = ["tests/utils_use_on_demand_test.py"],
+    # Shard count set equal to the number of tests as one process per test is
+    # required
+    shard_count = 2,
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/compiler/xla:compiler_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu/test_utils",
+        "//tensorflow/python/keras",
+    ],
+)
+
+tf_py_test(
     name = "utils_use_synthetic_data_for_test",
     size = "medium",
     srcs = ["tests/utils_use_synthetic_data_for_test.py"],
