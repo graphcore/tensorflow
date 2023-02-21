@@ -1806,10 +1806,21 @@ Status PoplarExecutor::CreatePoplarTarget() {
 
 Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   TENSORFLOW_TRACEPOINT();
+
+  // Override config options with global flags.
+  IpuOptions overridden_cfg = cfg;
+  if (PoplarXlaFlags::Get().use_on_demand) {
+    VLOG(1) << "Overriding device connection type to ON_DEMAND due to "
+               "--use_on_demand flag";
+    overridden_cfg.set_device_connection_type(
+        IpuDeviceConnectionType::ON_DEMAND);
+  }
+
   bool has_user_config = (current_config_.device_config_size() > 0);
-  if (!DeviceConfigurationsEqual(cfg, current_config_) && has_user_config) {
+  if (!DeviceConfigurationsEqual(overridden_cfg, current_config_) &&
+      has_user_config) {
     XLA_VLOG_LINES(1, "Current config: " + current_config_.DebugString() +
-                          "\nNew config: " + cfg.DebugString());
+                          "\nNew config: " + overridden_cfg.DebugString());
     return FailedPrecondition(
         "IPU system configuration has already been set in this process, "
         "but it should have been reset automatically by the call to "
@@ -1826,12 +1837,13 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
               << ordinal_ << " is already configured: staying attached to it.";
     }
   }
-  current_config_ = cfg;
+  current_config_ = overridden_cfg;
   configured_ = true;
 
   if (!ipu_.DeviceAttached()) {
     TF_RETURN_IF_ERROR(CreatePoplarTarget());
-    if (cfg.device_connection_type() == IpuDeviceConnectionType::ALWAYS) {
+    if (overridden_cfg.device_connection_type() ==
+        IpuDeviceConnectionType::ALWAYS) {
       TF_RETURN_IF_ERROR(AttachToPoplarDevice());
     }
   }
