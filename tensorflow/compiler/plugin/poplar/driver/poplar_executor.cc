@@ -1566,7 +1566,8 @@ Status PoplarExecutor::AttachToPoplarDevice() {
   }
 
   const bool wait_for_device =
-      ConnectionType() == IpuDeviceConnectionType::ON_DEMAND;
+      ConnectionType() == IpuDeviceConnectionType::ON_DEMAND ||
+      PoplarXlaFlags::Get().use_on_demand;
   const bool use_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
 
   try {
