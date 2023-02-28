@@ -1381,13 +1381,20 @@ class _IPUDeviceConnectionConfig(_ConfigBase):
       # Compile without attaching to the device.
       config = IPUConfig()
       config.device_connection.type = DeviceConnectionType.ON_DEMAND
+
+    If using `DeviceConnectionType.PRE_COMPILE` to compile models to run on C600
+    cards then the link topology will need to be set to "line" using the
+    `POPLAR_TARGET_OPTIONS` environment variable. See
+    :external+poplar-api:ref:`environment variables` in the
+    :external+poplar-api:doc:`index` for more information.
     """
     self.type = DeviceConnectionType.ALWAYS
     """
-    Version of the IPU hardware to use (string). Must be one of "ipu1", "ipu2"
-    or "" (default). Only required if the
-    :ref:`connection type <device_connection.type>` provided is
-    `DeviceConnectionType.PRE_COMPILE` or `DeviceConnectionType.NEVER`.
+    Version of the IPU architecture to use (string). Must be one of "ipu1",
+    "ipu2", "ipu21" or "" (default). A specific version is required if the
+    :ref:`connection type <device_connection.type>` is specified as
+    `DeviceConnectionType.PRE_COMPILE` or `DeviceConnectionType.NEVER`. Do
+    not specify a version otherwise.
     """
     self.version = ""
     """
@@ -1463,7 +1470,7 @@ class _IPUModelConfig(_ConfigBase):
 class _IpuAlgebraicSimplifierConfig(_ConfigBase):
   def __init__(self):
     """
-    Enables optimizations which allow arbitrary reassociations and
+    Enables optimizations which allow arbitrary re-associations and
     transformations of mathematical operations with no accuracy guarantees.
     Enabling this option can result in incorrect output for programs that depend
     on an exact implementation of IEEE floating point for maths functions. It
@@ -1756,7 +1763,7 @@ class _OptimizationConfig(_ConfigBase):
     """
     self.cholesky_block_size = 0
     """
-    Enables optimizations which allow arbitrary reassociations and
+    Enables optimizations which allow arbitrary re-associations and
     transformations of mathematical operations with no accuracy guarantees.
     Enabling this option can result in incorrect output for programs that depend
     on an exact implementation of IEEE floating point for maths functions. It
@@ -1874,7 +1881,7 @@ class IPUConfig(_ConfigBase):
     """
     Configure the IPUs to be used by the session.
     The configuration describes a system consisting of multiple TensorFlow
-    devices, each with control of one of more IPUs. The devices will be labeled
+    devices, each with control of one of more IPUs. The devices will be labelled
     ``/device:IPU:0``, ``/device:IPU:1`` and so on.
 
     Each device can control a specific number of IPUs, given by the ``num_ipus``
@@ -1904,7 +1911,7 @@ class IPUConfig(_ConfigBase):
 
     The configuration describes a system consisting of multiple TensorFlow
     devices, each with control of one of more IPUs. The TensorFlow devices will
-    be labeled ``/device:IPU:0``, ``/device:IPU:1`` and so on.
+    be labelled ``/device:IPU:0``, ``/device:IPU:1`` and so on.
 
     Each TensorFlow device uses a specific configuration consisting of one or
     more IPUs from the list of devices.  These can be found by running the
@@ -2217,10 +2224,11 @@ def configure_ipu_system(config, device="cpu", reset_configuration=True):
 
 def reset_ipu_configuration():
   """ Reset the IPU configuration in preparation for it to be reconfigured.
-  Blocks until all currently configured IPU devices have finished executing.
+  This blocks until all currently configured IPU devices have finished
+  executing.
 
-  Note that this function does not currently support reseting IPUs that are
-  running in parallel python threads.
+  Note that this function does not currently support resetting IPUs that are
+  running in parallel Python threads.
   """
   sync_ops = []
 
