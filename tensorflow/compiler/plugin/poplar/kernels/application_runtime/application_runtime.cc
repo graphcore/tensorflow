@@ -725,6 +725,8 @@ class EngineResource {
         tensorflow::ThreadOptions(), engine_name_ + "_execute_thread", [this] {
           Status runtime_status = Status::OK();
           bool reset_engine = false;
+          static constexpr int num_of_reset_retries = 2;
+          int reset_engine_retries_left = num_of_reset_retries;
           while (!communication_manager_.Exiting()) {
             {
               // Prevent any new requests from being inserted whilst the engine
@@ -738,7 +740,7 @@ class EngineResource {
                 communication_manager_.Abort(runtime_status);
                 // If the exception raised only requires an engine reset, then
                 // continue, otherwise we can't recover.
-                if (!reset_engine) {
+                if (!reset_engine || reset_engine_retries_left <= 0) {
                   communication_manager_.InitiateExit();
                   return;
                 }
@@ -746,9 +748,11 @@ class EngineResource {
 
               runtime_status = StartEngineAndConnectStreams(reset_engine);
               if (!runtime_status.ok()) {
+                --reset_engine_retries_left;
                 continue;
               }
 
+              reset_engine_retries_left = num_of_reset_retries;
               reset_engine = false;
               runtime_status = Status::OK();
             }
