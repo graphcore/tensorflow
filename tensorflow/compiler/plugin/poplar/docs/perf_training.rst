@@ -98,7 +98,7 @@ array and will contain `x1 - x2` for each iteration in the loop.
 
 See entries in the :ref:`api-section` for more details.
 
-For a more practical example, the Graphcore tutorials repository contains a :tutorials-repo:`detailed tutorial about using infeeds and outfeeds with TensorFlow <tutorials/tensorflow2/infeed_outfeed>`.
+For a more practical example, the Graphcore examples repository contains a :tutorials-repo:`detailed tutorial about using infeeds and outfeeds with TensorFlow <tutorials/tensorflow2/infeed_outfeed>`.
 
 
 .. _infeed-simplification:
@@ -536,11 +536,11 @@ If an operation requires the full tensor, the shards can be broadcast to all
 replicas.
 
 RTS is used to save memory when using stateful optimizers, such as Adam or LAMB,
-with replicas. In Keras, it can be enabled by setting the 
+with replicas. In Keras, it can be enabled by setting the
 `replicated_optimizer_state_sharding`
-argument to True in the 
+argument to True in the
 :py:func:`~keras.ipu.extensions.FunctionalExtension.set_gradient_accumulation_options`
-method for non-pipelined models and the 
+method for non-pipelined models and the
 :py:func:`~keras.ipu.extensions.FunctionalExtension.set_pipelining_options` method
 for pipelined models.
 
