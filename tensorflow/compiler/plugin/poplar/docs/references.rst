@@ -9,8 +9,7 @@ Graphcore
 _________
 
 - The latest versions of all the Graphcore `software documentation <https://docs.graphcore.ai/page/software.html>`_ including user guides and technical notes
-- The Graphcore `GitHub examples repository <https://github.com/graphcore/examples>`_ has application examples
-- The Graphcore `GitHub tutorials repository <https://github.com/graphcore/tutorials>`_ has examples of features and simple applications, and tutorials
+- The Graphcore `GitHub examples repository <https://github.com/graphcore/examples>`_ has full applications, examples of features, simple applications and tutorials
 - There are `Graphcore videos <https://www.graphcore.ai/resources/how-to-videos>`_ with explanations and demos of Graphcore software
 - The source code for `TensorFlow for the IPU <https://github.com/graphcore/tensorflow>`_ on GitHub
 

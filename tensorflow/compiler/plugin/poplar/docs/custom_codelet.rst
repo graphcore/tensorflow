@@ -51,7 +51,7 @@ C++ code compiled for, and executed on, the IPU.
 
 For more information about writing Poplar graph programs and codelets, refer to
 the `Poplar and PopLibs User Guide
-<https://docs.graphcore.ai/projects/poplar-user-guide/>`_ and the :tutorials-repo:`Poplar tutorials <tutorials/poplar>` on the Graphcore GitHub tutorials respository.
+<https://docs.graphcore.ai/projects/poplar-user-guide/>`_ and the :tutorials-repo:`Poplar tutorials <tutorials/poplar>` in the Graphcore GitHub examples repository.
 
 Your program must contain a function to build the graph, which will be called
 from TensorFlow when you instantiate the custom op. This has the following
@@ -465,9 +465,11 @@ repository:
 
 * :tutorials-repo-tf1:`Custom op with codelet for custom vertex code <feature_examples/tensorflow/custom_op>`
 
-.. note:: These examples are for TensorFlow 1.
+.. note:: These examples are only for TensorFlow 1.
 
-  From Poplar SDK 3.1, TensorFlow 1 will only be supported in CentOS 7. In addition, `Examples <https://github.com/graphcore/examples/tree/v3.0.0>`__ and `Tutorials <https://github.com/graphcore/tutorials/tree/sdk-release-3.0>`__ for TensorFlow 1 are only available up to version 3.0 of the SDK. There has been limited testing of the 3.0 versions of the TensorFlow 1 tutorials and examples with Poplar SDK 3.1.
+  From Poplar SDK 3.1, TensorFlow 1 will only be supported in CentOS 7.
+
+  In addition, `Examples <https://github.com/graphcore/examples/tree/v3.0.0>`__ and `Tutorials <https://github.com/graphcore/tutorials/tree/sdk-release-3.0>`__ for TensorFlow 1 are only available up to version 3.0 of the SDK. There has been limited testing of the 3.0 versions of the TensorFlow 1 tutorials and examples with later versions of the Poplar SDK.
 
 
 
