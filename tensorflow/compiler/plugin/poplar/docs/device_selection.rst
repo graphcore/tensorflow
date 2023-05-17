@@ -447,9 +447,16 @@ These runtime errors are handled in the following manner:
 * ``application_runtime_error`` - a ``tensorflow.errors.InternalError`` error
   is raised. The error message contains the reason why the error occurred. An
   IPU reset will be performed before the next execution of a Poplar program.
-* ``recoverable_runtime_error`` with a recovery action ``poplar::RecoveryAction::IPU_RESET`` - a ``tensorflow.errors.InternalError`` error
-  is raised. The error message contains the reason why the error occurred. An
-  IPU reset will be performed before the next execution of a Poplar program.
+* ``recoverable_runtime_error``- a ``tensorflow.errors.InternalError`` error
+  is raised. The error message contains the reason why the error occurred
+  and `recovery_action` string attribute.
+  This attribute can contain:
+
+  - `IPU_RESET`: IPU reset will be performed before the next execution of a Poplar program.
+  - `LINK_RESET`: Reset the IPU-Links in a non-Pod system. This retrains the IPU-Links between IPUs.
+  - `PARTITION_RESET`: Reset the IPU partition in a Pod system. This retrains the IPU-Links between IPUs.
+  - `FULL_RESET`: Power cycle the system.
+
 * Unknown runtime errors - a ``tensorflow.errors.Unknown``  error
   is raised. The error message might contain the reason why the error occurred.
   When these errors occur manual intervention is required before the system is
@@ -459,3 +466,5 @@ These runtime errors are handled in the following manner:
   When these errors occur manual intervention might be required before the
   system is operational again. The error message might contain a required
   recovery action.
+
+
