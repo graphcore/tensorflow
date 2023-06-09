@@ -13,7 +13,7 @@ For more information about the IPU architecture, abstract programming model and 
 
 See the `Getting Started" guide for your IPU system <https://docs.graphcore.ai/en/latest/getting-started.html>`__ in the
 `Graphcore documentation <https://docs.graphcore.ai>`_
-for information on installing the Poplar SDK and refer to the :external+tensorflow1-quick-start:doc:`index` for installing TensorFlow 1 and running a simple application.
+for information on installing the Poplar SDK and refer to :numref:`setup_quick_start` for how to install TensorFlow 1 for the IPU.
 
 TensorFlow is a powerful graph-modelling framework that can be used for the
 development, training and deployment of deep learning models. In the Graphcore
