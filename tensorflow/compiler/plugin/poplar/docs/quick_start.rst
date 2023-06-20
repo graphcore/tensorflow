@@ -3,54 +3,56 @@
 Setup quick start
 ------------------
 
-.. note:: There are two ways you can run TensorFlow 1 applications:
-
-    #. Directly on the system using the setup described in this chapter.
-    #. In a TensorFlow 1 Docker container that has already been setup. Refer to :doc:`poplar-docker:index` for more information.
-
 This section describes how to set up your system to start using TensorFlow 1 for the IPU.
+
+.. note:: From Poplar SDK 3.1, TensorFlow 1 will only be supported in CentOS 7. In addition, `Examples <https://github.com/graphcore/examples/tree/v3.0.0>`__ and `Tutorials <https://github.com/graphcore/tutorials/tree/sdk-release-3.0>`__ for TensorFlow 1 are only available up to version 3.0 of the SDK. There has been limited testing of the 3.0 versions of the TensorFlow 1 tutorials and examples with later versions of the Poplar SDK.
+
 
 Ensure you have completed the steps described in the `getting started guide for your system <https://docs.graphcore.ai/en/latest/getting-started.html>`__ before completing the steps in this section.
 
-The setup for TensorFlow 1 depends on whether your system is running :ref:`ubuntu-18-04` or :ref:`ubuntu-20-04`.
-
-You can check which OS you are running with:
-
-.. code-block:: console
-
-  $ lsb_release -a
-
-.. _ubuntu-18-04:
-
-Ubuntu 18.04
-------------
-
-.. _sec_quick_enable_sdk:
-
 Enable Poplar SDK
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
+
+You need to enable the Poplar SDK before you can use TensorFlow 1.
 
 .. code-block::
 
     $ source [path-to-sdk]/enable
-    $ popc --version
 
 where ``[path-to-sdk]`` is the path to the Poplar SDK.
+
+You can verify that Poplar has been successfully set up by running:
+
+.. code-block:: console
+
+  $ popc --version
+
+This will display the version of the installed software.
 
 Create and enable a Python virtual environment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+It is recommended that you work in a Python virtual environment. You can create and activate a virtual environment as follows:
+
 .. code-block::
 
-    $ virtualenv -p python[py_ver] ~/[base_dir]/[venv_name]
+    $ python[py_ver] -m venv ~/[base_dir]/[venv_name]
     $ source ~/[base_dir]/[venv_name]/bin/activate
 
 where ``[base_dir]`` is a location of your choice and ``[venv_name]`` is the name of the directory that will be created for the virtual environment. ``[py_ver]`` is the version of Python you are using and it depends on your OS.
 
-On Ubuntu 18 systems we support Python 3.6, and on Ubuntu 20 systems we support Python 3.8. You can get more information about the versions of tools supported in the Poplar SDK for different operating systems in the :doc:`release-notes:index`.  You can check which OS you are running with ``lsb_release -a``.
+You can get more information about the versions of Python and other tools supported in the Poplar SDK for different operating systems in the :doc:`release-notes:index`.  You can check which OS you are running with ``lsb_release -a``.
 
 Install the TensorFlow 1 wheels and validate
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+There are two TensorFlow 1 wheels included in the Poplar SDK, one for AMD processors and one for Intel processors. Check which processor is used on your system by running:
+
+.. code-block:: console
+
+   $ lscpu | grep name
+
+Install the wheel files needed to run TensorFlow 1 on the IPU.
 
 .. tabs::
 
@@ -61,7 +63,7 @@ Install the TensorFlow 1 wheels and validate
             $ python -m pip install ${POPLAR_SDK_ENABLED?}/../tensorflow-1.*+amd_*.whl
             $ python -m pip install ${POPLAR_SDK_ENABLED?}/../ipu_tensorflow_addons-1.*.whl
             $ python3 -c "from tensorflow.python import ipu"
-            $ python3 -c "ipu_tensorflow_addons.keras import layers"
+
 
    .. group-tab:: Intel
 
@@ -70,22 +72,3 @@ Install the TensorFlow 1 wheels and validate
             $ python -m pip install ${POPLAR_SDK_ENABLED?}/../tensorflow-1.*+intel_*.whl
             $ python -m pip install ${POPLAR_SDK_ENABLED?}/../ipu_tensorflow_addons-1.*.whl
             $ python3 -c "from tensorflow.python import ipu"
-            $ python3 -c "ipu_tensorflow_addons.keras import layers"
-
-
-.. _ubuntu-20-04:
-
-Ubuntu 20.04
-------------
-
-Ubuntu 20.04 does not natively support TensorFlow 1.
-This means that you need to run TensorFlow 1 applications in an Ubuntu 18.04 Docker container. Refer to :doc:`poplar-docker:index` for more information.
-
-The following commands provide an example of how to pull the latest TensorFlow 1 image from Docker Hub, and then instantiate the container(:numref:`code-tf1-docker`):
-
-.. code-block:: console
-    :name: code-tf1-docker
-    :caption: Creating a TensorFlow 1 Docker container
-
-    $ docker pull graphcore/tensorflow:1-intel
-    $ gc-docker -- -ti -v /home/ubuntu/graphcore:/graphcore -e IPUOF_VIPU_API_HOST -e IPUOF_VIPU_API_PARTITION_ID graphcore/tensorflow:1-intel
