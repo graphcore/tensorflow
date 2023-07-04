@@ -188,9 +188,7 @@ definition and the session construct, as shown below:
 .. note::
     To ensure that your code is executed efficiently on the IPU, you should compile
     it with ``ipu.ipu_compiler.compile()``. For operations that are to be placed on
-    an IPU, this should be called inside an ``ipu_scope``. However, this is not
-    necessary when using an ``IPUEstimator`` or ``IPUStrategy`` in `TensorFlow 2
-    <https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/targetting_tf2.html>`_.
+    an IPU, this should be called inside an ``ipu_scope``.
 
 Let's now build on our previous TensorFlow script by adding
 ``ipu.ipu_compiler.compile`` to the session definition.
