@@ -5,16 +5,14 @@ The purpose of this document is to introduce the TensorFlow framework from the
 perspective of developing and training models for the IPU. It assumes you have
 some knowledge of machine learning and TensorFlow.
 
-For more information about the IPU architecture, abstract programming model and tools, as well as algorithmic techniques, refer to the :external+ipu-programmers-guide:doc:`index`. The :external+memory-performan-optimisation:doc:`index` contains guidelines for optimising performance in machine learning models running on the IPU.
-
-
 .. note:: This document is for TensorFlow 2. For information on TensorFlow 1
           please refer to `Targeting the IPU from TensorFlow 1
           <https://docs.graphcore.ai/projects/tensorflow1-user-guide/>`_.
 
-See the `Getting Started" guide for your IPU system <https://docs.graphcore.ai/en/latest/getting-started.html>`__ in the
-`Graphcore documentation <https://docs.graphcore.ai>`_
-for information on installing the Poplar SDK and refer to the :external+tensorflow1-quick-start:doc:`index` for installing TensorFlow 1 and running a simple application.
+
+For more information about the IPU architecture, abstract programming model and tools, as well as algorithmic techniques, refer to the :external+ipu-programmers-guide:doc:`index`.
+
+The Graphcore implementation of TensorFlow 2 is included in the :doc:`Poplar SDK <sdk-overview:index>`. See the `Getting Started guide <https://docs.graphcore.ai/en/latest/getting-started.html#getting-started>`_ for your system for how to install the Poplar SDK. Refer to the :external+tensorflow2-quick-start:doc:`index` for installing the TensorFlow 2 for IPU wheel. The quick start guide also shows how to run a simple TensorFlow 2 application on the IPU.
 
 TensorFlow is a powerful graph-modelling framework that can be used for the
 development, training and deployment of deep learning models. In the Graphcore
@@ -71,6 +69,15 @@ Document overview
 * The next few sections provide information on IPU-specific features.
 * Finally, there are reference chapters describing the API and supported operators.
 
+Other resources
+~~~~~~~~~~~~~~~
+
 You can find further information on porting a TensorFlow program to the IPU and
 parallelising it, in our `TensorFlow technical notes
 <https://docs.graphcore.ai/en/latest/#tensorflow>`_.
+
+:doc:`differences-ipu-gpu:index` provides a high-level overview of the programming changes required when switching from GPUs to IPUs and :doc:`memory-performance-optimisation` presents guidelines to help you develop high-performance machine learning models running on the IPU.
+
+The Graphcore `Examples GitHub repository <https://github.com/graphcore/examples>`_ contains TensorFlow 2 applications, :tutorials-repo:`feature examples <feature_examples/tensorflow2>`,
+:tutorials-repo:`tutorials <tutorials/tensorflow2>` and :tutorials-repo:`simple applications <simple_applications/tensorflow2>`.
+Further developer resources can be found on `Graphcore's developer portal <https://www.graphcore.ai/developer>`_.
